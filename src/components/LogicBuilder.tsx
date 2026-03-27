@@ -10,13 +10,17 @@ import {
   Play, 
   History,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { toast } from 'sonner';
 
 const VARIABLES = [
   { name: 'API_KEY', value: 'sk_test_••••••••', type: 'Secret' },
@@ -26,12 +30,16 @@ const VARIABLES = [
 ];
 
 import { usePlatform } from '../hooks/usePlatform';
+import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
 
 export const LogicBuilder = () => {
   const { tenant } = usePlatform();
   const [activeTab, setActiveTab] = useState<'ASSETS' | 'VARIABLES'>('ASSETS');
   const [assets, setAssets] = useState<any[]>([]);
+  const [modules, setModules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<any | null>(null);
 
   useEffect(() => {
     if (!tenant?.id) {
@@ -42,7 +50,7 @@ export const LogicBuilder = () => {
     const logicRef = collection(db, 'tenants', tenantId, 'logic');
     const q = query(logicRef, orderBy('name', 'asc'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeLogic = onSnapshot(q, (snapshot) => {
       const logicData = snapshot.docs.map(doc => ({
         ...doc.data(),
         id: doc.id
@@ -54,8 +62,39 @@ export const LogicBuilder = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Also fetch modules to identify orphaned assets
+    const modulesRef = collection(db, 'tenants', tenantId, 'modules');
+    const unsubscribeModules = onSnapshot(modulesRef, (snapshot) => {
+      setModules(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `tenants/${tenantId}/modules`);
+    });
+
+    return () => {
+      unsubscribeLogic();
+      unsubscribeModules();
+    };
   }, [tenant?.id]);
+
+  const handleDeleteAsset = (asset: any) => {
+    setAssetToDelete(asset);
+  };
+
+  const confirmDelete = async () => {
+    if (!tenant?.id || !assetToDelete) return;
+    
+    setDeletingId(assetToDelete.id);
+    try {
+      await deleteDoc(doc(db, 'tenants', tenant.id, 'logic', assetToDelete.id));
+      toast.success(`${assetToDelete.name} deleted successfully`);
+      setAssetToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `tenants/${tenant.id}/logic/${assetToDelete.id}`);
+      toast.error(`Failed to delete ${assetToDelete.name}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -133,21 +172,41 @@ export const LogicBuilder = () => {
                         <h3 className="text-sm font-bold text-zinc-900 dark:text-white">{asset.name}</h3>
                       </div>
                     </div>
-                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", 
-                      asset.status === 'Active' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
-                    )}>
-                      {asset.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", 
+                        asset.status === 'Active' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
+                      )}>
+                        {asset.status}
+                      </span>
+                      {asset.targetModuleId && !modules.find(m => m.id === asset.targetModuleId) && (
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-full text-[10px] font-bold uppercase tracking-widest animate-pulse">
+                          <AlertTriangle size={10} />
+                          Orphaned
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mb-6">{asset.description}</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed mb-6">
+                    {asset.description}
+                  </p>
                   <div className="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800">
                     <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-400 dark:text-zinc-500">
                       <History size={12} />
                       <span>Last run: {asset.lastRun?.toDate ? asset.lastRun.toDate().toLocaleString() : 'Never'}</span>
                     </div>
-                    <button className="p-1.5 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
-                      <Play size={16} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleDeleteAsset(asset)}
+                        disabled={deletingId === asset.id}
+                        className="p-1.5 text-zinc-400 dark:text-zinc-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                        title="Delete Asset"
+                      >
+                        {deletingId === asset.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                      </button>
+                      <button className="p-1.5 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                        <Play size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )) : (
@@ -205,6 +264,18 @@ export const LogicBuilder = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <DeleteConfirmationModal 
+        isOpen={!!assetToDelete}
+        onClose={() => setAssetToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Logic Asset?"
+        description="Are you sure you want to delete this logic asset? This action is permanent and will remove all associated configurations."
+        itemName={assetToDelete?.name}
+        moduleName={assetToDelete?.targetModuleId ? modules.find(m => m.id === assetToDelete.targetModuleId)?.name : undefined}
+        moduleId={assetToDelete?.targetModuleId}
+        isDeleting={deletingId === assetToDelete?.id}
+      />
     </div>
   );
 };

@@ -27,13 +27,14 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, doc, setDoc, onSnapshot, query, serverTimestamp, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, query, serverTimestamp, getDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
 import { useFirebase } from '../hooks/useFirebase';
 import { toast } from 'sonner';
 
 import { useNavigate } from 'react-router-dom';
-
 import { MODULES } from '../constants/modules';
+import { DeleteModuleModal } from './DeleteModuleModal';
+
 
 const CATEGORIES = [
   'All',
@@ -55,6 +56,8 @@ export const ModuleCatalog = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [customModules, setCustomModules] = useState<any[]>([]);
+  const [moduleToDelete, setModuleToDelete] = useState<any>(null);
+
 
   useEffect(() => {
     // Listen for global custom modules
@@ -136,21 +139,39 @@ export const ModuleCatalog = () => {
     }
   };
 
-  const handleDeleteCustom = async (mod: any) => {
+  const handleDeleteCustom = async (mod: any, deleteLogic: boolean) => {
     if (!tenantId || !mod.isCustom) return;
     
     setEnabling(mod.id);
     try {
+      if (deleteLogic) {
+        // Delete associated logic
+        const logicRef = collection(db, 'tenants', tenantId, 'logic');
+        const q = query(logicRef, where('targetModuleId', '==', mod.id));
+        const logicSnap = await getDocs(q);
+        const deletePromises = logicSnap.docs.map(docSnap => deleteDoc(docSnap.ref));
+        await Promise.all(deletePromises);
+        
+        if (logicSnap.size > 0) {
+          toast.info(`Deleted ${logicSnap.size} associated logic assets.`);
+        }
+      }
+
+      // Note: Subcollections like 'records' are not automatically deleted in Firestore when the parent doc is deleted.
+      // For a production app, we would ideally trigger a Cloud Function to clean these up.
+      // Here we focus on the Business Logic (Workflows) as requested.
+      
       await deleteDoc(doc(db, 'tenants', tenantId, 'modules', mod.id));
       toast.success(`${mod.name} module deleted.`);
-      setDeleteConfirm(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `tenants/${tenantId}/modules/${mod.id}`);
       toast.error(`Failed to delete ${mod.name}`);
     } finally {
       setEnabling(null);
+      setModuleToDelete(null);
     }
   };
+
 
   // Merge prebuilt MODULES with custom modules from Firestore
   const allModules: any[] = [...MODULES];
@@ -279,32 +300,15 @@ export const ModuleCatalog = () => {
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">v1.2.0</span>
                 {mod.isCustom && (
                   <div className="flex items-center gap-2">
-                    {deleteConfirm === mod.id ? (
-                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-2 py-1 animate-in fade-in slide-in-from-left-2">
-                        <span className="text-[10px] font-bold text-red-600 dark:text-red-400">Delete?</span>
-                        <button 
-                          onClick={() => handleDeleteCustom(mod)}
-                          className="text-[10px] font-bold text-red-600 dark:text-white hover:text-red-700 dark:hover:text-red-300 transition-colors"
-                        >
-                          Yes
-                        </button>
-                        <button 
-                          onClick={() => setDeleteConfirm(null)}
-                          className="text-[10px] font-bold text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-                        >
-                          No
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => setDeleteConfirm(mod.id)}
-                        className="p-1 text-zinc-400 dark:text-zinc-600 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                        title="Delete Custom Module"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
+                    <button 
+                      onClick={() => setModuleToDelete(mod)}
+                      className="p-1 text-zinc-400 dark:text-zinc-600 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                      title="Delete Custom Module"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
+
                 )}
               </div>
               {mod.isEnabled ? (
@@ -356,6 +360,17 @@ export const ModuleCatalog = () => {
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Try adjusting your search or category filters.</p>
         </div>
       )}
+
+      {moduleToDelete && tenantId && (
+        <DeleteModuleModal 
+          isOpen={true}
+          module={moduleToDelete}
+          tenantId={tenantId}
+          onClose={() => setModuleToDelete(null)}
+          onConfirm={(deleteLogic) => handleDeleteCustom(moduleToDelete, deleteLogic)}
+        />
+      )}
     </div>
+
   );
 };
