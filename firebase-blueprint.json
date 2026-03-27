@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Represents a business or organization using the platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the tenant." },
+        "name": { "type": "string", "description": "Name of the organization." },
+        "industry": { "type": "string", "description": "Industry sector (e.g., Government, Healthcare)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp of creation." },
+        "ownerId": { "type": "string", "description": "UID of the tenant owner." }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A member of a tenant workspace.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "displayName": { "type": "string", "description": "User's full name." },
+        "role": { "type": "string", "enum": ["admin", "editor", "viewer"], "description": "Access level." },
+        "tenantId": { "type": "string", "description": "ID of the tenant they belong to." },
+        "lastActive": { "type": "string", "format": "date-time", "description": "Last activity timestamp." }
+      },
+      "required": ["uid", "email", "role", "tenantId"]
+    },
+    "Module": {
+      "title": "Module",
+      "description": "A pre-built solution template.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Module ID." },
+        "name": { "type": "string", "description": "Module name." },
+        "description": { "type": "string", "description": "Module description." },
+        "category": { "type": "string", "description": "Module category." },
+        "icon": { "type": "string", "description": "Lucide icon name." }
+      },
+      "required": ["id", "name"]
+    },
+    "Case": {
+      "title": "Case",
+      "description": "A specific request or workflow instance.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Case ID (e.g., C-1001)." },
+        "tenantId": { "type": "string", "description": "Owner tenant ID." },
+        "moduleId": { "type": "string", "description": "Associated module ID." },
+        "title": { "type": "string", "description": "Case title." },
+        "status": { "type": "string", "description": "Current status." },
+        "priority": { "type": "string", "enum": ["High", "Medium", "Low"], "description": "Priority level." },
+        "submittedBy": { "type": "string", "description": "Name of submitter." },
+        "submittedAt": { "type": "string", "format": "date-time", "description": "Submission timestamp." },
+        "aiSummary": { "type": "string", "description": "AI-generated summary of the case." },
+        "description": { "type": "string", "description": "Full case description." }
+      },
+      "required": ["id", "tenantId", "title", "status", "priority"]
+    },
+    "LogicAsset": {
+      "title": "Logic Asset",
+      "description": "Business logic or automation rule.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Logic ID." },
+        "tenantId": { "type": "string", "description": "Owner tenant ID." },
+        "name": { "type": "string", "description": "Asset name." },
+        "type": { "type": "string", "enum": ["FORMULA", "TRIGGER", "SCHEDULE", "PROCEDURE"], "description": "Logic type." },
+        "status": { "type": "string", "enum": ["Active", "Inactive"], "description": "Current status." },
+        "description": { "type": "string", "description": "Asset description." },
+        "lastRun": { "type": "string", "format": "date-time", "description": "Last execution timestamp." }
+      },
+      "required": ["id", "tenantId", "name", "type", "status"]
+    },
+    "DocumentTemplate": {
+      "title": "Document Template",
+      "description": "A reusable template for generating documents.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the template." },
+        "tenantId": { "type": "string", "description": "Owner tenant ID." },
+        "name": { "type": "string", "description": "Template name." },
+        "description": { "type": "string", "description": "Template description." },
+        "moduleId": { "type": "string", "description": "Associated module ID (optional)." },
+        "content": { "type": "string", "description": "HTML or JSON content of the template." },
+        "status": { "type": "string", "enum": ["Draft", "Published", "Archived"], "description": "Current status." },
+        "version": { "type": "integer", "description": "Version number." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp." },
+        "createdBy": { "type": "string", "description": "UID of the creator." }
+      },
+      "required": ["id", "tenantId", "name", "status", "version"]
+    },
+    "GeneratedDocument": {
+      "title": "Generated Document",
+      "description": "A document generated from a template.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the document." },
+        "tenantId": { "type": "string", "description": "Owner tenant ID." },
+        "templateId": { "type": "string", "description": "ID of the template used." },
+        "templateVersion": { "type": "integer", "description": "Version of the template used." },
+        "recordId": { "type": "string", "description": "ID of the record (e.g., Case ID) it was generated from." },
+        "moduleId": { "type": "string", "description": "ID of the module it belongs to." },
+        "name": { "type": "string", "description": "Document name (e.g., Invoice_123.pdf)." },
+        "url": { "type": "string", "description": "URL to the generated file (if stored externally) or base64 data." },
+        "status": { "type": "string", "enum": ["Draft", "Final", "Issued", "Approved"], "description": "Current status." },
+        "generatedAt": { "type": "string", "format": "date-time", "description": "Generation timestamp." },
+        "generatedBy": { "type": "string", "description": "UID of the user who generated it." },
+        "dataSnapshot": { "type": "object", "description": "Snapshot of the data used for generation." }
+      },
+      "required": ["id", "tenantId", "templateId", "name", "status", "generatedAt"]
+    }
+  },
+  "firestore": {
+    "/tenants/{tenantId}": {
+      "schema": "Tenant",
+      "description": "Tenant organization data."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and workspace membership."
+    },
+    "/modules/{moduleId}": {
+      "schema": "Module",
+      "description": "Global module catalog."
+    },
+    "/tenants/{tenantId}/cases/{caseId}": {
+      "schema": "Case",
+      "description": "Cases belonging to a specific tenant."
+    },
+    "/tenants/{tenantId}/logic/{logicId}": {
+      "schema": "LogicAsset",
+      "description": "Logic assets for a specific tenant."
+    },
+    "/tenants/{tenantId}/templates/{templateId}": {
+      "schema": "DocumentTemplate",
+      "description": "Document templates for a specific tenant."
+    },
+    "/tenants/{tenantId}/documents/{documentId}": {
+      "schema": "GeneratedDocument",
+      "description": "Generated documents for a specific tenant."
+    }
+  }
+}

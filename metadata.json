@@ -1,0 +1,9 @@
+{
+  "name": "Aurora Module Builder",
+  "description": "Professional-grade AI-native module builder with grid-based layout and real-time configuration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

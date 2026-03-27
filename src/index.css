@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* react-grid-layout styles */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top;
+}
+.react-grid-item.cssTransforms {
+  transition-property: transform;
+}
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+}
+
+.react-grid-item.dropping {
+  visibility: hidden;
+}
+
+.react-grid-placeholder {
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 12px;
+  border: 2px dashed rgba(99, 102, 241, 0.3);
+  transition-duration: 100ms;
+  z-index: 2;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+.react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+.react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Quill Dark Theme Overrides */
+.quill-dark-toolbar .ql-toolbar.ql-snow {
+  border-color: var(--color-zinc-800) !important;
+  background-color: var(--color-zinc-900) !important;
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+}
+
+.quill-dark-toolbar .ql-container.ql-snow {
+  border-color: var(--color-zinc-800) !important;
+  background-color: transparent !important;
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+  font-family: inherit;
+}
+
+.quill-dark-toolbar .ql-editor {
+  color: var(--color-zinc-200);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.quill-dark-toolbar .ql-editor.ql-blank::before {
+  color: var(--color-zinc-600) !important;
+  font-style: normal;
+}
+
+.quill-dark-toolbar .ql-snow .ql-stroke {
+  stroke: var(--color-zinc-400) !important;
+}
+
+.quill-dark-toolbar .ql-snow .ql-fill {
+  fill: var(--color-zinc-400) !important;
+}
+
+.quill-dark-toolbar .ql-snow .ql-picker {
+  color: var(--color-zinc-400) !important;
+}
+
+.quill-dark-toolbar .ql-snow .ql-picker-options {
+  background-color: var(--color-zinc-900) !important;
+  border-color: var(--color-zinc-800) !important;
+  color: var(--color-zinc-400) !important;
+}
+
+.quill-dark-toolbar .ql-snow.ql-toolbar button:hover .ql-stroke,
+.quill-dark-toolbar .ql-snow.ql-toolbar button.ql-active .ql-stroke {
+  stroke: var(--color-indigo-400) !important;
+}
+
+.quill-dark-toolbar .ql-snow.ql-toolbar button:hover .ql-fill,
+.quill-dark-toolbar .ql-snow.ql-toolbar button.ql-active .ql-fill {
+  fill: var(--color-indigo-400) !important;
+}
+
+.scrollbar-hide::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide,
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

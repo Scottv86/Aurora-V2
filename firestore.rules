@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        ((request.auth.token.email == "scottv86@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isTenantMember(tenantId) {
+      return isAuthenticated() && 
+        (isAdmin() || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId
+        ));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'editor', 'viewer'] &&
+             data.tenantId is string;
+    }
+
+    function isValidTenant(data) {
+      return data.id is string && data.id.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerId is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if isAuthenticated() && (isOwner(resource.data.ownerId) || isTenantMember(tenantId) || isAdmin());
+      allow create: if isAuthenticated() && isValidTenant(request.resource.data) && isOwner(request.resource.data.ownerId);
+      allow update: if isAuthenticated() && isValidTenant(request.resource.data) && (isOwner(resource.data.ownerId) || isAdmin());
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        isOwner(userId) || 
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == resource.data.tenantId)
+      );
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+    }
+
+    match /modules/{moduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /tenants/{tenantId}/cases/{caseId} {
+      allow read: if isTenantMember(tenantId) || isAdmin();
+      allow write: if isTenantMember(tenantId) || isAdmin();
+    }
+
+    match /tenants/{tenantId}/logic/{logicId} {
+      allow read: if isTenantMember(tenantId) || isAdmin();
+      allow write: if isTenantMember(tenantId) || isAdmin();
+    }
+
+    match /tenants/{tenantId}/templates/{templateId} {
+      allow read: if isTenantMember(tenantId) || isAdmin();
+      allow write: if isTenantMember(tenantId) || isAdmin();
+    }
+
+    match /tenants/{tenantId}/documents/{documentId} {
+      allow read: if isTenantMember(tenantId) || isAdmin();
+      allow write: if isTenantMember(tenantId) || isAdmin();
+    }
+
+    match /tenants/{tenantId}/modules/{moduleId} {
+      allow read: if isTenantMember(tenantId) || isAdmin();
+      allow write: if isTenantMember(tenantId) || isAdmin();
+
+      match /records/{recordId} {
+        allow read: if isTenantMember(tenantId) || isAdmin();
+        allow write: if isTenantMember(tenantId) || isAdmin();
+
+        match /history/{historyId} {
+          allow read: if isTenantMember(tenantId) || isAdmin();
+          allow write: if isTenantMember(tenantId) || isAdmin();
+        }
+      }
+    }
+  }
+}
