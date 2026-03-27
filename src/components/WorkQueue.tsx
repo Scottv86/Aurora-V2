@@ -34,6 +34,27 @@ export const WorkQueue = () => {
   const [processing, setProcessing] = useState(false);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'documents'>('details');
+  const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+    
+    // Listen for enabled/active modules to filter orphaned cases
+    const modulesRef = collection(db, 'tenants', tenant.id, 'modules');
+    const unsub = onSnapshot(modulesRef, (snapshot) => {
+      const activeIds = new Set<string>();
+      snapshot.docs.forEach(doc => {
+        if (doc.data().status === 'ACTIVE') {
+          activeIds.add(doc.id);
+        }
+      });
+      setActiveModuleIds(activeIds);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `tenants/${tenant.id}/modules`);
+    });
+
+    return () => unsub();
+  }, [tenant?.id]);
 
   useEffect(() => {
     if (!tenant?.id) {
@@ -115,7 +136,7 @@ export const WorkQueue = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
-          {cases.length > 0 ? cases.map((c, i) => (
+          {cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length > 0 ? cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).map((c, i) => (
             <motion.div
               key={c.id}
               initial={{ opacity: 0, x: -20 }}
@@ -135,7 +156,7 @@ export const WorkQueue = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{c.id}</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">{c.module}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">{c.module || 'General Request'}</span>
                     </div>
                     <h3 className="text-sm font-bold text-zinc-900 dark:text-white mt-0.5">{c.title}</h3>
                   </div>
@@ -158,7 +179,7 @@ export const WorkQueue = () => {
             </motion.div>
           )) : (
             <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center">
-              <p className="text-zinc-500">No cases found in the queue.</p>
+              <p className="text-zinc-500">No active cases found in the queue.</p>
             </div>
           )}
         </div>

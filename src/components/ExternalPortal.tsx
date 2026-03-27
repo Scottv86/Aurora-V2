@@ -37,10 +37,22 @@ export const ExternalPortal = () => {
     const tenantId = 'default-tenant';
     const caseId = `C-${Math.floor(1000 + Math.random() * 9000)}`;
     
+    const typeToModule: Record<string, string> = {
+      'Community Grant Application': 'grants',
+      'Service Maintenance Request': 'service-requests',
+      'Business License Renewal': 'risk-register',
+      'General Enquiry': 'contacts' // Assuming contacts as a catch-all or leave unmapped
+    };
+
+    const moduleId = typeToModule[formData.type] || 'general';
+    const moduleName = formData.type.split(' ').slice(-1)[0] === 'Enquiry' ? 'General' : formData.type;
+    
     try {
       await setDoc(doc(db, 'tenants', tenantId, 'cases', caseId), {
         id: caseId,
         tenantId,
+        moduleId,
+        module: moduleName,
         title: formData.fullName + ' - ' + formData.type,
         submittedBy: formData.fullName,
         email: formData.email,

@@ -16,6 +16,7 @@ export const MODULES = [
   { 
     id: 'contacts', 
     name: 'Contacts', 
+    type: 'RECORD',
     category: 'CRM & People', 
     icon: Users, 
     description: 'Manage people and relationships across your organization.',
@@ -29,6 +30,7 @@ export const MODULES = [
   { 
     id: 'service-requests', 
     name: 'Service Requests', 
+    type: 'WORK_ITEM',
     category: 'Intake & Requests', 
     icon: FileText, 
     description: 'Handle external requests with automated triage and routing.',
@@ -42,6 +44,7 @@ export const MODULES = [
   { 
     id: 'invoicing', 
     name: 'Invoicing', 
+    type: 'FINANCIAL',
     category: 'Finance', 
     icon: CreditCard, 
     description: 'Generate, send, and track invoices and payments.',
@@ -56,6 +59,7 @@ export const MODULES = [
   { 
     id: 'assets', 
     name: 'Asset Register', 
+    type: 'RECORD',
     category: 'Operations', 
     icon: Database, 
     description: 'Track physical and digital assets with maintenance history.',
@@ -69,6 +73,7 @@ export const MODULES = [
   { 
     id: 'onboarding', 
     name: 'Onboarding', 
+    type: 'WORK_ITEM',
     category: 'HR & People', 
     icon: UserPlus, 
     description: 'Streamline employee and contractor onboarding flows.',
@@ -82,6 +87,7 @@ export const MODULES = [
   { 
     id: 'risk-register', 
     name: 'Risk Register', 
+    type: 'RECORD',
     category: 'Risk & Compliance', 
     icon: ShieldCheck, 
     description: 'Identify, assess, and mitigate operational risks.',
@@ -95,6 +101,7 @@ export const MODULES = [
   { 
     id: 'point-of-sale', 
     name: 'Point of Sale', 
+    type: 'FINANCIAL',
     category: 'Operations', 
     icon: ShoppingCart, 
     description: 'Process retail transactions and manage till sessions.',
@@ -108,6 +115,7 @@ export const MODULES = [
   { 
     id: 'grants', 
     name: 'Grants Management', 
+    type: 'WORK_ITEM',
     category: 'Intake & Requests', 
     icon: HeartHandshake, 
     description: 'End-to-end grant application and acquittal workflows.',

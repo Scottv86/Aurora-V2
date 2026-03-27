@@ -30,15 +30,48 @@ export interface Suite {
   modules: Module[];
 }
 
+export type FieldType = 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select';
+
+export interface ModuleField {
+  id: string;
+  name: string;
+  label: string;
+  type: FieldType;
+  options?: string[];
+  required: boolean;
+  placeholder?: string;
+  helperText?: string;
+  calculationLogic?: string;
+  targetModuleId?: string;
+  fields?: ModuleField[]; // For nested structures if needed in the future
+}
+
+export interface ModuleColumn {
+  id: string;
+  fields: ModuleField[];
+}
+
+export interface ModuleLayout {
+  id: string;
+  columnCount: number;
+  tabId?: string;
+  columns: ModuleColumn[];
+}
+
+export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';
+
 export interface Module {
   id: string;
   name: string;
+  type: ModuleType;
   description: string;
   icon: string;
   category: string;
   enabled: boolean;
-  schema?: any;
+  isCustom?: boolean;
+  layout: ModuleLayout[];
   tabs?: { id: string; label: string }[];
+  workflow?: { statuses: { name: string }[] };
   workflows?: Workflow[];
 }
 
@@ -58,7 +91,7 @@ export interface WorkflowStep {
 export interface GlobalObject {
   id: string;
   type: 'CONTACT' | 'ORG' | 'ADDRESS' | 'NOTE' | 'TASK';
-  data: any;
+  data: Record<string, any>;
 }
 
 export interface BusinessLogic {
@@ -85,8 +118,8 @@ export interface DocumentTemplate {
   content: string;
   status: 'Draft' | 'Published' | 'Archived';
   version: number;
-  createdAt?: any;
-  updatedAt?: any;
+  createdAt?: string | number | { seconds: number; nanoseconds: number };
+  updatedAt?: string | number | { seconds: number; nanoseconds: number };
   createdBy?: string;
 }
 
@@ -100,8 +133,8 @@ export interface GeneratedDocument {
   name: string;
   url?: string;
   status: 'Draft' | 'Final' | 'Issued' | 'Approved';
-  generatedAt: any;
+  generatedAt: string | number | { seconds: number; nanoseconds: number };
   generatedBy?: string;
-  dataSnapshot?: any;
+  dataSnapshot?: Record<string, any>;
   content?: string;
 }

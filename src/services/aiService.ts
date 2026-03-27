@@ -1,11 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { Module, ModuleField } from "../types/platform";
 
 let aiInstance: GoogleGenAI | null = null;
 
 const getAI = () => {
   if (aiInstance) return aiInstance;
   
-  const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+  const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) {
     console.warn('Gemini API Key (VITE_GEMINI_API_KEY) is missing. AI features will not work.');
   }
@@ -16,33 +17,7 @@ const getAI = () => {
 };
 
 export interface AISolution {
-  modules: {
-    id: string;
-    name: string;
-    description: string;
-    category: string;
-    isCustom: boolean;
-    iconName: string;
-    tabs?: { id: string; label: string }[];
-    layout: {
-      id: string;
-      columnCount: number;
-      tabId?: string;
-      columns: {
-        id: string;
-        fields: {
-          id: string;
-          name: string;
-          label: string;
-          type: 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select';
-          options?: string[];
-          required: boolean;
-          placeholder?: string;
-          helperText?: string;
-        }[];
-      }[];
-    }[];
-  }[];
+  modules: Module[];
   workflows: {
     name: string;
     steps: string[];
@@ -70,8 +45,10 @@ export interface AIDocumentTemplate {
  */
 export const generateSolution = async (prompt: string): Promise<AISolution> => {
   const ai = getAI();
-  const response = await (ai as any).models.generateContent({
-    model: "gemini-2.5-flash",
+  if (!ai) throw new Error("AI service not initialized");
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.0-flash",
     contents: `You are Aurora AI, the architect for a business operating platform. 
     A user wants to build a solution for: "${prompt}".
     
@@ -80,8 +57,9 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
     2. For each module, define a set of tabs (e.g., "General", "Details", "Settings") to organize the data.
     3. For each module, define the visual layout organized into rows and columns.
     4. Use appropriate field types.
-    5. Workflows with specific steps bound to a module.
-    6. Automations bound to a module.
+    5. For each module, suggest a "Module Type" based on its function: "RECORD" (for data entries like Licences), "WORK_ITEM" (for actionable items like Applications), "REGISTRY" (for reference data), "LOG" (for audit/event data), or "FINANCIAL" (for monetary tracking).
+    6. Workflows with specific steps bound to a module.
+    7. Automations bound to a module.
     
     Provide your response in a structured JSON format.`,
     config: {
@@ -100,6 +78,7 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
                 category: { type: Type.STRING },
                 isCustom: { type: Type.BOOLEAN },
                 iconName: { type: Type.STRING },
+                type: { type: Type.STRING, enum: ['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] },
                 tabs: {
                   type: Type.ARRAY,
                   items: {
@@ -151,7 +130,7 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
                   }
                 }
               },
-              required: ["id", "name", "description", "category", "isCustom", "iconName", "layout"]
+              required: ["id", "name", "description", "category", "isCustom", "iconName", "type", "layout"]
             }
           },
           workflows: {
@@ -183,11 +162,16 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
           reasoning: { type: Type.STRING }
         },
         required: ["modules", "workflows", "automations", "reasoning"]
-      }
+      } as any
     }
   });
 
-  return JSON.parse(response.text);
+  try {
+    return JSON.parse(response.text) as AISolution;
+  } catch (error) {
+    console.error("Failed to parse AI solution JSON:", error);
+    throw new Error("Invalid response from AI service.");
+  }
 };
 
 /**
@@ -195,8 +179,10 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
  */
 export const generateDocumentTemplate = async (prompt: string, moduleId?: string): Promise<AIDocumentTemplate> => {
   const ai = getAI();
-  const response = await (ai as any).models.generateContent({
-    model: "gemini-2.5-flash",
+  if (!ai) throw new Error("AI service not initialized");
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.0-flash",
     contents: `You are Aurora AI, an expert in business document automation. 
     A user wants to create a document template for: "${prompt}".
     ${moduleId ? `This template is for the module: "${moduleId}".` : ""}
@@ -215,11 +201,16 @@ export const generateDocumentTemplate = async (prompt: string, moduleId?: string
           suggestedFields: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
         required: ["name", "content", "description", "suggestedFields"]
-      }
+      } as any
     }
   });
 
-  return JSON.parse(response.text);
+  try {
+    return JSON.parse(response.text) as AIDocumentTemplate;
+  } catch (error) {
+    console.error("Failed to parse AI document template JSON:", error);
+    throw new Error("Invalid response from AI service.");
+  }
 };
 
 /**
@@ -229,7 +220,7 @@ export const generateAISummary = async (data: any, fields: any[]): Promise<strin
   try {
     const ai = getAI();
     const dataString = JSON.stringify(data, null, 2);
-    const fieldsString = JSON.stringify(fields.map(f => ({ id: f.id, label: f.label, type: f.type })), null, 2);
+    const fieldsString = JSON.stringify(fields.map((f: ModuleField) => ({ id: f.id, label: f.label, type: f.type })), null, 2);
     
     const prompt = `You are an AI assistant integrated into a CRM system. 
 Generate a concise, professional summary of this record data.
@@ -237,8 +228,8 @@ Fields: ${fieldsString}
 Data: ${dataString}`;
 
     // FIXED: Use a valid model name
-    const response = await (ai as any).models.generateContent({
-      model: "gemini-2.5-flash",
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
     
@@ -252,7 +243,7 @@ Data: ${dataString}`;
 /**
  * Safely evaluates calculation fields locally.
  */
-export const evaluateCalculations = (data: any, fields: any[]): any => {
+export const evaluateCalculations = (data: Record<string, any>, fields: ModuleField[]): Record<string, any> => {
   const newData = { ...data };
   
   fields.forEach(field => {

@@ -28,8 +28,7 @@ import {
   query, 
   orderBy,
   where,
-  addDoc,
-  getDocs
+  addDoc
 } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { db, handleFirestoreError, OperationType } from '../../firebase';
@@ -39,20 +38,22 @@ import { MODULES } from '../../constants/modules';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, stripUndefined } from '../../lib/utils';
+import { Module, ModuleField, ModuleLayout, ModuleColumn, Workflow } from '../../types/platform';
 
 export const ModuleView = () => {
   const { id } = useParams();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { user } = useFirebase();
   const { tenant, isLoading: platformLoading } = usePlatform();
-  const [moduleData, setModuleData] = useState<any>(null);
-  const [records, setRecords] = useState<any[]>([]);
+  const [moduleData, setModuleData] = useState<Module | null>(null);
+  const [records, setRecords] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [editingRecord, setEditingRecord] = useState<any>(null);
-  const [newEntryData, setNewEntryData] = useState<any>({});
+  const [editingRecord, setEditingRecord] = useState<Record<string, any> | null>(null);
+  const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [usersData, setUsersData] = useState<any[]>([]);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
@@ -60,19 +61,19 @@ export const ModuleView = () => {
 
   const allFields = useMemo(() => {
     if (moduleData?.layout) {
-      const fields: any[] = [];
-      moduleData.layout.forEach((row: any) => {
-        row.columns.forEach((col: any) => {
-          fields.push(...flattenFields(col.fields));
+      const fields: ModuleField[] = [];
+      moduleData.layout.forEach((row: ModuleLayout) => {
+        row.columns.forEach((col: ModuleColumn) => {
+          fields.push(...flattenFields(col.fields as any) as ModuleField[]);
         });
       });
       return fields;
     }
-    return flattenFields(moduleData?.fields || []);
+    return flattenFields((moduleData as any)?.fields || []) as ModuleField[];
   }, [moduleData]);
 
   const displayFields = useMemo(() => {
-    return allFields.filter((f: any) => 
+    return allFields.filter((f: ModuleField) => 
       !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup'].includes(f.type)
     );
   }, [allFields]);
@@ -125,16 +126,16 @@ export const ModuleView = () => {
 
     const logicRef = collection(db, 'tenants', tenant.id, 'logic');
     const workflowQuery = query(logicRef, where('type', '==', 'WORKFLOW'), where('targetModuleId', '==', id));
-    const unsubscribeWorkflows = onSnapshot(workflowQuery, (snapshot) => {
-      setWorkflows(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    const unsubscribeWorkflows = onSnapshot(workflowQuery, (snapshot: any) => {
+      setWorkflows(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id } as any)) as Workflow[]);
     });
 
     const recordsRef = collection(db, 'tenants', tenant.id, 'modules', id, 'records');
     const q = query(recordsRef, orderBy('createdAt', 'desc'));
     
-    const unsubscribeRecords = onSnapshot(q, (snapshot) => {
-      setRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-    }, (error) => {
+    const unsubscribeRecords = onSnapshot(q, (snapshot: any) => {
+      setRecords(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
+    }, (error: any) => {
       handleFirestoreError(error, OperationType.LIST, `tenants/${tenant.id}/modules/${id}/records`);
     });
 
@@ -151,18 +152,18 @@ export const ModuleView = () => {
     if (allFields.some(f => f.type === 'user')) {
       const usersRef = collection(db, 'users');
       const usersQuery = query(usersRef, where('tenantId', '==', tenant.id));
-      unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-        setUsersData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      unsubscribeUsers = onSnapshot(usersQuery, (snapshot: any) => {
+        setUsersData(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
       });
     }
 
     const lookupFields = allFields.filter(f => f.type === 'lookup' && f.targetModuleId);
     const lookupUnsubscribes = lookupFields.map(field => {
-      const targetRef = collection(db, 'tenants', tenant.id, 'modules', field.targetModuleId, 'records');
-      return onSnapshot(targetRef, (snapshot) => {
+      const targetRef = collection(db, 'tenants', tenant.id, 'modules', field.targetModuleId!, 'records');
+      return onSnapshot(targetRef, (snapshot: any) => {
         setLookupData(prev => ({
           ...prev,
-          [field.targetModuleId]: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }))
+          [field.targetModuleId!]: snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }))
         }));
       });
     });
@@ -201,9 +202,9 @@ export const ModuleView = () => {
         let workflowId = null;
 
         if (workflows.length > 0) {
-          initialStatus = workflows[0].steps?.[0] || 'Active';
+          initialStatus = workflows[0].steps?.[0]?.name || 'Active';
           workflowId = workflows[0].id;
-        } else if (moduleData.workflow?.statuses?.length > 0) {
+        } else if (moduleData.workflow?.statuses && moduleData.workflow.statuses.length > 0) {
           initialStatus = moduleData.workflow.statuses[0].name;
         }
 
@@ -669,6 +670,51 @@ export const ModuleView = () => {
                   className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold disabled:opacity-50"
                 >
                   {isSubmitting ? 'Saving...' : editingRecord ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {recordToDelete && (
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setRecordToDelete(null)}
+              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl p-8 space-y-6"
+            >
+              <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center text-rose-500 mx-auto">
+                <LucideIcons.AlertCircle size={32} />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Delete Entry?</h3>
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
+                  Are you sure you want to delete this record? This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex gap-4 pt-4">
+                <button 
+                  onClick={() => setRecordToDelete(null)}
+                  className="flex-1 py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white rounded-xl font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleDeleteEntry(recordToDelete)}
+                  className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-50 transition-all shadow-xl shadow-rose-500/20 flex items-center justify-center gap-2"
+                >
+                  <span>Delete</span>
                 </button>
               </div>
             </motion.div>

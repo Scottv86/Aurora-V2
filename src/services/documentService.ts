@@ -1,5 +1,5 @@
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { doc, setDoc, collection, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { DocumentTemplate, GeneratedDocument } from '../types/platform';
 
 export const DocumentService = {
@@ -34,14 +34,14 @@ export const DocumentService = {
 
     try {
       await setDoc(doc(db, 'tenants', tenantId, 'templates', templateId), templateData);
-      return templateData as DocumentTemplate;
+      return templateData as unknown as DocumentTemplate;
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `tenants/${tenantId}/templates/${templateId}`);
       throw error;
     }
   },
 
-  async generateDocument(tenantId: string, template: DocumentTemplate, recordData: any, userId: string) {
+  async generateDocument(tenantId: string, template: DocumentTemplate, recordData: Record<string, any>, userId: string) {
     // Basic merge field replacement
     let content = template.content;
     
@@ -49,27 +49,35 @@ export const DocumentService = {
     Object.keys(recordData).forEach(key => {
       const value = recordData[key];
       const placeholder = new RegExp(`{{${key}}}`, 'g');
-      content = content.replace(placeholder, value !== undefined && value !== null ? String(value) : '');
+      // Only replace if value is not an object (unless it's a Date)
+      const displayValue = (value !== undefined && value !== null) 
+        ? (typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : String(value))
+        : '';
+      content = content.replace(placeholder, displayValue);
     });
 
     // Handle conditional sections: [[IF field]] ... [[ENDIF]]
-    // This is a very simple implementation
-    const conditionalRegex = /\[\[IF\s+(\w+)\]\]([\s\S]*?)\[\[ENDIF\]\]/g;
-    content = content.replace(conditionalRegex, (match, field, innerContent) => {
+    const conditionalRegex = /\[\[IF\s+([\w.]+)]]([\s\S]*?)\[\[ENDIF]]/g;
+    content = content.replace(conditionalRegex, (_, field, innerContent) => {
       return recordData[field] ? innerContent : '';
     });
 
     // Handle repeating sections: [[REPEAT list]] ... [[ENDREPEAT]]
-    const repeatRegex = /\[\[REPEAT\s+(\w+)\]\]([\s\S]*?)\[\[ENDREPEAT\]\]/g;
-    content = content.replace(repeatRegex, (match, listKey, innerContent) => {
+    const repeatRegex = /\[\[REPEAT\s+([\w.]+)]]([\s\S]*?)\[\[ENDREPEAT]]/g;
+    content = content.replace(repeatRegex, (_, listKey, innerContent) => {
       const list = recordData[listKey];
       if (Array.isArray(list)) {
         return list.map(item => {
           let itemContent = innerContent;
-          Object.keys(item).forEach(key => {
-            const placeholder = new RegExp(`{{${key}}}`, 'g');
-            itemContent = itemContent.replace(placeholder, String(item[key]));
-          });
+          if (typeof item === 'object' && item !== null) {
+            Object.keys(item).forEach(key => {
+              const placeholder = new RegExp(`{{${key}}}`, 'g');
+              itemContent = itemContent.replace(placeholder, String(item[key] ?? ''));
+            });
+          } else {
+            // If it's a simple array of values, use {{item}} as placeholder
+            itemContent = itemContent.replace(/{{item}}/g, String(item));
+          }
           return itemContent;
         }).join('');
       }
@@ -82,14 +90,14 @@ export const DocumentService = {
       tenantId,
       templateId: template.id,
       templateVersion: template.version,
-      recordId: recordData.id,
+      recordId: recordData.id as string | undefined,
       moduleId: template.moduleId,
-      name: `${template.name}_${recordData.id || Date.now()}`,
+      name: `${template.name}_${(recordData.id as string) || Date.now()}`,
       status: 'Draft',
       generatedAt: new Date().toISOString(),
       generatedBy: userId,
       dataSnapshot: recordData,
-      content: content // Storing the merged HTML content
+      content: content
     };
 
     try {

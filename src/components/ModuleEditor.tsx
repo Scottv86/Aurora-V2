@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   Plus, 
   Settings2, 
@@ -7,28 +7,21 @@ import {
   ChevronDown, 
   ChevronUp, 
   Eye, 
-  Code, 
   Save, 
   Type, 
   Hash, 
   Calendar, 
   CheckSquare, 
-  List, 
   AlignLeft, 
-  Image as ImageIcon, 
   Box, 
   Layout as LayoutIcon, 
   Columns, 
   Maximize2, 
   Move,
   Info,
-  AlertCircle,
   Copy,
-  ArrowRight,
   Sparkles,
   DollarSign,
-  Calculator,
-  MoreHorizontal,
   Grid3X3,
   Mail,
   Phone,
@@ -36,7 +29,6 @@ import {
   Search,
   User,
   BrainCircuit,
-  ToggleLeft,
   X,
   Minus,
   Clock,
@@ -53,6 +45,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, getDoc, updateDoc, setDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
+import { ModuleType } from '../types/platform';
 
 // --- Types ---
 
@@ -213,6 +206,7 @@ export const ModuleEditor = () => {
     description: 'Created via Drag-and-Drop Builder',
     category: 'Custom',
     iconName: 'Box',
+    type: 'RECORD' as ModuleType,
   });
   
   const [layout, setLayout] = useState<Layout>([
@@ -258,6 +252,7 @@ export const ModuleEditor = () => {
             description: data.description || '',
             category: data.category || 'Custom',
             iconName: data.iconName || 'Box',
+            type: (data.type as ModuleType) || 'RECORD',
           });
         }
       } catch (error) {
@@ -306,9 +301,7 @@ export const ModuleEditor = () => {
   
   const [activeTab, setActiveTab] = useState<'build' | 'preview' | 'logic' | 'settings'>('build');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
-  const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null);
   const [insertionIndex, setInsertionIndex] = useState<number | null>(null);
   const [insertionFieldIndex, setInsertionFieldIndex] = useState<{ colId: string, index: number } | null>(null);
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
@@ -322,7 +315,7 @@ export const ModuleEditor = () => {
     columnCount,
     columns: Array.from({ length: columnCount }, (_, i) => ({
       id: `col-${generateId()}-${i}`,
-      fields: []
+      fields: [] as Field[]
     })),
     tabId: currentTabId
   });
@@ -1088,8 +1081,7 @@ export const ModuleEditor = () => {
                     </button>
                     <button 
                       onClick={() => {
-                        console.log('Module State Exported:', moduleState);
-                        alert('Module state exported to console!');
+                        alert('Module state exported! (Check developer console for data)');
                       }}
                       className="px-10 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-bold uppercase tracking-widest transition-all shadow-xl shadow-indigo-500/20"
                     >
@@ -1139,6 +1131,26 @@ export const ModuleEditor = () => {
                       className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
                       placeholder="e.g. Operations"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Type</label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
+                          className={cn(
+                            "px-4 py-3 rounded-xl border text-[10px] font-bold transition-all uppercase tracking-widest",
+                            moduleSettings.type === type
+                              ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                              : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                          )}
+                        >
+                          {type.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="space-y-2">

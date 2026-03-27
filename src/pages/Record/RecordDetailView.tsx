@@ -11,16 +11,9 @@ import {
   Loader2, 
   AlertCircle,
   ArrowLeft,
-  Calendar as CalendarIcon,
-  CheckCircle2,
-  MoreVertical,
-  History,
-  FileText,
-  ShieldCheck,
   Check,
   X,
-  Sparkles,
-  Layers
+  Sparkles
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { 
@@ -33,7 +26,6 @@ import {
   onSnapshot, 
   query, 
   where,
-  getDocs,
   orderBy,
   addDoc
 } from 'firebase/firestore';
@@ -44,19 +36,19 @@ import { MODULES } from '../../constants/modules';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, stripUndefined } from '../../lib/utils';
+import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
 
 export const RecordDetailView = () => {
   const { moduleId, recordId } = useParams();
   const navigate = useNavigate();
   const { tenant, isLoading: platformLoading } = usePlatform();
-  const [moduleData, setModuleData] = useState<any>(null);
-  const [record, setRecord] = useState<any>(null);
-  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [moduleData, setModuleData] = useState<Module | null>(null);
+  const [record, setRecord] = useState<Record<string, any> | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<any>({});
+  const [editData, setEditData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [usersData, setUsersData] = useState<any[]>([]);
@@ -70,15 +62,15 @@ export const RecordDetailView = () => {
 
   const allFields = useMemo(() => {
     if (moduleData?.layout) {
-      const fields: any[] = [];
-      moduleData.layout.forEach((row: any) => {
-        row.columns.forEach((col: any) => {
-          fields.push(...flattenFields(col.fields));
+      const fields: ModuleField[] = [];
+      moduleData.layout.forEach((row: ModuleLayout) => {
+        row.columns.forEach((col: ModuleColumn) => {
+          fields.push(...flattenFields(col.fields as any)); // flattenFields expects any[]/Field[]
         });
       });
       return fields;
     }
-    return flattenFields(moduleData?.fields || []);
+    return flattenFields((moduleData as any)?.fields || []) as ModuleField[];
   }, [moduleData]);
 
   useEffect(() => {
@@ -129,12 +121,6 @@ export const RecordDetailView = () => {
       }
     });
 
-    const logicRef = collection(db, 'tenants', tenant.id, 'logic');
-    const workflowQuery = query(logicRef, where('type', '==', 'WORKFLOW'), where('targetModuleId', '==', moduleId));
-    const unsubscribeWorkflows = onSnapshot(workflowQuery, (snapshot) => {
-      setWorkflows(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-    });
-
     const historyRef = collection(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId, 'history');
     const qHistory = query(historyRef, orderBy('timestamp', 'desc'));
     const unsubscribeHistory = onSnapshot(qHistory, (snapshot) => {
@@ -143,7 +129,6 @@ export const RecordDetailView = () => {
 
     return () => {
       unsubscribeRecord();
-      unsubscribeWorkflows();
       unsubscribeHistory();
     };
   }, [tenant?.id, moduleId, recordId, platformLoading, navigate]);

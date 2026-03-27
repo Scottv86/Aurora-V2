@@ -5,22 +5,17 @@ import {
   Clock, 
   ArrowUpRight, 
   ArrowDownRight,
-  Filter,
   Download,
   Calendar
 } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'motion/react';
 import { 
-  BarChart, 
-  Bar, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer, 
-  LineChart, 
-  Line,
   AreaChart,
   Area,
   PieChart,
@@ -29,16 +24,12 @@ import {
 } from 'recharts';
 import { cn } from '../lib/utils';
 import { useTheme } from '../hooks/useTheme';
+import { usePlatform } from '../hooks/usePlatform';
+import { db } from '../firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { useEffect, useMemo } from 'react';
 
-const DATA = [
-  { name: 'Mon', cases: 40, resolved: 24 },
-  { name: 'Tue', cases: 30, resolved: 13 },
-  { name: 'Wed', cases: 20, resolved: 98 },
-  { name: 'Thu', cases: 27, resolved: 39 },
-  { name: 'Fri', cases: 18, resolved: 48 },
-  { name: 'Sat', cases: 23, resolved: 38 },
-  { name: 'Sun', cases: 34, resolved: 43 },
-];
+
 
 const MODULE_DISTRIBUTION = [
   { name: 'Grants', value: 400 },
@@ -51,7 +42,132 @@ const COLORS = ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef'];
 
 export const Analytics = () => {
   const { theme } = useTheme();
+  const { tenant } = usePlatform();
   const isDark = theme === 'dark';
+
+  const [cases, setCases] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+
+    // Listen to cases
+    const casesRef = collection(db, 'tenants', tenant.id, 'cases');
+    const casesUnsub = onSnapshot(casesRef, (snapshot) => {
+      setCases(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    // Listen to modules
+    const modulesRef = collection(db, 'tenants', tenant.id, 'modules');
+    const modulesUnsub = onSnapshot(modulesRef, (snapshot) => {
+      const activeIds = new Set<string>();
+      snapshot.docs.forEach(doc => {
+        if (doc.data().status === 'ACTIVE') {
+          activeIds.add(doc.id);
+        }
+      });
+      setActiveModuleIds(activeIds);
+    });
+
+    // Listen to users (global collection but we can filter or just count for now)
+    const usersRef = collection(db, 'users');
+    const usersUnsub = onSnapshot(usersRef, (snapshot) => {
+      setUsers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    return () => {
+      casesUnsub();
+      modulesUnsub();
+      usersUnsub();
+    };
+  }, [tenant?.id]);
+
+  // Process data for stats and charts 
+  const stats = useMemo(() => {
+    // ONLY show cases associated with ACTIVE modules (consistency with Work Queue)
+    const activeCases = cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId));
+    const totalCases = activeCases.length;
+    
+    // Average Resolution
+    const completedCases = activeCases.filter(c => c.status === 'Completed' && c.submittedAt && c.updatedAt);
+    let avgResolution = 0;
+    if (completedCases.length > 0) {
+      const totalDiff = completedCases.reduce((acc, c) => {
+        const start = c.submittedAt.toDate ? c.submittedAt.toDate() : new Date(c.submittedAt);
+        const end = c.updatedAt.toDate ? c.updatedAt.toDate() : new Date(c.updatedAt);
+        return acc + (end.getTime() - start.getTime());
+      }, 0);
+      avgResolution = totalDiff / completedCases.length / (1000 * 60 * 60 * 24); // in days
+    }
+
+    // AI Efficiency (percentage of cases with AI summary)
+    const aiCases = activeCases.filter(c => c.aiSummary && c.aiSummary !== '');
+    const aiEfficiency = totalCases > 0 ? (aiCases.length / totalCases) * 100 : 94;
+
+    // Active Users (count users for this tenant)
+    const tenantUsers = users.filter(u => u.tenantId === tenant?.id);
+
+    return {
+      totalCases,
+      avgResolution: avgResolution.toFixed(1),
+      activeUsers: tenantUsers.length || users.length, // Fallback if no specific tenant users
+      aiEfficiency: Math.round(aiEfficiency)
+    };
+  }, [cases, users, tenant?.id, activeModuleIds]);
+
+  const chartData = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const now = new Date();
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(now.getDate() - (6 - i));
+      return {
+        name: days[d.getDay()],
+        date: d.toDateString(),
+        cases: 0,
+        resolved: 0
+      };
+    });
+
+    cases.forEach(c => {
+      // Filter out orphaned cases from chart data too
+      if (!c.moduleId || !activeModuleIds.has(c.moduleId)) return;
+      
+      const submittedDate = c.submittedAt?.toDate ? c.submittedAt.toDate() : new Date(c.submittedAt);
+      const dayIndex = last7Days.findIndex(d => d.date === submittedDate.toDateString());
+      if (dayIndex >= 0) {
+        last7Days[dayIndex].cases++;
+        if (c.status === 'Completed') {
+          last7Days[dayIndex].resolved++;
+        }
+      }
+    });
+
+    return last7Days;
+  }, [cases, activeModuleIds]);
+
+  const moduleDistribution = useMemo(() => {
+    const counts: Record<string, number> = {};
+
+    cases.forEach(c => {
+      // Filter out orphaned cases from distribution
+      if (!c.moduleId || !activeModuleIds.has(c.moduleId)) return;
+      
+      const moduleName = c.module || 'Uncategorized';
+      counts[moduleName] = (counts[moduleName] || 0) + 1;
+    });
+
+    const data = Object.entries(counts).map(([name, value]) => ({ name, value }));
+    return data.length > 0 ? data : MODULE_DISTRIBUTION; // Fallback to placeholder if no data
+  }, [cases, activeModuleIds]);
+
+  const statsConfig = [
+    { label: 'Total Cases', value: stats.totalCases.toLocaleString(), change: '+12.5%', trend: 'up', icon: BarChart3 },
+    { label: 'Avg. Resolution', value: `${stats.avgResolution} days`, change: '-8.1%', trend: 'down', icon: Clock },
+    { label: 'Active Users', value: stats.activeUsers.toString(), change: '+4.3%', trend: 'up', icon: Users },
+    { label: 'AI Efficiency', value: `${stats.aiEfficiency}%`, change: '+2.1%', trend: 'up', icon: TrendingUp },
+  ];
 
   return (
     <div className="space-y-8">
@@ -73,12 +189,7 @@ export const Analytics = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: 'Total Cases', value: '1,284', change: '+12.5%', trend: 'up', icon: BarChart3 },
-          { label: 'Avg. Resolution', value: '4.2 days', change: '-8.1%', trend: 'down', icon: Clock },
-          { label: 'Active Users', value: '482', change: '+4.3%', trend: 'up', icon: Users },
-          { label: 'AI Efficiency', value: '94%', change: '+2.1%', trend: 'up', icon: TrendingUp },
-        ].map((stat, i) => (
+        {statsConfig.map((stat, i) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
@@ -122,7 +233,7 @@ export const Analytics = () => {
           </div>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={DATA}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorCases" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
@@ -171,7 +282,7 @@ export const Analytics = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={MODULE_DISTRIBUTION}
+                  data={moduleDistribution}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -179,7 +290,7 @@ export const Analytics = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {MODULE_DISTRIBUTION.map((entry, index) => (
+                  {moduleDistribution.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -196,13 +307,13 @@ export const Analytics = () => {
             </ResponsiveContainer>
           </div>
           <div className="space-y-3">
-            {MODULE_DISTRIBUTION.map((entry, index) => (
+            {moduleDistribution.map((entry, index) => (
               <div key={entry.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">{entry.name}</span>
                 </div>
-                <span className="text-xs font-bold text-zinc-900 dark:text-white">{((entry.value / 1200) * 100).toFixed(0)}%</span>
+                <span className="text-xs font-bold text-zinc-900 dark:text-white">{((entry.value / (cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length || 1)) * 100).toFixed(0)}%</span>
               </div>
             ))}
           </div>

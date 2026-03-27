@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { MODULES } from '../constants/modules';
 import { DeleteModuleModal } from './DeleteModuleModal';
+import { ModuleType } from '../types/platform';
 
 
 const CATEGORIES = [
@@ -46,10 +47,20 @@ const CATEGORIES = [
   'Risk & Compliance'
 ];
 
+const MODULE_TYPES: (ModuleType | 'All')[] = [
+  'All',
+  'RECORD',
+  'WORK_ITEM',
+  'REGISTRY',
+  'LOG',
+  'FINANCIAL'
+];
+
 export const ModuleCatalog = () => {
   const { user } = useFirebase();
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedType, setSelectedType] = useState<ModuleType | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [configuredModules, setConfiguredModules] = useState<any[]>([]);
   const [enabling, setEnabling] = useState<string | null>(null);
@@ -209,8 +220,10 @@ export const ModuleCatalog = () => {
     }
   });
 
+
   const filteredModules = allModules.filter(m => 
     (selectedCategory === 'All' || m.category === selectedCategory) &&
+    (selectedType === 'All' || m.type === selectedType) &&
     ((m.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (m.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -248,13 +261,31 @@ export const ModuleCatalog = () => {
             key={cat}
             onClick={() => setSelectedCategory(cat)}
             className={cn(
-              "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border",
+              "px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-wider",
               selectedCategory === cat 
                 ? "bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-500/20" 
                 : "bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
             )}
           >
             {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mr-2 ml-1">Type</span>
+        {MODULE_TYPES.map(type => (
+          <button
+            key={type}
+            onClick={() => setSelectedType(type)}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-wider",
+              selectedType === type 
+                ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-zinc-900 dark:border-zinc-100 shadow-lg shadow-zinc-500/20" 
+                : "bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+            )}
+          >
+            {type.replace('_', ' ')}
           </button>
         ))}
       </div>
@@ -292,7 +323,19 @@ export const ModuleCatalog = () => {
                   <span className="text-[8px] px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-full font-bold uppercase tracking-widest">Custom</span>
                 )}
               </div>
-              <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 mb-3 uppercase tracking-wider">{mod.category}</p>
+              <div className="flex items-center gap-3 mb-3">
+                <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{mod.category}</p>
+                <div className="h-1 w-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+                <span className={cn(
+                  "text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border",
+                  mod.type === 'WORK_ITEM' ? "bg-amber-500/10 text-amber-600 border-amber-500/20" :
+                  mod.type === 'RECORD' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
+                  mod.type === 'FINANCIAL' ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                  "bg-zinc-500/10 text-zinc-600 border-zinc-500/20"
+                )}>
+                  {mod.type || 'RECORD'}
+                </span>
+              </div>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">{mod.description}</p>
             </div>
             <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">

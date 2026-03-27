@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useState, useEffect, ReactNode } from 'react';
 import { 
   auth, 
   db, 
@@ -187,7 +187,7 @@ export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-        console.log("Sign in cancelled or popup closed");
+        // Silently handle cancelled sign-in
       } else {
         console.error("Sign in error:", error);
         toast.error("Failed to sign in. Please try again.");

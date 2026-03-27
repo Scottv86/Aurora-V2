@@ -163,7 +163,7 @@ export const DeleteModuleModal = ({ isOpen, onClose, onConfirm, module, tenantId
                     <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
                       This module contains <span className="font-bold text-zinc-900 dark:text-white">{recordCount} records</span> that will be permanently removed. This action cannot be undone.
                     </p>
-                  </section>Section ends here
+                  </section>
 
                   {assets.length > 0 && (
                     <section className="space-y-4">
