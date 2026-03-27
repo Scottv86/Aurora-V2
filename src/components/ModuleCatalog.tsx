@@ -202,7 +202,7 @@ export const ModuleCatalog = () => {
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/workspace/builder-choice')}
+            onClick={() => navigate('/workspace/builder')}
             className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20"
           >
             <Plus size={18} />

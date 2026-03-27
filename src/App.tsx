@@ -43,7 +43,6 @@ const App = () => {
               <Route path="/workspace/catalog" element={<PlatformShell><ModuleCatalog /></PlatformShell>} />
               <Route path="/workspace/builder" element={<PlatformShell><BuilderChoice /></PlatformShell>} />
               <Route path="/workspace/ai-builder" element={<PlatformShell fullBleed><AIBuilder /></PlatformShell>} />
-              <Route path="/workspace/builder/new" element={<PlatformShell fullBleed><ModuleEditor /></PlatformShell>} />
               <Route path="/workspace/builder/:id" element={<PlatformShell fullBleed><ModuleEditor /></PlatformShell>} />
               
               {/* Dynamic Module Routes */}

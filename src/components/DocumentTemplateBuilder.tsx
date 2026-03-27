@@ -21,7 +21,7 @@ import {
 import { cn } from '../lib/utils';
 import { DocumentTemplate } from '../types/platform';
 import { DocumentService } from '../services/documentService';
-import { generateDocumentTemplate } from '../services/geminiService';
+import { generateDocumentTemplate } from '../services/aiService';
 import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
 

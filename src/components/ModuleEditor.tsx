@@ -201,7 +201,8 @@ const LAYOUT_TYPES = [
 // --- Components ---
 
 export const ModuleEditor = () => {
-  const { id } = useParams();
+  const { id: routeId } = useParams();
+  const id = routeId || 'new';
   const navigate = useNavigate();
   const { tenant } = usePlatform();
   const [isSaving, setIsSaving] = useState(false);
@@ -231,7 +232,7 @@ export const ModuleEditor = () => {
 
   // Load layout from Firestore
   React.useEffect(() => {
-    if (!id || !tenant?.id) return;
+    if (!tenant?.id) return;
     
     if (id === 'new') {
       setIsLoading(false);
@@ -271,7 +272,7 @@ export const ModuleEditor = () => {
   }, [id, tenant?.id]);
 
   const handleSave = async () => {
-    if (!id || !tenant?.id) return;
+    if (!tenant?.id) return;
     setIsSaving(true);
     try {
       if (id === 'new') {

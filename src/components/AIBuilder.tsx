@@ -13,10 +13,10 @@ import {
   Terminal,
   ChevronRight
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, stripUndefined } from '../lib/utils';
-import { generateSolution, AISolution } from '../services/geminiService';
+import { generateSolution, AISolution } from '../services/aiService';
 import { usePlatform } from '../hooks/usePlatform';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
@@ -29,17 +29,29 @@ export const AIBuilder = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [result, setResult] = useState<AISolution | null>(null);
+  
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+
+    const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      toast.error("Gemini API Key is missing. Please add VITE_GEMINI_API_KEY to your .env file.");
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const solution = await generateSolution(prompt);
       setResult(solution);
       setStep(2);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Generation Error:", error);
-      toast.error("Failed to generate solution. Please try again.");
+      const message = error?.message || "Failed to generate solution. Please try again.";
+      toast.error(message);
     } finally {
       setIsGenerating(false);
     }
@@ -198,12 +210,14 @@ export const AIBuilder = () => {
             exit={{ opacity: 0, y: -20 }}
             className="space-y-8"
           >
-            <div className="p-8 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-8 shadow-xl dark:shadow-none">
-              <div className="flex items-start gap-4 p-6 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+            <div className="p-8 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-8 shadow-xl dark:shadow-none relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent pointer-events-none" />
+              
+              <div className="relative flex items-start gap-4 p-6 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
                 <Sparkles className="text-indigo-600 dark:text-indigo-400 shrink-0" size={24} />
                 <div>
                   <h3 className="text-lg font-bold text-zinc-900 dark:text-white">AI Recommendation</h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{result.reasoning}</p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed font-medium">{result.reasoning}</p>
                 </div>
               </div>
 
@@ -283,34 +297,40 @@ export const AIBuilder = () => {
                 </div>
               </div>
 
-              <div className="pt-8 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                <button 
-                  onClick={() => setStep(1)}
-                  className="text-sm font-bold text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                >
-                  Back to Prompt
-                </button>
-                <div className="flex gap-4">
-                  <button className="px-6 py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-900 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shadow-sm dark:shadow-none">
-                    Customize
-                  </button>
+            </div>
+
+            {/* Sticky Action Footer */}
+            <div className="sticky bottom-6 left-0 right-0 z-50 mt-8">
+              <div className="mx-auto max-w-2xl px-4">
+                <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-4">
                   <button 
-                    onClick={handleDeploy}
-                    disabled={isDeploying}
-                    className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50"
+                    onClick={() => setStep(1)}
+                    className="text-sm font-bold text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors px-4"
                   >
-                    {isDeploying ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Deploying...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Deploy to Workspace</span>
-                        <ArrowRight size={16} />
-                      </>
-                    )}
+                    Back
                   </button>
+                  <div className="flex gap-3">
+                    <button className="px-5 py-2.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+                      Customize
+                    </button>
+                    <button 
+                      onClick={handleDeploy}
+                      disabled={isDeploying}
+                      className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isDeploying ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Deploying...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Deploy to Workspace</span>
+                          <ArrowRight size={16} />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

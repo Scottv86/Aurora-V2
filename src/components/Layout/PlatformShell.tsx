@@ -147,7 +147,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         <main className={cn(
           "flex-1 transition-all duration-300",
           isSidebarOpen ? "ml-64" : "ml-20",
-          fullBleed && "h-[calc(100vh-4rem)] overflow-hidden"
+          fullBleed && "h-[calc(100vh-4rem)] overflow-y-auto"
         )}>
           <div className={cn(
             "mx-auto",

@@ -1,25 +1,244 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || 'mock-key' });
+let aiInstance: GoogleGenAI | null = null;
 
+const getAI = () => {
+  if (aiInstance) return aiInstance;
+  
+  const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn('Gemini API Key (VITE_GEMINI_API_KEY) is missing. AI features will not work.');
+  }
+  
+  // FIXED: Constructor expects an options object with apiKey
+  aiInstance = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
+  return aiInstance;
+};
+
+export interface AISolution {
+  modules: {
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    isCustom: boolean;
+    iconName: string;
+    tabs?: { id: string; label: string }[];
+    layout: {
+      id: string;
+      columnCount: number;
+      tabId?: string;
+      columns: {
+        id: string;
+        fields: {
+          id: string;
+          name: string;
+          label: string;
+          type: 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select';
+          options?: string[];
+          required: boolean;
+          placeholder?: string;
+          helperText?: string;
+        }[];
+      }[];
+    }[];
+  }[];
+  workflows: {
+    name: string;
+    steps: string[];
+    description: string;
+    targetModuleId: string;
+  }[];
+  automations: {
+    trigger: string;
+    action: string;
+    description: string;
+    targetModuleId: string;
+  }[];
+  reasoning: string;
+}
+
+export interface AIDocumentTemplate {
+  name: string;
+  content: string;
+  description: string;
+  suggestedFields: string[];
+}
+
+/**
+ * Generates a complete business solution based on a prompt.
+ */
+export const generateSolution = async (prompt: string): Promise<AISolution> => {
+  const ai = getAI();
+  const response = await (ai as any).models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: `You are Aurora AI, the architect for a business operating platform. 
+    A user wants to build a solution for: "${prompt}".
+    
+    Design a comprehensive solution including:
+    1. Modules to enable. Choose from pre-built modules or define entirely new custom modules.
+    2. For each module, define a set of tabs (e.g., "General", "Details", "Settings") to organize the data.
+    3. For each module, define the visual layout organized into rows and columns.
+    4. Use appropriate field types.
+    5. Workflows with specific steps bound to a module.
+    6. Automations bound to a module.
+    
+    Provide your response in a structured JSON format.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          modules: {
+            type: Type.ARRAY,
+            items: { 
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                name: { type: Type.STRING },
+                description: { type: Type.STRING },
+                category: { type: Type.STRING },
+                isCustom: { type: Type.BOOLEAN },
+                iconName: { type: Type.STRING },
+                tabs: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      label: { type: Type.STRING }
+                    },
+                    required: ["id", "label"]
+                  }
+                },
+                layout: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      columnCount: { type: Type.INTEGER },
+                      tabId: { type: Type.STRING },
+                      columns: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            id: { type: Type.STRING },
+                            fields: {
+                              type: Type.ARRAY,
+                              items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                  id: { type: Type.STRING },
+                                  name: { type: Type.STRING },
+                                  label: { type: Type.STRING },
+                                  type: { type: Type.STRING, enum: ['text', 'longText', 'number', 'checkbox', 'currency', 'email', 'phone', 'address', 'lookup', 'user', 'calculation', 'ai_summary', 'date', 'select'] },
+                                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                  required: { type: Type.BOOLEAN },
+                                  placeholder: { type: Type.STRING },
+                                  helperText: { type: Type.STRING }
+                                },
+                                required: ["id", "name", "label", "type", "required"]
+                              }
+                            }
+                          },
+                          required: ["id", "fields"]
+                        }
+                      }
+                    },
+                    required: ["id", "columnCount", "columns"]
+                  }
+                }
+              },
+              required: ["id", "name", "description", "category", "isCustom", "iconName", "layout"]
+            }
+          },
+          workflows: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                steps: { type: Type.ARRAY, items: { type: Type.STRING } },
+                description: { type: Type.STRING },
+                targetModuleId: { type: Type.STRING }
+              },
+              required: ["name", "steps", "description", "targetModuleId"]
+            }
+          },
+          automations: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                trigger: { type: Type.STRING },
+                action: { type: Type.STRING },
+                description: { type: Type.STRING },
+                targetModuleId: { type: Type.STRING }
+              },
+              required: ["trigger", "action", "description", "targetModuleId"]
+            }
+          },
+          reasoning: { type: Type.STRING }
+        },
+        required: ["modules", "workflows", "automations", "reasoning"]
+      }
+    }
+  });
+
+  return JSON.parse(response.text);
+};
+
+/**
+ * Generates a document template based on a prompt.
+ */
+export const generateDocumentTemplate = async (prompt: string, moduleId?: string): Promise<AIDocumentTemplate> => {
+  const ai = getAI();
+  const response = await (ai as any).models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: `You are Aurora AI, an expert in business document automation. 
+    A user wants to create a document template for: "${prompt}".
+    ${moduleId ? `This template is for the module: "${moduleId}".` : ""}
+    
+    Design a professional document template in HTML format with placeholders like {{field_name}}.
+    
+    Provide your response in a structured JSON format.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          content: { type: Type.STRING },
+          description: { type: Type.STRING },
+          suggestedFields: { type: Type.ARRAY, items: { type: Type.STRING } }
+        },
+        required: ["name", "content", "description", "suggestedFields"]
+      }
+    }
+  });
+
+  return JSON.parse(response.text);
+};
+
+/**
+ * Generates a summary for a record.
+ */
 export const generateAISummary = async (data: any, fields: any[]): Promise<string> => {
   try {
+    const ai = getAI();
     const dataString = JSON.stringify(data, null, 2);
     const fieldsString = JSON.stringify(fields.map(f => ({ id: f.id, label: f.label, type: f.type })), null, 2);
     
     const prompt = `You are an AI assistant integrated into a CRM system. 
-Your task is to generate a concise, professional summary of the following record data.
+Generate a concise, professional summary of this record data.
+Fields: ${fieldsString}
+Data: ${dataString}`;
 
-Fields Definition:
-${fieldsString}
-
-Record Data:
-${dataString}
-
-Please provide a 2-3 sentence summary highlighting the most important information.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+    // FIXED: Use a valid model name
+    const response = await (ai as any).models.generateContent({
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
     
@@ -30,6 +249,9 @@ Please provide a 2-3 sentence summary highlighting the most important informatio
   }
 };
 
+/**
+ * Safely evaluates calculation fields locally.
+ */
 export const evaluateCalculations = (data: any, fields: any[]): any => {
   const newData = { ...data };
   
