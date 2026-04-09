@@ -1,4 +1,4 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 
 interface SidebarItemProps {
@@ -8,17 +8,22 @@ interface SidebarItemProps {
   to?: string;
   badge?: string;
   nested?: boolean;
+  onClick?: () => void;
 }
 
-export const SidebarItem = ({ icon: Icon, label, active, to, badge, nested }: SidebarItemProps) => {
+export const SidebarItem = ({ icon: Icon, label, active, to, badge, nested, onClick }: SidebarItemProps) => {
   const navigate = useNavigate();
-  const isComingSoon = !to;
+  const isComingSoon = !to && !onClick;
 
   return (
     <button
       type="button"
       onClick={(e) => {
         e.preventDefault();
+        if (onClick) {
+          onClick();
+          return;
+        }
         if (to) navigate(to);
       }}
       disabled={isComingSoon}

@@ -1,55 +1,33 @@
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, setDoc, collection, serverTimestamp, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { DocumentTemplate, GeneratedDocument } from '../types/platform';
 
 export const DocumentService = {
   async getTemplates(tenantId: string, moduleId?: string) {
-    const templatesRef = collection(db, 'tenants', tenantId, 'templates');
-    let q = query(templatesRef, orderBy('createdAt', 'desc'));
-    if (moduleId) {
-      q = query(templatesRef, where('moduleId', '==', moduleId), orderBy('createdAt', 'desc'));
-    }
-    try {
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DocumentTemplate));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.GET, `tenants/${tenantId}/templates`);
-      throw error;
-    }
+    console.log(`[DocumentService] Fetching templates for tenant ${tenantId}, module ${moduleId}`);
+    // NOTE: Firestore fetching removed. Transition to Prisma/API required.
+    return [] as DocumentTemplate[];
   },
 
   async saveTemplate(tenantId: string, template: Partial<DocumentTemplate>) {
-    const templatesRef = collection(db, 'tenants', tenantId, 'templates');
-    const templateId = template.id || doc(templatesRef).id;
-    const now = serverTimestamp();
-    
-    const templateData = {
+    console.log(`[DocumentService] Saving template for tenant ${tenantId}`, template);
+    // NOTE: Firestore write removed. 
+    return {
       ...template,
-      id: templateId,
+      id: template.id || 'temp-id',
       tenantId,
-      updatedAt: now,
-      createdAt: template.createdAt || now,
+      updatedAt: new Date().toISOString(),
+      createdAt: template.createdAt || new Date().toISOString(),
       version: (template.version || 0) + 1,
-    };
-
-    try {
-      await setDoc(doc(db, 'tenants', tenantId, 'templates', templateId), templateData);
-      return templateData as unknown as DocumentTemplate;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenantId}/templates/${templateId}`);
-      throw error;
-    }
+    } as unknown as DocumentTemplate;
   },
 
   async generateDocument(tenantId: string, template: DocumentTemplate, recordData: Record<string, any>, userId: string) {
-    // Basic merge field replacement
+    // Basic merge field replacement remains valid as it is pure JS
     let content = template.content;
     
     // Replace simple placeholders: {{field}}
     Object.keys(recordData).forEach(key => {
       const value = recordData[key];
       const placeholder = new RegExp(`{{${key}}}`, 'g');
-      // Only replace if value is not an object (unless it's a Date)
       const displayValue = (value !== undefined && value !== null) 
         ? (typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : String(value))
         : '';
@@ -75,7 +53,6 @@ export const DocumentService = {
               itemContent = itemContent.replace(placeholder, String(item[key] ?? ''));
             });
           } else {
-            // If it's a simple array of values, use {{item}} as placeholder
             itemContent = itemContent.replace(/{{item}}/g, String(item));
           }
           return itemContent;
@@ -84,7 +61,7 @@ export const DocumentService = {
       return '';
     });
 
-    const docId = doc(collection(db, 'tenants', tenantId, 'documents')).id;
+    const docId = 'doc_' + Math.random().toString(36).substr(2, 9);
     const docData: Partial<GeneratedDocument> = {
       id: docId,
       tenantId,
@@ -100,30 +77,13 @@ export const DocumentService = {
       content: content
     };
 
-    try {
-      await setDoc(doc(db, 'tenants', tenantId, 'documents', docId), {
-        ...docData,
-        generatedAt: serverTimestamp()
-      });
-      return docData as GeneratedDocument;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenantId}/documents/${docId}`);
-      throw error;
-    }
+    // NOTE: Firestore document generation storage removed.
+    return docData as GeneratedDocument;
   },
 
   async getDocuments(tenantId: string, recordId?: string) {
-    const docsRef = collection(db, 'tenants', tenantId, 'documents');
-    let q = query(docsRef, orderBy('generatedAt', 'desc'));
-    if (recordId) {
-      q = query(docsRef, where('recordId', '==', recordId), orderBy('generatedAt', 'desc'));
-    }
-    try {
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GeneratedDocument));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.GET, `tenants/${tenantId}/documents`);
-      throw error;
-    }
+    console.log(`[DocumentService] Fetching documents for tenant ${tenantId}, record ${recordId}`);
+    // NOTE: Firestore fetching removed.
+    return [] as GeneratedDocument[];
   }
 };

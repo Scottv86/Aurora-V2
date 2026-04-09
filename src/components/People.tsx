@@ -1,21 +1,14 @@
 import { 
-  Users, 
   UserPlus, 
   Search, 
   MoreVertical, 
-  Mail, 
-  Phone, 
   Shield, 
-  CheckCircle2,
   Clock,
   Filter
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
 import { usePlatform } from '../hooks/usePlatform';
-import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 
 export const People = () => {
   const { tenant } = usePlatform();
@@ -27,23 +20,12 @@ export const People = () => {
       setLoading(false);
       return;
     }
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('tenantId', '==', tenant.id), orderBy('lastActive', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      }));
-      setPeople(usersData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'users');
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+    
+    // NOTE: User fetching from Firestore has been removed 
+    // during the Supabase migration. This will be replaced by Prisma/API calls.
+    setPeople([]);
+    setLoading(false);
+  }, [tenant?.id]);
 
   if (loading) {
     return (
@@ -92,7 +74,7 @@ export const People = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {people.map((person, i) => (
+            {people.length > 0 ? people.map((person, i) => (
               <motion.tr 
                 key={person.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -103,7 +85,7 @@ export const People = () => {
                 <td className="py-4 px-6">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs">
-                      {person.displayName ? person.displayName.split(' ').map((n: any) => n[0]).join('') : '??'}
+                      {person.displayName ? person.displayName.split(' ').map((n: string) => n[0]).join('') : '??'}
                     </div>
                     <div>
                       <p className="text-sm font-bold text-zinc-900 dark:text-white">{person.displayName || 'Unknown User'}</p>
@@ -137,7 +119,13 @@ export const People = () => {
                   </button>
                 </td>
               </motion.tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-zinc-500 dark:text-zinc-400">
+                  No workspace members found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

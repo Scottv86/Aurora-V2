@@ -1,20 +1,15 @@
 import { 
   Sparkles, 
-  Globe, 
   ArrowRight, 
   CheckCircle2, 
   CloudUpload,
   FileText,
   Search,
-  History,
-  Clock,
   ChevronRight
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, addDoc, setDoc, doc, serverTimestamp, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 
 export const ExternalPortal = () => {
   const [view, setView] = useState<'SUBMIT' | 'TRACK'>('SUBMIT');
@@ -34,40 +29,20 @@ export const ExternalPortal = () => {
     if (!formData.fullName || !formData.email || !formData.description) return;
     
     setIsSubmitting(true);
-    const tenantId = 'default-tenant';
     const caseId = `C-${Math.floor(1000 + Math.random() * 9000)}`;
     
-    const typeToModule: Record<string, string> = {
-      'Community Grant Application': 'grants',
-      'Service Maintenance Request': 'service-requests',
-      'Business License Renewal': 'risk-register',
-      'General Enquiry': 'contacts' // Assuming contacts as a catch-all or leave unmapped
-    };
-
-    const moduleId = typeToModule[formData.type] || 'general';
-    const moduleName = formData.type.split(' ').slice(-1)[0] === 'Enquiry' ? 'General' : formData.type;
-    
     try {
-      await setDoc(doc(db, 'tenants', tenantId, 'cases', caseId), {
-        id: caseId,
-        tenantId,
-        moduleId,
-        module: moduleName,
-        title: formData.fullName + ' - ' + formData.type,
-        submittedBy: formData.fullName,
-        email: formData.email,
-        type: formData.type,
-        description: formData.description,
-        status: 'New',
-        priority: 'Medium',
-        submittedAt: serverTimestamp(),
-        aiSummary: 'Processing submission...'
-      });
+      // NOTE: Firestore case submission removed.
+      // In the future, this should call a public API endpoint.
+      console.log(`[ExternalPortal] Submitting case ${caseId}`, formData);
+      
+      // Artificial delay to simulate network request
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
       setSubmittedId(caseId);
       setIsSubmitted(true);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenantId}/cases/${caseId}`);
+      console.error("Submission Error:", error);
     } finally {
       setIsSubmitting(false);
     }

@@ -17,33 +17,16 @@ import {
   History
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
-import { 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc, 
-  serverTimestamp, 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy,
-  where,
-  addDoc
-} from 'firebase/firestore';
 import { toast } from 'sonner';
-import { db, handleFirestoreError, OperationType } from '../../firebase';
 import { usePlatform } from '../../hooks/usePlatform';
-import { useFirebase } from '../../hooks/useFirebase';
 import { MODULES } from '../../constants/modules';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
-import { cn, isFieldVisible, flattenFields, stripUndefined } from '../../lib/utils';
-import { Module, ModuleField, ModuleLayout, ModuleColumn, Workflow } from '../../types/platform';
+import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
+import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
 
 export const ModuleView = () => {
   const { id } = useParams();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { user } = useFirebase();
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
@@ -53,10 +36,7 @@ export const ModuleView = () => {
   const [editingRecord, setEditingRecord] = useState<Record<string, any> | null>(null);
   const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
-  const [usersData, setUsersData] = useState<any[]>([]);
-  const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
   const navigate = useNavigate();
 
   const allFields = useMemo(() => {
@@ -85,94 +65,26 @@ export const ModuleView = () => {
       return;
     }
 
-    const fetchMod = async () => {
+    const fetchModAndRecords = async () => {
       setLoading(true);
       try {
-        const modRef = doc(db, 'tenants', tenant.id, 'modules', id);
-        const modSnap = await getDoc(modRef);
-        
-        let data: any = null;
+        // NOTE: Module and Record fetching from Firestore removed.
         const prebuilt = MODULES.find(m => m.id === id);
-
-        if (modSnap.exists()) {
-          data = modSnap.data();
-          if (prebuilt) {
-            data = { ...prebuilt, ...data };
-          } else {
-            const IconComponent = (LucideIcons as any)[data.iconName || data.icon] || LucideIcons.Layers;
-            data = { ...data, icon: IconComponent };
-          }
-        } else {
-          const globalModRef = doc(db, 'modules', id);
-          const globalModSnap = await getDoc(globalModRef);
-          if (globalModSnap.exists()) {
-            const gData = globalModSnap.data();
-            const IconComponent = (LucideIcons as any)[gData.icon] || LucideIcons.Layers;
-            data = { ...gData, icon: IconComponent, isCustom: true };
-          } else if (prebuilt) {
-            data = prebuilt;
-          }
+        if (prebuilt) {
+          setModuleData(prebuilt as any);
         }
-
-        setModuleData(data);
+        
+        // Stubbing records list
+        setRecords([]);
       } catch (error) {
-        console.error("Error fetching module:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMod();
-
-    const logicRef = collection(db, 'tenants', tenant.id, 'logic');
-    const workflowQuery = query(logicRef, where('type', '==', 'WORKFLOW'), where('targetModuleId', '==', id));
-    const unsubscribeWorkflows = onSnapshot(workflowQuery, (snapshot: any) => {
-      setWorkflows(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id } as any)) as Workflow[]);
-    });
-
-    const recordsRef = collection(db, 'tenants', tenant.id, 'modules', id, 'records');
-    const q = query(recordsRef, orderBy('createdAt', 'desc'));
-    
-    const unsubscribeRecords = onSnapshot(q, (snapshot: any) => {
-      setRecords(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
-    }, (error: any) => {
-      handleFirestoreError(error, OperationType.LIST, `tenants/${tenant.id}/modules/${id}/records`);
-    });
-
-    return () => {
-      unsubscribeRecords();
-      unsubscribeWorkflows();
-    };
+    fetchModAndRecords();
   }, [tenant?.id, id, platformLoading]);
-
-  useEffect(() => {
-    if (platformLoading || !tenant?.id || allFields.length === 0) return;
-
-    let unsubscribeUsers = () => {};
-    if (allFields.some(f => f.type === 'user')) {
-      const usersRef = collection(db, 'users');
-      const usersQuery = query(usersRef, where('tenantId', '==', tenant.id));
-      unsubscribeUsers = onSnapshot(usersQuery, (snapshot: any) => {
-        setUsersData(snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id })));
-      });
-    }
-
-    const lookupFields = allFields.filter(f => f.type === 'lookup' && f.targetModuleId);
-    const lookupUnsubscribes = lookupFields.map(field => {
-      const targetRef = collection(db, 'tenants', tenant.id, 'modules', field.targetModuleId!, 'records');
-      return onSnapshot(targetRef, (snapshot: any) => {
-        setLookupData(prev => ({
-          ...prev,
-          [field.targetModuleId!]: snapshot.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }))
-        }));
-      });
-    });
-
-    return () => {
-      unsubscribeUsers();
-      lookupUnsubscribes.forEach(unsub => unsub());
-    };
-  }, [tenant?.id, platformLoading, allFields]);
 
   const handleCreateEntry = async () => {
     if (!tenant?.id || !id || !moduleData) return;
@@ -190,38 +102,14 @@ export const ModuleView = () => {
         }
       }
 
-      if (editingRecord) {
-        const recordRef = doc(db, 'tenants', tenant.id, 'modules', id, 'records', editingRecord.id);
-        await updateDoc(recordRef, stripUndefined({
-          ...finalData,
-          updatedAt: serverTimestamp()
-        }));
-        toast.success("Record updated successfully");
-      } else {
-        let initialStatus = 'Active';
-        let workflowId = null;
-
-        if (workflows.length > 0) {
-          initialStatus = workflows[0].steps?.[0]?.name || 'Active';
-          workflowId = workflows[0].id;
-        } else if (moduleData.workflow?.statuses && moduleData.workflow.statuses.length > 0) {
-          initialStatus = moduleData.workflow.statuses[0].name;
-        }
-
-        await addDoc(collection(db, 'tenants', tenant.id, 'modules', id, 'records'), stripUndefined({
-          ...finalData,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          status: initialStatus,
-          workflowId: workflowId
-        }));
-        toast.success("Record created successfully");
-      }
+      // NOTE: Firestore creation/update removed.
+      toast.success(editingRecord ? "Record updated locally (Simulation)" : "Record created locally (Simulation)");
+      
       setShowNewEntryModal(false);
       setEditingRecord(null);
       setNewEntryData({});
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenant.id}/modules/${id}/records`);
+      console.error("Save Error:", error);
       toast.error(editingRecord ? "Failed to update record" : "Failed to create record");
     } finally {
       setIsSubmitting(false);
@@ -232,12 +120,12 @@ export const ModuleView = () => {
     if (!tenant?.id || !id) return;
 
     try {
-      const recordRef = doc(db, 'tenants', tenant.id, 'modules', id, 'records', recordId);
-      await deleteDoc(recordRef);
-      toast.success("Record deleted successfully");
+      // NOTE: Firestore deletion removed.
+      toast.success("Record deleted locally (Simulation)");
+      setRecords(prev => prev.filter(r => r.id !== recordId));
       setRecordToDelete(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `tenants/${tenant.id}/modules/${id}/records/${recordId}`);
+      console.error("Delete Error:", error);
       toast.error("Failed to delete record");
     }
   };
@@ -250,7 +138,7 @@ export const ModuleView = () => {
 
   if (!moduleData) return <Navigate to="/workspace" replace />;
 
-  const Icon = moduleData.icon || LucideIcons.Layers;
+  const Icon = (moduleData as any).icon || LucideIcons.Layers;
 
   return (
     <div className="space-y-8">
@@ -532,80 +420,11 @@ export const ModuleView = () => {
                                                 }
                                               });
                                             }}
-                                            usersData={usersData}
-                                            lookupData={lookupData}
+                                            usersData={[]}
+                                            lookupData={{}}
                                           />
                                         </div>
                                       )})}
-                                    </div>
-                                  </div>
-                                ) : field.type === 'repeatableGroup' ? (
-                                  <div className="bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                      <h5 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</h5>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const currentList = newEntryData[field.id] || [];
-                                          setNewEntryData({
-                                            ...newEntryData,
-                                            [field.id]: [...currentList, {}]
-                                          });
-                                        }}
-                                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 uppercase tracking-widest flex items-center gap-1"
-                                      >
-                                        <Plus size={12} /> Add
-                                      </button>
-                                    </div>
-                                    <div className="space-y-4">
-                                      {(newEntryData[field.id] || []).map((item: any, idx: number) => (
-                                        <div key={idx} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 space-y-3 relative shadow-sm">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const currentList = [...newEntryData[field.id]];
-                                              currentList.splice(idx, 1);
-                                              setNewEntryData({
-                                                ...newEntryData,
-                                                [field.id]: currentList
-                                              });
-                                            }}
-                                            className="absolute top-2 right-2 text-zinc-500 hover:text-rose-500 transition-colors"
-                                          >
-                                            <Trash2 size={14} />
-                                          </button>
-                                          <div className="text-[10px] font-bold text-zinc-600 uppercase">Item {idx + 1}</div>
-                                          {(field.fields || []).map((nestedField: any) => {
-                                            if (!isFieldVisible(nestedField, item)) return null;
-                                            return (
-                                            <div key={nestedField.id} className="space-y-1">
-                                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                                                {nestedField.label}
-                                              </label>
-                                              <FieldInput 
-                                                field={nestedField}
-                                                value={item[nestedField.id]}
-                                                onChange={(val) => {
-                                                  const currentList = [...newEntryData[field.id]];
-                                                  currentList[idx] = {
-                                                    ...currentList[idx],
-                                                    [nestedField.id]: val
-                                                  };
-                                                  setNewEntryData({
-                                                    ...newEntryData,
-                                                    [field.id]: currentList
-                                                  });
-                                                }}
-                                                usersData={usersData}
-                                                lookupData={lookupData}
-                                              />
-                                            </div>
-                                          )})}
-                                        </div>
-                                      ))}
-                                      {(!newEntryData[field.id] || newEntryData[field.id].length === 0) && (
-                                        <p className="text-[10px] text-zinc-500 italic text-center py-2">No items added.</p>
-                                      )}
                                     </div>
                                   </div>
                                 ) : (
@@ -618,8 +437,8 @@ export const ModuleView = () => {
                                       field={field}
                                       value={newEntryData[field.id]}
                                       onChange={(val) => setNewEntryData({...newEntryData, [field.id]: val})}
-                                      usersData={usersData}
-                                      lookupData={lookupData}
+                                      usersData={[]}
+                                      lookupData={{}}
                                     />
                                     {field.helperText && (
                                       <p className="text-xs text-zinc-500 mt-1.5">{field.helperText}</p>
@@ -634,22 +453,8 @@ export const ModuleView = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {allFields.map((field: any) => (
-                      <div key={field.id} className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                          {field.label || field.name}
-                          {field.required && <span className="text-rose-500">*</span>}
-                        </label>
-                        <FieldInput 
-                          field={field}
-                          value={newEntryData[field.id]}
-                          onChange={(val) => setNewEntryData({...newEntryData, [field.id]: val})}
-                          usersData={usersData}
-                          lookupData={lookupData}
-                        />
-                      </div>
-                    ))}
+                  <div className="text-zinc-500 text-sm">
+                    Layout configuration is missing for this module.
                   </div>
                 )}
               </div>

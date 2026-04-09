@@ -16,26 +16,12 @@ import {
   Sparkles
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
-import { 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc, 
-  serverTimestamp, 
-  collection, 
-  onSnapshot, 
-  query, 
-  where,
-  orderBy,
-  addDoc
-} from 'firebase/firestore';
 import { toast } from 'sonner';
-import { db, handleFirestoreError, OperationType } from '../../firebase';
 import { usePlatform } from '../../hooks/usePlatform';
 import { MODULES } from '../../constants/modules';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
-import { cn, isFieldVisible, flattenFields, stripUndefined } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
 
 export const RecordDetailView = () => {
@@ -44,15 +30,15 @@ export const RecordDetailView = () => {
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [record, setRecord] = useState<Record<string, any> | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [usersData, setUsersData] = useState<any[]>([]);
-  const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
+  const [usersData] = useState<any[]>([]);
+  const [lookupData] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     if (moduleData?.tabs && moduleData.tabs.length > 0 && !activeTabId) {
@@ -65,7 +51,7 @@ export const RecordDetailView = () => {
       const fields: ModuleField[] = [];
       moduleData.layout.forEach((row: ModuleLayout) => {
         row.columns.forEach((col: ModuleColumn) => {
-          fields.push(...flattenFields(col.fields as any)); // flattenFields expects any[]/Field[]
+          fields.push(...flattenFields(col.fields as any));
         });
       });
       return fields;
@@ -80,87 +66,27 @@ export const RecordDetailView = () => {
       return;
     }
 
-    const fetchMod = async () => {
+    const fetchModAndRecord = async () => {
       setLoading(true);
       try {
-        const modRef = doc(db, 'tenants', tenant.id, 'modules', moduleId);
-        const modSnap = await getDoc(modRef);
-        
-        let data: any = null;
+        // NOTE: Module and Record fetching from Firestore removed.
         const prebuilt = MODULES.find(m => m.id === moduleId);
-
-        if (modSnap.exists()) {
-          data = modSnap.data();
-          if (prebuilt) {
-            data = { ...prebuilt, ...data };
-          } else {
-            const IconComponent = (LucideIcons as any)[data.iconName || data.icon] || LucideIcons.Layers;
-            data = { ...data, icon: IconComponent };
-          }
-        } else if (prebuilt) {
-          data = prebuilt;
+        if (prebuilt) {
+          setModuleData(prebuilt as any);
         }
-
-        setModuleData(data);
+        
+        // Stubbing record data
+        setRecord(null); 
+        toast.error("Record access via Firestore is disabled. Migration to Prisma API in progress.");
       } catch (error) {
-        console.error("Error fetching module:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMod();
-
-    const recordRef = doc(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId);
-    const unsubscribeRecord = onSnapshot(recordRef, (doc) => {
-      if (doc.exists()) {
-        setRecord({ ...doc.data(), id: doc.id });
-      } else {
-        toast.error("Record not found");
-        navigate(`/workspace/modules/${moduleId}`);
-      }
-    });
-
-    const historyRef = collection(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId, 'history');
-    const qHistory = query(historyRef, orderBy('timestamp', 'desc'));
-    const unsubscribeHistory = onSnapshot(qHistory, (snapshot) => {
-      setHistory(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-    });
-
-    return () => {
-      unsubscribeRecord();
-      unsubscribeHistory();
-    };
-  }, [tenant?.id, moduleId, recordId, platformLoading, navigate]);
-
-  useEffect(() => {
-    if (platformLoading || !tenant?.id || allFields.length === 0) return;
-
-    let unsubscribeUsers = () => {};
-    if (allFields.some(f => f.type === 'user')) {
-      const usersRef = collection(db, 'users');
-      const usersQuery = query(usersRef, where('tenantId', '==', tenant.id));
-      unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-        setUsersData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-      });
-    }
-
-    const lookupFields = allFields.filter(f => f.type === 'lookup' && f.targetModuleId);
-    const lookupUnsubscribes = lookupFields.map(field => {
-      const targetRef = collection(db, 'tenants', tenant.id, 'modules', field.targetModuleId, 'records');
-      return onSnapshot(targetRef, (snapshot) => {
-        setLookupData(prev => ({
-          ...prev,
-          [field.targetModuleId]: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }))
-        }));
-      });
-    });
-
-    return () => {
-      unsubscribeUsers();
-      lookupUnsubscribes.forEach(unsub => unsub());
-    };
-  }, [tenant?.id, platformLoading, allFields]);
+    fetchModAndRecord();
+  }, [tenant?.id, moduleId, recordId, platformLoading]);
 
   const handleUpdateEntry = async () => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
@@ -178,16 +104,12 @@ export const RecordDetailView = () => {
         }
       }
 
-      const recordRef = doc(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId);
-      await updateDoc(recordRef, stripUndefined({
-        ...finalData,
-        updatedAt: serverTimestamp()
-      }));
-      
-      toast.success("Record updated successfully");
+      // NOTE: Firestore update removed.
+      toast.success("Record updated locally (Simulation)");
+      setRecord(prev => ({ ...prev, ...finalData }));
       setShowEditModal(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenant.id}/modules/${moduleId}/records/${recordId}`);
+      console.error("Update Error:", error);
       toast.error("Failed to update record");
     } finally {
       setIsSubmitting(false);
@@ -198,22 +120,11 @@ export const RecordDetailView = () => {
     if (!tenant?.id || !moduleId || !recordId || !record) return;
     
     try {
-      const recordRef = doc(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId);
-      await updateDoc(recordRef, {
-        status: newStatus,
-        updatedAt: serverTimestamp()
-      });
-
-      await addDoc(collection(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId, 'history'), {
-        from: record.status,
-        to: newStatus,
-        timestamp: serverTimestamp(),
-        user: tenant?.name || 'System'
-      });
-
-      toast.success(`Status updated to ${newStatus}`);
+      // NOTE: Firestore status update removed.
+      setRecord(prev => prev ? { ...prev, status: newStatus } : null);
+      toast.success(`Status updated to ${newStatus} (Simulation)`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenant.id}/modules/${moduleId}/records/${recordId}`);
+      console.error("Status Update Error:", error);
       toast.error("Failed to update status");
     }
   };
@@ -222,12 +133,11 @@ export const RecordDetailView = () => {
     if (!tenant?.id || !moduleId || !recordId) return;
 
     try {
-      const recordRef = doc(db, 'tenants', tenant.id, 'modules', moduleId, 'records', recordId);
-      await deleteDoc(recordRef);
-      toast.success("Record deleted successfully");
+      // NOTE: Firestore deletion removed.
+      toast.success("Record deleted (Simulation)");
       navigate(`/workspace/modules/${moduleId}`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `tenants/${tenant.id}/modules/${moduleId}/records/${recordId}`);
+      console.error("Delete Error:", error);
       toast.error("Failed to delete record");
     }
   };
@@ -240,7 +150,7 @@ export const RecordDetailView = () => {
 
   if (!moduleData || !record) return <Navigate to="/workspace" replace />;
 
-  const Icon = moduleData.icon || LucideIcons.Layers;
+  const Icon = (moduleData as any).icon || LucideIcons.Layers;
 
   return (
     <div className="space-y-8 pb-20">
@@ -489,7 +399,6 @@ export const RecordDetailView = () => {
         </div>
       </div>
 
-      {/* Edit Entry Modal (Reuse New Entry logic but for specific record) */}
       <AnimatePresence>
         {showEditModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
@@ -640,9 +549,6 @@ export const RecordDetailView = () => {
                                           )})}
                                         </div>
                                       ))}
-                                      {(!editData[field.id] || editData[field.id].length === 0) && (
-                                        <p className="text-xs text-zinc-500 italic text-center py-2">No items added.</p>
-                                      )}
                                     </div>
                                   </div>
                                 ) : field.type === 'fieldGroup' ? (
@@ -662,9 +568,6 @@ export const RecordDetailView = () => {
                                       usersData={usersData}
                                       lookupData={lookupData}
                                     />
-                                    {field.helperText && (
-                                      <p className="text-xs text-zinc-500 mt-1.5">{field.helperText}</p>
-                                    )}
                                   </>
                                 )}
                               </div>
@@ -708,7 +611,6 @@ export const RecordDetailView = () => {
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {showDeleteModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">

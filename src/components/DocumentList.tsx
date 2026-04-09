@@ -7,13 +7,6 @@ import {
   Trash2, 
   Search, 
   Filter, 
-  MoreVertical,
-  ChevronRight,
-  Clock,
-  User as UserIcon,
-  CheckCircle2,
-  AlertCircle,
-  ExternalLink,
   Plus,
   X
 } from 'lucide-react';
@@ -129,7 +122,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           </thead>
           <tbody className="divide-y divide-zinc-800/50">
             {filteredDocs.length > 0 ? (
-              filteredDocs.map((doc) => (
+              filteredDocs.map((doc: GeneratedDocument) => (
                 <tr key={doc.id} className="hover:bg-zinc-800/30 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -155,10 +148,12 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className="text-sm text-zinc-300">
-                        {doc.generatedAt ? format(new Date(doc.generatedAt.seconds * 1000), 'MMM d, yyyy') : 'N/A'}
+                        {doc.generatedAt && typeof doc.generatedAt === 'object' && 'seconds' in doc.generatedAt 
+                          ? format(new Date((doc.generatedAt as any).seconds * 1000), 'MMM d, yyyy') : 'N/A'}
                       </span>
                       <span className="text-xs text-zinc-500">
-                        {doc.generatedAt ? format(new Date(doc.generatedAt.seconds * 1000), 'h:mm a') : ''}
+                        {doc.generatedAt && typeof doc.generatedAt === 'object' && 'seconds' in doc.generatedAt 
+                          ? format(new Date((doc.generatedAt as any).seconds * 1000), 'h:mm a') : ''}
                       </span>
                     </div>
                   </td>

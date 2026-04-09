@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id                 String         @id(map: "Tenant_pkey") @default(cuid())
+  name               String
+  subdomain          String         @unique(map: "Tenant_subdomain_key")
+  status             String         @default("active")
+  dbConnectionString String?        @map("db_connection_string")
+  planTier           String         @default("standard") @map("plan_tier")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  members            TenantMember[]
+  usageLogs          UsageLog[]
+  workspaces         Workspace[]
+
+  @@map("tenants")
+}
+
+model UsageLog {
+  id        String   @id(map: "UsageLog_pkey") @default(cuid())
+  tenantId  String   @map("tenant_id")
+  type      String
+  amount    Float
+  metadata  Json?
+  timestamp DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], map: "UsageLog_tenantId_fkey")
+
+  @@index([tenantId, timestamp], map: "UsageLog_tenantId_timestamp_idx")
+  @@map("usage_logs")
+}
+
+model Workspace {
+  id       String   @id(map: "Workspace_pkey") @default(cuid())
+  tenantId String   @map("tenant_id")
+  name     String
+  modules  Module[]
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], map: "Workspace_tenantId_fkey")
+
+  @@index([tenantId], map: "Workspace_tenantId_idx")
+  @@map("workspaces")
+}
+
+model Module {
+  id          String    @id(map: "Module_pkey") @default(cuid())
+  tenantId    String    @map("tenant_id")
+  workspaceId String    @map("workspace_id")
+  name        String
+  config      Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], map: "Module_workspaceId_fkey")
+  records     Record[]
+
+  @@index([tenantId], map: "Module_tenantId_idx")
+  @@map("modules")
+}
+
+model User {
+  id           String         @id(map: "User_pkey")
+  email        String         @unique(map: "User_email_key")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  isSuperAdmin Boolean        @default(false) @map("is_superadmin")
+  updatedAt    DateTime       @default(now()) @updatedAt @map("updated_at")
+  memberships  TenantMember[]
+
+  @@map("users")
+}
+
+model TenantMember {
+  id        String   @id(map: "TenantMember_pkey") @default(cuid())
+  userId    String   @map("user_id")
+  tenantId  String   @map("tenant_id")
+  roleId    String   @default("viewer") @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
+  user      User     @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
+
+  @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
+  @@index([tenantId], map: "TenantMember_tenantId_idx")
+  @@index([userId], map: "TenantMember_userId_idx")
+  @@map("tenant_members")
+}
+
+model Record {
+  id        String   @id(map: "Record_pkey") @default(cuid())
+  tenantId  String   @map("tenant_id")
+  moduleId  String   @map("module_id")
+  data      Json
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
+
+  @@index([moduleId], map: "Record_moduleId_idx")
+  @@index([tenantId], map: "Record_tenantId_idx")
+  @@map("records")
+}
+
+model DocumentTemplate {
+  id          String   @id(map: "DocumentTemplate_pkey") @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  moduleId    String?  @map("module_id")
+  content     String
+  status      String   @default("Draft")
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+
+  @@index([tenantId], map: "DocumentTemplate_tenantId_idx")
+  @@map("document_templates")
+}
+
+model GeneratedDocument {
+  id              String   @id(map: "GeneratedDocument_pkey") @default(cuid())
+  tenantId        String   @map("tenant_id")
+  templateId      String   @map("template_id")
+  templateVersion Int?     @map("template_version")
+  recordId        String?  @map("record_id")
+  moduleId        String?  @map("module_id")
+  name            String
+  url             String?
+  status          String   @default("Draft")
+  generatedAt     DateTime @default(now()) @map("generated_at")
+  generatedBy     String?  @map("generated_by")
+  dataSnapshot    Json?    @map("data_snapshot")
+  content         String?
+
+  @@index([recordId], map: "GeneratedDocument_recordId_idx")
+  @@index([tenantId], map: "GeneratedDocument_tenantId_idx")
+  @@map("generated_documents")
+}

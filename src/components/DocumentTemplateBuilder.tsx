@@ -1,22 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { 
   Save, 
-  Eye, 
-  Code, 
   Plus, 
   X, 
-  ChevronRight, 
-  ChevronDown,
   Variable,
   Type,
   Table as TableIcon,
   CheckSquare,
-  Layout,
-  Sparkles,
-  History,
-  FileText
+  Sparkles
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DocumentTemplate } from '../types/platform';

@@ -7,15 +7,19 @@ import {
   User as UserIcon 
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
-import { useFirebase } from '../../hooks/useFirebase';
+import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { Environment } from '../../types/platform';
 
 export const Navbar = () => {
   const { tenant, environment, setEnvironment } = usePlatform();
-  const { logout, user } = useFirebase();
+  const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   
+  // Get user details from Supabase metadata or fallback to email
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+  const avatarUrl = user?.user_metadata?.avatar_url;
+
   return (
     <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4">
@@ -64,15 +68,15 @@ export const Navbar = () => {
         </button>
         <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800">
           <div className="text-right hidden sm:block">
-            <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none">{user?.displayName || 'User'}</p>
+            <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none">{displayName}</p>
             <p className="text-[10px] text-zinc-500 font-medium mt-1 uppercase tracking-tighter">Tenant Admin</p>
           </div>
           <button 
             onClick={logout}
             className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center overflow-hidden hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           >
-            {user?.photoURL ? (
-              <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
             ) : (
               <UserIcon size={16} className="text-zinc-400" />
             )}

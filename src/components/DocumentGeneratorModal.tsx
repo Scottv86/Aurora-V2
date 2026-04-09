@@ -2,15 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Sparkles, 
-  ChevronRight, 
-  ChevronDown, 
-  ArrowRight, 
-  CheckCircle2, 
   Loader2, 
   X,
   Eye,
-  FileDown,
-  Mail,
   Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -39,7 +33,6 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [previewContent, setPreviewContent] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && tenant) {

@@ -5,30 +5,44 @@ import {
   ArrowRight, 
   CheckCircle2, 
   Loader2,
-  FileText,
   Workflow,
   Layers,
   Zap,
-  Database,
-  Terminal,
   ChevronRight
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, stripUndefined } from '../lib/utils';
+import { cn } from '../lib/utils';
 import { generateSolution, AISolution } from '../services/aiService';
 import { usePlatform } from '../hooks/usePlatform';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, addDoc, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
 
 export const AIBuilder = () => {
   const { tenant } = usePlatform();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [result, setResult] = useState<AISolution | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState(0);
+  
+  useEffect(() => {
+    if (retryCountdown <= 0) return;
+    
+    const timer = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [retryCountdown > 0]);
   
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -49,69 +63,50 @@ export const AIBuilder = () => {
       setResult(solution);
       setStep(2);
     } catch (error: any) {
-      console.error("AI Generation Error:", error);
-      const message = error?.message || "Failed to generate solution. Please try again.";
-      toast.error(message);
+      console.error("AI Generation Error (Raw):", error);
+      
+      const errorMsg = error?.message || "";
+      const isQuotaError = errorMsg.toLowerCase().includes("429") || 
+                          errorMsg.toLowerCase().includes("resource_exhausted") || 
+                          errorMsg.toLowerCase().includes("quota");
+
+      if (isQuotaError) {
+        const match = errorMsg.match(/retry in ([\d.]+)/i);
+        const delay = match ? Math.ceil(parseFloat(match[1])) + 2 : 62;
+        
+        setRetryCountdown(delay);
+        toast.error(`AI Quota reached. Please wait ${delay}s for the next request.`, {
+          description: "Free tier models have strict limits. Your countdown is active.",
+          duration: 5000,
+        });
+      } else {
+        const message = errorMsg || "Failed to generate solution. Please try again.";
+        toast.error(message);
+      }
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleDeploy = async () => {
-    if (!result || !tenant?.id) return;
+    if (!result || !tenant?.id || !user) return;
     setIsDeploying(true);
     
     try {
-      // 1. Enable Modules
-      for (const mod of result.modules) {
-        // Strip any potential non-serializable properties
-        const { icon, isEnabled, ...serializableMod } = mod as any;
-        
-        await setDoc(doc(db, 'tenants', tenant.id, 'modules', mod.id), stripUndefined({
-          ...serializableMod,
-          enabledAt: serverTimestamp(),
-          status: 'ACTIVE',
-          source: 'AI_BUILDER'
-        }));
-      }
+      // NOTE: Database deployment is disabled during the Supabase migration.
+      // In a production environment, this would call an Express API endpoint 
+      // that uses Prisma to create the modules, workflows, and automations.
+      console.log("AI Builder: Deployment requested for", result);
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 2. Create Workflows
-      for (const wf of result.workflows) {
-        await addDoc(collection(db, 'tenants', tenant.id, 'logic'), stripUndefined({
-          tenantId: tenant.id,
-          name: wf.name,
-          type: 'WORKFLOW',
-          description: wf.description,
-          steps: wf.steps,
-          targetModuleId: wf.targetModuleId,
-          status: 'Active',
-          createdAt: serverTimestamp(),
-          source: 'AI_BUILDER'
-        }));
-      }
-
-      // 3. Create Automations
-      for (const auto of result.automations) {
-        await addDoc(collection(db, 'tenants', tenant.id, 'logic'), stripUndefined({
-          tenantId: tenant.id,
-          name: `${auto.trigger} -> ${auto.action}`,
-          type: 'TRIGGER',
-          description: auto.description,
-          trigger: auto.trigger,
-          action: auto.action,
-          targetModuleId: auto.targetModuleId,
-          status: 'Active',
-          createdAt: serverTimestamp(),
-          source: 'AI_BUILDER'
-        }));
-      }
-
-      toast.success("Solution deployed to your workspace!");
+      toast.success("Solution architected successfully (Local Simulation)!");
       setStep(3);
       setPrompt('');
       setResult(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenant.id}/deploy`);
+      console.error("AI Deployment Error:", error);
       toast.error("Failed to deploy solution.");
     } finally {
       setIsDeploying(false);
@@ -162,10 +157,10 @@ export const AIBuilder = () => {
                 </div>
                 <button 
                   onClick={handleGenerate}
-                  disabled={!prompt || isGenerating}
+                  disabled={!prompt || isGenerating || retryCountdown > 0}
                   className={cn(
                     "flex items-center gap-2 px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-xl",
-                    prompt && !isGenerating 
+                    prompt && !isGenerating && retryCountdown === 0
                       ? "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/20" 
                       : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed shadow-none"
                   )}
@@ -174,6 +169,10 @@ export const AIBuilder = () => {
                     <>
                       <Loader2 size={18} className="animate-spin" />
                       <span>Architecting...</span>
+                    </>
+                  ) : retryCountdown > 0 ? (
+                    <>
+                      <span>Retry in {retryCountdown}s</span>
                     </>
                   ) : (
                     <>
@@ -217,7 +216,7 @@ export const AIBuilder = () => {
                 <Sparkles className="text-indigo-600 dark:text-indigo-400 shrink-0" size={24} />
                 <div>
                   <h3 className="text-lg font-bold text-zinc-900 dark:text-white">AI Recommendation</h3>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed font-medium">{result.reasoning}</p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed font-medium">{result?.reasoning}</p>
                 </div>
               </div>
 
@@ -229,7 +228,7 @@ export const AIBuilder = () => {
                       Suggested Modules
                     </h4>
                     <div className="space-y-4">
-                      {result.modules.map((m: any, i: number) => (
+                      {result?.modules.map((m: any, i: number) => (
                         <div key={i} className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-3">
                           <div className="flex items-center gap-3">
                             <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-500" />
@@ -260,7 +259,7 @@ export const AIBuilder = () => {
                       Workflows
                     </h4>
                     <div className="space-y-3">
-                      {result.workflows.map((wf: any, i: number) => (
+                      {result?.workflows.map((wf: any, i: number) => (
                         <div key={i} className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-2">
                           <p className="text-sm font-bold text-zinc-900 dark:text-white">{wf.name}</p>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -282,7 +281,7 @@ export const AIBuilder = () => {
                       Automations
                     </h4>
                     <div className="space-y-3">
-                      {result.automations.map((auto: any, i: number) => (
+                      {result?.automations.map((auto: any, i: number) => (
                         <div key={i} className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-2">
                           <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-[10px] uppercase tracking-wider">
                             <span>{auto.trigger}</span>

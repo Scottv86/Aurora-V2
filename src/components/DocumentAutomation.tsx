@@ -1,25 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   FileText, 
   Plus, 
   Search, 
-  Filter, 
-  MoreVertical, 
-  ChevronRight, 
   Clock, 
-  Sparkles,
-  History,
-  Settings,
-  Layout,
-  Zap,
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
-  Copy,
-  Trash2,
-  Edit2
+  Zap, 
+  Copy, 
+  Trash2, 
+  Edit2,
+  Filter,
+  Database
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { DocumentTemplate } from '../types/platform';
 import { DocumentService } from '../services/documentService';
@@ -79,6 +70,22 @@ export const DocumentAutomation = () => {
         }}
         onCancel={() => setIsBuilderOpen(false)}
       />
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full">
+          <Database className="text-zinc-300 dark:text-zinc-700" size={48} />
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">No Workspace Selected</h2>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-sm mt-2">
+            You don't seem to be associated with a workspace. Please contact your administrator.
+          </p>
+        </div>
+      </div>
     );
   }
 

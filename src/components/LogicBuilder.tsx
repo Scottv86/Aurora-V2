@@ -4,13 +4,10 @@ import {
   Clock, 
   Plus, 
   Search, 
-  ChevronRight, 
   Code2, 
   Variable, 
   Play, 
   History,
-  CheckCircle2,
-  AlertCircle,
   Trash2,
   Loader2,
   AlertTriangle
@@ -18,8 +15,6 @@ import {
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 const VARIABLES = [
@@ -36,7 +31,7 @@ export const LogicBuilder = () => {
   const { tenant } = usePlatform();
   const [activeTab, setActiveTab] = useState<'ASSETS' | 'VARIABLES'>('ASSETS');
   const [assets, setAssets] = useState<any[]>([]);
-  const [modules, setModules] = useState<any[]>([]);
+  const [modules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<any | null>(null);
@@ -46,34 +41,11 @@ export const LogicBuilder = () => {
       setLoading(false);
       return;
     }
-    const tenantId = tenant.id;
-    const logicRef = collection(db, 'tenants', tenantId, 'logic');
-    const q = query(logicRef, orderBy('name', 'asc'));
-
-    const unsubscribeLogic = onSnapshot(q, (snapshot) => {
-      const logicData = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      }));
-      setAssets(logicData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `tenants/${tenantId}/logic`);
-      setLoading(false);
-    });
-
-    // Also fetch modules to identify orphaned assets
-    const modulesRef = collection(db, 'tenants', tenantId, 'modules');
-    const unsubscribeModules = onSnapshot(modulesRef, (snapshot) => {
-      setModules(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `tenants/${tenantId}/modules`);
-    });
-
-    return () => {
-      unsubscribeLogic();
-      unsubscribeModules();
-    };
+    
+    // NOTE: Logic asset fetching from Firestore has been removed 
+    // during the Supabase migration. This will be replaced by Prisma/API calls.
+    setAssets([]);
+    setLoading(false);
   }, [tenant?.id]);
 
   const handleDeleteAsset = (asset: any) => {
@@ -85,11 +57,12 @@ export const LogicBuilder = () => {
     
     setDeletingId(assetToDelete.id);
     try {
-      await deleteDoc(doc(db, 'tenants', tenant.id, 'logic', assetToDelete.id));
-      toast.success(`${assetToDelete.name} deleted successfully`);
+      // NOTE: Database deletion is disabled during the Supabase migration.
+      toast.success(`${assetToDelete.name} deleted locally`);
+      setAssets(prev => prev.filter(a => a.id !== assetToDelete.id));
       setAssetToDelete(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `tenants/${tenant.id}/logic/${assetToDelete.id}`);
+      console.error("Delete Error:", error);
       toast.error(`Failed to delete ${assetToDelete.name}`);
     } finally {
       setDeletingId(null);
@@ -155,7 +128,7 @@ export const LogicBuilder = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {assets.length > 0 ? assets.map((asset, i) => (
+              {assets.length > 0 ? assets.map((asset) => (
                 <div key={asset.id} className="p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-zinc-300 dark:hover:border-zinc-700 transition-all group shadow-sm dark:shadow-none">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -174,7 +147,7 @@ export const LogicBuilder = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", 
-                        asset.status === 'Active' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
+                         asset.status === 'Active' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
                       )}>
                         {asset.status}
                       </span>

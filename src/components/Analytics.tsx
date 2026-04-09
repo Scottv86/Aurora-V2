@@ -8,7 +8,6 @@ import {
   Download,
   Calendar
 } from 'lucide-react';
-import { useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   XAxis, 
@@ -25,9 +24,8 @@ import {
 import { cn } from '../lib/utils';
 import { useTheme } from '../hooks/useTheme';
 import { usePlatform } from '../hooks/usePlatform';
-import { db } from '../firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { useEffect, useMemo } from 'react';
+import { useData } from '../hooks/useData';
+import { useEffect, useMemo, useState } from 'react';
 
 
 
@@ -45,46 +43,25 @@ export const Analytics = () => {
   const { tenant } = usePlatform();
   const isDark = theme === 'dark';
 
-  const [cases, setCases] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const { data: cases } = useData('records');
+  const { data: modules } = useData('modules');
+  const users: any[] = []; // Need to implement user API later
   const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!tenant?.id) return;
-
-    // Listen to cases
-    const casesRef = collection(db, 'tenants', tenant.id, 'cases');
-    const casesUnsub = onSnapshot(casesRef, (snapshot) => {
-      setCases(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    if (!modules) return;
+    const activeIds = new Set<string>();
+    modules.forEach(m => {
+      if (m.enabled !== false) {
+        activeIds.add(m.id);
+      }
     });
-
-    // Listen to modules
-    const modulesRef = collection(db, 'tenants', tenant.id, 'modules');
-    const modulesUnsub = onSnapshot(modulesRef, (snapshot) => {
-      const activeIds = new Set<string>();
-      snapshot.docs.forEach(doc => {
-        if (doc.data().status === 'ACTIVE') {
-          activeIds.add(doc.id);
-        }
-      });
-      setActiveModuleIds(activeIds);
-    });
-
-    // Listen to users (global collection but we can filter or just count for now)
-    const usersRef = collection(db, 'users');
-    const usersUnsub = onSnapshot(usersRef, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-    });
-
-    return () => {
-      casesUnsub();
-      modulesUnsub();
-      usersUnsub();
-    };
-  }, [tenant?.id]);
+    setActiveModuleIds(activeIds);
+  }, [modules]);
 
   // Process data for stats and charts 
   const stats = useMemo(() => {
+    if (!cases) return { totalCases: 0, avgResolution: '0.0', activeUsers: 0, aiEfficiency: 0 };
     // ONLY show cases associated with ACTIVE modules (consistency with Work Queue)
     const activeCases = cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId));
     const totalCases = activeCases.length;
@@ -130,6 +107,8 @@ export const Analytics = () => {
       };
     });
 
+    if (!cases) return last7Days;
+
     cases.forEach(c => {
       // Filter out orphaned cases from chart data too
       if (!c.moduleId || !activeModuleIds.has(c.moduleId)) return;
@@ -149,6 +128,7 @@ export const Analytics = () => {
 
   const moduleDistribution = useMemo(() => {
     const counts: Record<string, number> = {};
+    if (!cases) return MODULE_DISTRIBUTION;
 
     cases.forEach(c => {
       // Filter out orphaned cases from distribution
@@ -313,7 +293,7 @@ export const Analytics = () => {
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                   <span className="text-xs text-zinc-500 dark:text-zinc-400">{entry.name}</span>
                 </div>
-                <span className="text-xs font-bold text-zinc-900 dark:text-white">{((entry.value / (cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length || 1)) * 100).toFixed(0)}%</span>
+                <span className="text-xs font-bold text-zinc-900 dark:text-white">{((entry.value / (cases?.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length || 1)) * 100).toFixed(0)}%</span>
               </div>
             ))}
           </div>

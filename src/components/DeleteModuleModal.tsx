@@ -9,13 +9,10 @@ import {
   Zap, 
   Terminal, 
   Code2,
-  CheckCircle2,
   Info
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 
 interface Asset {
   id: string;
@@ -48,41 +45,11 @@ export const DeleteModuleModal = ({ isOpen, onClose, onConfirm, module, tenantId
   const fetchDependencies = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Workflows & Logic
-      const logicRef = collection(db, 'tenants', tenantId, 'logic');
-      const q = query(logicRef, where('targetModuleId', '==', module.id));
-      const logicSnap = await getDocs(q);
-      const logicAssets = logicSnap.docs.map(doc => ({
-        id: doc.id,
-        name: doc.data().name || 'Unnamed Asset',
-        type: doc.data().type || 'LOGIC'
-      }));
-      setAssets(logicAssets);
-
-      // 2. Fetch Record Count
-      const recordsRef = collection(db, 'tenants', tenantId, 'modules', module.id, 'records');
-      const recordsSnap = await getDocs(recordsRef);
-      setRecordCount(recordsSnap.size);
-
-      // 3. Fetch Lookup Dependencies (scan other modules)
-      const modulesRef = collection(db, 'tenants', tenantId, 'modules');
-      const modulesSnap = await getDocs(modulesRef);
-      const refs: string[] = [];
-      
-      modulesSnap.forEach(docSnap => {
-        const modData = docSnap.data();
-        if (docSnap.id === module.id) return;
-        
-        // Check fields for lookups
-        const fields = modData.fields || [];
-        const hasLookup = fields.some((f: any) => f.type === 'lookup' && f.targetModuleId === module.id);
-        
-        if (hasLookup) {
-          refs.push(modData.name || docSnap.id);
-        }
-      });
-      setReferencingModules(refs);
-
+      // NOTE: Firestore dependency scanning is disabled during the Supabase migration.
+      // Dependency scanning should be moved to the Prisma/API layer.
+      setAssets([]);
+      setRecordCount(0);
+      setReferencingModules([]);
     } catch (error) {
       console.error("Error fetching dependencies:", error);
     } finally {

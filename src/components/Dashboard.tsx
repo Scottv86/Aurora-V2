@@ -1,37 +1,19 @@
 import { 
-  LayoutDashboard, 
-  Settings, 
-  Users, 
   Globe, 
-  Layers, 
-  Zap, 
-  Plus, 
-  Search, 
-  Bell, 
-  User as UserIcon,
   ChevronRight,
   Database,
   Workflow,
-  FileText,
-  BarChart3,
   ShieldCheck,
   Cpu,
   ArrowUpRight,
-  Terminal,
-  History,
-  CloudUpload,
-  Sparkles,
-  LogOut,
-  LogIn
+  Sparkles
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
-
 import { usePlatform } from '../hooks/usePlatform';
+import { useAuth } from '../hooks/useAuth';
 
 export const Dashboard = () => {
   const { tenant } = usePlatform();
@@ -42,28 +24,89 @@ export const Dashboard = () => {
     { label: 'System Health', value: '99.9%', icon: <ShieldCheck size={20} />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
   ]);
 
+  const { user, session } = useAuth();
+
   useEffect(() => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !user) return;
     const tenantId = tenant.id;
-    const casesRef = collection(db, 'tenants', tenantId, 'cases');
-    
-    const unsubscribe = onSnapshot(casesRef, (snapshot) => {
-      const allCases = snapshot.docs.map(doc => doc.data());
-      const activeCases = allCases.filter(c => c.status !== 'Completed' && c.status !== 'Archived').length;
+    let socket: any = null;
+
+    const fetchRecords = async () => {
+      try {
+        const token = session?.access_token;
+        const res = await fetch('http://localhost:3001/api/data/records', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenantId
+          }
+        });
+        if (res.ok) {
+          const allCases = await res.json();
+          updateStats(allCases);
+        }
+      } catch (err) {
+        console.error('Failed to fetch records', err);
+      }
+    };
+
+    const updateStats = (allCases: any[]) => {
+      const activeCases = allCases.filter((c: any) => c.status !== 'Completed' && c.status !== 'Archived').length;
       const totalSubmissions = allCases.length;
       
       setStats(prev => [
         { ...prev[0], value: activeCases.toString() },
         { ...prev[1], value: totalSubmissions.toString() },
-        { ...prev[2], value: (totalSubmissions * 0.8).toFixed(0) }, // Mock AI stat based on real cases
+        { ...prev[2], value: (totalSubmissions * 0.8).toFixed(0) },
         prev[3]
       ]);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `tenants/${tenantId}/cases`);
-    });
+    };
 
-    return () => unsubscribe();
-  }, []);
+    // Initial Fetch
+    fetchRecords();
+
+    // Setup Socket.IO for real-time updates
+    if (session?.access_token) {
+      const token = session.access_token;
+      import('socket.io-client').then(({ io }) => {
+        socket = io('http://localhost:3001', {
+          auth: { token }
+        });
+
+        socket.on('connect', () => {
+          socket.emit('join_tenant', tenantId);
+        });
+
+        // For simplicity in this demo we re-fetch all records on any record change, 
+        // but normally we would incrementally patch the state.
+        socket.on('record_added', fetchRecords);
+        socket.on('record_updated', fetchRecords);
+        socket.on('record_deleted', fetchRecords);
+      });
+    }
+
+    return () => {
+      if (socket) {
+        socket.emit('leave_tenant', tenantId);
+        socket.disconnect();
+      }
+    };
+  }, [tenant?.id, user, session]);
+
+  if (!tenant) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full text-zinc-300 dark:text-zinc-700">
+          <Database size={48} />
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">No Workspace Selected</h2>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-sm mt-2">
+            You don't seem to be associated with a workspace. Please contact your administrator.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

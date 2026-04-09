@@ -1,24 +1,22 @@
 import { 
   Sparkles, 
   Globe, 
-  Layers, 
   Zap, 
   CheckCircle2, 
   ArrowRight, 
-  ChevronLeft,
   Building2,
   Briefcase,
   Users,
   CloudUpload,
-  Cpu,
-  LayoutDashboard
+  LayoutDashboard,
+  HeartPulse,
+  ShoppingBag
 } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { db, handleFirestoreError, OperationType, auth } from '../firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '../hooks/useAuth';
 
 const INDUSTRIES = [
   { id: 'gov', name: 'Government & Public Sector', icon: Building2 },
@@ -29,15 +27,9 @@ const INDUSTRIES = [
   { id: 'pro', name: 'Professional Services', icon: Briefcase },
 ];
 
-function HeartPulse(props: any) {
-  return <Users {...props} />;
-}
-function ShoppingBag(props: any) {
-  return <Users {...props} />;
-}
-
 export const Onboarding = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -55,23 +47,16 @@ export const Onboarding = () => {
     const tenantId = formData.slug || formData.name.toLowerCase().replace(/\s+/g, '-');
     
     try {
-      await setDoc(doc(db, 'tenants', tenantId), {
-        id: tenantId,
-        name: formData.name,
-        slug: tenantId,
-        plan: 'ENTERPRISE',
-        status: 'ACTIVE',
-        industry: formData.industry,
-        description: formData.description,
-        createdAt: serverTimestamp(),
-        environments: ['DEV', 'PROD'],
-        currentEnvironment: 'DEV',
-        ownerId: auth.currentUser?.uid
-      });
+      // NOTE: Firestore tenant creation removed. 
+      // This should be migrated to the new Prisma/API infrastructure.
+      console.log(`[Onboarding] Creating tenant ${tenantId} for user ${user?.id}`, formData);
+      
+      // Artificial delay to simulate network request
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       navigate('/workspace');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenantId}`);
+      console.error("Onboarding Error:", error);
     } finally {
       setIsSubmitting(false);
     }

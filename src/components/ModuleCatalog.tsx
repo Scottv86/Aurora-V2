@@ -1,19 +1,5 @@
 import * as LucideIcons from 'lucide-react';
 import { 
-  Users, 
-  Globe, 
-  Layers, 
-  Zap, 
-  Database,
-  Workflow,
-  FileText,
-  BarChart3,
-  Cpu,
-  ShieldCheck,
-  CreditCard,
-  ShoppingCart,
-  Briefcase,
-  HeartHandshake,
   Search,
   Plus,
   CheckCircle2,
@@ -26,16 +12,13 @@ import {
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, doc, setDoc, onSnapshot, query, serverTimestamp, getDoc, deleteDoc, where, getDocs } from 'firebase/firestore';
-import { useFirebase } from '../hooks/useFirebase';
+import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
 
 import { useNavigate } from 'react-router-dom';
 import { MODULES } from '../constants/modules';
 import { DeleteModuleModal } from './DeleteModuleModal';
 import { ModuleType } from '../types/platform';
-
 
 const CATEGORIES = [
   'All',
@@ -57,57 +40,22 @@ const MODULE_TYPES: (ModuleType | 'All')[] = [
 ];
 
 export const ModuleCatalog = () => {
-  const { user } = useFirebase();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedType, setSelectedType] = useState<ModuleType | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [configuredModules, setConfiguredModules] = useState<any[]>([]);
   const [enabling, setEnabling] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const [customModules, setCustomModules] = useState<any[]>([]);
+  const [customModules] = useState<any[]>([]);
   const [moduleToDelete, setModuleToDelete] = useState<any>(null);
-
-
-  useEffect(() => {
-    // Listen for global custom modules
-    const globalModulesRef = collection(db, 'modules');
-    const unsub = onSnapshot(globalModulesRef, (snapshot) => {
-      setCustomModules(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, isCustom: true })));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'modules');
-    });
-    return () => unsub();
-  }, []);
 
   useEffect(() => {
     if (!user) return;
-
-    const fetchUserTenant = async () => {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const tid = userSnap.data().tenantId;
-          setTenantId(tid);
-
-          // Listen for enabled modules
-          const modulesRef = collection(db, 'tenants', tid, 'modules');
-          return onSnapshot(modulesRef, (snapshot) => {
-            setConfiguredModules(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-          }, (error) => {
-            handleFirestoreError(error, OperationType.GET, `tenants/${tid}/modules`);
-          });
-        }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-      }
-    };
-
-    let unsubscribe: any;
-    fetchUserTenant().then(unsub => unsubscribe = unsub);
-    return () => unsubscribe?.();
+    // Note: Tenant and Module data fetching from Firestore has been removed 
+    // during the Supabase migration. This will be replaced by Prisma/API calls.
+    setTenantId('temp-tenant-id');
   }, [user]);
 
   const handleEnable = async (mod: any) => {
@@ -115,17 +63,11 @@ export const ModuleCatalog = () => {
     setEnabling(mod.id);
     
     try {
-      // Strip non-serializable properties like 'icon' (React component)
-      const { icon, isEnabled, ...serializableMod } = mod;
-      
-      await setDoc(doc(db, 'tenants', tenantId, 'modules', mod.id), {
-        ...serializableMod,
-        enabledAt: serverTimestamp(),
-        status: 'ACTIVE'
-      }, { merge: true });
-      toast.success(`${mod.name} module enabled successfully!`);
+      // NOTE: Database write is disabled during Supabase migration.
+      // This logic will be moved to an Express API endpoint.
+      setConfiguredModules(prev => [...prev, { ...mod, status: 'ACTIVE' }]);
+      toast.success(`${mod.name} module enabled locally!`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenantId}/modules/${mod.id}`);
       toast.error(`Failed to enable ${mod.name}`);
     } finally {
       setEnabling(null);
@@ -137,45 +79,24 @@ export const ModuleCatalog = () => {
     setEnabling(mod.id);
     
     try {
-      // Always mark as INACTIVE to preserve any custom configurations or overrides
-      await setDoc(doc(db, 'tenants', tenantId, 'modules', mod.id), {
-        status: 'INACTIVE'
-      }, { merge: true });
-      toast.success(`${mod.name} module disabled.`);
+      // NOTE: Database write is disabled during Supabase migration.
+      setConfiguredModules(prev => prev.map(m => m.id === mod.id ? { ...m, status: 'INACTIVE' } : m));
+      toast.success(`${mod.name} module disabled locally.`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `tenants/${tenantId}/modules/${mod.id}`);
       toast.error(`Failed to disable ${mod.name}`);
     } finally {
       setEnabling(null);
     }
   };
 
-  const handleDeleteCustom = async (mod: any, deleteLogic: boolean) => {
+  const handleDeleteCustom = async (mod: any) => {
     if (!tenantId || !mod.isCustom) return;
     
     setEnabling(mod.id);
     try {
-      if (deleteLogic) {
-        // Delete associated logic
-        const logicRef = collection(db, 'tenants', tenantId, 'logic');
-        const q = query(logicRef, where('targetModuleId', '==', mod.id));
-        const logicSnap = await getDocs(q);
-        const deletePromises = logicSnap.docs.map(docSnap => deleteDoc(docSnap.ref));
-        await Promise.all(deletePromises);
-        
-        if (logicSnap.size > 0) {
-          toast.info(`Deleted ${logicSnap.size} associated logic assets.`);
-        }
-      }
-
-      // Note: Subcollections like 'records' are not automatically deleted in Firestore when the parent doc is deleted.
-      // For a production app, we would ideally trigger a Cloud Function to clean these up.
-      // Here we focus on the Business Logic (Workflows) as requested.
-      
-      await deleteDoc(doc(db, 'tenants', tenantId, 'modules', mod.id));
-      toast.success(`${mod.name} module deleted.`);
+      // NOTE: Database write is disabled during Supabase migration.
+      toast.success(`${mod.name} module deleted locally.`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `tenants/${tenantId}/modules/${mod.id}`);
       toast.error(`Failed to delete ${mod.name}`);
     } finally {
       setEnabling(null);
@@ -183,11 +104,10 @@ export const ModuleCatalog = () => {
     }
   };
 
-
-  // Merge prebuilt MODULES with custom modules from Firestore
+  // Merge prebuilt MODULES with custom modules
   const allModules: any[] = [...MODULES];
   
-  // Add global custom modules
+  // Add custom modules (currently empty after Firestore removal)
   customModules.forEach(cm => {
     if (!allModules.find(m => m.id === cm.id)) {
       const IconComponent = (LucideIcons as any)[cm.icon] || LucideIcons.Layers;
@@ -208,18 +128,8 @@ export const ModuleCatalog = () => {
         ...cm, 
         isEnabled: cm.status === 'ACTIVE' 
       };
-    } else {
-      // This shouldn't happen if custom modules are global, but just in case
-      const IconComponent = (LucideIcons as any)[cm.iconName || cm.icon] || LucideIcons.Layers;
-      allModules.push({
-        ...cm,
-        icon: IconComponent,
-        isEnabled: cm.status === 'ACTIVE',
-        isCustom: true
-      });
     }
   });
-
 
   const filteredModules = allModules.filter(m => 
     (selectedCategory === 'All' || m.category === selectedCategory) &&
@@ -410,7 +320,7 @@ export const ModuleCatalog = () => {
           module={moduleToDelete}
           tenantId={tenantId}
           onClose={() => setModuleToDelete(null)}
-          onConfirm={(deleteLogic) => handleDeleteCustom(moduleToDelete, deleteLogic)}
+          onConfirm={() => handleDeleteCustom(moduleToDelete)}
         />
       )}
     </div>

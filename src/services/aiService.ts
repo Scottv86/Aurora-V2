@@ -48,7 +48,7 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
   if (!ai) throw new Error("AI service not initialized");
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash-lite",
     contents: `You are Aurora AI, the architect for a business operating platform. 
     A user wants to build a solution for: "${prompt}".
     
@@ -182,7 +182,7 @@ export const generateDocumentTemplate = async (prompt: string, moduleId?: string
   if (!ai) throw new Error("AI service not initialized");
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash-lite",
     contents: `You are Aurora AI, an expert in business document automation. 
     A user wants to create a document template for: "${prompt}".
     ${moduleId ? `This template is for the module: "${moduleId}".` : ""}
@@ -229,7 +229,7 @@ Data: ${dataString}`;
 
     // FIXED: Use a valid model name
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash-lite",
       contents: prompt,
     });
     

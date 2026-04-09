@@ -41,8 +41,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, getDoc, updateDoc, setDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
 import { ModuleType } from '../types/platform';
@@ -224,7 +222,7 @@ export const ModuleEditor = () => {
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
   const [isEditingTab, setIsEditingTab] = useState<string | null>(null);
 
-  // Load layout from Firestore
+  // Load layout - SIMULATED for migration
   React.useEffect(() => {
     if (!tenant?.id) return;
     
@@ -235,26 +233,15 @@ export const ModuleEditor = () => {
 
     const fetchModule = async () => {
       try {
-        const docRef = doc(db, 'tenants', tenant.id, 'modules', id);
-        const docSnap = await getDoc(docRef);
+        // NOTE: Firestore loading removed.
+        // In the future, this should fetch from the prisma API.
+        console.log(`[ModuleEditor] Fetching module ${id} for tenant ${tenant.id}`);
         
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.layout && Array.isArray(data.layout) && data.layout.length > 0) {
-            setLayout(data.layout);
-          }
-          if (data.tabs && Array.isArray(data.tabs) && data.tabs.length > 0) {
-            setTabs(data.tabs);
-            setCurrentTabId(data.tabs[0].id);
-          }
-          setModuleSettings({
-            name: data.name || 'New Custom Module',
-            description: data.description || '',
-            category: data.category || 'Custom',
-            iconName: data.iconName || 'Box',
-            type: (data.type as ModuleType) || 'RECORD',
-          });
-        }
+        // Simulating load delay
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Placeholder check - if you had specific module data in mind, add here.
+        // For now, it stays with initial state or default builder state.
       } catch (error) {
         console.error("Error loading module:", error);
         toast.error("Failed to load module layout.");
@@ -270,29 +257,26 @@ export const ModuleEditor = () => {
     if (!tenant?.id) return;
     setIsSaving(true);
     try {
+      // NOTE: Firestore saving removed.
+      // This should be migrated to the new Prisma/API infrastructure.
+      console.log(`[ModuleEditor] Saving module ${id} for tenant ${tenant.id}`, {
+        ...moduleSettings,
+        layout,
+        tabs
+      });
+
+      // Simulation delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       if (id === 'new') {
-        const newModuleRef = doc(collection(db, 'tenants', tenant.id, 'modules'));
-        await setDoc(newModuleRef, {
-          ...moduleSettings,
-          isCustom: true,
-          status: 'ACTIVE',
-          source: 'MANUAL_BUILDER',
-          createdAt: serverTimestamp(),
-          layout: layout,
-          tabs: tabs
-        });
-        toast.success('Module created successfully!');
-        navigate(`/workspace/builder/${newModuleRef.id}`, { replace: true });
+        const mockNewId = `m-${Math.random().toString(36).substring(7)}`;
+        toast.success('Module created successfully! (Simulated)');
+        navigate(`/workspace/builder/${mockNewId}`, { replace: true });
       } else {
-        await updateDoc(doc(db, 'tenants', tenant.id, 'modules', id), {
-          ...moduleSettings,
-          layout: layout,
-          tabs: tabs
-        });
-        toast.success('Module saved successfully!');
+        toast.success('Module saved successfully! (Simulated)');
       }
     } catch (error) {
-      handleFirestoreError(error, id === 'new' ? OperationType.CREATE : OperationType.UPDATE, `tenants/${tenant.id}/modules/${id}`);
+      console.error("Save Error:", error);
       toast.error('Failed to save module layout.');
     } finally {
       setIsSaving(false);

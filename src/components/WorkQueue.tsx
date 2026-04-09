@@ -2,83 +2,48 @@ import {
   FileText, 
   Search, 
   Filter, 
-  MoreVertical, 
   ChevronRight, 
   Clock, 
   User, 
   Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  ArrowUpRight,
   MessageSquare,
-  Paperclip,
   Zap,
-  Sparkles as SparklesIcon
+  Database
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 import { usePlatform } from '../hooks/usePlatform';
+import { useData } from '../hooks/useData';
 import { DocumentList } from './DocumentList';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 
 export const WorkQueue = () => {
   const { tenant } = usePlatform();
-  const [cases, setCases] = useState<any[]>([]);
+  const { data: cases, loading: casesLoading, mutate: mutateCases } = useData('records');
+  const { data: modules, loading: modulesLoading } = useData('modules');
+  
   const [selectedCase, setSelectedCase] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'documents'>('details');
   const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (!tenant?.id) return;
-    
-    // Listen for enabled/active modules to filter orphaned cases
-    const modulesRef = collection(db, 'tenants', tenant.id, 'modules');
-    const unsub = onSnapshot(modulesRef, (snapshot) => {
-      const activeIds = new Set<string>();
-      snapshot.docs.forEach(doc => {
-        if (doc.data().status === 'ACTIVE') {
-          activeIds.add(doc.id);
-        }
-      });
-      setActiveModuleIds(activeIds);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `tenants/${tenant.id}/modules`);
-    });
-
-    return () => unsub();
-  }, [tenant?.id]);
+  const loading = casesLoading || modulesLoading;
 
   useEffect(() => {
-    if (!tenant?.id) {
-      setLoading(false);
-      return;
-    }
-    const tenantId = tenant.id;
-    const casesRef = collection(db, 'tenants', tenantId, 'cases');
-    const q = query(casesRef, orderBy('submittedAt', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const casesData = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      }));
-      setCases(casesData);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `tenants/${tenantId}/cases`);
-      setLoading(false);
+    if (!modules) return;
+    const activeIds = new Set<string>();
+    modules.forEach(m => {
+      // Assuming 'enabled' or 'status' check for modules depending on config
+      if (m.enabled !== false) {
+        activeIds.add(m.id);
+      }
     });
-
-    return () => unsubscribe();
-  }, [tenant?.id]);
+    setActiveModuleIds(activeIds);
+  }, [modules]);
 
   const handleProcessCase = async () => {
     if (!tenant?.id || !selectedCase) return;
@@ -88,16 +53,12 @@ export const WorkQueue = () => {
       const nextStatus = selectedCase.status === 'New' ? 'In Progress' : 
                         selectedCase.status === 'In Progress' ? 'Completed' : 'Completed';
       
-      const caseRef = doc(db, 'tenants', tenant.id, 'cases', selectedCase.id);
-      await updateDoc(caseRef, {
-        status: nextStatus,
-        updatedAt: serverTimestamp()
-      });
+      await mutateCases('UPDATE', { status: nextStatus }, selectedCase.id);
       
       toast.success(`Case updated to ${nextStatus}`);
       setSelectedCase({ ...selectedCase, status: nextStatus });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tenants/${tenant.id}/cases/${selectedCase.id}`);
+      console.error(error);
       toast.error("Failed to process case");
     } finally {
       setProcessing(false);
@@ -108,6 +69,22 @@ export const WorkQueue = () => {
     return (
       <div className="h-96 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!tenant) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full">
+          <Database className="text-zinc-300 dark:text-zinc-700" size={48} />
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">No Workspace Selected</h2>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-sm mt-2">
+            You don't seem to be associated with a workspace. Please contact your administrator.
+          </p>
+        </div>
       </div>
     );
   }
