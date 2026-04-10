@@ -18,6 +18,7 @@ model Tenant {
   members            TenantMember[]
   usageLogs          UsageLog[]
   workspaces         Workspace[]
+  menuConfig         Json?          @map("menu_config")
 
   @@map("tenants")
 }
@@ -80,6 +81,7 @@ model TenantMember {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   tenant    Tenant   @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
   user      User     @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
+  menuConfig Json?    @map("menu_config")
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
   @@index([tenantId], map: "TenantMember_tenantId_idx")

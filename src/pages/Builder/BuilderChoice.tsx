@@ -13,7 +13,7 @@ export const BuilderChoice = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <button
-          onClick={() => navigate('/workspace/ai-builder')}
+          onClick={() => navigate('/workspace/settings/ai-builder')}
           className="group relative p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl text-left hover:border-indigo-500/50 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 shadow-sm dark:shadow-none"
         >
           <div className="w-14 h-14 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-6 group-hover:scale-110 transition-transform">
@@ -30,7 +30,7 @@ export const BuilderChoice = () => {
         </button>
 
         <button
-          onClick={() => navigate('/workspace/builder/new')}
+          onClick={() => navigate('/workspace/settings/builder/new')}
           className="group relative p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl text-left hover:border-emerald-500/50 transition-all hover:shadow-2xl hover:shadow-emerald-500/10 shadow-sm dark:shadow-none"
         >
           <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-6 group-hover:scale-110 transition-transform">

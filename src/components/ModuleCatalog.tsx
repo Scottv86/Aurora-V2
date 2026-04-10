@@ -87,26 +87,38 @@ export const ModuleCatalog = () => {
     setEnabling(mod.id);
     
     try {
-      // For now, we'll just delete it or mark it inactive in the DB.
-      // If it's a custom module, we'll update it.
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const response = await fetch(`${DATA_API_URL}/modules/${mod.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          ...mod,
-          status: 'INACTIVE'
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to disable module');
+      
+      // If it's a standard module (not custom), we UNINSTALL it (delete from DB)
+      // If it's custom, we just mark it INACTIVE to hide it from the menu
+      if (!mod.isCustom) {
+        const response = await fetch(`${DATA_API_URL}/modules/${mod.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (!response.ok) throw new Error('Failed to uninstall module');
+        toast.success(`${mod.name} module uninstalled.`);
+      } else {
+        const response = await fetch(`${DATA_API_URL}/modules/${mod.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          },
+          body: JSON.stringify({
+            ...mod,
+            status: 'INACTIVE'
+          })
+        });
+        if (!response.ok) throw new Error('Failed to disable module');
+        toast.success(`${mod.name} module disabled.`);
+      }
       
       await refreshModules();
-      toast.success(`${mod.name} module disabled.`);
     } catch (error: any) {
       toast.error(error.message || `Failed to disable ${mod.name}`);
     } finally {
@@ -181,7 +193,7 @@ export const ModuleCatalog = () => {
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/workspace/builder')}
+            onClick={() => navigate('/workspace/settings/builder')}
             className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20"
           >
             <Plus size={18} />
@@ -250,7 +262,7 @@ export const ModuleCatalog = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => navigate(`/workspace/builder/${mod.id}`)}
+                  onClick={() => navigate(`/workspace/settings/builder/${mod.id}`)}
                   className="p-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors shadow-sm dark:shadow-none"
                   title="Edit Module Definition"
                 >

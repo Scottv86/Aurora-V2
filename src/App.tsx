@@ -55,10 +55,17 @@ const App = () => {
 
               {/* Workspace Routes (Authenticated Standard Users) */}
               <Route path="/workspace" element={<ProtectedRoute><PlatformShell><DashboardPage /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/catalog" element={<ProtectedRoute><PlatformShell><ModuleCatalog /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/builder" element={<ProtectedRoute><PlatformShell><BuilderChoice /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/ai-builder" element={<ProtectedRoute><PlatformShell fullBleed><AIBuilder /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/builder/:id" element={<ProtectedRoute><PlatformShell fullBleed><ModuleEditor /></PlatformShell></ProtectedRoute>} />
+              {/* Legacy Redirects to new Settings location */}
+              <Route path="/workspace/builder" element={<Navigate to="/workspace/settings/builder" replace />} />
+              <Route path="/workspace/ai-builder" element={<Navigate to="/workspace/settings/ai-builder" replace />} />
+              <Route path="/workspace/builder/:id" element={<Navigate to="/workspace/settings/builder/:id" replace />} />
+              <Route path="/workspace/catalog" element={<Navigate to="/workspace/settings/modules" replace />} />
+              <Route path="/workspace/documents" element={<Navigate to="/workspace/settings/templates" replace />} />
+              <Route path="/workspace/workflows" element={<Navigate to="/workspace/settings/automations" replace />} />
+              <Route path="/workspace/automations" element={<Navigate to="/workspace/settings/automations" replace />} />
+              <Route path="/workspace/logic" element={<Navigate to="/workspace/settings/logic" replace />} />
+              <Route path="/workspace/deployments" element={<Navigate to="/workspace/settings/deploy" replace />} />
+              <Route path="/workspace/reports" element={<Navigate to="/workspace/settings/reports" replace />} />
               
               {/* Dynamic Module Routes */}
               <Route path="/workspace/modules/:id" element={<ProtectedRoute><PlatformShell><ModuleView /></PlatformShell></ProtectedRoute>} />
@@ -68,14 +75,25 @@ const App = () => {
               <Route path="/workspace/queue" element={<ProtectedRoute><PlatformShell><WorkQueue /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/people" element={<ProtectedRoute><PlatformShell><People /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/analytics" element={<ProtectedRoute><PlatformShell><Analytics /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/workflows" element={<ProtectedRoute><PlatformShell><LogicBuilder /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/documents" element={<ProtectedRoute><PlatformShell><DocumentAutomation /></PlatformShell></ProtectedRoute>} />
               
-              {/* Other Features */}
-              <Route path="/workspace/automations" element={<ProtectedRoute><PlatformShell><ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/logic" element={<ProtectedRoute><PlatformShell><ComingSoon title="Logic Assets" description="Central repository for reusable business logic, scripts, and validation rules." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/deployments" element={<ProtectedRoute><PlatformShell><ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings" element={<ProtectedRoute><PlatformShell><ComingSoon title="Organization Settings" description="Configure tenant branding, user roles, security policies, and API keys." /></PlatformShell></ProtectedRoute>} />
+              {/* Settings & Studio (Consolidated) */}
+              <Route path="/workspace/settings" element={<ProtectedRoute><PlatformShell><ComingSoon title="Organization Settings" description="Configure tenant branding, site metadata, and global workspace defaults." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/team" element={<ProtectedRoute><PlatformShell><ComingSoon title="Team Management" description="Invite users, manage roles, and configure access control policies." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/billing" element={<ProtectedRoute><PlatformShell><ComingSoon title="Billing & Plans" description="Manage subscriptions, payment methods, and billing history." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/security" element={<ProtectedRoute><PlatformShell><ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." /></PlatformShell></ProtectedRoute>} />
+              
+              {/* Module Builder (within Settings) */}
+              <Route path="/workspace/settings/builder" element={<ProtectedRoute><PlatformShell><BuilderChoice /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/ai-builder" element={<ProtectedRoute><PlatformShell fullBleed><AIBuilder /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/builder/:id" element={<ProtectedRoute><PlatformShell fullBleed><ModuleEditor /></PlatformShell></ProtectedRoute>} />
+              
+              <Route path="/workspace/settings/modules" element={<ProtectedRoute><PlatformShell><ModuleCatalog /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/apps" element={<ProtectedRoute><PlatformShell><ComingSoon title="App Catalog" description="Discover, install, and manage third-party applications." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/templates" element={<ProtectedRoute><PlatformShell><DocumentAutomation /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/automations" element={<ProtectedRoute><PlatformShell><ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/reports" element={<ProtectedRoute><PlatformShell><ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/logic" element={<ProtectedRoute><PlatformShell><LogicBuilder /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/deploy" element={<ProtectedRoute><PlatformShell><ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." /></PlatformShell></ProtectedRoute>} />
               
               {/* External / Public */}
               <Route path="/portal" element={<ExternalPortal />} />

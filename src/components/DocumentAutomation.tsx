@@ -93,7 +93,7 @@ export const DocumentAutomation = () => {
     <div className="space-y-8 p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Document Studio</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Templates</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Create and manage reusable document templates for your platform.</p>
         </div>
         <button

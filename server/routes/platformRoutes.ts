@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { AuthRequest } from '../middleware/authMiddleware';
+import { AuthRequest, authenticate } from '../middleware/authMiddleware';
 import { globalPrisma } from '../lib/prisma';
 
 const router = Router();
@@ -14,9 +14,9 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     return res.status(401).json({ error: 'Auth failed: User session missing' });
   }
 
-  try {
-    const { uid, tenantIds } = req.user;
+  const { uid, tenantIds } = req.user;
 
+  try {
     // Fetch user details from DB
     const user = await globalPrisma.user.findUnique({
       where: { id: uid },
@@ -36,8 +36,8 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
 
     // Determine primary tenant
     // We prioritize actual database memberships over the token's snapshot
-    let primaryMembership = user.memberships[0];
-    let tenant = primaryMembership?.tenant || null;
+    const primaryMembership = user.memberships[0];
+    let tenant: any = primaryMembership?.tenant || null;
 
     console.log(`[PlatformAPI] Context check: user=${user.email} admin=${user.isSuperAdmin} total_members=${user.memberships.length} primary=${tenant?.name || 'NONE'}`);
 
@@ -48,6 +48,9 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         orderBy: { createdAt: 'asc' }
       });
     }
+
+    // Menu Configuration Resolution: User Customization > Tenant Default
+    const menuConfig = primaryMembership?.menuConfig || tenant?.menuConfig || null;
 
     res.json({
       user: {
@@ -63,12 +66,59 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         plan: tenant.planTier,
         status: tenant.status,
         createdAt: tenant.createdAt,
-        environments: ['production']
-      } : null
+        environments: ['production'],
+        menuConfig: tenant.menuConfig
+      } : null,
+      menuConfig // Resolved menu config (profile override or tenant default)
     });
   } catch (error: any) {
     console.error('[PlatformAPI] Context error:', error);
     res.status(500).json({ error: 'Failed to retrieve platform context' });
+  }
+});
+
+/**
+ * PUT /api/platform/menu-config
+ * Updates the menu configuration for either the current user or the organization.
+ */
+router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response) => {
+  const { config, scope } = req.body;
+  const { uid, tenantIds, isSuperAdmin } = req.user!;
+  
+  // Use provided tenant ID from header or fallback to primary
+  const tenantId = req.headers['x-tenant-id'] as string || tenantIds[0];
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'No active tenant found for request' });
+  }
+
+  try {
+    if (scope === 'tenant') {
+      // Check if user is admin of this tenant or superadmin
+      const membership = await globalPrisma.tenantMember.findUnique({
+        where: { userId_tenantId: { userId: uid, tenantId } }
+      });
+
+      if (!isSuperAdmin && membership?.roleId !== 'admin') {
+        return res.status(403).json({ error: 'Only administrators can update the organization menu.' });
+      }
+
+      await globalPrisma.tenant.update({
+        where: { id: tenantId },
+        data: { menuConfig: config }
+      });
+    } else {
+      // Default scope: user (TenantMember profile)
+      await globalPrisma.tenantMember.update({
+        where: { userId_tenantId: { userId: uid, tenantId } },
+        data: { menuConfig: config }
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[PlatformAPI] Menu config update error:', error);
+    res.status(500).json({ error: 'Failed to save menu configuration' });
   }
 });
 

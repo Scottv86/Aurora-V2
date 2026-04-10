@@ -1,0 +1,147 @@
+--- src\components\AIBuilder.tsx ---
+101: const promises = result.modules.map(async (m: any) => {
+111: .map((wf: any) => ({
+114: steps: wf.steps.map((s: string) => ({ id: `step-${Math.random().toString(36).substring(7)}`, label: s, type: 'status' }))
+226: ].map((template, i) => (
+265: {result?.modules.map((m: any, i: number) => (
+277: {m.layout?.flatMap((row: any) => row.columns.flatMap((col: any) => col.fields)).map((f: any, j: number) => (
+296: {result?.workflows.map((wf: any, i: number) => (
+300: {wf.steps.map((s: string, j: number) => (
+318: {result?.automations.map((auto: any, i: number) => (
+--- src\components\Analytics.tsx ---
+141: const data = Object.entries(counts).map(([name, value]) => ({ name, value }));
+172: {statsConfig.map((stat, i) => (
+273: {moduleDistribution.map((_, index) => (
+290: {moduleDistribution.map((entry, index) => (
+--- src\components\ComputeMatrix.tsx ---
+104: {compute.nodes.map((node: any, i: number) => (
+189: ].map((item, i) => (
+--- src\components\Dashboard.tsx ---
+114: {stats.map((stat, i) => (
+148: ].map((wf, i) => (
+--- src\components\DeleteModuleModal.tsx ---
+142: {assets.map(asset => (
+182: {referencingModules.map(m => (
+--- src\components\DocumentAutomation.tsx ---
+176: filteredTemplates.map((t) => (
+--- src\components\DocumentGeneratorModal.tsx ---
+105: templates.map((t) => (
+--- src\components\DocumentList.tsx ---
+125: filteredDocs.map((doc: GeneratedDocument) => (
+--- src\components\DocumentTemplateBuilder.tsx ---
+174: {modules.map((m) => (
+227: {['id', 'name', 'status', 'createdAt', 'updatedAt'].map(field => (
+--- src\components\ExternalPortal.tsx ---
+241: ].map((req, i) => (
+--- src\components\FieldInput.tsx ---
+22: {field.options?.map((opt: string, j: number) => (
+105: {usersData.map((u: any) => (
+120: {lookupData[field.targetModuleId]?.map((r: any) => (
+--- src\components\FleetManager.tsx ---
+78: const pieData = Object.entries(fleet.distribution).map(([name, value]) => ({ name, value }));
+102: {HUD_METRICS.map((item, i) => (
+138: {pieData.map((_, index) => (
+150: {pieData.map((entry, i) => (
+173: {fleet.deployments.map((deploy: any, i: number) => (
+255: ].map((node) => (
+--- src\components\HealthMonitor.tsx ---
+109: ].map((stat, i) => (
+145: {health.services.map((service: any, i: number) => (
+188: ].map((log, i) => (
+--- src\components\Layout\PlatformShell.tsx ---
+116: {enabledModules.map(mod => {
+--- src\components\LogicBuilder.tsx ---
+131: {assets.length > 0 ? assets.map((asset) => (
+212: {VARIABLES.map((v, i) => (
+--- src\components\ModuleCatalog.tsx ---
+135: setCustomModules(prev => prev.map(m => m.id === saved.id ? saved : m));
+231: {CATEGORIES.map(cat => (
+249: {MODULE_TYPES.map(type => (
+266: {filteredModules.map((mod, i) => (
+--- src\components\ModuleEditor.tsx ---
+444: setLayout(prev => prev.map(row => {
+448: columns: row.columns.map(col => {
+466: const nextLayout = prev.map(row => {
+470: columns: row.columns.map(col => {
+487: return nextLayout.map(row => {
+491: columns: row.columns.map(col => {
+546: setLayout(prev => prev.map(row => {
+564: setLayout(prev => prev.map(row => {
+568: columns: row.columns.map(col => {
+580: setLayout(prev => prev.map(row => ({
+582: columns: row.columns.map(col => ({
+584: fields: col.fields.map(field =>
+615: {(['build', 'preview', 'logic', 'settings'] as const).map((tab) => (
+668: {LAYOUT_TYPES.map((type) => (
+691: {FIELD_CATEGORIES.map((category) => (
+695: {category.fields.map((type) => (
+735: {tabs.map((tab) => (
+743: const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+771: setLayout(layout.map(r => r.tabId === tab.id ? { ...r, tabId: newTabs[0].id } : r));
+809: return filteredLayout.map((row, rowIndex) => (
+861: {[1, 2, 3, 4].map(count => (
+886: {row.columns.map((col) => (
+904: {col.fields.map((field, fIndex) => (
+1072: {layout.map((row) => (
+1083: {row.columns.map((col) => (
+1085: {col.fields.map((field) => (
+1169: {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
+1308: {(selectedField.options || []).map((opt, idx) => (
+1348: {(selectedField.fields || []).map((nestedField, idx) => (
+1384: {FIELD_CATEGORIES.flatMap(c => c.fields).filter(f => f.id !== 'fieldGroup' && f.id !== 'repeatableGroup').map(f => (
+1498: {layout.flatMap(r => r.columns).flatMap(c => c.fields).filter(f => f.id !== selectedField.id).map(f => (
+--- src\components\Navigation\Navbar.tsx ---
+40: {tenant?.environments.map(env => (
+--- src\components\Onboarding.tsx ---
+91: {[1, 2, 3, 4].map(s => (
+170: {INDUSTRIES.map(ind => (
+269: ].map((item, i) => (
+--- src\components\People.tsx ---
+77: {people.length > 0 ? people.map((person, i) => (
+88: {person.displayName ? person.displayName.split(' ').map((n: string) => n[0]).join('') : '??'}
+--- src\components\SuperAdmin.tsx ---
+141: {STATUS_TICKER.map((item, i) => (
+210: ].map((stat, i) => (
+274: .map((tenant, idx) => (
+415: {['standard', 'growth', 'enterprise'].map(p => (
+--- src\components\TenantOverview.tsx ---
+95: {HUD_STATUS.map((item, i) => (
+115: ].map((stat, i) => (
+159: {tenant.usageLogs.map((log: any) => (
+199: {tenant.workspaces.map((ws: any) => (
+--- src\components\WorkQueue.tsx ---
+116: {cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length > 0 ? cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).map((c, i) => (
+--- src\hooks\useData.ts ---
+76: setData(prev => prev.map(p => p.id === record.id ? record : p));
+--- src\pages\Module\ModuleView.tsx ---
+176: setRecords(prev => prev.map(r => r.id === savedRecord.id ? savedRecord : r));
+268: ].map((stat, i) => (
+307: {displayFields.slice(0, 4).map((field: any, i: number) => (
+316: {records.map((record, i) => (
+322: {displayFields.slice(0, 4).map((field: any, j: number) => (
+431: {moduleData.tabs.map((tab: any) => (
+456: .map((row: any) => (
+458: {row.columns.map((col: any) => (
+460: {col.fields.map((field: any) => {
+489: {(field.fields || []).map((nestedField: any) => {
+--- src\pages\Record\RecordDetailView.tsx ---
+307: {moduleData.tabs.map((tab: any) => (
+333: .map((row: any) => (
+335: {row.columns.map((col: any) => (
+337: {col.fields.map((field: any) => {
+366: {(record[field.id] || []).map((item: any, idx: number) => (
+371: {(field.fields || []).map((nestedField: any) => {
+393: {(field.fields || []).map((nestedField: any) => {
+428: {allFields.map((field: any) => (
+447: {moduleData.workflow?.statuses?.map((st: any) => (
+478: {history.map((h, i) => (
+533: {moduleData.tabs.map((tab: any) => (
+557: .map((row: any) => (
+559: {row.columns.map((col: any) => (
+561: {col.fields.map((field: any) => {
+605: {(editData[field.id] || []).map((item: any, idx: number) => (
+622: {(field.fields || []).map((nestedField: any) => {
+--- src\services\aiService.ts ---
+223: const fieldsString = JSON.stringify(fields.map((f: ModuleField) => ({ id: f.id, label: f.label, type: f.type })), null, 2);
+--- src\services\documentService.ts ---
+48: return list.map(item => {

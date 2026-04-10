@@ -10,7 +10,7 @@ async function main() {
     { name: 'Global Tech', subdomain: 'global' }
   ];
 
-  const createdTenants = {};
+  const createdTenants: Record<string, any> = {};
 
   for (const t of tenants) {
     const existing = await prisma.tenant.findUnique({ where: { subdomain: t.subdomain } });
@@ -43,7 +43,9 @@ async function main() {
     let authUser;
     
     // Check if user exists in Supabase
-    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    const listResponse = await supabaseAdmin.auth.admin.listUsers();
+    const users = listResponse.data?.users || [];
+    const listError = listResponse.error;
     if (listError) {
       console.error('Error listing users:', listError);
       continue;
@@ -67,6 +69,10 @@ async function main() {
 
       if (createError) {
         console.error(`Failed to create ${tu.email}:`, createError.message);
+        continue;
+      }
+      if (!newUser?.user) {
+        console.error(`Failed to create ${tu.email}: No user data returned`);
         continue;
       }
       authUser = newUser.user;

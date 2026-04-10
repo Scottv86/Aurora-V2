@@ -319,7 +319,7 @@ export const ModuleEditor = () => {
       
       if (isNew) {
         toast.success('Module created successfully!');
-        navigate(`/workspace/builder/${savedModule.id}`, { replace: true });
+        navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
       } else {
         toast.success('Module saved successfully!');
       }

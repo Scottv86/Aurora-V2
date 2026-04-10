@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     server: 'Aurora Platform API',
-    v: '2026-04-10.3' // Version timestamp
+    v: '2026-04-10.4' // Version timestamp
   });
 });
 
