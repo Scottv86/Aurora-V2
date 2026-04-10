@@ -93,7 +93,7 @@ export const WorkQueue = () => {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Work Queue</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Queue</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage and process active cases across all modules.</p>
         </div>
         <div className="flex gap-3">

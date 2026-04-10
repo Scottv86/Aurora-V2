@@ -15,6 +15,7 @@ router.get('/modules', async (req: TenantRequest, res) => {
       return {
         ...config,
         id: m.id,
+        name: m.name,
         templateId: config.id,
         status: config.status || 'ACTIVE',
         createdAt: m.createdAt,

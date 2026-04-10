@@ -17,7 +17,7 @@ export const MODULES = [
     id: 'contacts', 
     name: 'Contacts', 
     type: 'RECORD',
-    category: 'CRM & People', 
+    category: 'CRM & Entities', 
     icon: Users, 
     description: 'Manage people and relationships across your organization.',
     fields: [
@@ -60,7 +60,7 @@ export const MODULES = [
     id: 'assets', 
     name: 'Asset Register', 
     type: 'RECORD',
-    category: 'Operations', 
+    category: 'Platform', 
     icon: Database, 
     description: 'Track physical and digital assets with maintenance history.',
     fields: [
@@ -74,7 +74,7 @@ export const MODULES = [
     id: 'onboarding', 
     name: 'Onboarding', 
     type: 'WORK_ITEM',
-    category: 'HR & People', 
+    category: 'HR & Entities', 
     icon: UserPlus, 
     description: 'Streamline employee and contractor onboarding flows.',
     fields: [
@@ -102,7 +102,7 @@ export const MODULES = [
     id: 'point-of-sale', 
     name: 'Point of Sale', 
     type: 'FINANCIAL',
-    category: 'Operations', 
+    category: 'Platform', 
     icon: ShoppingCart, 
     description: 'Process retail transactions and manage till sessions.',
     fields: [

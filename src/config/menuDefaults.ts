@@ -7,19 +7,19 @@ export const systemDefaultMenuConfig: MenuConfig = {
       title: 'Main',
       items: [
         { id: 'dashboard', label: 'Dashboard', iconName: 'LayoutDashboard', to: '/workspace', isVisible: true },
-        { id: 'queue', label: 'Work Queue', iconName: 'ClipboardList', to: '/workspace/queue', isVisible: true }
+        { id: 'queue', label: 'Queue', iconName: 'ClipboardList', to: '/workspace/queue', isVisible: true }
       ]
     },
     {
       id: 'modules',
-      title: 'Enabled Modules',
+      title: 'Modules',
       items: [] // Dynamically populated from active modules
     },
     {
-      id: 'operations',
-      title: 'Operations',
+      id: 'platform',
+      title: 'Platform',
       items: [
-        { id: 'people', label: 'People', iconName: 'Users', to: '/workspace/people', isVisible: true }
+        { id: 'entities', label: 'Entities', iconName: 'Users', to: '/workspace/entities', isVisible: true }
       ]
     },
     {
@@ -33,6 +33,7 @@ export const systemDefaultMenuConfig: MenuConfig = {
         { id: 'meet', label: 'Meet', iconName: 'Video', isVisible: true },
         { id: 'calendar', label: 'Calendar', iconName: 'Calendar', isVisible: true },
         { id: 'notes', label: 'Notes', iconName: 'StickyNote', isVisible: true },
+        { id: 'reminders', label: 'Reminders', iconName: 'Bell', isVisible: true },
         { id: 'reports', label: 'Reports', iconName: 'BarChart3', isVisible: true }
       ]
     }

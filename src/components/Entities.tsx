@@ -10,9 +10,9 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { usePlatform } from '../hooks/usePlatform';
 
-export const People = () => {
+export const Entities = () => {
   const { tenant } = usePlatform();
-  const [people, setPeople] = useState<any[]>([]);
+  const [entities, setEntities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export const People = () => {
     
     // NOTE: User fetching from Firestore has been removed 
     // during the Supabase migration. This will be replaced by Prisma/API calls.
-    setPeople([]);
+    setEntities([]);
     setLoading(false);
   }, [tenant?.id]);
 
@@ -38,7 +38,7 @@ export const People = () => {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">People</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Entities</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage users, roles, and permissions within your workspace.</p>
         </div>
         <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20">
@@ -74,7 +74,7 @@ export const People = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {people.length > 0 ? people.map((person, i) => (
+            {entities.length > 0 ? entities.map((person, i) => (
               <motion.tr 
                 key={person.id}
                 initial={{ opacity: 0, y: 10 }}

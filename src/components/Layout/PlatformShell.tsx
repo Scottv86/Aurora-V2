@@ -233,7 +233,20 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     // Inject active modules that are missing from the configuration
     const sections = menuConfig.sections.map(section => {
       if (section.id === 'modules') {
-        const existingModuleIds = new Set(section.items.map(i => i.id));
+        // Only include items that are in enabledModules (in case some were deactivated but not yet removed from saved config)
+        const activeModuleIds = new Set(enabledModules.map(m => `module:${m.id}`));
+        const currentItems = section.items
+          .filter(i => activeModuleIds.has(i.id))
+          .map(item => {
+            const mod = enabledModules.find(m => `module:${m.id}` === item.id);
+            return mod ? { 
+              ...item, 
+              label: mod.name, 
+              iconName: mod.iconName || item.iconName 
+            } : item;
+          });
+        const existingModuleIds = new Set(currentItems.map(i => i.id));
+
         const newModules = enabledModules
           .filter(m => !existingModuleIds.has(`module:${m.id}`))
           .map(m => ({
@@ -246,10 +259,16 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         
         return {
           ...section,
-          items: [...section.items, ...newModules]
+          items: [...currentItems, ...newModules]
         };
       }
       return section;
+    }).filter(section => {
+      // Hide the modules section if it's empty
+      if (section.id === 'modules') {
+        return section.items.length > 0;
+      }
+      return true;
     });
 
     return { ...menuConfig, sections };
@@ -459,7 +478,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
                     <div>
                       <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
-                        Studio Assets
+                        System
                       </div>
                       <nav className="space-y-1">
                         <SidebarItem 
@@ -474,6 +493,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           label="Apps" 
                           to="/workspace/settings/apps" 
                           active={isActive('/workspace/settings/apps')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Database} 
+                          label="Database" 
+                          to="/workspace/settings/database" 
+                          active={isActive('/workspace/settings/database')} 
                           collapsed={!isSidebarOpen} 
                         />
                         <SidebarItem 
@@ -518,14 +544,34 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           active={isActive('/workspace/settings/reports')} 
                           collapsed={!isSidebarOpen} 
                         />
-                      </nav>
-                    </div>
-
-                    <div>
-                      <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
-                        System
-                      </div>
-                      <nav className="space-y-1">
+                        <SidebarItem 
+                          icon={LucideIcons.Network} 
+                          label="Intranet" 
+                          to="/workspace/settings/intranet" 
+                          active={isActive('/workspace/settings/intranet')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Bot} 
+                          label="Agents" 
+                          to="/workspace/settings/agents" 
+                          active={isActive('/workspace/settings/agents')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.BookOpen} 
+                          label="Knowledge base" 
+                          to="/workspace/settings/knowledge" 
+                          active={isActive('/workspace/settings/knowledge')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.TestTube} 
+                          label="Testing" 
+                          to="/workspace/settings/testing" 
+                          active={isActive('/workspace/settings/testing')} 
+                          collapsed={!isSidebarOpen} 
+                        />
                         <SidebarItem 
                           icon={LucideIcons.CloudUpload} 
                           label="Deployments" 

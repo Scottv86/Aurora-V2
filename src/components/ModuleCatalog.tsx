@@ -24,11 +24,11 @@ import { ModuleType } from '../types/platform';
 
 const CATEGORIES = [
   'All',
-  'CRM & People',
+  'CRM & Entities',
   'Intake & Requests',
   'Finance',
-  'Operations',
-  'HR & People',
+  'Platform',
+  'HR & Entities',
   'Risk & Compliance',
   'Custom'
 ];

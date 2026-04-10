@@ -20,7 +20,7 @@ import { ExternalPortal } from './components/ExternalPortal';
 import { ModuleEditor } from './components/ModuleEditor';
 import { LogicBuilder } from './components/LogicBuilder';
 import { Analytics } from './components/Analytics';
-import { People } from './components/People';
+import { Entities } from './components/Entities';
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
 import { HealthMonitor } from './components/HealthMonitor';
@@ -73,8 +73,9 @@ const App = () => {
               
               {/* Platform Operations */}
               <Route path="/workspace/queue" element={<ProtectedRoute><PlatformShell><WorkQueue /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/people" element={<ProtectedRoute><PlatformShell><People /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/entities" element={<ProtectedRoute><PlatformShell><Entities /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/analytics" element={<ProtectedRoute><PlatformShell><Analytics /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/reminders" element={<ProtectedRoute><PlatformShell><ComingSoon title="Reminders" description="Set task alerts, keep track of deadlines, and manage your personal notifications." /></PlatformShell></ProtectedRoute>} />
               
               {/* Settings & Studio (Consolidated) */}
               <Route path="/workspace/settings" element={<ProtectedRoute><PlatformShell><ComingSoon title="Organization Settings" description="Configure tenant branding, site metadata, and global workspace defaults." /></PlatformShell></ProtectedRoute>} />
@@ -89,11 +90,16 @@ const App = () => {
               
               <Route path="/workspace/settings/modules" element={<ProtectedRoute><PlatformShell><ModuleCatalog /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/apps" element={<ProtectedRoute><PlatformShell><ComingSoon title="App Catalog" description="Discover, install, and manage third-party applications." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/database" element={<ProtectedRoute><PlatformShell><ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/templates" element={<ProtectedRoute><PlatformShell><DocumentAutomation /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/automations" element={<ProtectedRoute><PlatformShell><ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/reports" element={<ProtectedRoute><PlatformShell><ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/knowledge" element={<ProtectedRoute><PlatformShell><ComingSoon title="Knowledge Base" description="Central repository for institutional knowledge, documentation, and training materials." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/agents" element={<ProtectedRoute><PlatformShell><ComingSoon title="AI Agents" description="Deploy and manage autonomous AI agents to automate complex workflows and data processing." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/intranet" element={<ProtectedRoute><PlatformShell><ComingSoon title="Intranet Hub" description="Internal corporate communication portal, employee directory, and centralized resource center." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/logic" element={<ProtectedRoute><PlatformShell><LogicBuilder /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/deploy" element={<ProtectedRoute><PlatformShell><ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/testing" element={<ProtectedRoute><PlatformShell><ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." /></PlatformShell></ProtectedRoute>} />
               
               {/* External / Public */}
               <Route path="/portal" element={<ExternalPortal />} />
