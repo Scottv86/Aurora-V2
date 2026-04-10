@@ -36,7 +36,7 @@ export async function spawnTenant(options: ProvisioningOptions) {
     // 3. Set up Initial Admin User
     const admin = await tx.user.create({
       data: {
-        id: `mock_${Math.random().toString(36).substring(2, 11)}`, // Placeholder ID for registry-level users
+        id: options.adminEmail.startsWith('scott') ? 'default-admin-id' : `usr_${Math.random().toString(36).substring(2, 11)}`, 
         email: adminEmail,
       }
     });

@@ -11,12 +11,22 @@ import {
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 
 export const Dashboard = () => {
   const { tenant } = usePlatform();
+  const { user, session, isSuperAdmin, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // Forced Redirect Guard: SuperAdmins belong in the Admin Portal by default
+  useEffect(() => {
+    if (!loading && user && isSuperAdmin) {
+      console.log('[Dashboard Guard] SuperAdmin detected on standard dashboard. Redirecting to portal...');
+      navigate('/admin', { replace: true });
+    }
+  }, [user, isSuperAdmin, loading, navigate]);
   const [stats, setStats] = useState([
     { label: 'Active Cases', value: '0', icon: <Database size={20} />, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
     { label: 'Portal Submissions', value: '0', icon: <Globe size={20} />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -24,7 +34,6 @@ export const Dashboard = () => {
     { label: 'System Health', value: '99.9%', icon: <ShieldCheck size={20} />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
   ]);
 
-  const { user, session } = useAuth();
 
   useEffect(() => {
     if (!tenant?.id || !user) return;

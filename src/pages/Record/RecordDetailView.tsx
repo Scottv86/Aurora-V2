@@ -18,7 +18,9 @@ import {
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 import { MODULES } from '../../constants/modules';
+import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
@@ -27,9 +29,28 @@ import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/pla
 export const RecordDetailView = () => {
   const { moduleId, recordId } = useParams();
   const navigate = useNavigate();
+  const { session } = useAuth();
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [record, setRecord] = useState<Record<string, any> | null>(null);
+
+  const Icon = useMemo(() => {
+    if (!moduleData) return LucideIcons.Layers;
+    const iconSource = (moduleData as any).iconName || (moduleData as any).icon;
+    
+    // If it's a string, look it up in LucideIcons
+    if (typeof iconSource === 'string' && iconSource.trim() !== '') {
+      return (LucideIcons as any)[iconSource] || LucideIcons.Layers;
+    }
+    
+    // If it's a component (function or object with $$typeof)
+    if (typeof iconSource === 'function' || (typeof iconSource === 'object' && iconSource !== null && (iconSource as any).$$typeof)) {
+      return iconSource;
+    }
+    
+    // Fallback for empty objects or other invalid data
+    return LucideIcons.Layers;
+  }, [moduleData]);
   const [history] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -69,17 +90,44 @@ export const RecordDetailView = () => {
     const fetchModAndRecord = async () => {
       setLoading(true);
       try {
-        // NOTE: Module and Record fetching from Firestore removed.
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+        
+        // 1. Fetch Module
         const prebuilt = MODULES.find(m => m.id === moduleId);
         if (prebuilt) {
           setModuleData(prebuilt as any);
+        } else {
+          const modRes = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant.id
+            }
+          });
+          if (modRes.ok) {
+            setModuleData(await modRes.json());
+          }
         }
         
-        // Stubbing record data
-        setRecord(null); 
-        toast.error("Record access via Firestore is disabled. Migration to Prisma API in progress.");
+        // 2. Fetch Record
+        const recRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        
+        if (recRes.ok) {
+          const recData = await recRes.json();
+          setRecord(recData);
+          setEditData(recData);
+        } else if (recRes.status === 404) {
+          toast.error("Record not found");
+        } else {
+          throw new Error(`Failed to fetch record: ${recRes.statusText}`);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
+        toast.error("Failed to load data");
       } finally {
         setLoading(false);
       }
@@ -104,13 +152,33 @@ export const RecordDetailView = () => {
         }
       }
 
-      // NOTE: Firestore update removed.
-      toast.success("Record updated locally (Simulation)");
-      setRecord(prev => ({ ...prev, ...finalData }));
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          ...finalData
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to update record');
+      }
+
+      const updatedRecord = await res.json();
+      setRecord(updatedRecord);
+      setEditData(updatedRecord);
       setShowEditModal(false);
-    } catch (error) {
+      toast.success("Record updated successfully");
+    } catch (error: any) {
       console.error("Update Error:", error);
-      toast.error("Failed to update record");
+      toast.error(error.message || "Failed to update record");
     } finally {
       setIsSubmitting(false);
     }
@@ -120,12 +188,31 @@ export const RecordDetailView = () => {
     if (!tenant?.id || !moduleId || !recordId || !record) return;
     
     try {
-      // NOTE: Firestore status update removed.
-      setRecord(prev => prev ? { ...prev, status: newStatus } : null);
-      toast.success(`Status updated to ${newStatus} (Simulation)`);
-    } catch (error) {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          status: newStatus
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to update status');
+      }
+
+      const updatedRecord = await res.json();
+      setRecord(updatedRecord);
+      toast.success(`Status updated to ${newStatus}`);
+    } catch (error: any) {
       console.error("Status Update Error:", error);
-      toast.error("Failed to update status");
+      toast.error(error.message || "Failed to update status");
     }
   };
 
@@ -133,12 +220,25 @@ export const RecordDetailView = () => {
     if (!tenant?.id || !moduleId || !recordId) return;
 
     try {
-      // NOTE: Firestore deletion removed.
-      toast.success("Record deleted (Simulation)");
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to delete record');
+      }
+
+      toast.success("Record deleted successfully");
       navigate(`/workspace/modules/${moduleId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Delete Error:", error);
-      toast.error("Failed to delete record");
+      toast.error(error.message || "Failed to delete record");
     }
   };
 
@@ -149,8 +249,6 @@ export const RecordDetailView = () => {
   );
 
   if (!moduleData || !record) return <Navigate to="/workspace" replace />;
-
-  const Icon = (moduleData as any).icon || LucideIcons.Layers;
 
   return (
     <div className="space-y-8 pb-20">

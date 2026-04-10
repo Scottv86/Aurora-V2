@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -30,22 +31,14 @@ const STATUS_TICKER = [
   { label: 'AI Swarm', value: '12 active', status: 'nominal' }
 ];
 
-// Mock Trend Data for Charts
-const MOCK_USAGE_TREND = [
-  { time: '00:00', usage: 1200 },
-  { time: '04:00', usage: 2100 },
-  { time: '08:00', usage: 1800 },
-  { time: '12:00', usage: 4500 },
-  { time: '16:00', usage: 3200 },
-  { time: '20:00', usage: 5100 },
-  { time: '23:59', usage: 3800 },
-];
+
 
 export const SuperAdmin = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [tenants, setTenants] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [usageTrend, setUsageTrend] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,18 +50,42 @@ export const SuperAdmin = () => {
     plan: 'standard'
   });
 
+  const { session } = useAuth();
+
   const fetchData = async () => {
     try {
+      if (!session?.access_token) return;
+
+      const headers = { 
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json' 
+      };
+
       const [tenantsRes, statsRes] = await Promise.all([
-        fetch(`${API_BASE}/tenants`),
-        fetch(`${API_BASE}/stats`)
+        fetch(`${API_BASE}/tenants`, { headers }),
+        fetch(`${API_BASE}/stats`, { headers })
       ]);
+      
       const tenantsData = await tenantsRes.json();
       const statsData = await statsRes.json();
-      setTenants(tenantsData);
-      setStats(statsData);
+      
+      if (Array.isArray(tenantsData)) {
+        setTenants(tenantsData);
+      } else {
+        console.warn('Tenants registry index is not an array:', tenantsData);
+        setTenants([]);
+        if (tenantsData.error) toast.error(tenantsData.error);
+      }
+
+      if (statsData && !statsData.error) {
+        setStats(statsData);
+        if (statsData.usageTrend) {
+          setUsageTrend(statsData.usageTrend);
+        }
+      }
     } catch (error) {
       toast.error('Platform Sync Failed');
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -177,7 +194,7 @@ export const SuperAdmin = () => {
           </div>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={MOCK_USAGE_TREND}>
+              <AreaChart data={usageTrend}>
                 <defs>
                   <linearGradient id="usageGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>

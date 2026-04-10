@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 type AuthMode = 'signin' | 'signup' | 'reset';
 
 export const Login = () => {
-  const { signInWithEmail, createWithEmail, resetPassword, user, loading } = useAuth();
+  const { signInWithEmail, createWithEmail, resetPassword, user, loading, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,10 +19,20 @@ export const Login = () => {
   // Redirect once authenticated
   useEffect(() => {
     if (!loading && user) {
-      const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/workspace';
-      navigate(from, { replace: true });
+      const fromPath = (location.state as { from?: { pathname: string } })?.from?.pathname;
+      
+      let targetPath: string;
+      if (isSuperAdmin) {
+        // SuperAdmins are forced to /admin unless they were already trying to reach a specific admin sub-page
+        targetPath = fromPath?.startsWith('/admin') ? fromPath : '/admin';
+      } else {
+        // Standard users go to the redirected 'from' path or the default /workspace
+        targetPath = fromPath || '/workspace';
+      }
+      
+      navigate(targetPath, { replace: true });
     }
-  }, [user, loading, navigate, location.state]);
+  }, [user, loading, isSuperAdmin, navigate, location.state]);
 
   // Show spinner while Auth resolves initial state
   if (loading) {

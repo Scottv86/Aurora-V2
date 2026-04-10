@@ -29,7 +29,7 @@ const INDUSTRIES = [
 
 export const Onboarding = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -44,19 +44,33 @@ export const Onboarding = () => {
 
   const handleComplete = async () => {
     setIsSubmitting(true);
-    const tenantId = formData.slug || formData.name.toLowerCase().replace(/\s+/g, '-');
     
     try {
-      // NOTE: Firestore tenant creation removed. 
-      // This should be migrated to the new Prisma/API infrastructure.
-      console.log(`[Onboarding] Creating tenant ${tenantId} for user ${user?.id}`, formData);
+      console.log(`[Onboarding] Provisioning tenant for user ${user?.id}`, formData);
       
-      // Artificial delay to simulate network request
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch('/api/admin/tenants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          subdomain: formData.slug,
+          adminEmail: user?.email || '',
+          plan: 'standard'
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to provision workspace');
+      }
       
       navigate('/workspace');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Onboarding Error:", error);
+      alert(error.message || "Failed to create workspace. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

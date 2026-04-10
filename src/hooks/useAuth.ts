@@ -7,5 +7,4 @@ export const useAuth = () => {
   return context;
 };
 
-// Alias useFirebase to useAuth temporarily to avoid breakage
-export const useFirebase = useAuth;
+

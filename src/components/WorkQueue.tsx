@@ -219,7 +219,7 @@ export const WorkQueue = () => {
                         <span className="text-zinc-500">Submitted At</span>
                         <span className="text-zinc-900 dark:text-white font-medium flex items-center gap-2">
                           <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
-                          {selectedCase.submittedAt?.toDate ? selectedCase.submittedAt.toDate().toLocaleString() : selectedCase.time}
+                          {selectedCase.createdAt ? new Date(selectedCase.createdAt).toLocaleString() : selectedCase.time}
                         </span>
                       </div>
                     </div>

@@ -9,14 +9,16 @@ import {
   XCircle,
   Settings2
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
+import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
 
 import { useNavigate } from 'react-router-dom';
 import { MODULES } from '../constants/modules';
+import { DATA_API_URL } from '../config';
 import { DeleteModuleModal } from './DeleteModuleModal';
 import { ModuleType } from '../types/platform';
 
@@ -27,7 +29,8 @@ const CATEGORIES = [
   'Finance',
   'Operations',
   'HR & People',
-  'Risk & Compliance'
+  'Risk & Compliance',
+  'Custom'
 ];
 
 const MODULE_TYPES: (ModuleType | 'All')[] = [
@@ -40,64 +43,97 @@ const MODULE_TYPES: (ModuleType | 'All')[] = [
 ];
 
 export const ModuleCatalog = () => {
-  const { user } = useAuth();
+  const { session } = useAuth();
+  const { tenant, modules, refreshModules } = usePlatform();
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedType, setSelectedType] = useState<ModuleType | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [configuredModules, setConfiguredModules] = useState<any[]>([]);
   const [enabling, setEnabling] = useState<string | null>(null);
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [customModules] = useState<any[]>([]);
   const [moduleToDelete, setModuleToDelete] = useState<any>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    // Note: Tenant and Module data fetching from Firestore has been removed 
-    // during the Supabase migration. This will be replaced by Prisma/API calls.
-    setTenantId('temp-tenant-id');
-  }, [user]);
-
   const handleEnable = async (mod: any) => {
-    if (!tenantId) return;
+    if (!tenant?.id) return;
     setEnabling(mod.id);
     
     try {
-      // NOTE: Database write is disabled during Supabase migration.
-      // This logic will be moved to an Express API endpoint.
-      setConfiguredModules(prev => [...prev, { ...mod, status: 'ACTIVE' }]);
-      toast.success(`${mod.name} module enabled locally!`);
-    } catch (error) {
-      toast.error(`Failed to enable ${mod.name}`);
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${DATA_API_URL}/modules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          ...mod,
+          status: 'ACTIVE'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to enable module');
+      
+      await refreshModules();
+      toast.success(`${mod.name} module enabled!`);
+    } catch (error: any) {
+      toast.error(error.message || `Failed to enable ${mod.name}`);
     } finally {
       setEnabling(null);
     }
   };
 
   const handleDisable = async (mod: any) => {
-    if (!tenantId) return;
+    if (!tenant?.id) return;
     setEnabling(mod.id);
     
     try {
-      // NOTE: Database write is disabled during Supabase migration.
-      setConfiguredModules(prev => prev.map(m => m.id === mod.id ? { ...m, status: 'INACTIVE' } : m));
-      toast.success(`${mod.name} module disabled locally.`);
-    } catch (error) {
-      toast.error(`Failed to disable ${mod.name}`);
+      // For now, we'll just delete it or mark it inactive in the DB.
+      // If it's a custom module, we'll update it.
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${DATA_API_URL}/modules/${mod.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          ...mod,
+          status: 'INACTIVE'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to disable module');
+      
+      await refreshModules();
+      toast.success(`${mod.name} module disabled.`);
+    } catch (error: any) {
+      toast.error(error.message || `Failed to disable ${mod.name}`);
     } finally {
       setEnabling(null);
     }
   };
 
   const handleDeleteCustom = async (mod: any) => {
-    if (!tenantId || !mod.isCustom) return;
+    if (!tenant?.id || !mod.isCustom) return;
     
     setEnabling(mod.id);
     try {
-      // NOTE: Database write is disabled during Supabase migration.
-      toast.success(`${mod.name} module deleted locally.`);
-    } catch (error) {
-      toast.error(`Failed to delete ${mod.name}`);
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`http://localhost:3001/api/data/modules/${mod.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to delete module');
+      
+      await refreshModules();
+      toast.success(`${mod.name} module deleted.`);
+    } catch (error: any) {
+      toast.error(error.message || `Failed to delete ${mod.name}`);
     } finally {
       setEnabling(null);
       setModuleToDelete(null);
@@ -107,27 +143,26 @@ export const ModuleCatalog = () => {
   // Merge prebuilt MODULES with custom modules
   const allModules: any[] = [...MODULES];
   
-  // Add custom modules (currently empty after Firestore removal)
-  customModules.forEach(cm => {
-    if (!allModules.find(m => m.id === cm.id)) {
-      const IconComponent = (LucideIcons as any)[cm.icon] || LucideIcons.Layers;
-      allModules.push({
-        ...cm,
-        icon: IconComponent,
-        isCustom: true
-      });
-    }
-  });
-
-  // Update status from tenant-specific configuredModules
-  configuredModules.forEach(cm => {
-    const idx = allModules.findIndex(m => m.id === cm.id);
+  modules.forEach(cm => {
+    const idx = allModules.findIndex(m => m.id === cm.id || m.id === cm.templateId);
+    const IconComponent = (LucideIcons as any)[cm.iconName] || (LucideIcons as any)[cm.icon] || LucideIcons.Layers;
+    
     if (idx >= 0) {
+      // Update existing prebuilt module with DB data (e.g. status)
       allModules[idx] = { 
         ...allModules[idx], 
         ...cm, 
+        icon: allModules[idx].icon, // Keep prebuilt icon if available
         isEnabled: cm.status === 'ACTIVE' 
       };
+    } else {
+      // Add new custom module
+      allModules.push({
+        ...cm,
+        icon: IconComponent,
+        isCustom: true,
+        isEnabled: cm.status !== 'INACTIVE'
+      });
     }
   });
 
@@ -314,11 +349,11 @@ export const ModuleCatalog = () => {
         </div>
       )}
 
-      {moduleToDelete && tenantId && (
+      {moduleToDelete && tenant?.id && (
         <DeleteModuleModal 
           isOpen={true}
           module={moduleToDelete}
-          tenantId={tenantId}
+          tenantId={tenant?.id || ''}
           onClose={() => setModuleToDelete(null)}
           onConfirm={() => handleDeleteCustom(moduleToDelete)}
         />

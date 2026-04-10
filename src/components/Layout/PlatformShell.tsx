@@ -1,4 +1,5 @@
 import { ReactNode, useState } from 'react';
+import * as LucideIcons from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -26,13 +27,11 @@ import { Login } from '../Auth/Login';
 
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading, logout } = useAuth();
-  const { isLoading: platformLoading } = usePlatform();
+  const { isLoading: platformLoading, modules } = usePlatform();
   const location = useLocation();
   const [isSidebarOpen] = useState(true);
   
-  // Modules are currently stubbed as part of the Firebase -> Supabase migration.
-  // Full module fetching from Prisma/API to be implemented in follow-up.
-  const [enabledModules] = useState<any[]>([]);
+  const enabledModules = modules.filter(m => m.status === 'ACTIVE' || m.isEnabled);
 
   const isAdminPath = location.pathname.startsWith('/admin');
 
@@ -88,15 +87,18 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                   <div>
                     <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4 px-3">Enabled Modules</p>
                     <nav className="space-y-1">
-                      {enabledModules.map(mod => (
-                        <SidebarItem 
-                          key={mod.id} 
-                          icon={mod.icon} 
-                          label={mod.name} 
-                          to={`/workspace/modules/${mod.id}`} 
-                          active={isActive(`/workspace/modules/${mod.id}`)} 
-                        />
-                      ))}
+                      {enabledModules.map(mod => {
+                        const IconComponent = (LucideIcons as any)[mod.iconName] || LucideIcons.Box;
+                        return (
+                          <SidebarItem 
+                            key={mod.id} 
+                            icon={IconComponent} 
+                            label={mod.name} 
+                            to={`/workspace/modules/${mod.id}`} 
+                            active={isActive(`/workspace/modules/${mod.id}`)} 
+                          />
+                        );
+                      })}
                     </nav>
                   </div>
                 )}

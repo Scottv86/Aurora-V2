@@ -29,20 +29,33 @@ export const ExternalPortal = () => {
     if (!formData.fullName || !formData.email || !formData.description) return;
     
     setIsSubmitting(true);
-    const caseId = `C-${Math.floor(1000 + Math.random() * 9000)}`;
     
     try {
-      // NOTE: Firestore case submission removed.
-      // In the future, this should call a public API endpoint.
-      console.log(`[ExternalPortal] Submitting case ${caseId}`, formData);
-      
-      // Artificial delay to simulate network request
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      setSubmittedId(caseId);
+      const response = await fetch('/api/public/submissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tenantSlug: 'acme', // This would typically come from the URL or portal config
+          type: formData.type,
+          fullName: formData.fullName,
+          email: formData.email,
+          description: formData.description
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Submission failed');
+      }
+
+      const result = await response.json();
+      setSubmittedId(result.id);
       setIsSubmitted(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Submission Error:", error);
+      alert(error.message || "Failed to submit request. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

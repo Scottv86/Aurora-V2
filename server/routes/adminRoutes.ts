@@ -51,8 +51,12 @@ router.get('/tenancy/:id', async (req, res) => {
       include: {
         workspaces: {
           include: {
-            users: true,
             modules: true
+          }
+        },
+        members: {
+          include: {
+            user: true
           }
         },
         usageLogs: {
@@ -65,8 +69,8 @@ router.get('/tenancy/:id', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant index not found' });
 
     // Aggregate counts
-    const totalModules = tenant.workspaces.reduce((acc, w) => acc + w.modules.length, 0);
-    const totalUsers = tenant.workspaces.reduce((acc, w) => acc + w.users.length, 0);
+    const totalModules = tenant.workspaces.reduce((acc: number, w: any) => acc + w.modules.length, 0);
+    const totalUsers = tenant.members.length;
     const totalWorkspaces = tenant.workspaces.length;
 
     res.json({
@@ -138,19 +142,44 @@ router.get('/stats', async (req, res) => {
   try {
     const totalTenants = await globalPrisma.tenant.count();
     const activeTenants = await globalPrisma.tenant.count({ where: { status: 'active' } });
+    // Aggregate AI token usage over the last 7 days for the trend chart
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const trendLogs = await globalPrisma.usageLog.findMany({
+      where: {
+        timestamp: { gte: sevenDaysAgo },
+        type: 'ai_token'
+      },
+      orderBy: { timestamp: 'asc' }
+    });
+
+    // Group by day/time for the chart
+    const trendMap: Record<string, number> = {};
+    trendLogs.forEach(log => {
+      const dateKey = log.timestamp.toISOString().split('T')[0];
+      trendMap[dateKey] = (trendMap[dateKey] || 0) + (log.amount || 0);
+    });
+
+    const usageTrend = Object.entries(trendMap).map(([time, usage]) => ({ time, usage }));
+
     const usageByTenant = await globalPrisma.usageLog.groupBy({
       by: ['tenantId'],
       _sum: { amount: true },
       where: { type: 'ai_token' }
     });
+
     res.json({
       overview: {
         totalTenants,
         activeTenants,
-        platformHealth: '99.99%',
-        totalAiUsage: usageByTenant.reduce((acc, u) => acc + (u._sum.amount || 0), 0)
+        platformHealth: '100%',
+        totalAiUsage: usageByTenant.reduce((acc: number, u: any) => acc + (u._sum.amount || 0), 0)
       },
-      usageByTenant
+      usageByTenant,
+      usageTrend: usageTrend.length > 0 ? usageTrend : [
+        { time: 'No Data', usage: 0 }
+      ]
     });
   } catch (error) {
     console.error('Failed to fetch stats:', error);

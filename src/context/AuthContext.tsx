@@ -28,28 +28,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // 1. Initial Session Check
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        syncUser(session.access_token);
+        await syncUser(session.access_token);
       }
       setLoading(false);
-    });
+    };
+    initSession();
 
-    // 2. Auth State Listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AuthTrace] onAuthStateChange: ${event}`, { hasSession: !!session });
+      setLoading(true);
       setSession(session);
       setUser(session?.user ?? null);
       
-      if (event === 'SIGNED_IN' && session) {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session) {
+        console.log(`[AuthTrace] Triggering syncUser for ${session.user.email}`);
         await syncUser(session.access_token);
       } else if (event === 'SIGNED_OUT') {
+        console.log(`[AuthTrace] Clearing admin state on SIGNED_OUT`);
         setIsSuperAdmin(false);
         setTenantIds([]);
         setCurrentRoleId(null);
       }
       
+      console.log(`[AuthTrace] Auth flow complete. Setting loading=false. isSuperAdmin=${isSuperAdmin}`);
       setLoading(false);
     });
 
@@ -68,12 +74,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (response.ok) {
         const sessionData = await response.json();
+        console.log(`[AuthTrace] Sync success:`, sessionData);
         setIsSuperAdmin(sessionData.isSuperAdmin);
         setTenantIds(sessionData.tenantIds || []);
         setCurrentRoleId(sessionData.roleId || null);
+      } else {
+        const err = await response.json();
+        console.error("Backend sync error:", err);
+        toast.error(`Registry Sync Failed: ${err.error || response.statusText}`);
       }
-    } catch (e) {
-      console.error("Backend sync failed:", e);
+    } catch (e: any) {
+      console.error("Backend sync critical failure:", e);
+      toast.error(`Platform Connection Error: ${e.message}`);
     }
   };
 

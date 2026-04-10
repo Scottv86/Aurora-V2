@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import type { User, Tenant, Environment } from '../types/platform';
+import { API_BASE_URL } from '../config';
 
 interface PlatformContextType {
   user: User | null;
@@ -8,60 +9,103 @@ interface PlatformContextType {
   environment: Environment;
   setEnvironment: (env: Environment) => void;
   isLoading: boolean;
+  modules: any[];
+  modulesLoading: boolean;
+  refreshModules: () => Promise<void>;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
 
 export const PlatformProvider = ({ children }: { children: ReactNode }) => {
-  const { user: supabaseUser, loading: authLoading, tenantIds } = useAuth();
+  const { user: supabaseUser, loading: authLoading, session } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [environment, setEnvironment] = useState<Environment>('DEV');
   const [isLoading, setIsLoading] = useState(true);
+  
+  const [modules, setModules] = useState<any[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(false);
+
+  const refreshModules = async () => {
+    if (!supabaseUser || !tenant?.id) return;
+    
+    setModulesLoading(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/data/modules`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setModules(data);
+      }
+    } catch (err) {
+      console.error('[PlatformContext] Failed to fetch modules:', err);
+    } finally {
+      setModulesLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (authLoading) return;
     if (!supabaseUser) {
       setUser(null);
       setTenant(null);
+      setModules([]);
       setIsLoading(false);
       return;
     }
 
-    // Since Firestore is gone, we'll gracefully stub out the user/tenant data.
-    // In a full migration, we'd fetch these from a /api/platform/me endpoint.
-    // For now, we'll set a basic profile from the supabase user.
-    setUser({
-      id: supabaseUser.id,
-      email: supabaseUser.email || '',
-      tenantId: tenantIds[0] || null,
-      role: 'TENANT_ADMIN' // Satisfy Role type
-    } as User);
+    const fetchContext = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/platform/context`, {
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Sync failed with status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setUser(data.user);
+        setTenant(data.tenant);
+        console.log(`[PlatformContext] Sync Success: ${data.user.email} @ ${data.tenant?.name || 'No Tenant'}`);
+      } catch (err: any) {
+        console.error('[PlatformContext] Sync Critical Failure:', err.message);
+        setUser(null);
+        setTenant(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    // Mock tenant data to avoid UI breakages (Satisfy Tenant interface)
-    if (tenantIds && tenantIds.length > 0) {
-      console.log(`[PlatformContext] Associated with tenant: ${tenantIds[0]}`);
-      setTenant({
-        id: tenantIds[0],
-        name: "Acme Corp",
-        slug: "acme",
-        subdomain: "acme",
-        status: "ACTIVE",
-        plan: "ENTERPRISE",
-        createdAt: new Date().toISOString(),
-        environments: ["DEV", "STAGING", "PROD"],
-        currentEnvironment: "DEV"
-      } as Tenant);
-    } else {
-      console.warn(`[PlatformContext] No tenant memberships detected.`);
-      setTenant(null);
+    fetchContext();
+  }, [supabaseUser, authLoading, session?.access_token]);
+
+  // Fetch modules once tenant is available
+  useEffect(() => {
+    if (tenant?.id) {
+      refreshModules();
     }
-
-    setIsLoading(false);
-  }, [supabaseUser, authLoading, tenantIds]);
+  }, [tenant?.id, supabaseUser]);
 
   return (
-    <PlatformContext.Provider value={{ user, tenant, environment, setEnvironment, isLoading }}>
+    <PlatformContext.Provider value={{ 
+      user, 
+      tenant, 
+      environment, 
+      setEnvironment, 
+      isLoading,
+      modules,
+      modulesLoading,
+      refreshModules
+    }}>
       {children}
     </PlatformContext.Provider>
   );

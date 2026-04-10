@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 
 export const AIBuilder = () => {
   const { tenant } = usePlatform();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [step, setStep] = useState(1);
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -93,21 +93,55 @@ export const AIBuilder = () => {
     setIsDeploying(true);
     
     try {
-      // NOTE: Database deployment is disabled during the Supabase migration.
-      // In a production environment, this would call an Express API endpoint 
-      // that uses Prisma to create the modules, workflows, and automations.
       console.log("AI Builder: Deployment requested for", result);
       
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
 
-      toast.success("Solution architected successfully (Local Simulation)!");
+      // Deploy each module defined in the AI result
+      const promises = result.modules.map(async (m: any) => {
+        const payload = {
+          name: m.name,
+          category: 'Custom',
+          iconName: 'Box',
+          type: 'RECORD',
+          layout: m.layout || [],
+          // Convert simpler AI steps to a more formal structure if needed
+          workflows: result.workflows
+            .filter((wf: any) => wf.modules?.includes(m.name) || !wf.modules) // Attach if specified
+            .map((wf: any) => ({
+              id: `wf-${Math.random().toString(36).substring(7)}`,
+              name: wf.name,
+              steps: wf.steps.map((s: string) => ({ id: `step-${Math.random().toString(36).substring(7)}`, label: s, type: 'status' }))
+            }))
+        };
+
+        const response = await fetch('http://localhost:3001/api/data/modules', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || `Failed to deploy module: ${m.name}`);
+        }
+
+        return response.json();
+      });
+
+      await Promise.all(promises);
+
+      toast.success("Solution architected and deployed successfully!");
       setStep(3);
       setPrompt('');
       setResult(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Deployment Error:", error);
-      toast.error("Failed to deploy solution.");
+      toast.error(error.message || "Failed to deploy solution.");
     } finally {
       setIsDeploying(false);
     }

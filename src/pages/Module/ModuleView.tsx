@@ -14,12 +14,14 @@ import {
   X,
   Database,
   Zap,
-  History
+  History as HistoryIcon
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 import { MODULES } from '../../constants/modules';
+import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
@@ -27,6 +29,7 @@ import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/pla
 
 export const ModuleView = () => {
   const { id } = useParams();
+  const { session } = useAuth();
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
@@ -38,6 +41,24 @@ export const ModuleView = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const Icon = useMemo(() => {
+    if (!moduleData) return LucideIcons.Layers;
+    const iconSource = (moduleData as any).iconName || (moduleData as any).icon;
+    
+    // If it's a string, look it up in LucideIcons
+    if (typeof iconSource === 'string' && iconSource.trim() !== '') {
+      return (LucideIcons as any)[iconSource] || LucideIcons.Layers;
+    }
+    
+    // If it's a component (function or object with $$typeof)
+    if (typeof iconSource === 'function' || (typeof iconSource === 'object' && iconSource !== null && (iconSource as any).$$typeof)) {
+      return iconSource;
+    }
+    
+    // Fallback for empty objects or other invalid data
+    return LucideIcons.Layers;
+  }, [moduleData]);
 
   const allFields = useMemo(() => {
     if (moduleData?.layout) {
@@ -68,23 +89,49 @@ export const ModuleView = () => {
     const fetchModAndRecords = async () => {
       setLoading(true);
       try {
-        // NOTE: Module and Record fetching from Firestore removed.
+        // 1. Check prebuilt modules first
         const prebuilt = MODULES.find(m => m.id === id);
         if (prebuilt) {
           setModuleData(prebuilt as any);
+        } else {
+          // 2. Fetch custom module from API
+          const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+          const res = await fetch(`${DATA_API_URL}/modules/${id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant.id
+            }
+          });
+          
+          if (res.ok) {
+            const customMod = await res.json();
+            setModuleData(customMod);
+          }
         }
         
-        // Stubbing records list
-        setRecords([]);
+        // 3. Fetch records for this module
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+        const recordsRes = await fetch(`${DATA_API_URL}/records?moduleId=${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+
+        if (recordsRes.ok) {
+          const recordsData = await recordsRes.json();
+          setRecords(recordsData);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
+        toast.error("Failed to load module data");
       } finally {
         setLoading(false);
       }
     };
 
     fetchModAndRecords();
-  }, [tenant?.id, id, platformLoading]);
+  }, [tenant?.id, id, platformLoading, session]);
 
   const handleCreateEntry = async () => {
     if (!tenant?.id || !id || !moduleData) return;
@@ -102,15 +149,43 @@ export const ModuleView = () => {
         }
       }
 
-      // NOTE: Firestore creation/update removed.
-      toast.success(editingRecord ? "Record updated locally (Simulation)" : "Record created locally (Simulation)");
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const isEditing = !!editingRecord;
+      
+      const res = await fetch(`${DATA_API_URL}/records${isEditing ? `/${editingRecord.id}` : ''}`, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId: id,
+          ...finalData
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to save record');
+      }
+
+      const savedRecord = await res.json();
+      
+      if (isEditing) {
+        setRecords(prev => prev.map(r => r.id === savedRecord.id ? savedRecord : r));
+        toast.success("Record updated successfully");
+      } else {
+        setRecords(prev => [savedRecord, ...prev]);
+        toast.success("Record created successfully");
+      }
       
       setShowNewEntryModal(false);
       setEditingRecord(null);
       setNewEntryData({});
-    } catch (error) {
+    } catch (error: any) {
       console.error("Save Error:", error);
-      toast.error(editingRecord ? "Failed to update record" : "Failed to create record");
+      toast.error(error.message || (editingRecord ? "Failed to update record" : "Failed to create record"));
     } finally {
       setIsSubmitting(false);
     }
@@ -120,13 +195,26 @@ export const ModuleView = () => {
     if (!tenant?.id || !id) return;
 
     try {
-      // NOTE: Firestore deletion removed.
-      toast.success("Record deleted locally (Simulation)");
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to delete record');
+      }
+
+      toast.success("Record deleted successfully");
       setRecords(prev => prev.filter(r => r.id !== recordId));
       setRecordToDelete(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Delete Error:", error);
-      toast.error("Failed to delete record");
+      toast.error(error.message || "Failed to delete record");
     }
   };
 
@@ -137,8 +225,6 @@ export const ModuleView = () => {
   );
 
   if (!moduleData) return <Navigate to="/workspace" replace />;
-
-  const Icon = (moduleData as any).icon || LucideIcons.Layers;
 
   return (
     <div className="space-y-8">
@@ -178,7 +264,7 @@ export const ModuleView = () => {
         {[
           { label: 'Total Records', value: records.length.toString(), icon: Database, color: 'text-blue-400' },
           { label: 'Active Tasks', value: '0', icon: Zap, color: 'text-amber-400' },
-          { label: 'Recent Activity', value: records.length > 0 ? 'Just now' : 'No data', icon: History, color: 'text-indigo-400' },
+          { label: 'Recent Activity', value: records.length > 0 ? 'Just now' : 'No data', icon: HistoryIcon, color: 'text-indigo-400' },
         ].map((stat, i) => (
           <div key={i} className="p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm">
             <div className="flex items-center justify-between mb-4">
@@ -246,7 +332,7 @@ export const ModuleView = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-zinc-500">
-                      {record.createdAt?.toDate ? record.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                      {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
                     </td>
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

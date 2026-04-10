@@ -37,7 +37,7 @@ export const Navbar = () => {
             onChange={(e) => setEnvironment(e.target.value as Environment)}
             className="bg-transparent text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none cursor-pointer"
           >
-            {tenant?.environments.map(env => (
+            {(tenant?.environments || ['production']).map(env => (
               <option key={env} value={env} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{env}</option>
             ))}
           </select>
@@ -69,7 +69,7 @@ export const Navbar = () => {
         <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800">
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none">{displayName}</p>
-            <p className="text-[10px] text-zinc-500 font-medium mt-1 uppercase tracking-tighter">Tenant Admin</p>
+            <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter">{tenant?.name || tenant?.id || 'No Workspace'}</p>
           </div>
           <button 
             onClick={logout}

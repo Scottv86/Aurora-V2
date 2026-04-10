@@ -33,8 +33,31 @@ export const getScopedPrisma = (
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
+          // Models that should be isolated by tenant_id
+          const TENANT_SCOPED_MODELS = [
+            'Workspace', 
+            'Module', 
+            'Record', 
+            'DocumentTemplate', 
+            'GeneratedDocument', 
+            'UsageLog', 
+            'TenantMember'
+          ];
+
+          const isScopedModel = TENANT_SCOPED_MODELS.includes(model);
+          const a = args as any;
+
           // If we are already inside our RLS transaction, just execute the query
-          if ((args as any)[RLS_CONTEXT]) {
+          // But first, if it's a scoped model, inject the tenant filtering at the app level
+          if (a[RLS_CONTEXT]) {
+            if (isScopedModel && tId) {
+              if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
+                a.where = { ...a.where, tenantId: tId };
+              }
+              if (operation === 'create') {
+                a.data = { ...a.data, tenantId: tId };
+              }
+            }
             return query(args);
           }
 
@@ -45,17 +68,26 @@ export const getScopedPrisma = (
             await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${uId.replace(/'/g, "''")}'`);
             await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${isAdmin}'`);
 
+            // Inject app-level tenant filtering for isolation insurance
+            if (isScopedModel && tId) {
+              if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
+                a.where = { ...a.where, tenantId: tId };
+              }
+              if (operation === 'create') {
+                a.data = { ...a.data, tenantId: tId };
+              }
+            }
+
             // Execute the operation on the transaction client
-            // We pass the RLS_CONTEXT flag to prevent re-entering this transaction loop
             const modelName = model.charAt(0).toLowerCase() + model.slice(1);
             const txModel = (tx as any)[modelName];
             
             if (txModel && typeof txModel[operation] === 'function') {
-              return txModel[operation]({ ...args, [RLS_CONTEXT]: true });
+              return txModel[operation]({ ...args, [RLS_CONTEXT]: true } as any);
             }
 
             // Fallback to standard query if dynamic resolution fails
-            return query({ ...args, [RLS_CONTEXT]: true });
+            return query({ ...args, [RLS_CONTEXT]: true } as any);
           });
         },
       },

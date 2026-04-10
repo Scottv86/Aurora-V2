@@ -42,7 +42,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { usePlatform } from '../hooks/usePlatform';
+import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
+import { DATA_API_URL } from '../config';
 import { ModuleType } from '../types/platform';
 
 // --- Types ---
@@ -195,7 +197,8 @@ export const ModuleEditor = () => {
   const { id: routeId } = useParams();
   const id = routeId || 'new';
   const navigate = useNavigate();
-  const { tenant } = usePlatform();
+  const { tenant, refreshModules } = usePlatform();
+  const { session } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -205,6 +208,7 @@ export const ModuleEditor = () => {
     category: 'Custom',
     iconName: 'Box',
     type: 'RECORD' as ModuleType,
+    status: 'ACTIVE' as const,
   });
   
   const [layout, setLayout] = useState<Layout>([
@@ -233,15 +237,33 @@ export const ModuleEditor = () => {
 
     const fetchModule = async () => {
       try {
-        // NOTE: Firestore loading removed.
-        // In the future, this should fetch from the prisma API.
         console.log(`[ModuleEditor] Fetching module ${id} for tenant ${tenant.id}`);
         
-        // Simulating load delay
-        await new Promise(resolve => setTimeout(resolve, 800));
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const response = await fetch(`${DATA_API_URL}/modules/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+
+        if (!response.ok) throw new Error('Failed to load module');
         
-        // Placeholder check - if you had specific module data in mind, add here.
-        // For now, it stays with initial state or default builder state.
+        const data = await response.json();
+        
+        // Populate state with data from backend
+        setModuleSettings({
+          name: data.name || 'Untitled Module',
+          description: data.description || '',
+          category: data.category || 'Custom',
+          iconName: data.iconName || 'Box',
+          type: data.type || 'RECORD',
+          status: data.status || 'ACTIVE',
+        });
+
+        if (data.layout) setLayout(data.layout);
+        if (data.tabs) setTabs(data.tabs);
+        
       } catch (error) {
         console.error("Error loading module:", error);
         toast.error("Failed to load module layout.");
@@ -257,27 +279,53 @@ export const ModuleEditor = () => {
     if (!tenant?.id) return;
     setIsSaving(true);
     try {
-      // NOTE: Firestore saving removed.
-      // This should be migrated to the new Prisma/API infrastructure.
       console.log(`[ModuleEditor] Saving module ${id} for tenant ${tenant.id}`, {
         ...moduleSettings,
         layout,
         tabs
       });
 
-      // Simulation delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const isNew = id === 'new';
       
-      if (id === 'new') {
-        const mockNewId = `m-${Math.random().toString(36).substring(7)}`;
-        toast.success('Module created successfully! (Simulated)');
-        navigate(`/workspace/builder/${mockNewId}`, { replace: true });
-      } else {
-        toast.success('Module saved successfully! (Simulated)');
+      const payload = {
+        ...moduleSettings,
+        layout,
+        tabs
+      };
+
+      const url = isNew 
+        ? `${DATA_API_URL}/modules` 
+        : `${DATA_API_URL}/modules/${id}`;
+      
+      const response = await fetch(url, {
+        method: isNew ? 'POST' : 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to save module');
       }
-    } catch (error) {
+
+      const savedModule = await response.json();
+      
+      await refreshModules();
+      
+      if (isNew) {
+        toast.success('Module created successfully!');
+        navigate(`/workspace/builder/${savedModule.id}`, { replace: true });
+      } else {
+        toast.success('Module saved successfully!');
+      }
+    } catch (error: any) {
       console.error("Save Error:", error);
-      toast.error('Failed to save module layout.');
+      toast.error(error.message || 'Failed to save module layout.');
     } finally {
       setIsSaving(false);
     }

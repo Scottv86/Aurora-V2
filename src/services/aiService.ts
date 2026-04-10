@@ -9,10 +9,10 @@ const getAI = () => {
   const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) {
     console.warn('Gemini API Key (VITE_GEMINI_API_KEY) is missing. AI features will not work.');
+    return null;
   }
   
-  // FIXED: Constructor expects an options object with apiKey
-  aiInstance = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
+  aiInstance = new GoogleGenAI({ apiKey });
   return aiInstance;
 };
 

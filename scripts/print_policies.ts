@@ -8,21 +8,17 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('--- RLS STATUS CHECK ---');
+  console.log('--- RLS POLICIES ---');
   try {
-    const tables = await (prisma as any).$queryRawUnsafe(`
-      SELECT tablename, rowsecurity 
-      FROM pg_tables 
-      WHERE schemaname = 'public' 
-      AND tablename IN ('modules', 'records', 'tenants', 'users')
-    `);
-    console.table(tables);
-
     const policies = await (prisma as any).$queryRawUnsafe(`
-      SELECT * FROM pg_policies 
-      WHERE tablename IN ('modules', 'records')
+      SELECT policyname, tablename, permissive, roles, cmd, qual, with_check 
+      FROM pg_policies
     `);
-    console.log('Existing Policies:', JSON.stringify(policies, null, 2));
+    
+    for (const p of policies) {
+      console.log(`Table: ${p.tablename} | Policy: ${p.policyname} | Command: ${p.cmd}`);
+      console.log(`  Qual: ${p.qual}`);
+    }
 
   } catch (error) {
     console.error('Error:', error);
