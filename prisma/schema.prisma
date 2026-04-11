@@ -18,6 +18,8 @@ model Tenant {
   members            TenantMember[]
   usageLogs          UsageLog[]
   workspaces         Workspace[]
+  teams              Team[]
+  agents             Agent[]
   menuConfig         Json?          @map("menu_config")
 
   @@map("tenants")
@@ -73,20 +75,54 @@ model User {
 }
 
 model TenantMember {
-  id        String   @id(map: "TenantMember_pkey") @default(cuid())
-  userId    String   @map("user_id")
-  tenantId  String   @map("tenant_id")
-  roleId    String   @default("viewer") @map("role_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
-  user      User     @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
-  menuConfig Json?    @map("menu_config")
+  id          String   @id(map: "TenantMember_pkey") @default(cuid())
+  userId      String?  @map("user_id")
+  agentId     String?  @map("agent_id")
+  tenantId    String   @map("tenant_id")
+  teamId      String?  @map("team_id")
+  roleId      String   @default("Standard") @map("role_id") // Maps to 'Standard', 'Lead', 'Admin'
+  isSynthetic Boolean  @default(false) @map("is_synthetic")
+  status      String   @default("Active") @map("status")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
+  user        User?    @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
+  agent       Agent?   @relation(fields: [agentId], references: [id], map: "TenantMember_agentId_fkey")
+  team        Team?    @relation(fields: [teamId], references: [id], map: "TenantMember_teamId_fkey")
+  menuConfig  Json?    @map("menu_config")
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
   @@index([tenantId], map: "TenantMember_tenantId_idx")
   @@index([userId], map: "TenantMember_userId_idx")
   @@map("tenant_members")
+}
+
+model Team {
+  id          String         @id @default(cuid())
+  tenantId    String         @map("tenant_id")
+  name        String
+  description String?
+  createdAt   DateTime       @default(now()) @map("created_at")
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  members     TenantMember[]
+
+  @@index([tenantId])
+  @@map("teams")
+}
+
+model Agent {
+  id          String         @id @default(cuid())
+  tenantId    String         @map("tenant_id")
+  name        String
+  modelType   String         @map("model_type")
+  config      Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  memberships TenantMember[]
+
+  @@index([tenantId])
+  @@map("agents")
 }
 
 model Record {

@@ -225,7 +225,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const enabledModules = modules.filter(m => m.status === 'ACTIVE');
   const isAdminPath = location.pathname.startsWith('/admin');
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
 
   const resolvedConfig = useMemo(() => {
     if (!menuConfig) return null;
@@ -446,141 +446,147 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                   <nav className="mb-6">
                     <SidebarItem icon={ArrowLeft} label="Back to Workspace" to="/workspace" collapsed={!isSidebarOpen} />
                   </nav>
-                  <div className="space-y-6">
-                    <div>
-                      <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
-                        General
-                      </div>
-                      <nav className="space-y-1">
-                        <SidebarItem 
-                          icon={LucideIcons.Building} 
-                          label="General" 
-                          to="/workspace/settings" 
-                          active={location.pathname === '/workspace/settings'} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Users} 
-                          label="Users" 
-                          to="/workspace/settings/team" 
-                          active={isActive('/workspace/settings/team')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.CreditCard} 
-                          label="Billing & Plan" 
-                          to="/workspace/settings/billing" 
-                          active={isActive('/workspace/settings/billing')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                      </nav>
-                    </div>
-
-                    <div>
-                      <div className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
-                        System
-                      </div>
-                      <nav className="space-y-1">
-                        <SidebarItem 
-                          icon={LucideIcons.Layers} 
-                          label="Modules" 
-                          to="/workspace/settings/modules" 
-                          active={isActive('/workspace/settings/modules')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.LayoutGrid} 
-                          label="Apps" 
-                          to="/workspace/settings/apps" 
-                          active={isActive('/workspace/settings/apps')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Database} 
-                          label="Database" 
-                          to="/workspace/settings/database" 
-                          active={isActive('/workspace/settings/database')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.FileText} 
-                          label="Templates" 
-                          to="/workspace/settings/templates" 
-                          active={isActive('/workspace/settings/templates')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Zap} 
-                          label="Automations" 
-                          to="/workspace/settings/automations" 
-                          active={isActive('/workspace/settings/automations')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Terminal} 
-                          label="Logic" 
-                          to="/workspace/settings/logic" 
-                          active={isActive('/workspace/settings/logic')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Lock} 
-                          label="Security" 
-                          to="/workspace/settings/security" 
-                          active={isActive('/workspace/settings/security')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Globe} 
-                          label="Portals" 
-                          to="/portal" 
-                          active={isActive('/portal')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.BarChart3} 
-                          label="Reports" 
-                          to="/workspace/settings/reports" 
-                          active={isActive('/workspace/settings/reports')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Network} 
-                          label="Intranet" 
-                          to="/workspace/settings/intranet" 
-                          active={isActive('/workspace/settings/intranet')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Bot} 
-                          label="Agents" 
-                          to="/workspace/settings/agents" 
-                          active={isActive('/workspace/settings/agents')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.BookOpen} 
-                          label="Knowledge base" 
-                          to="/workspace/settings/knowledge" 
-                          active={isActive('/workspace/settings/knowledge')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.TestTube} 
-                          label="Testing" 
-                          to="/workspace/settings/testing" 
-                          active={isActive('/workspace/settings/testing')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.CloudUpload} 
-                          label="Deployments" 
-                          to="/workspace/settings/deploy" 
-                          active={isActive('/workspace/settings/deploy')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                      </nav>
-                    </div>
+                  <div className="space-y-1">
+                    <SidebarItem 
+                      icon={LucideIcons.Building} 
+                      label="Organisation" 
+                      to="/workspace/settings" 
+                      active={location.pathname === '/workspace/settings'} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.UserCircle} 
+                      label="Users & Agents" 
+                      to="/dashboard/settings/users" 
+                      active={isActive('/dashboard/settings/users')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.CreditCard} 
+                      label="Billing & Plan" 
+                      to="/workspace/settings/billing" 
+                      active={isActive('/workspace/settings/billing')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.BarChart2} 
+                      label="Model usage" 
+                      to="/workspace/settings/usage" 
+                      active={isActive('/workspace/settings/usage')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Layers} 
+                      label="Modules" 
+                      to="/workspace/settings/modules" 
+                      active={isActive('/workspace/settings/modules')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.LayoutGrid} 
+                      label="Apps" 
+                      to="/workspace/settings/apps" 
+                      active={isActive('/workspace/settings/apps')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Database} 
+                      label="Database" 
+                      to="/workspace/settings/database" 
+                      active={isActive('/workspace/settings/database')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.ListTodo} 
+                      label="Lists" 
+                      to="/workspace/settings/lists" 
+                      active={isActive('/workspace/settings/lists')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Palette} 
+                      label="Appearance" 
+                      to="/workspace/settings/appearance" 
+                      active={isActive('/workspace/settings/appearance')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.FileText} 
+                      label="Templates" 
+                      to="/workspace/settings/templates" 
+                      active={isActive('/workspace/settings/templates')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Zap} 
+                      label="Automations" 
+                      to="/workspace/settings/automations" 
+                      active={isActive('/workspace/settings/automations')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Terminal} 
+                      label="Logic" 
+                      to="/workspace/settings/logic" 
+                      active={isActive('/workspace/settings/logic')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Lock} 
+                      label="Security" 
+                      to="/workspace/settings/security" 
+                      active={isActive('/workspace/settings/security')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Globe} 
+                      label="Portals" 
+                      to="/portal" 
+                      active={isActive('/portal')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.BarChart3} 
+                      label="Reports" 
+                      to="/workspace/settings/reports" 
+                      active={isActive('/workspace/settings/reports')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Network} 
+                      label="Intranet" 
+                      to="/workspace/settings/intranet" 
+                      active={isActive('/workspace/settings/intranet')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.BookOpen} 
+                      label="Knowledge base" 
+                      to="/workspace/settings/knowledge" 
+                      active={isActive('/workspace/settings/knowledge')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.TestTube} 
+                      label="Testing" 
+                      to="/workspace/settings/testing" 
+                      active={isActive('/workspace/settings/testing')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.CloudUpload} 
+                      label="Deployments" 
+                      to="/workspace/settings/deploy" 
+                      active={isActive('/workspace/settings/deploy')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Key} 
+                      label="API" 
+                      to="/workspace/settings/api" 
+                      active={isActive('/workspace/settings/api')} 
+                      collapsed={!isSidebarOpen} 
+                    />
                   </div>
                 </div>
               )}

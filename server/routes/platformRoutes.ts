@@ -84,7 +84,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
 router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response) => {
   const { config, scope } = req.body;
   const { uid, tenantIds, isSuperAdmin } = req.user!;
-  
+
   // Use provided tenant ID from header or fallback to primary
   const tenantId = req.headers['x-tenant-id'] as string || tenantIds[0];
 

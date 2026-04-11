@@ -1,0 +1,98 @@
+import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
+import { usePlatform } from './usePlatform';
+import { useAuth } from './useAuth';
+
+export interface TenantMember {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Lead' | 'Standard';
+  team: string;
+  status: 'Active' | 'Inactive' | 'Pending' | 'Offline';
+  isSynthetic: boolean;
+  avatar?: string;
+  modelType?: string; // For agents
+  lastActive?: string;
+}
+
+const API_BASE_URL = 'http://localhost:3001/api/members';
+
+export const useUsers = () => {
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const [members, setMembers] = useState<TenantMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchMembers = useCallback(async () => {
+    if (!tenant?.id) return;
+    setLoading(true);
+    try {
+      const res = await fetch(API_BASE_URL, {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (!res.ok) throw new Error('Failed to fetch members');
+      const data = await res.json();
+      setMembers(data);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenant?.id, session?.access_token]);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
+
+  const inviteHuman = async (data: { email: string, role: string, teamId?: string }) => {
+    if (!tenant?.id) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to send invitation');
+      const newMember = await res.json();
+      setMembers(prev => [newMember, ...prev]);
+      toast.success(`Invitation sent to ${data.email}`);
+      return newMember;
+    } catch (err: any) {
+      toast.error(err.message);
+      throw err;
+    }
+  };
+
+  const provisionAgent = async (data: { modelType: string, teamId?: string, role: string }) => {
+    if (!tenant?.id) return;
+    try {
+      const res = await fetch(`http://localhost:3001/api/members/provision`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to provision agent');
+      const newAgent = await res.json();
+      setMembers(prev => [newAgent, ...prev]);
+      toast.success(`Agent ${newAgent.name} successfully provisioned`);
+      return newAgent;
+    } catch (err: any) {
+      toast.error(err.message);
+      throw err;
+    }
+  };
+
+  return { members, loading, inviteHuman, provisionAgent, refetch: fetchMembers };
+};

@@ -6,6 +6,8 @@ import adminRoutes from './routes/adminRoutes';
 import dataRoutes from './routes/dataRoutes';
 import platformRoutes from './routes/platformRoutes';
 import publicRoutes from './routes/publicRoutes';
+import memberRoutes from './routes/memberRoutes';
+import teamRoutes from './routes/teamRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -54,6 +56,10 @@ app.use('/api/data', authenticate, requireTenantAccess, dataRoutes);
 
 // Platform Helper Routes (Context, Me)
 app.use('/api/platform', authenticate, platformRoutes);
+
+// Staff Management (Members & Teams)
+app.use('/api/members', authenticate, requireTenantAccess, memberRoutes);
+app.use('/api/teams', authenticate, requireTenantAccess, teamRoutes);
 
 // Public API Routes (Portal submissions)
 app.use('/api/public', publicRoutes);

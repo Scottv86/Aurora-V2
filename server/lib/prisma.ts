@@ -41,7 +41,9 @@ export const getScopedPrisma = (
             'DocumentTemplate', 
             'GeneratedDocument', 
             'UsageLog', 
-            'TenantMember'
+            'TenantMember',
+            'Team',
+            'Agent'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);
