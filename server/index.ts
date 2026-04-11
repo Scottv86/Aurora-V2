@@ -8,6 +8,7 @@ import platformRoutes from './routes/platformRoutes';
 import publicRoutes from './routes/publicRoutes';
 import memberRoutes from './routes/memberRoutes';
 import teamRoutes from './routes/teamRoutes';
+import positionRoutes from './routes/positionRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -41,7 +42,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     server: 'Aurora Platform API',
-    v: '2026-04-10.4' // Version timestamp
+    v: '2026-04-11.1' // Version timestamp
   });
 });
 
@@ -60,6 +61,7 @@ app.use('/api/platform', authenticate, platformRoutes);
 // Staff Management (Members & Teams)
 app.use('/api/members', authenticate, requireTenantAccess, memberRoutes);
 app.use('/api/teams', authenticate, requireTenantAccess, teamRoutes);
+app.use('/api/positions', authenticate, requireTenantAccess, positionRoutes);
 
 // Public API Routes (Portal submissions)
 app.use('/api/public', publicRoutes);

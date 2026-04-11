@@ -10,7 +10,7 @@ export interface TenantRequest extends AuthRequest {
 export const requireTenantAccess = (req: TenantRequest, res: Response, next: NextFunction) => {
   const tenantId = req.headers['x-tenant-id'] as string;
   
-  console.log(`[TenantMiddleware] Routing: ${req.method} ${req.originalUrl} | Tenant: ${tenantId}`);
+  console.log(`[TenantMiddleware] Routing: ${req.method} ${req.path} | Origin: ${req.originalUrl} | Tenant: ${tenantId}`);
 
   if (!tenantId) {
     return res.status(400).json({ error: 'Missing x-tenant-id header' });

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUsers, TenantMember } from '../../../hooks/useUsers';
 import { Table } from '../../UI/Table';
 import { Badge, Button } from '../../UI/Primitives';
-import { User, Bot, Mail, Shield, Users, Clock, Plus, Zap } from 'lucide-react';
+import { User, Bot, Mail, Shield, Users, Clock, Plus, Zap, Briefcase } from 'lucide-react';
 
 interface DirectoryAppletProps {
   onInviteHuman: () => void;
@@ -55,6 +55,15 @@ export const DirectoryApplet = ({ onInviteHuman, onProvisionAgent }: DirectoryAp
         <div className="flex items-center gap-2">
           <Users size={14} className="text-zinc-400" />
           <span className="text-zinc-600 dark:text-zinc-400">{m.team}</span>
+        </div>
+      )
+    },
+    {
+      header: 'Position',
+      accessor: (m: TenantMember) => (
+        <div className="flex items-center gap-2">
+          <Briefcase size={14} className="text-zinc-400" />
+          <span className="text-zinc-600 dark:text-zinc-400">{m.position || 'Unassigned'}</span>
         </div>
       )
     },

@@ -1,8 +1,8 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTeams, Team } from '../../../hooks/useTeams';
-import { Button } from '../../UI/Primitives';
+import { Button, cn } from '../../UI/Primitives';
 import { Users, Bot, User, Plus, MoreHorizontal, ArrowUpRight } from 'lucide-react';
-import { cn } from '../../UI/Primitives';
 
 interface TeamsAppletProps {
   onCreateTeam?: () => void;
@@ -39,8 +39,13 @@ export const TeamsApplet = ({ onCreateTeam }: TeamsAppletProps) => {
 };
 
 const TeamCard = ({ team }: { team: Team }) => {
+  const navigate = useNavigate();
+
   return (
-    <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-200 bg-white p-6 transition-all hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 dark:border-zinc-800 dark:bg-zinc-900">
+    <div 
+      onClick={() => navigate(`/dashboard/settings/teams/${team.id}`)}
+      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-200 bg-white p-6 transition-all hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 cursor-pointer dark:border-zinc-800 dark:bg-zinc-900"
+    >
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-100 font-bold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100">

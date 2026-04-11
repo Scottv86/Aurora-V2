@@ -9,11 +9,37 @@ export interface TenantMember {
   email: string;
   role: 'Admin' | 'Lead' | 'Standard';
   team: string;
+  teamId?: string;
   status: 'Active' | 'Inactive' | 'Pending' | 'Offline';
   isSynthetic: boolean;
+  positionId?: string;
+  position?: string;
+  positionNumber?: string;
   avatar?: string;
   modelType?: string; // For agents
+  agentConfig?: any;
   lastActive?: string;
+  createdAt: string;
+
+  // New Staff Details
+  firstName?: string;
+  otherName?: string;
+  familyName?: string;
+  personalEmail?: string;
+  homeAddress?: string;
+  workArrangements?: string;
+  emergencyContact?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  nationality?: string;
+  startDate?: string;
+  endDate?: string;
+
+  // Relations
+  phoneNumbers?: { label: string; number: string }[];
+  certifications?: { name: string; issuer: string; dateObtained?: string; expiryDate?: string }[];
+  education?: { institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[];
+  skills?: { name: string; proficiencyLevel: string }[];
 }
 
 const API_BASE_URL = 'http://localhost:3001/api/members';

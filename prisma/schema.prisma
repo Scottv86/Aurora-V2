@@ -20,6 +20,11 @@ model Tenant {
   workspaces         Workspace[]
   teams              Team[]
   agents             Agent[]
+  positions          Position[]
+  phoneNumbers       MemberPhoneNumber[]
+  certifications     MemberCertification[]
+  education          MemberEducation[]
+  skills             MemberSkill[]
   menuConfig         Json?          @map("menu_config")
 
   @@map("tenants")
@@ -81,6 +86,7 @@ model TenantMember {
   tenantId    String   @map("tenant_id")
   teamId      String?  @map("team_id")
   roleId      String   @default("Standard") @map("role_id") // Maps to 'Standard', 'Lead', 'Admin'
+  positionId  String?  @map("position_id")
   isSynthetic Boolean  @default(false) @map("is_synthetic")
   status      String   @default("Active") @map("status")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -90,12 +96,85 @@ model TenantMember {
   user        User?    @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
   agent       Agent?   @relation(fields: [agentId], references: [id], map: "TenantMember_agentId_fkey")
   team        Team?    @relation(fields: [teamId], references: [id], map: "TenantMember_teamId_fkey")
+  position    Position? @relation(fields: [positionId], references: [id], map: "TenantMember_positionId_fkey")
   menuConfig  Json?    @map("menu_config")
+
+  // Comprehensive Staff Details
+  firstName       String?   @map("first_name")
+  otherName       String?   @map("other_name")
+  familyName      String?   @map("family_name")
+  personalEmail   String?   @map("personal_email")
+  homeAddress     String?   @map("home_address")
+  workArrangements String?   @map("work_arrangements")
+  emergencyContact String?   @map("emergency_contact")
+  dateOfBirth     DateTime? @map("date_of_birth")
+  gender          String?   @map("gender")
+  nationality     String?   @map("nationality")
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+
+  phoneNumbers    MemberPhoneNumber[]
+  certifications  MemberCertification[]
+  education       MemberEducation[]
+  skills          MemberSkill[]
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
   @@index([tenantId], map: "TenantMember_tenantId_idx")
   @@index([userId], map: "TenantMember_userId_idx")
   @@map("tenant_members")
+}
+
+model MemberPhoneNumber {
+  id        String   @id @default(cuid())
+  memberId  String   @map("member_id")
+  tenantId  String   @map("tenant_id")
+  label     String   // e.g. 'Work', 'Home', 'Mobile'
+  number    String
+  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("member_phone_numbers")
+}
+
+model MemberCertification {
+  id            String    @id @default(cuid())
+  memberId      String    @map("member_id")
+  tenantId      String    @map("tenant_id")
+  name          String
+  issuer        String?
+  dateObtained  DateTime? @map("date_obtained")
+  expiryDate    DateTime? @map("expiry_date")
+  member        TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("member_certifications")
+}
+
+model MemberEducation {
+  id            String    @id @default(cuid())
+  memberId      String    @map("member_id")
+  tenantId      String    @map("tenant_id")
+  institution   String
+  degree        String?
+  fieldOfStudy  String?   @map("field_of_study")
+  startDate     DateTime? @map("start_date")
+  endDate       DateTime? @map("end_date")
+  member        TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("member_education")
+}
+
+model MemberSkill {
+  id              String   @id @default(cuid())
+  memberId        String   @map("member_id")
+  tenantId        String   @map("tenant_id")
+  name            String
+  proficiencyLevel String?  @map("proficiency_level")
+  member          TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("member_skills")
 }
 
 model Team {
@@ -175,4 +254,24 @@ model GeneratedDocument {
   @@index([recordId], map: "GeneratedDocument_recordId_idx")
   @@index([tenantId], map: "GeneratedDocument_tenantId_idx")
   @@map("generated_documents")
+}
+
+model Position {
+  id             String         @id @default(cuid())
+  tenantId       String         @map("tenant_id")
+  positionNumber String         @map("position_number")
+  title          String
+  description    String?
+  parentId       String?        @map("parent_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
+  parent         Position?      @relation("PositionToPosition", fields: [parentId], references: [id])
+  children       Position[]     @relation("PositionToPosition")
+  members        TenantMember[]
+
+  @@unique([tenantId, positionNumber])
+  @@index([tenantId])
+  @@map("positions")
 }

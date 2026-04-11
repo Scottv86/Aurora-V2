@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DirectoryApplet } from '../../components/Settings/UserManagement/DirectoryApplet';
 import { TeamsApplet } from '../../components/Settings/UserManagement/TeamsApplet';
+import { PositionsApplet } from '../../components/Settings/UserManagement/PositionsApplet';
+import { OrgChartApplet } from '../../components/Settings/UserManagement/OrgChartApplet';
 import { AuditLogsApplet } from '../../components/Settings/UserManagement/AuditLogsApplet';
 import { InviteProvisionModal } from '../../components/Settings/UserManagement/InviteProvisionModal';
 import { CreateTeamModal } from '../../components/Settings/UserManagement/CreateTeamModal';
@@ -18,6 +20,8 @@ export const UserManagementPage = () => {
   const tabs = [
     { id: 'directory', label: 'Directory' },
     { id: 'teams', label: 'Teams' },
+    { id: 'positions', label: 'Positions' },
+    { id: 'org-chart', label: 'Org Chart' },
     { id: 'audit', label: 'Audit Logs' }
   ];
 
@@ -27,7 +31,7 @@ export const UserManagementPage = () => {
       <div className="flex flex-col gap-4 border-b border-zinc-200 bg-white/80 px-8 py-6 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-            User & Agent Management
+            Staff Management
           </h1>
           <p className="text-zinc-500">
             Orchestrate your hybrid workforce of human experts and autonomous digital coworkers.
@@ -63,6 +67,8 @@ export const UserManagementPage = () => {
             />
           )}
           {activeTab === 'teams' && <TeamsApplet onCreateTeam={() => setIsTeamModalOpen(true)} />}
+          {activeTab === 'positions' && <PositionsApplet />}
+          {activeTab === 'org-chart' && <OrgChartApplet />}
           {activeTab === 'audit' && <AuditLogsApplet />}
         </div>
       </div>

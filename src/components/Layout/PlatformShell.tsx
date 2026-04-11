@@ -456,7 +456,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     />
                     <SidebarItem 
                       icon={LucideIcons.UserCircle} 
-                      label="Users & Agents" 
+                      label="Staff" 
                       to="/dashboard/settings/users" 
                       active={isActive('/dashboard/settings/users')} 
                       collapsed={!isSidebarOpen} 
@@ -487,6 +487,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       label="Apps" 
                       to="/workspace/settings/apps" 
                       active={isActive('/workspace/settings/apps')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.Mail} 
+                      label="Email exchange" 
+                      to="/workspace/settings/email" 
+                      active={isActive('/workspace/settings/email')} 
                       collapsed={!isSidebarOpen} 
                     />
                     <SidebarItem 
@@ -536,6 +543,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       label="Security" 
                       to="/workspace/settings/security" 
                       active={isActive('/workspace/settings/security')} 
+                      collapsed={!isSidebarOpen} 
+                    />
+                    <SidebarItem 
+                      icon={LucideIcons.History} 
+                      label="Audit" 
+                      to="/workspace/settings/audit" 
+                      active={isActive('/workspace/settings/audit')} 
                       collapsed={!isSidebarOpen} 
                     />
                     <SidebarItem 

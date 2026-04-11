@@ -43,7 +43,12 @@ export const getScopedPrisma = (
             'UsageLog', 
             'TenantMember',
             'Team',
-            'Agent'
+            'Agent',
+            'Position',
+            'MemberPhoneNumber',
+            'MemberCertification',
+            'MemberEducation',
+            'MemberSkill'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);
@@ -90,6 +95,8 @@ export const getScopedPrisma = (
 
             // Fallback to standard query if dynamic resolution fails
             return query({ ...args, [RLS_CONTEXT]: true } as any);
+          }, { 
+            timeout: 20000 // Increase timeout to 20s for complex staff detail updates
           });
         },
       },

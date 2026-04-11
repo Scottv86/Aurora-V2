@@ -9,84 +9,120 @@ BEGIN
     RETURN (
         current_setting('app.is_superadmin', true) = 'true' 
         OR EXISTS (
-            SELECT 1 FROM "User" 
+            SELECT 1 FROM "users" 
             WHERE id = current_setting('app.current_user_id', true)
-            AND "isSuperAdmin" = true
+            AND "is_superadmin" = true
         )
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 2. ENABLE RLS ON ALL TABLES
-ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Tenant" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Workspace" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Module" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Record" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "TenantMember" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "DocumentTemplate" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "GeneratedDocument" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "tenants" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "workspaces" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "modules" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "records" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "tenant_members" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "document_templates" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "generated_documents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_phone_numbers" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_certifications" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_education" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_skills" ENABLE ROW LEVEL SECURITY;
 
--- 3. POLICIES FOR "User"
+-- 3. POLICIES FOR "users"
 -- Superadmins see all users
-CREATE POLICY user_superadmin_all ON "User" FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS user_superadmin_all ON "users";
+CREATE POLICY user_superadmin_all ON "users" FOR ALL USING (is_superadmin());
 -- Users can see/update themselves
-CREATE POLICY user_self_access ON "User" FOR ALL USING (id = current_setting('app.current_user_id', true));
+DROP POLICY IF EXISTS user_self_access ON "users";
+CREATE POLICY user_self_access ON "users" FOR ALL USING (id = current_setting('app.current_user_id', true));
 
--- 4. POLICIES FOR "Tenant"
+-- 4. POLICIES FOR "tenants"
 -- Superadmins see all tenants
-CREATE POLICY tenant_superadmin_all ON "Tenant" FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS tenant_superadmin_all ON "tenants";
+CREATE POLICY tenant_superadmin_all ON "tenants" FOR ALL USING (is_superadmin());
 -- Users can see tenants they are members of
-CREATE POLICY tenant_member_select ON "Tenant" FOR SELECT USING (
+DROP POLICY IF EXISTS tenant_member_select ON "tenants";
+CREATE POLICY tenant_member_select ON "tenants" FOR SELECT USING (
     EXISTS (
-        SELECT 1 FROM "TenantMember" 
-        WHERE "tenantId" = "Tenant".id 
-        AND "userId" = current_setting('app.current_user_id', true)
+        SELECT 1 FROM "tenant_members" 
+        WHERE "tenant_id" = "tenants".id 
+        AND "user_id" = current_setting('app.current_user_id', true)
     )
 );
 
--- 5. POLICIES FOR "TenantMember"
+-- 5. POLICIES FOR "tenant_members"
 -- Superadmins see all memberships
-CREATE POLICY member_superadmin_all ON "TenantMember" FOR ALL USING (is_superadmin());
+DROP POLICY IF EXISTS member_superadmin_all ON "tenant_members";
+CREATE POLICY member_superadmin_all ON "tenant_members" FOR ALL USING (is_superadmin());
 -- Users see memberships for their tenants
-CREATE POLICY member_tenant_isolation ON "TenantMember" FOR ALL USING (
-    "tenantId" = current_setting('app.current_tenant_id', true)
+DROP POLICY IF EXISTS member_tenant_isolation ON "tenant_members";
+CREATE POLICY member_tenant_isolation ON "tenant_members" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true)
 );
 
--- 6. TENANT-SCOPED DATA (Workspace, Module, Record, Templates)
--- Shared Logic: Access if tenantId matches OR superadmin bypass
+-- 6. TENANT-SCOPED DATA (workspaces, modules, records, templates)
+-- Shared Logic: Access if tenant_id matches OR superadmin bypass
 
 -- Workspace
-CREATE POLICY workspace_isolation ON "Workspace" FOR ALL USING (
-    "tenantId" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+DROP POLICY IF EXISTS workspace_isolation ON "workspaces";
+CREATE POLICY workspace_isolation ON "workspaces" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
 -- Module
-CREATE POLICY module_isolation ON "Module" FOR ALL USING (
-    "tenantId" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+DROP POLICY IF EXISTS module_isolation ON "modules";
+CREATE POLICY module_isolation ON "modules" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
 -- Record
-CREATE POLICY record_isolation ON "Record" FOR ALL USING (
-    "tenantId" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+DROP POLICY IF EXISTS record_isolation ON "records";
+CREATE POLICY record_isolation ON "records" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
 -- DocumentTemplate
-CREATE POLICY template_isolation ON "DocumentTemplate" FOR ALL USING (
-    "tenantId" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+DROP POLICY IF EXISTS template_isolation ON "document_templates";
+CREATE POLICY template_isolation ON "document_templates" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
--- GeneratedDocument
-CREATE POLICY document_isolation ON "GeneratedDocument" FOR ALL USING (
-    "tenantId" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+DROP POLICY IF EXISTS document_isolation ON "generated_documents";
+CREATE POLICY document_isolation ON "generated_documents" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+-- Member Lists
+DROP POLICY IF EXISTS member_phone_isolation ON "member_phone_numbers";
+CREATE POLICY member_phone_isolation ON "member_phone_numbers" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+DROP POLICY IF EXISTS member_cert_isolation ON "member_certifications";
+CREATE POLICY member_cert_isolation ON "member_certifications" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+DROP POLICY IF EXISTS member_edu_isolation ON "member_education";
+CREATE POLICY member_edu_isolation ON "member_education" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+DROP POLICY IF EXISTS member_skill_isolation ON "member_skills";
+CREATE POLICY member_skill_isolation ON "member_skills" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
 -- 7. FORCE RLS (Ensures owner is also restricted)
-ALTER TABLE "User" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "Tenant" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "Workspace" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "Module" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "Record" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "TenantMember" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "DocumentTemplate" FORCE ROW LEVEL SECURITY;
-ALTER TABLE "GeneratedDocument" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "users" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "tenants" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "workspaces" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "modules" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "records" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "tenant_members" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "document_templates" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "generated_documents" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "member_phone_numbers" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "member_certifications" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "member_education" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "member_skills" FORCE ROW LEVEL SECURITY;

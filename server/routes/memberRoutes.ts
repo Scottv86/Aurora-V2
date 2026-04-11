@@ -1,10 +1,10 @@
 import express from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
-import { emitTenantUpdate } from '../socket';
+import { globalPrisma } from '../lib/prisma';
 
 const router = express.Router();
 
-// GET all members (Human & Agent)
+// GET all members
 router.get('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
@@ -12,20 +12,23 @@ router.get('/', async (req: TenantRequest, res) => {
       include: {
         user: true,
         agent: true,
-        team: true
-      },
-      orderBy: { createdAt: 'desc' }
+        team: true,
+        position: true
+      }
     });
 
+    // Format for frontend
     const formatted = members.map(m => ({
       id: m.id,
-      name: m.isSynthetic ? m.agent?.name : (m.user?.email.split('@')[0] || 'Unknown'),
-      email: m.isSynthetic ? `agent.${m.agent?.modelType.toLowerCase().replace(' ', '.')}@internal` : (m.user?.email || ''),
+      name: m.isSynthetic ? m.agent?.name : (m.firstName && m.familyName ? `${m.firstName} ${m.familyName}` : (m.user?.email.split('@')[0] || 'Unknown')),
+      email: m.isSynthetic ? 'Agent' : (m.user?.email || ''),
       role: m.roleId,
       team: m.team?.name || 'Unassigned',
+      teamId: m.teamId,
       status: m.status,
       isSynthetic: m.isSynthetic,
-      modelType: m.agent?.modelType,
+      position: m.position?.title || 'Undesignated',
+      avatar: m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || 'U')}&background=random`,
       lastActive: m.isSynthetic ? 'Now' : 'Recent'
     }));
 
@@ -35,114 +38,22 @@ router.get('/', async (req: TenantRequest, res) => {
   }
 });
 
-// POST Invite Human
-router.post('/invite', async (req: TenantRequest, res) => {
-  try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const { email, role, teamId } = req.body;
-
-    // Build/Find user shell
-    let user = await db.user.findFirst({ where: { email } });
-    if (!user) {
-      user = await db.user.create({
-        data: {
-          id: `u_${Math.random().toString(36).substr(2, 9)}`,
-          email
-        }
-      });
-    }
-
-    const member = await db.tenantMember.create({
-      data: {
-        tenantId,
-        userId: user.id,
-        roleId: role,
-        teamId: teamId || null,
-        isSynthetic: false,
-        status: 'Pending'
-      },
-      include: { user: true, team: true }
-    });
-
-    const formatted = {
-      id: member.id,
-      name: email.split('@')[0],
-      email: email,
-      role: member.roleId,
-      team: member.team?.name || 'Unassigned',
-      status: member.status,
-      isSynthetic: false,
-      lastActive: 'Never'
-    };
-
-    emitTenantUpdate(tenantId, 'member_added', formatted);
-    res.json(formatted);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST Provision Agent
-router.post('/provision', async (req: TenantRequest, res) => {
-  try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const { modelType, teamId, role } = req.body;
-
-    // Create Agent record
-    const agent = await db.agent.create({
-      data: {
-        tenantId,
-        name: `${modelType.split(' ')[0]} ${Math.floor(Math.random() * 100)}`,
-        modelType
-      }
-    });
-
-    // Create TenantMember bridge
-    const member = await db.tenantMember.create({
-      data: {
-        tenantId,
-        agentId: agent.id,
-        roleId: role,
-        teamId: teamId || null,
-        isSynthetic: true,
-        status: 'Active'
-      },
-      include: { agent: true, team: true }
-    });
-
-    const formatted = {
-      id: member.id,
-      name: agent.name,
-      email: `agent.${modelType.toLowerCase().replace(' ', '.')}@internal`,
-      role: member.roleId,
-      team: member.team?.name || 'Unassigned',
-      status: member.status,
-      isSynthetic: true,
-      modelType: agent.modelType,
-      lastActive: 'Now'
-    };
-
-    emitTenantUpdate(tenantId, 'member_added', formatted);
-    res.json(formatted);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET single member
+// GET single member details
 router.get('/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;
-
     const member = await db.tenantMember.findFirst({
       where: { id },
       include: {
         user: true,
         agent: true,
-        team: true
+        team: true,
+        position: true,
+        phoneNumbers: true,
+        certifications: true,
+        education: true,
+        skills: true
       }
     });
 
@@ -151,21 +62,43 @@ router.get('/:id', async (req: TenantRequest, res) => {
     }
 
     // Format for frontend
+    const displayName = member.isSynthetic 
+      ? member.agent?.name 
+      : (member.firstName && member.familyName ? `${member.firstName} ${member.familyName}` : (member.user?.email.split('@')[0] || 'Unknown'));
+
     const formatted = {
       id: member.id,
-      userId: member.userId,
-      agentId: member.agentId,
-      name: member.isSynthetic ? member.agent?.name : (member.user?.email.split('@')[0] || 'Unknown'),
-      email: member.isSynthetic ? `agent.${member.agent?.modelType.toLowerCase().replace(' ', '.')}@internal` : (member.user?.email || ''),
+      name: displayName,
+      email: member.isSynthetic ? 'Agent' : (member.user?.email || ''),
       role: member.roleId,
       teamId: member.teamId,
-      team: member.team?.name || 'Unassigned',
+      positionId: member.positionId,
       status: member.status,
       isSynthetic: member.isSynthetic,
       agentConfig: member.agent?.config,
       modelType: member.agent?.modelType,
       createdAt: member.createdAt,
-      lastActive: member.isSynthetic ? 'Now' : 'Recent'
+      lastActive: member.isSynthetic ? 'Now' : 'Recent',
+      
+      // Detailed fields
+      firstName: member.firstName,
+      otherName: member.otherName,
+      familyName: member.familyName,
+      personalEmail: member.personalEmail,
+      homeAddress: member.homeAddress,
+      workArrangements: member.workArrangements,
+      emergencyContact: member.emergencyContact,
+      dateOfBirth: member.dateOfBirth,
+      gender: member.gender,
+      nationality: member.nationality,
+      startDate: member.startDate,
+      endDate: member.endDate,
+      
+      // Relations
+      phoneNumbers: member.phoneNumbers,
+      certifications: member.certifications,
+      education: member.education,
+      skills: member.skills
     };
 
     res.json(formatted);
@@ -179,7 +112,13 @@ router.post('/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;
-    const { role, teamId, status, agentConfig, modelType, name } = req.body;
+    
+    const { 
+      role, teamId, positionId, status, agentConfig, modelType, name,
+      firstName, otherName, familyName, personalEmail, homeAddress, workArrangements,
+      emergencyContact, dateOfBirth, gender, nationality, startDate, endDate,
+      phoneNumbers, certifications, education, skills
+    } = req.body;
 
     const member = await db.tenantMember.findFirst({
       where: { id },
@@ -188,15 +127,73 @@ router.post('/:id', async (req: TenantRequest, res) => {
 
     if (!member) return res.status(404).json({ error: 'Member not found or access denied' });
 
-    // 1. Update TenantMember basic fields
+    // 1. Update TenantMember basic and detailed fields
     const updatedMember = await db.tenantMember.update({
       where: { id },
       data: {
         roleId: role || member.roleId,
         teamId: teamId !== undefined ? (teamId || null) : member.teamId,
-        status: status || member.status
+        positionId: positionId !== undefined ? (positionId || null) : member.positionId,
+        status: status || member.status,
+        
+        firstName: firstName !== undefined ? firstName : member.firstName,
+        otherName: otherName !== undefined ? otherName : member.otherName,
+        familyName: familyName !== undefined ? familyName : member.familyName,
+        personalEmail: personalEmail !== undefined ? personalEmail : member.personalEmail,
+        homeAddress: homeAddress !== undefined ? homeAddress : member.homeAddress,
+        workArrangements: workArrangements !== undefined ? workArrangements : member.workArrangements,
+        emergencyContact: emergencyContact !== undefined ? emergencyContact : member.emergencyContact,
+        dateOfBirth: (dateOfBirth && dateOfBirth !== "") ? new Date(dateOfBirth) : member.dateOfBirth,
+        gender: gender !== undefined ? gender : member.gender,
+        nationality: nationality !== undefined ? nationality : member.nationality,
+        startDate: (startDate && startDate !== "") ? new Date(startDate) : member.startDate,
+        endDate: (endDate && endDate !== "") ? new Date(endDate) : member.endDate,
+
+        // Nested updates for relations
+        phoneNumbers: phoneNumbers ? {
+          deleteMany: {},
+          create: phoneNumbers.map((p: any) => ({ label: p.label, number: p.number, tenant_id: req.tenantId }))
+        } : undefined,
+        certifications: certifications ? {
+          deleteMany: {},
+          create: certifications.map((c: any) => ({
+            name: c.name,
+            issuer: c.issuer,
+            dateObtained: (c.dateObtained && c.dateObtained !== "") ? new Date(c.dateObtained) : null,
+            expiryDate: (c.expiryDate && c.expiryDate !== "") ? new Date(c.expiryDate) : null,
+            tenant_id: req.tenantId
+          }))
+        } : undefined,
+        education: education ? {
+          deleteMany: {},
+          create: education.map((e: any) => ({
+            institution: e.institution,
+            degree: e.degree,
+            fieldOfStudy: e.fieldOfStudy,
+            startDate: (e.startDate && e.startDate !== "") ? new Date(e.startDate) : null,
+            endDate: (e.endDate && e.endDate !== "") ? new Date(e.endDate) : null,
+            tenant_id: req.tenantId
+          }))
+        } : undefined,
+        skills: skills ? {
+          deleteMany: {},
+          create: skills.map((s: any) => ({
+            name: s.name,
+            proficiencyLevel: s.proficiencyLevel,
+            tenant_id: req.tenantId
+          }))
+        } : undefined
       },
-      include: { user: true, agent: true, team: true }
+      include: { 
+        user: true, 
+        agent: true, 
+        team: true, 
+        position: true,
+        phoneNumbers: true,
+        certifications: true,
+        education: true,
+        skills: true
+      }
     });
 
     // 2. If it's an agent, update Agent specific fields
@@ -204,38 +201,31 @@ router.post('/:id', async (req: TenantRequest, res) => {
       await db.agent.update({
         where: { id: member.agentId },
         data: {
-          config: agentConfig !== undefined ? agentConfig : member.agent?.config,
-          modelType: modelType || member.agent?.modelType,
-          name: name || member.agent?.name
+          modelType: modelType || undefined,
+          config: agentConfig || undefined,
+          name: name || undefined
         }
       });
     }
 
     res.json({ success: true, member: updatedMember });
   } catch (err: any) {
+    console.error('[MemberAPI Update Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE member (Decommission Agent or Revoke Human Access)
+// DELETE member
 router.delete('/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;
-
-    const member = await db.tenantMember.findFirst({ where: { id } });
-    if (!member) return res.status(404).json({ error: 'Member not found or access denied' });
-
-    // If it's an agent, we delete the agent record too
-    if (member.isSynthetic && member.agentId) {
-      // First delete membership (bridge)
-      await db.tenantMember.delete({ where: { id } });
-      // Then delete agent record
-      await db.agent.delete({ where: { id: member.agentId } });
-    } else {
-      // Just delete the membership for humans
-      await db.tenantMember.delete({ where: { id } });
-    }
+    
+    // Check if it's the last admin? (Business logic could go here)
+    
+    await db.tenantMember.delete({
+      where: { id }
+    });
 
     res.json({ success: true });
   } catch (err: any) {

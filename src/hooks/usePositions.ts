@@ -3,24 +3,33 @@ import { toast } from 'sonner';
 import { usePlatform } from './usePlatform';
 import { useAuth } from './useAuth';
 
-export interface Team {
+export interface Occupant {
   id: string;
   name: string;
-  description: string;
-  memberCount: number;
-  agentCount: number;
-  avatar?: string;
+  isSynthetic: boolean;
 }
 
-const API_BASE_URL = 'http://localhost:3001/api/teams';
+export interface Position {
+  id: string;
+  positionNumber: string;
+  title: string;
+  description?: string;
+  parentId?: string;
+  parentTitle?: string;
+  occupants: Occupant[];
+  occupantCount: number;
+  createdAt: string;
+}
 
-export const useTeams = () => {
+const API_BASE_URL = 'http://localhost:3001/api/positions';
+
+export const usePositions = () => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTeams = useCallback(async () => {
+  const fetchPositions = useCallback(async () => {
     if (!tenant?.id) return;
     setLoading(true);
     try {
@@ -30,9 +39,9 @@ export const useTeams = () => {
           'x-tenant-id': tenant.id
         }
       });
-      if (!res.ok) throw new Error('Failed to fetch teams');
+      if (!res.ok) throw new Error('Failed to fetch positions');
       const data = await res.json();
-      setTeams(data);
+      setPositions(data);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -41,10 +50,10 @@ export const useTeams = () => {
   }, [tenant?.id, session?.access_token]);
 
   useEffect(() => {
-    fetchTeams();
-  }, [fetchTeams]);
+    fetchPositions();
+  }, [fetchPositions]);
 
-  const createTeam = async (data: { name: string, description: string }) => {
+  const createPosition = async (data: Partial<Position>) => {
     if (!tenant?.id) return;
     try {
       const res = await fetch(API_BASE_URL, {
@@ -56,18 +65,21 @@ export const useTeams = () => {
         },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('Failed to create team');
-      const newTeam = await res.json();
-      setTeams(prev => [...prev, newTeam]);
-      toast.success(`Team "${data.name}" created successfully`);
-      return newTeam;
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create position');
+      }
+      const newPosition = await res.json();
+      setPositions(prev => [...prev, newPosition]);
+      toast.success(`Position ${data.title} created`);
+      return newPosition;
     } catch (err: any) {
       toast.error(err.message);
       throw err;
     }
   };
 
-  const updateTeam = async (id: string, data: Partial<Team>) => {
+  const updatePosition = async (id: string, data: Partial<Position>) => {
     if (!tenant?.id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
@@ -79,10 +91,10 @@ export const useTeams = () => {
         },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('Failed to update team');
+      if (!res.ok) throw new Error('Failed to update position');
       const updated = await res.json();
-      setTeams(prev => prev.map(t => t.id === id ? { ...t, ...updated } : t));
-      toast.success('Team updated successfully');
+      setPositions(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p));
+      toast.success('Position updated');
       return updated;
     } catch (err: any) {
       toast.error(err.message);
@@ -90,7 +102,7 @@ export const useTeams = () => {
     }
   };
 
-  const deleteTeam = async (id: string) => {
+  const deletePosition = async (id: string) => {
     if (!tenant?.id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
@@ -100,25 +112,25 @@ export const useTeams = () => {
           'x-tenant-id': tenant.id
         }
       });
-      if (!res.ok) throw new Error('Failed to delete team');
-      setTeams(prev => prev.filter(t => t.id !== id));
-      toast.success('Team deleted');
+      if (!res.ok) throw new Error('Failed to delete position');
+      setPositions(prev => prev.filter(p => p.id !== id));
+      toast.success('Position removed');
     } catch (err: any) {
       toast.error(err.message);
       throw err;
     }
   };
 
-  return { teams, loading, createTeam, updateTeam, deleteTeam, refetch: fetchTeams };
+  return { positions, loading, createPosition, updatePosition, deletePosition, refetch: fetchPositions };
 };
 
-export const useTeam = (id?: string) => {
+export const usePosition = (id?: string) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
-  const [team, setTeam] = useState<Team & { members?: any[] } | null>(null);
+  const [position, setPosition] = useState<Position | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchTeam = useCallback(async () => {
+  const fetchPosition = useCallback(async () => {
     if (!tenant?.id || !id) return;
     setLoading(true);
     try {
@@ -130,10 +142,10 @@ export const useTeam = (id?: string) => {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.details || errorData.error || 'Failed to fetch team');
+        throw new Error(errorData.details || errorData.error || 'Failed to fetch position');
       }
       const data = await res.json();
-      setTeam(data);
+      setPosition(data);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -142,10 +154,10 @@ export const useTeam = (id?: string) => {
   }, [tenant?.id, id, session?.access_token]);
 
   useEffect(() => {
-    fetchTeam();
-  }, [fetchTeam]);
+    fetchPosition();
+  }, [fetchPosition]);
 
-  const updateTeam = async (data: Partial<Team>) => {
+  const updatePosition = async (data: Partial<Position>) => {
     if (!tenant?.id || !id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
@@ -157,10 +169,10 @@ export const useTeam = (id?: string) => {
         },
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('Failed to update team');
+      if (!res.ok) throw new Error('Failed to update position');
       const updated = await res.json();
-      setTeam(prev => prev ? { ...prev, ...updated } : null);
-      toast.success('Team details updated');
+      setPosition(prev => prev ? { ...prev, ...updated } : null);
+      toast.success('Position updated successfully');
       return updated;
     } catch (err: any) {
       toast.error(err.message);
@@ -168,7 +180,7 @@ export const useTeam = (id?: string) => {
     }
   };
 
-  const deleteTeam = async () => {
+  const deletePosition = async () => {
     if (!tenant?.id || !id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
@@ -178,13 +190,13 @@ export const useTeam = (id?: string) => {
           'x-tenant-id': tenant.id
         }
       });
-      if (!res.ok) throw new Error('Failed to delete team');
-      toast.success('Team permanently removed');
+      if (!res.ok) throw new Error('Failed to delete position');
+      toast.success('Position removed');
     } catch (err: any) {
       toast.error(err.message);
       throw err;
     }
   };
 
-  return { team, loading, updateTeam, deleteTeam, refetch: fetchTeam };
+  return { position, loading, updatePosition, deletePosition, refetch: fetchPosition };
 };

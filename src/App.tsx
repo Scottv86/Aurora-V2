@@ -28,6 +28,8 @@ import { FleetManager } from './components/FleetManager';
 import { ComputeMatrix } from './components/ComputeMatrix';
 import { UserManagementPage } from './pages/Settings/UserManagement';
 import { MemberDetailView } from './pages/Settings/MemberDetailView';
+import { TeamDetailView } from './pages/Settings/TeamDetailView';
+import { PositionDetailView } from './pages/Settings/PositionDetailView';
 
 // Pages
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
@@ -84,6 +86,7 @@ const App = () => {
               <Route path="/workspace/settings/billing" element={<ProtectedRoute><PlatformShell><ComingSoon title="Billing & Plans" description="Manage subscriptions, payment methods, and billing history." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/usage" element={<ProtectedRoute><PlatformShell><ComingSoon title="Model Usage" description="Monitor tokens, API calls, and resource consumption for your AI models." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/security" element={<ProtectedRoute><PlatformShell><ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/audit" element={<ProtectedRoute><PlatformShell><ComingSoon title="Audit Log" description="Review system activity, security events, and configuration changes across the platform." /></PlatformShell></ProtectedRoute>} />
               
               {/* Module Builder (within Settings) */}
               <Route path="/workspace/settings/builder" element={<ProtectedRoute><PlatformShell><BuilderChoice /></PlatformShell></ProtectedRoute>} />
@@ -92,6 +95,7 @@ const App = () => {
               
               <Route path="/workspace/settings/modules" element={<ProtectedRoute><PlatformShell><ModuleCatalog /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/apps" element={<ProtectedRoute><PlatformShell><ComingSoon title="App Catalog" description="Discover, install, and manage third-party applications." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/settings/email" element={<ProtectedRoute><PlatformShell><ComingSoon title="Email Exchange" description="Configure mail server settings, domain verification, and email communication protocols." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/database" element={<ProtectedRoute><PlatformShell><ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/lists" element={<ProtectedRoute><PlatformShell><ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/appearance" element={<ProtectedRoute><PlatformShell><ComingSoon title="Appearance & Branding" description="Customize the visual theme, organization logos, and brand identity settings." /></PlatformShell></ProtectedRoute>} />
@@ -108,6 +112,8 @@ const App = () => {
               {/* User & Agent Management */}
               <Route path="/dashboard/settings/users" element={<ProtectedRoute><PlatformShell><UserManagementPage /></PlatformShell></ProtectedRoute>} />
               <Route path="/dashboard/settings/users/:id" element={<ProtectedRoute><PlatformShell><MemberDetailView /></PlatformShell></ProtectedRoute>} />
+              <Route path="/dashboard/settings/teams/:id" element={<ProtectedRoute><PlatformShell><TeamDetailView /></PlatformShell></ProtectedRoute>} />
+              <Route path="/dashboard/settings/positions/:id" element={<ProtectedRoute><PlatformShell><PositionDetailView /></PlatformShell></ProtectedRoute>} />
               
               {/* External / Public */}
               <Route path="/portal" element={<ExternalPortal />} />
