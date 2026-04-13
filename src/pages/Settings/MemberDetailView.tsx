@@ -31,6 +31,8 @@ import { useTeams } from '../../hooks/useTeams';
 import { usePositions } from '../../hooks/usePositions';
 import { Button, Input, Select, Badge, cn } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { PermissionsTab } from '../../components/Settings/Workforce/PermissionsTab';
 
 export const MemberDetailView = () => {
   const { id } = useParams();
@@ -40,6 +42,8 @@ export const MemberDetailView = () => {
   const { positions } = usePositions();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Local form state
   const [role, setRole] = useState('');
@@ -140,10 +144,19 @@ export const MemberDetailView = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (confirm(`Are you sure you want to decommission this ${member?.isSynthetic ? 'agent' : 'member'}?`)) {
+  const handleDelete = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!member) return;
+    setIsDeleting(true);
+    try {
       await deleteMember();
-      navigate('/dashboard/settings/users');
+      navigate('/dashboard/settings/workforce');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -152,7 +165,7 @@ export const MemberDetailView = () => {
       <div className="p-8 flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-sm text-zinc-500 animate-pulse font-medium">Accessing Coworker Records...</p>
+          <p className="text-sm text-zinc-500 animate-pulse font-medium">Accessing Workforce Records...</p>
         </div>
       </div>
     );
@@ -162,8 +175,8 @@ export const MemberDetailView = () => {
     return (
       <div className="p-8 text-center bg-red-500/5 border border-red-500/10 rounded-2xl">
         <p className="text-red-500 font-medium">Coworker not found or access denied.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/users')}>
-          Return to Directory
+        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/workforce')}>
+          Return to Hub
         </Button>
       </div>
     );
@@ -174,7 +187,7 @@ export const MemberDetailView = () => {
       {/* Breadcrumbs & Navigation */}
       <div className="flex items-center gap-4">
         <button 
-          onClick={() => navigate('/dashboard/settings/users')}
+          onClick={() => navigate('/dashboard/settings/workforce')}
           className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
         >
           <ArrowLeft size={20} className="text-zinc-500" />
@@ -182,7 +195,7 @@ export const MemberDetailView = () => {
         <div className="flex items-center text-sm font-medium">
           <span className="text-zinc-400">Settings</span>
           <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">Staff</span>
+          <span className="text-zinc-400">Workforce</span>
           <ChevronRight size={14} className="mx-2 text-zinc-600" />
           <span className="text-zinc-900 dark:text-zinc-100">{fullName}</span>
         </div>
@@ -228,6 +241,7 @@ export const MemberDetailView = () => {
             { id: 'employment', label: 'Employment' },
             { id: 'professional', label: 'Professional & Skills' },
             ...(member.isSynthetic ? [{ id: 'configuration', label: 'Intelligence' }] : []),
+            { id: 'permissions', label: 'Permissions' },
             { id: 'activity', label: 'Activity Logs' }
           ]}
           activeTab={activeTab}
@@ -737,6 +751,14 @@ export const MemberDetailView = () => {
             </motion.div>
           )}
 
+          {activeTab === 'permissions' && (
+            <PermissionsTab 
+              memberId={member.id}
+              assignedGroups={member.permissionGroups || []}
+              onUpdate={(groupIds) => updateMember({ permissionGroups: groupIds })}
+            />
+          )}
+
           {activeTab === 'activity' && (
             <motion.div 
                initial={{ opacity: 0 }}
@@ -754,6 +776,15 @@ export const MemberDetailView = () => {
           )}
         </div>
       </div>
+
+      <DeleteConfirmationModal 
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        title={`Decommission ${member.isSynthetic ? 'Agent' : 'Staff Member'}`}
+        description={`Are you sure you want to decommission "${fullName}"? This action cannot be undone and will permanently remove their access and history from the active workspace.`}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

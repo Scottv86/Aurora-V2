@@ -18,7 +18,7 @@ const VERTICAL_SPACING = 180;
 
 const VIRTUAL_ROOT_ID = 'virtual-root';
 
-export const OrgChartApplet = () => {
+export const OrgVisualizer = () => {
   const navigate = useNavigate();
   const { positions, loading } = usePositions();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -78,7 +78,7 @@ export const OrgChartApplet = () => {
         
       return treeLayout(root) as unknown as TreeNode;
     } catch (err) {
-      console.error('Org Chart Stratification Error:', err);
+      console.error('Org Visualizer Stratification Error:', err);
       return null;
     }
   }, [positions]);
@@ -109,7 +109,7 @@ export const OrgChartApplet = () => {
       <div className="flex h-[600px] items-center justify-center rounded-3xl border border-zinc-200 bg-white/50 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/50">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
-          <span className="text-zinc-500 animate-pulse">Mapping Organization...</span>
+          <span className="text-zinc-500 animate-pulse text-sm font-medium">Visualizing Report Lines...</span>
         </div>
       </div>
     );
@@ -118,52 +118,52 @@ export const OrgChartApplet = () => {
   if (!hierarchyData) {
     return (
       <div className="flex h-[600px] flex-col items-center justify-center rounded-3xl border-2 border-dashed border-zinc-200 bg-white/50 dark:border-zinc-800 dark:bg-zinc-900/50">
-        <Briefcase size={48} className="mb-4 text-zinc-300" />
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">No Reporting Structure Found</h3>
-        <p className="text-zinc-500 max-w-sm text-center mt-2">
-          Create positions and define their reporting lines in the "Positions" tab to see them mapped out here.
+        <Briefcase size={48} className="mb-4 text-zinc-200" />
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Reporting Structure Pending</h3>
+        <p className="text-zinc-500 max-w-sm text-center mt-2 text-sm leading-relaxed">
+          Define role architecture and reporting lines in the "Role Architecture" tab to visualize your organizational map.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="relative h-[700px] w-full overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950/50" ref={containerRef}>
+    <div className="relative h-[700px] w-full overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950 shadow-inner" ref={containerRef}>
       {/* Search & Controls Overlay */}
       <div className="absolute left-6 top-6 z-10 flex flex-col gap-3">
         <div className="relative group">
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-500 transition-colors" />
           <input 
             type="text" 
-            placeholder="Search structure..."
+            placeholder="Search architecture..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-11 w-64 rounded-2xl border border-zinc-200 bg-white/80 pl-10 pr-4 text-sm shadow-xl shadow-zinc-200/20 backdrop-blur-md outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-none"
+            className="h-11 w-64 rounded-2xl border border-zinc-200 bg-white/90 pl-10 pr-4 text-sm shadow-2xl shadow-zinc-200/50 backdrop-blur-md outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900/90 dark:shadow-none"
           />
         </div>
         
-        <div className="flex items-center gap-2 p-1 rounded-2xl border border-zinc-200 bg-white/80 shadow-xl shadow-zinc-200/20 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80 dark:shadow-none w-max">
-          <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400" onClick={() => {
+        <div className="flex items-center gap-2 p-1.5 rounded-2xl border border-zinc-200 bg-white/90 shadow-2xl shadow-zinc-200/50 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90 dark:shadow-none w-max">
+          <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 transition-colors" onClick={() => {
             const svg = d3.select(svgRef.current!);
             svg.transition().call(d3.zoom<SVGSVGElement, any>().scaleBy, 1.3);
           }}>
             <ZoomIn size={18} />
           </button>
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
-          <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400" onClick={() => {
+          <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 transition-colors" onClick={() => {
             const svg = d3.select(svgRef.current!);
             svg.transition().call(d3.zoom<SVGSVGElement, any>().scaleBy, 0.7);
           }}>
             <ZoomOut size={18} />
           </button>
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
-          <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400" onClick={() => {
+          <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 transition-colors" onClick={() => {
              const { width, height } = containerRef.current?.getBoundingClientRect() || { width: 1000, height: 600 };
              d3.select(svgRef.current!).transition().call(d3.zoom<SVGSVGElement, any>().transform, d3.zoomIdentity.translate(width / 4, height / 2).scale(0.8));
           }}>
             <Maximize size={18} />
           </button>
-          <div className="px-3 py-1 font-mono text-xs text-zinc-500">
+          <div className="px-3 py-1 font-mono text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
             {Math.round(zoomLevel * 100)}%
           </div>
         </div>
@@ -204,9 +204,9 @@ export const OrgChartApplet = () => {
                   key={`link-${i}`}
                   d={pathData || ''}
                   fill="none"
-                  stroke="#e2e8f0"
+                  stroke="#cbd5e1"
                   strokeWidth={2}
-                  className="transition-all dark:stroke-zinc-800"
+                  className="transition-all dark:stroke-zinc-800 opacity-60"
                 />
               );
             })}
@@ -226,24 +226,24 @@ export const OrgChartApplet = () => {
                 <motion.div 
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  whileHover={{ y: -4, scale: 1.02 }}
-                  onClick={() => navigate(`/dashboard/settings/positions/${node.data.id}`)}
-                  className={`flex flex-col h-full rounded-2xl border bg-white p-3 shadow-lg transition-all cursor-pointer dark:bg-zinc-900 ${
+                  whileHover={{ y: -6, scale: 1.05 }}
+                  onClick={() => navigate(`/dashboard/settings/workforce/roles/${node.data.id}`)}
+                  className={`flex flex-col h-full rounded-2xl border bg-white p-3 shadow-xl transition-all cursor-pointer dark:bg-zinc-900 ${
                     searchQuery && (node.data.title.toLowerCase().includes(searchQuery.toLowerCase()) || node.data.positionNumber.toLowerCase().includes(searchQuery.toLowerCase()))
-                      ? 'border-blue-500 ring-4 ring-blue-500/10' 
+                      ? 'border-blue-500 ring-4 ring-blue-500/20' 
                       : 'border-zinc-200 dark:border-zinc-800'
                   }`}
                 >
                   <div className="flex items-start justify-between">
-                    <Badge variant="blue" className="text-[10px] py-0 px-1.5 font-mono">{node.data.positionNumber}</Badge>
-                    <div className="flex items-center gap-1.5 p-1 rounded-full bg-zinc-50 dark:bg-zinc-800/50 pr-2">
+                    <Badge variant="blue" className="text-[10px] py-0 px-2 font-mono ring-1 ring-blue-500/10 tracking-tight">{node.data.positionNumber}</Badge>
+                    <div className="flex items-center gap-1.5 p-1 rounded-full bg-zinc-50 dark:bg-zinc-800/50 pr-2 border border-zinc-100 dark:border-zinc-700/50">
                        <div className={`flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-bold ${
-                         node.data.occupants?.[0]?.isSynthetic ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                         node.data.occupants?.[0]?.isSynthetic ? 'bg-purple-500 text-white' : 'bg-blue-600 text-white'
                        }`}>
                          {node.data.occupants?.[0]?.isSynthetic ? <Cpu size={10} /> : <User size={10} />}
                        </div>
-                       <span className="text-[9px] font-semibold text-zinc-500 uppercase tracking-tighter">
-                         {node.data.occupantCount > 0 ? (node.data.occupants?.[0]?.isSynthetic ? 'Agent' : 'Human') : 'Vacant'}
+                       <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-tighter">
+                         {node.data.occupantCount > 0 ? (node.data.occupants?.[0]?.isSynthetic ? 'Agent' : 'Expert') : 'Vacant'}
                        </span>
                     </div>
                   </div>
@@ -256,28 +256,28 @@ export const OrgChartApplet = () => {
                   <div className="mt-2 flex flex-col gap-1 flex-1">
                     {node.data.occupantCount > 0 ? (
                       <div className="flex flex-col">
-                        <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-300 truncate">
+                        <span className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 truncate">
                           {node.data.occupants?.[0]?.name}
                         </span>
                         {node.data.occupantCount > 1 && (
-                          <span className="text-[9px] text-zinc-400 italic">
-                            + {node.data.occupantCount - 1} other{node.data.occupantCount > 2 ? 's' : ''}
+                          <span className="text-[9px] text-zinc-400 font-medium italic">
+                            + {node.data.occupantCount - 1} co-experts{node.data.occupantCount > 2 ? 's' : ''}
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-[10px] italic text-zinc-400">Position Unfilled</span>
+                      <span className="text-[10px] italic text-zinc-400 font-medium">Spot Unfilled</span>
                     )}
                   </div>
                   
                   <div className="mt-auto flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
-                    <div className="flex items-center gap-1 text-[10px] text-zinc-500">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-zinc-400">
                       <Users size={10} />
                       {node.data.occupantCount}
                     </div>
                     {node.children && (
-                      <div className="flex items-center gap-0.5 text-[10px] font-medium text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-1.5 rounded-md">
-                        {node.children.length} reports
+                      <div className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-500/10 px-2 rounded-lg py-0.5">
+                        {node.children.length} {node.children.length === 1 ? 'report' : 'reports'}
                       </div>
                     )}
                   </div>
@@ -289,21 +289,22 @@ export const OrgChartApplet = () => {
       </svg>
       
       {/* Legend / Status bar */}
-      <div className="absolute bottom-6 left-6 flex items-center gap-4 rounded-xl border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-medium text-zinc-600 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-400">
-        <div className="flex items-center gap-1.5">
-          <div className="h-2 w-2 rounded-full bg-blue-500" />
-          <span>Positions</span>
+      <div className="absolute bottom-6 left-6 flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white/90 px-5 py-2.5 text-[10px] font-bold text-zinc-500 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-400 shadow-xl shadow-zinc-200/50 dark:shadow-none uppercase tracking-widest">
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+          <span>Human Staff</span>
         </div>
-        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800" />
-        <div className="flex items-center gap-1.5">
-          <div className="h-2 w-2 rounded-full bg-purple-500" />
-          <span>Agents</span>
+        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 w-2.5 rounded-full bg-purple-500" />
+          <span>Digital Coworkers</span>
         </div>
-        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800" />
-        <div className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100">
-          Total Nodes: {positions.length}
+        <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
+        <div className="flex items-center gap-2 text-zinc-900 dark:text-white">
+          Architecture Nodes: <span className="text-blue-600">{positions.length}</span>
         </div>
       </div>
     </div>
   );
 };
+

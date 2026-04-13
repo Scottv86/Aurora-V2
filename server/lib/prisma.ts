@@ -48,7 +48,9 @@ export const getScopedPrisma = (
             'MemberPhoneNumber',
             'MemberCertification',
             'MemberEducation',
-            'MemberSkill'
+            'MemberSkill',
+            'PermissionGroup',
+            'MemberPermissionGroup'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);

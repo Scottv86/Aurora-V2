@@ -9,6 +9,8 @@ import publicRoutes from './routes/publicRoutes';
 import memberRoutes from './routes/memberRoutes';
 import teamRoutes from './routes/teamRoutes';
 import positionRoutes from './routes/positionRoutes';
+import permissionRoutes from './routes/permissionRoutes';
+import auditRoutes from './routes/auditRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -62,6 +64,8 @@ app.use('/api/platform', authenticate, platformRoutes);
 app.use('/api/members', authenticate, requireTenantAccess, memberRoutes);
 app.use('/api/teams', authenticate, requireTenantAccess, teamRoutes);
 app.use('/api/positions', authenticate, requireTenantAccess, positionRoutes);
+app.use('/api/permissions', authenticate, requireTenantAccess, permissionRoutes);
+app.use('/api/audit', authenticate, requireTenantAccess, auditRoutes);
 
 // Public API Routes (Portal submissions)
 app.use('/api/public', publicRoutes);

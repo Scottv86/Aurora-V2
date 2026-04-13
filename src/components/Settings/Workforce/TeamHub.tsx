@@ -4,32 +4,30 @@ import { useTeams, Team } from '../../../hooks/useTeams';
 import { Button, cn } from '../../UI/Primitives';
 import { Users, Bot, User, Plus, MoreHorizontal, ArrowUpRight } from 'lucide-react';
 
-interface TeamsAppletProps {
+interface TeamHubProps {
   onCreateTeam?: () => void;
+  searchQuery?: string;
 }
 
-export const TeamsApplet = ({ onCreateTeam }: TeamsAppletProps) => {
+export const TeamHub = ({ onCreateTeam, searchQuery = '' }: TeamHubProps) => {
   const { teams, loading } = useTeams();
+
+    const query = searchQuery.toLowerCase();
+    const filteredTeams = teams.filter(t => 
+      !query || 
+      t.name.toLowerCase().includes(query) || 
+      (t.description && t.description.toLowerCase().includes(query))
+    );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Workspace Teams</h3>
-          <p className="text-sm text-zinc-500">Manage horizontal departments and cross-functional squads.</p>
-        </div>
-        <Button variant="primary" className="gap-2" onClick={onCreateTeam}>
-          <Plus size={16} /> Create New Team
-        </Button>
-      </div>
-
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-48 animate-pulse rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50" />
           ))
         ) : (
-          teams.map((team) => (
+          filteredTeams.map((team) => (
             <TeamCard key={team.id} team={team} />
           ))
         )}
@@ -38,12 +36,13 @@ export const TeamsApplet = ({ onCreateTeam }: TeamsAppletProps) => {
   );
 };
 
+
 const TeamCard = ({ team }: { team: Team }) => {
   const navigate = useNavigate();
 
   return (
     <div 
-      onClick={() => navigate(`/dashboard/settings/teams/${team.id}`)}
+      onClick={() => navigate(`/dashboard/settings/workforce/teams/${team.id}`)}
       className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-200 bg-white p-6 transition-all hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 cursor-pointer dark:border-zinc-800 dark:bg-zinc-900"
     >
       <div className="space-y-4">

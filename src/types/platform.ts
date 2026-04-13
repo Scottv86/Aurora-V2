@@ -107,6 +107,7 @@ export interface User {
   email: string;
   role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'STAFF' | 'EXTERNAL';
   tenantId?: string;
+  capabilities?: string[];
 }
 
 export interface DocumentTemplate {

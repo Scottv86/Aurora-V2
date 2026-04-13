@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authenticate } from '../middleware/authMiddleware';
 import { globalPrisma } from '../lib/prisma';
+import { resolveCapabilities } from '../lib/permissions';
 
 const router = Router();
 
@@ -23,7 +24,12 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
       include: {
         memberships: {
           include: {
-            tenant: true
+            tenant: true,
+            permissionGroups: {
+              include: {
+                permissionGroup: true
+              }
+            }
           }
         }
       }
@@ -37,18 +43,12 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     // Determine primary tenant
     // We prioritize actual database memberships over the token's snapshot
     const primaryMembership = user.memberships[0];
-    let tenant: any = primaryMembership?.tenant || null;
+    const tenant: any = primaryMembership?.tenant || null;
 
-    console.log(`[PlatformAPI] Context check: user=${user.email} admin=${user.isSuperAdmin} total_members=${user.memberships.length} primary=${tenant?.name || 'NONE'}`);
-
-    // Fallback for SuperAdmins who might not have explicit memberships
-    if (!tenant && user.isSuperAdmin) {
-      console.log(`[PlatformAPI] SuperAdmin ${user.email} has no memberships. Fetching global fallback tenant.`);
-      tenant = await globalPrisma.tenant.findFirst({
-        orderBy: { createdAt: 'asc' }
-      });
-    }
-
+    // Calculate flattened capabilities for the primary membership
+    const groupIds = primaryMembership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
+    const capabilities = await resolveCapabilities(groupIds, tenant?.id || '');
+    
     // Menu Configuration Resolution: User Customization > Tenant Default
     const menuConfig = primaryMembership?.menuConfig || tenant?.menuConfig || null;
 
@@ -57,7 +57,8 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         id: user.id,
         email: user.email,
         isSuperAdmin: user.isSuperAdmin,
-        role: primaryMembership?.roleId || (user.isSuperAdmin ? 'SUPERADMIN' : 'USER')
+        role: primaryMembership?.roleId || (user.isSuperAdmin ? 'SUPERADMIN' : 'USER'),
+        capabilities: capabilities
       },
       tenant: tenant ? {
         id: tenant.id,

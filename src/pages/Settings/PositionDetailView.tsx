@@ -16,6 +16,7 @@ import {
 import { usePosition, usePositions } from '../../hooks/usePositions';
 import { Button, Input, Select, Badge, cn } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
 export const PositionDetailView = () => {
   const { id } = useParams();
@@ -24,6 +25,8 @@ export const PositionDetailView = () => {
   const { positions: allPositions } = usePositions();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Local form state
   const [title, setTitle] = useState('');
@@ -54,10 +57,19 @@ export const PositionDetailView = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (confirm(`Are you sure you want to permanently delete the "${position?.title}" position? This may orphan reporting lines below it.`)) {
+  const handleDelete = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!position) return;
+    setIsDeleting(true);
+    try {
       await deletePosition();
-      navigate('/dashboard/settings/users');
+      navigate('/dashboard/settings/workforce');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -76,8 +88,8 @@ export const PositionDetailView = () => {
     return (
       <div className="p-8 text-center bg-red-500/5 border border-red-500/10 rounded-2xl">
         <p className="text-red-500 font-medium">Position record not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/users')}>
-          Return to Management
+        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/workforce')}>
+          Return to Hub
         </Button>
       </div>
     );
@@ -88,7 +100,7 @@ export const PositionDetailView = () => {
       {/* breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 
-          onClick={() => navigate('/dashboard/settings/users')}
+          onClick={() => navigate('/dashboard/settings/workforce')}
           className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
         >
           <ArrowLeft size={20} className="text-zinc-500" />
@@ -96,7 +108,7 @@ export const PositionDetailView = () => {
         <div className="flex items-center text-sm font-medium">
           <span className="text-zinc-400">Settings</span>
           <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">Staff</span>
+          <span className="text-zinc-400">Workforce</span>
           <ChevronRight size={14} className="mx-2 text-zinc-600" />
           <span className="text-zinc-900 dark:text-zinc-100">{position.title} ({position.positionNumber})</span>
         </div>
@@ -232,7 +244,7 @@ export const PositionDetailView = () => {
                                 variant="ghost" 
                                 size="sm" 
                                 className="text-blue-500"
-                                onClick={() => navigate(`/dashboard/settings/users/${occ.id}`)}
+                                onClick={() => navigate(`/dashboard/settings/workforce/member/${occ.id}`)}
                               >
                                 View Detailed Record
                               </Button>
@@ -269,6 +281,15 @@ export const PositionDetailView = () => {
           )}
         </div>
       </div>
+
+      <DeleteConfirmationModal 
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Position Slot"
+        description={`Are you sure you want to permanently delete the "${position.title}" position? This action cannot be undone and may orphan reporting lines below it in the organizational hierarchy.`}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

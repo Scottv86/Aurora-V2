@@ -5,6 +5,7 @@ import { cn } from './Primitives';
 interface Tab {
   id: string;
   label: string;
+  icon?: React.ElementType;
 }
 
 interface TabsProps {
@@ -16,29 +17,34 @@ interface TabsProps {
 
 export const Tabs = ({ tabs, activeTab, onChange, className }: TabsProps) => {
   return (
-    <div className={cn('flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800', className)}>
-      {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => onChange(tab.id)}
-            className={cn(
-              'relative px-4 py-2.5 text-sm font-medium transition-colors outline-none',
-              isActive ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-            )}
-          >
-            {tab.label}
-            {isActive && (
-              <motion.div
-                layoutId="activeTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              />
-            )}
-          </button>
-        );
-      })}
+    <div className={cn('flex items-center border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar', className)}>
+      <div className="flex items-center gap-1 min-w-full">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => onChange(tab.id)}
+              className={cn(
+                'relative flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all outline-none whitespace-nowrap',
+                isActive 
+                  ? 'text-zinc-900 dark:text-zinc-100' 
+                  : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200'
+              )}
+            >
+              {tab.icon && <tab.icon size={16} className={cn(isActive ? 'text-blue-600' : 'text-zinc-400')} />}
+              <span className="tracking-tight">{tab.label}</span>
+              {isActive && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };

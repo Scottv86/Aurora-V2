@@ -6,10 +6,16 @@ import { Badge, Button, Input } from '../../UI/Primitives';
 import { Modal } from '../../UI/TabsAndModal';
 import { Briefcase, Plus, Search, MapPin, Users, History, TreeLabels, ChevronRight } from 'lucide-react';
 
-export const PositionsApplet = () => {
+interface OrgDesignProps {
+  isModalOpen: boolean;
+  onCloseModal: () => void;
+  searchQuery?: string;
+  activeFilter?: string;
+}
+
+export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', activeFilter = 'all' }: OrgDesignProps) => {
   const navigate = useNavigate();
   const { positions, loading, createPosition } = usePositions();
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [newPosition, setNewPosition] = useState({
     positionNumber: '',
     title: '',
@@ -19,41 +25,41 @@ export const PositionsApplet = () => {
 
   const columns = [
     {
-      header: 'Position Number',
+      header: 'ID / Code',
       accessor: (p: Position) => (
         <div className="flex items-center gap-2">
-          <Badge variant="blue" className="font-mono">{p.positionNumber}</Badge>
+          <Badge variant="blue" className="font-mono text-[10px] tracking-tight">{p.positionNumber}</Badge>
         </div>
       )
     },
     {
-      header: 'Title',
+      header: 'Functional Title',
       accessor: (p: Position) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-zinc-900 dark:text-zinc-100">{p.title}</span>
+          <span className="font-bold text-zinc-900 dark:text-zinc-100">{p.title}</span>
           {p.parentTitle && (
-            <div className="flex items-center gap-1 text-xs text-zinc-500">
-              <ChevronRight size={12} /> reports to {p.parentTitle}
+            <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-zinc-400">
+              <ChevronRight size={10} /> Reports to {p.parentTitle}
             </div>
           )}
         </div>
       )
     },
     {
-      header: 'Occupants',
+      header: 'Workforce Slotted',
       accessor: (p: Position) => (
         <div className="flex items-center gap-2">
           <Users size={14} className="text-zinc-400" />
-          <span className="text-zinc-600 dark:text-zinc-400">
-            {p.occupantCount} {p.occupantCount === 1 ? 'member' : 'members'}
+          <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            {p.occupantCount} {p.occupantCount === 1 ? 'expert' : 'experts'}
           </span>
         </div>
       )
     },
     {
-      header: 'Description',
+      header: 'Role Summary',
       accessor: (p: Position) => (
-        <span className="text-sm text-zinc-500 line-clamp-1">{p.description || 'No description provided'}</span>
+        <span className="text-sm text-zinc-500 line-clamp-1">{p.description || 'Definition pending...'}</span>
       )
     }
   ];
@@ -61,41 +67,50 @@ export const PositionsApplet = () => {
   const handleCreate = async () => {
     try {
       await createPosition(newPosition);
-      setIsModalOpen(false);
+      onCloseModal();
       setNewPosition({ positionNumber: '', title: '', description: '', parentId: '' });
     } catch (err) {
       // toast handled in hook
     }
   };
 
+  const filteredPositions = positions.filter(p => {
+    // Phase 1: Contextual Filters
+    let matchesFilter = true;
+    if (activeFilter === 'filled') matchesFilter = p.occupantCount > 0;
+    if (activeFilter === 'open') matchesFilter = p.occupantCount === 0;
+
+    // Phase 2: Search Query
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = !query || 
+      p.title.toLowerCase().includes(query) || 
+      (p.description && p.description.toLowerCase().includes(query)) ||
+      p.positionNumber.toLowerCase().includes(query);
+
+    return matchesFilter && matchesSearch;
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Organizational Positions</h3>
-          <p className="text-sm text-zinc-500">Define standalone roles and slots for your workforce hierarchy.</p>
-        </div>
-        <Button variant="primary" className="gap-2" onClick={() => setIsModalOpen(true)}>
-          <Plus size={16} /> Create Position
-        </Button>
+      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-950">
+        <Table 
+          data={filteredPositions} 
+          columns={columns} 
+          loading={loading}
+          pagination={true}
+          onRowClick={(p) => navigate(`/dashboard/settings/workforce/roles/${p.id}`)}
+          emptyMessage="No roles defined yet. Define a role architecture to start building your organization."
+        />
       </div>
-
-      <Table 
-        data={positions} 
-        columns={columns} 
-        loading={loading}
-        onRowClick={(p) => navigate(`/dashboard/settings/positions/${p.id}`)}
-        emptyMessage="No positions defined yet. Create one to start building your org chart."
-      />
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Create New Position"
+        onClose={onCloseModal}
+        title="Create Role"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button variant="primary" onClick={handleCreate}>Create Position</Button>
+            <Button variant="secondary" onClick={onCloseModal}>Cancel</Button>
+            <Button variant="primary" onClick={handleCreate}>Create Role</Button>
           </>
         }
       >

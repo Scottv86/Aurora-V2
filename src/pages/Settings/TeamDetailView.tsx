@@ -15,6 +15,7 @@ import {
 import { useTeam } from '../../hooks/useTeams';
 import { Button, Input, Badge, cn } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
 export const TeamDetailView = () => {
   const { id } = useParams();
@@ -22,6 +23,8 @@ export const TeamDetailView = () => {
   const { team, loading, updateTeam, deleteTeam } = useTeam(id);
   const [activeTab, setActiveTab] = useState('overview');
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Local form state
   const [name, setName] = useState('');
@@ -43,10 +46,19 @@ export const TeamDetailView = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (confirm(`Are you sure you want to permanently delete the "${team?.name}" team? This cannot be undone.`)) {
+  const handleDelete = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!team) return;
+    setIsDeleting(true);
+    try {
       await deleteTeam();
-      navigate('/dashboard/settings/users');
+      navigate('/dashboard/settings/workforce');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -65,8 +77,8 @@ export const TeamDetailView = () => {
     return (
       <div className="p-8 text-center bg-red-500/5 border border-red-500/10 rounded-2xl">
         <p className="text-red-500 font-medium">Team record not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/users')}>
-          Return to Management
+        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/workforce')}>
+          Return to Hub
         </Button>
       </div>
     );
@@ -77,7 +89,7 @@ export const TeamDetailView = () => {
       {/* breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 
-          onClick={() => navigate('/dashboard/settings/users')}
+          onClick={() => navigate('/dashboard/settings/workforce')}
           className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
         >
           <ArrowLeft size={20} className="text-zinc-500" />
@@ -85,7 +97,7 @@ export const TeamDetailView = () => {
         <div className="flex items-center text-sm font-medium">
           <span className="text-zinc-400">Settings</span>
           <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">Staff</span>
+          <span className="text-zinc-400">Workforce</span>
           <ChevronRight size={14} className="mx-2 text-zinc-600" />
           <span className="text-zinc-900 dark:text-zinc-100">{team.name} Team</span>
         </div>
@@ -212,7 +224,7 @@ export const TeamDetailView = () => {
                                 variant="ghost" 
                                 size="sm" 
                                 className="text-blue-500"
-                                onClick={() => navigate(`/dashboard/settings/users/${m.id}`)}
+                                onClick={() => navigate(`/dashboard/settings/workforce/member/${m.id}`)}
                               >
                                 View Profile
                               </Button>
@@ -248,6 +260,15 @@ export const TeamDetailView = () => {
           )}
         </div>
       </div>
+
+      <DeleteConfirmationModal 
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Team"
+        description={`Are you sure you want to permanently delete the "${team.name}" team? This action cannot be undone and will impact all associated staff.`}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

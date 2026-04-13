@@ -40,6 +40,7 @@ export interface TenantMember {
   certifications?: { name: string; issuer: string; dateObtained?: string; expiryDate?: string }[];
   education?: { institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[];
   skills?: { name: string; proficiencyLevel: string }[];
+  permissionGroups?: { id: string; name: string; description?: string }[];
 }
 
 const API_BASE_URL = 'http://localhost:3001/api/members';

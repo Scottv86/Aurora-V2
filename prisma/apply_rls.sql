@@ -30,6 +30,9 @@ ALTER TABLE "member_phone_numbers" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "member_certifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "member_education" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "member_skills" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "permission_groups" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_permission_groups" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLICIES FOR "users"
 -- Superadmins see all users
@@ -113,6 +116,23 @@ CREATE POLICY member_skill_isolation ON "member_skills" FOR ALL USING (
     "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
+-- Permission Groups
+DROP POLICY IF EXISTS permission_group_isolation ON "permission_groups";
+CREATE POLICY permission_group_isolation ON "permission_groups" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+DROP POLICY IF EXISTS member_pg_isolation ON "member_permission_groups";
+CREATE POLICY member_pg_isolation ON "member_permission_groups" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+-- Audit Logs
+DROP POLICY IF EXISTS audit_log_isolation ON "audit_logs";
+CREATE POLICY audit_log_isolation ON "audit_logs" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
 -- 7. FORCE RLS (Ensures owner is also restricted)
 ALTER TABLE "users" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "tenants" FORCE ROW LEVEL SECURITY;
@@ -126,3 +146,6 @@ ALTER TABLE "member_phone_numbers" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "member_certifications" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "member_education" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "member_skills" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "permission_groups" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "member_permission_groups" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "audit_logs" FORCE ROW LEVEL SECURITY;

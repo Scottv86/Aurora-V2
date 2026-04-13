@@ -26,7 +26,7 @@ import { TenantOverview } from './components/TenantOverview';
 import { HealthMonitor } from './components/HealthMonitor';
 import { FleetManager } from './components/FleetManager';
 import { ComputeMatrix } from './components/ComputeMatrix';
-import { UserManagementPage } from './pages/Settings/UserManagement';
+import { WorkforcePage } from './pages/Settings/WorkforcePage';
 import { MemberDetailView } from './pages/Settings/MemberDetailView';
 import { TeamDetailView } from './pages/Settings/TeamDetailView';
 import { PositionDetailView } from './pages/Settings/PositionDetailView';
@@ -109,11 +109,11 @@ const App = () => {
               <Route path="/workspace/settings/deploy" element={<ProtectedRoute><PlatformShell><ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/settings/api" element={<ProtectedRoute><PlatformShell><ComingSoon title="API Management" description="Configure API keys, webhooks, and external integration points." /></PlatformShell></ProtectedRoute>} />
               
-              {/* User & Agent Management */}
-              <Route path="/dashboard/settings/users" element={<ProtectedRoute><PlatformShell><UserManagementPage /></PlatformShell></ProtectedRoute>} />
-              <Route path="/dashboard/settings/users/:id" element={<ProtectedRoute><PlatformShell><MemberDetailView /></PlatformShell></ProtectedRoute>} />
-              <Route path="/dashboard/settings/teams/:id" element={<ProtectedRoute><PlatformShell><TeamDetailView /></PlatformShell></ProtectedRoute>} />
-              <Route path="/dashboard/settings/positions/:id" element={<ProtectedRoute><PlatformShell><PositionDetailView /></PlatformShell></ProtectedRoute>} />
+              {/* Workforce Management */}
+              <Route path="/dashboard/settings/workforce" element={<ProtectedRoute><PlatformShell><WorkforcePage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/dashboard/settings/workforce/member/:id" element={<ProtectedRoute><PlatformShell><MemberDetailView /></PlatformShell></ProtectedRoute>} />
+              <Route path="/dashboard/settings/workforce/teams/:id" element={<ProtectedRoute><PlatformShell><TeamDetailView /></PlatformShell></ProtectedRoute>} />
+              <Route path="/dashboard/settings/workforce/roles/:id" element={<ProtectedRoute><PlatformShell><PositionDetailView /></PlatformShell></ProtectedRoute>} />
               
               {/* External / Public */}
               <Route path="/portal" element={<ExternalPortal />} />

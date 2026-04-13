@@ -1,6 +1,9 @@
 import express from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import { authorize } from '../middleware/authorize';
 import { globalPrisma } from '../lib/prisma';
+import { recordAudit } from '../lib/audit';
+import { resolveCapabilities } from '../lib/permissions';
 
 const router = express.Router();
 
@@ -53,7 +56,12 @@ router.get('/:id', async (req: TenantRequest, res) => {
         phoneNumbers: true,
         certifications: true,
         education: true,
-        skills: true
+        skills: true,
+        permissionGroups: {
+          include: {
+            permissionGroup: true
+          }
+        }
       }
     });
 
@@ -98,7 +106,8 @@ router.get('/:id', async (req: TenantRequest, res) => {
       phoneNumbers: member.phoneNumbers,
       certifications: member.certifications,
       education: member.education,
-      skills: member.skills
+      skills: member.skills,
+      permissionGroups: member.permissionGroups.map(pg => pg.permissionGroup)
     };
 
     res.json(formatted);
@@ -107,8 +116,53 @@ router.get('/:id', async (req: TenantRequest, res) => {
   }
 });
 
+// GET effective permissions
+router.get('/:id/effective-permissions', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+    
+    const member = await db.tenantMember.findUnique({
+      where: { id },
+      include: {
+        permissionGroups: {
+          include: {
+            permissionGroup: true
+          }
+        }
+      }
+    });
+
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    const groupIds = member.permissionGroups.map(pg => pg.permissionGroupId);
+    const capabilities = await resolveCapabilities(groupIds, req.tenantId!);
+
+    // Group capabilities by category for better UI organization
+    const breakdown: Record<string, string[]> = {};
+    capabilities.forEach(cap => {
+      const [category] = cap.split(':');
+      if (!breakdown[category]) breakdown[category] = [];
+      breakdown[category].push(cap);
+    });
+
+    res.json({
+      memberId: id,
+      groups: member.permissionGroups.map(pg => ({
+        id: pg.permissionGroup.id,
+        name: pg.permissionGroup.name,
+        parentGroupId: pg.permissionGroup.parentGroupId
+      })),
+      effectiveCapabilities: capabilities,
+      breakdown
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH update member
-router.post('/:id', async (req: TenantRequest, res) => {
+router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;
@@ -117,7 +171,7 @@ router.post('/:id', async (req: TenantRequest, res) => {
       role, teamId, positionId, status, agentConfig, modelType, name,
       firstName, otherName, familyName, personalEmail, homeAddress, workArrangements,
       emergencyContact, dateOfBirth, gender, nationality, startDate, endDate,
-      phoneNumbers, certifications, education, skills
+      phoneNumbers, certifications, education, skills, permissionGroups
     } = req.body;
 
     const member = await db.tenantMember.findFirst({
@@ -182,6 +236,13 @@ router.post('/:id', async (req: TenantRequest, res) => {
             proficiencyLevel: s.proficiencyLevel,
             tenant_id: req.tenantId
           }))
+        } : undefined,
+        permissionGroups: permissionGroups ? {
+          deleteMany: {},
+          create: permissionGroups.map((groupId: string) => ({
+            permissionGroupId: groupId,
+            tenantId: req.tenantId!
+          }))
         } : undefined
       },
       include: { 
@@ -192,7 +253,12 @@ router.post('/:id', async (req: TenantRequest, res) => {
         phoneNumbers: true,
         certifications: true,
         education: true,
-        skills: true
+        skills: true,
+        permissionGroups: {
+          include: {
+            permissionGroup: true
+          }
+        }
       }
     });
 
@@ -208,6 +274,15 @@ router.post('/:id', async (req: TenantRequest, res) => {
       });
     }
 
+    await recordAudit({
+      tenantId: req.tenantId!,
+      actorId: req.user!.uid,
+      action: 'MEMBER_UPDATE',
+      resourceId: id,
+      oldValue: member, // Note: Simplified for auditing
+      newValue: updatedMember
+    });
+
     res.json({ success: true, member: updatedMember });
   } catch (err: any) {
     console.error('[MemberAPI Update Error]', err);
@@ -216,7 +291,7 @@ router.post('/:id', async (req: TenantRequest, res) => {
 });
 
 // DELETE member
-router.delete('/:id', async (req: TenantRequest, res) => {
+router.delete('/:id', authorize('decommission:staff'), async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;

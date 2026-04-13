@@ -456,9 +456,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     />
                     <SidebarItem 
                       icon={LucideIcons.UserCircle} 
-                      label="Staff" 
-                      to="/dashboard/settings/users" 
-                      active={isActive('/dashboard/settings/users')} 
+                      label="Workforce" 
+                      to="/dashboard/settings/workforce" 
+                      active={isActive('/dashboard/settings/workforce')} 
                       collapsed={!isSidebarOpen} 
                     />
                     <SidebarItem 

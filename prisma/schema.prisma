@@ -26,6 +26,9 @@ model Tenant {
   education          MemberEducation[]
   skills             MemberSkill[]
   menuConfig         Json?          @map("menu_config")
+  permissionGroups   PermissionGroup[]
+  memberPermissionGroups MemberPermissionGroup[]
+  auditLogs          AuditLog[]
 
   @@map("tenants")
 }
@@ -117,6 +120,7 @@ model TenantMember {
   certifications  MemberCertification[]
   education       MemberEducation[]
   skills          MemberSkill[]
+  permissionGroups MemberPermissionGroup[]
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
   @@index([tenantId], map: "TenantMember_tenantId_idx")
@@ -274,4 +278,54 @@ model Position {
   @@unique([tenantId, positionNumber])
   @@index([tenantId])
   @@map("positions")
+}
+
+model PermissionGroup {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  parentGroupId String? @map("parent_group_id")
+  name        String
+  description String?
+  capabilities Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  parentGroup PermissionGroup? @relation("GroupInheritance", fields: [parentGroupId], references: [id])
+  childGroups PermissionGroup[] @relation("GroupInheritance")
+  members     MemberPermissionGroup[]
+
+  @@index([tenantId])
+  @@map("permission_groups")
+}
+
+model MemberPermissionGroup {
+  tenantId          String   @map("tenant_id")
+  memberId          String   @map("member_id")
+  permissionGroupId String   @map("permission_group_id")
+  assignedAt        DateTime @default(now()) @map("assigned_at")
+
+  tenant             Tenant          @relation(fields: [tenantId], references: [id])
+  member            TenantMember    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  permissionGroup   PermissionGroup @relation(fields: [permissionGroupId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, permissionGroupId])
+  @@index([tenantId])
+  @@map("member_permission_groups")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  actorId    String   @map("actor_id")
+  action     String   
+  resourceId String   @map("resource_id")
+  oldValue   Json?
+  newValue   Json?
+  timestamp  DateTime @default(now()) @map("timestamp")
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, timestamp])
+  @@map("audit_logs")
 }

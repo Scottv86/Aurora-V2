@@ -59,10 +59,10 @@ export const CreateTeamModal = ({ isOpen, onClose }: CreateTeamModalProps) => {
           </div>
           <div>
             <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              New Department / Squad
+              New Hub Department / Squad
             </p>
             <p className="text-xs text-zinc-500">
-              Define a high-level organizational unit for human staff and AI agents.
+              Define a high-level organizational unit for human members and digital coworkers.
             </p>
           </div>
         </div>
