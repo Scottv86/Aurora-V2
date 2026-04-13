@@ -14,8 +14,8 @@ export const useCapabilities = () => {
    * SuperAdmins always have all capabilities.
    */
   const hasCapability = useCallback((requiredCap: string): boolean => {
-    if (isSuperAdmin) return true;
-    if (user?.role === 'admin') return true; // Tenant Admins bypass capability checks
+    const isDeveloper = user?.licenceType === 'Developer' || isSuperAdmin;
+    if (isDeveloper) return true; // Developers and SuperAdmins bypass capability checks within the tenant context
     if (capabilities.includes(requiredCap)) return true;
 
     // Wildcard check

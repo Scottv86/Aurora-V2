@@ -13,6 +13,32 @@ export interface Tenant {
   createdAt: string;
   environments: Environment[];
   currentEnvironment: Environment;
+  branding?: {
+    logoUrl?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    accentColor?: string;
+    faviconUrl?: string;
+  };
+  localization?: {
+    timezone?: string;
+    language?: string;
+    currency?: string;
+    dateFormat?: string;
+  };
+  metadata?: {
+    industry?: string;
+    website?: string;
+    contactEmail?: string;
+    siteTitle?: string;
+    metaDescription?: string;
+    socialImage?: string;
+  };
+  workspaceSettings?: {
+    defaultModuleVisibility?: 'public' | 'private';
+    autoCategorization?: boolean;
+    archivingPolicyDays?: number;
+  };
 }
 
 export interface Capability {

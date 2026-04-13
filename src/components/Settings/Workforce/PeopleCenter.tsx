@@ -43,8 +43,8 @@ export const PeopleCenter = ({ searchQuery = '', activeFilter = 'all' }: PeopleC
       accessor: (m: TenantMember) => (
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 transition-colors group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 overflow-hidden">
-            {m.avatar ? (
-              <img src={m.avatar} alt={m.name} className="h-full w-full object-cover" />
+            {m.avatarUrl ? (
+              <img src={m.avatarUrl} alt={m.name} className="h-full w-full object-cover" />
             ) : (
               m.isSynthetic ? <Bot size={20} className="text-blue-600" /> : <User size={20} className="text-zinc-600" />
             )}
@@ -63,7 +63,7 @@ export const PeopleCenter = ({ searchQuery = '', activeFilter = 'all' }: PeopleC
       accessor: (m: TenantMember) => (
         <div className="flex items-center gap-2">
           <FileBadge size={14} className="text-zinc-400" />
-          <Badge variant="outline" className={cn(
+          <Badge className={cn(
             "font-black border-none text-[10px]",
             m.licenceType === 'Developer' ? "text-indigo-500 bg-indigo-500/10" : "text-zinc-500 bg-zinc-500/10"
           )}>

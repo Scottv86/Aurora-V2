@@ -61,8 +61,12 @@ const TeamCard = ({ team }: { team: Team }) => {
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-100 font-bold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100">
-            {team.name[0]}
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-100 font-bold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100 overflow-hidden shadow-sm shadow-black/5 group-hover:shadow-indigo-500/20 transition-all">
+            {team.avatar ? (
+              <img src={team.avatar} alt={team.name} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-xl font-bold text-indigo-500">{team.name[0]?.toUpperCase()}</span>
+            )}
           </div>
           <button className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
             <MoreHorizontal size={20} />

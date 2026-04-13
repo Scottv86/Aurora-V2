@@ -166,5 +166,31 @@ export const useUsers = () => {
     }
   };
 
-  return { members, loading, inviteHuman, provisionAgent, cloneMember, refetch: fetchMembers };
+  const updateMember = async (id: string, updates: Partial<TenantMember>) => {
+    if (!tenant?.id) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/${id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify(updates)
+      });
+      if (!res.ok) throw new Error('Failed to update member');
+      const { member: updatedMember } = await res.json();
+      
+      // Update local state is complex because of formatting in GET all members
+      // Easier to just refetch or optimistically update if we trust the return
+      setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+      toast.success('Member updated successfully');
+      return updatedMember;
+    } catch (err: any) {
+      toast.error(err.message);
+      throw err;
+    }
+  };
+
+  return { members, loading, inviteHuman, provisionAgent, cloneMember, updateMember, refetch: fetchMembers };
 };

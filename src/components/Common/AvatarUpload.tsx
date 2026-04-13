@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, X, Loader2 } from 'lucide-react';
-import { Button, cn } from '../UI/Primitives';
+import { Camera, Loader2 } from 'lucide-react';
+import { cn } from '../UI/Primitives';
+import { toast } from 'sonner';
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 interface AvatarUploadProps {
   currentUrl?: string;
@@ -17,6 +20,12 @@ export const AvatarUpload = ({ currentUrl, onUpload, name, className }: AvatarUp
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File size exceeds 5MB limit');
+      return;
+    }
+
+    setUploading(true);
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64String = reader.result as string;

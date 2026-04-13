@@ -13,6 +13,7 @@ import { useTeam } from '../../hooks/useTeams';
 import { Button, Input, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { AvatarUpload } from '../../components/Common/AvatarUpload';
 
 export const TeamDetailView = () => {
   const { id } = useParams();
@@ -26,18 +27,20 @@ export const TeamDetailView = () => {
   // Local form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   useEffect(() => {
     if (team) {
       setName(team.name);
       setDescription(team.description || '');
+      setAvatarUrl(team.avatar || '');
     }
   }, [team]);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await updateTeam({ name, description });
+      await updateTeam({ name, description, avatarUrl });
     } finally {
       setIsSaving(false);
     }
@@ -103,9 +106,14 @@ export const TeamDetailView = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
         <div className="flex items-center gap-6">
-          <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-blue-500/10">
-            <Users size={44} />
-          </div>
+          <AvatarUpload 
+            currentUrl={avatarUrl}
+            onUpload={async (url) => {
+              setAvatarUrl(url);
+              await updateTeam({ avatarUrl: url });
+            }}
+            name={name}
+          />
           <div className="space-y-2">
              <div className="flex items-center gap-3">
                <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">{team.name}</h1>

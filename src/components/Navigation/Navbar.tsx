@@ -53,10 +53,19 @@ export const Navbar = () => {
     <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Sparkles size={18} className="text-white" />
+          <div className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 overflow-hidden",
+            !tenant?.branding?.logoUrl && "bg-gradient-to-br from-indigo-500 to-purple-600"
+          )}>
+            {tenant?.branding?.logoUrl ? (
+              <img src={tenant.branding.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <Sparkles size={18} className="text-white" />
+            )}
           </div>
-          <span className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white">Aurora</span>
+          <span className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white">
+            {tenant?.name || 'Aurora'}
+          </span>
         </div>
         <div className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-2" />
         <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-full px-3 py-1">

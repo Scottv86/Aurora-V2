@@ -26,6 +26,10 @@ model Tenant {
   education          MemberEducation[]
   skills             MemberSkill[]
   menuConfig         Json?          @map("menu_config")
+  branding           Json?
+  localization       Json?
+  metadata           Json?
+  workspaceSettings  Json?          @map("workspace_settings")
   permissionGroups   PermissionGroup[]
   memberPermissionGroups MemberPermissionGroup[]
   auditLogs          AuditLog[]
@@ -54,6 +58,7 @@ model Workspace {
   tenant   Tenant   @relation(fields: [tenantId], references: [id], map: "Workspace_tenantId_fkey")
 
   @@index([tenantId], map: "Workspace_tenantId_idx")
+  @@unique([id, tenantId])
   @@map("workspaces")
 }
 
@@ -68,6 +73,7 @@ model Module {
   records     Record[]
 
   @@index([tenantId], map: "Module_tenantId_idx")
+  @@unique([id, tenantId])
   @@map("modules")
 }
 
@@ -138,6 +144,7 @@ model TenantMember {
   timesheets       Timesheet[]
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
+  @@unique([id, tenantId])
   @@index([tenantId], map: "TenantMember_tenantId_idx")
   @@index([userId], map: "TenantMember_userId_idx")
   @@map("tenant_members")
@@ -201,11 +208,13 @@ model Team {
   tenantId    String         @map("tenant_id")
   name        String
   description String?
+  avatarUrl   String?        @map("avatar_url")
   createdAt   DateTime       @default(now()) @map("created_at")
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
   members     TenantMember[]
 
   @@index([tenantId])
+  @@unique([id, tenantId])
   @@map("teams")
 }
 
@@ -220,6 +229,7 @@ model Agent {
   memberships TenantMember[]
 
   @@index([tenantId])
+  @@unique([id, tenantId])
   @@map("agents")
 }
 
@@ -292,6 +302,7 @@ model Position {
   successors     MemberSuccession[]
 
   @@unique([tenantId, positionNumber])
+  @@unique([id, tenantId])
   @@index([tenantId])
   @@map("positions")
 }

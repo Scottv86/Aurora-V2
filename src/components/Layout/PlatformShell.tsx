@@ -223,7 +223,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     })
   );
   
-  const isDeveloper = platformUser?.licenceType === 'Developer' || platformUser?.isSuperAdmin || platformUser?.role === 'admin';
+  const isDeveloper = platformUser?.licenceType === 'Developer' || platformUser?.isSuperAdmin;
 
   const enabledModules = modules.filter(m => m.status === 'ACTIVE');
   const isAdminPath = location.pathname.startsWith('/admin');
@@ -622,7 +622,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     <Save size={14} />
                     {isSidebarOpen && "Save to Profile"}
                   </button>
-                  {user.role === 'admin' && (
+                  {(platformUser?.licenceType === 'Developer' || platformUser?.isSuperAdmin) && (
                     <button
                       onClick={() => handleSave('tenant')}
                       className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-200 rounded-md hover:bg-zinc-700 transition-colors border border-zinc-700"

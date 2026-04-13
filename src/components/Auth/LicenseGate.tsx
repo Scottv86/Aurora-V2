@@ -13,7 +13,11 @@ interface LicenseGateProps {
  * Otherwise, renders nothing or the provided fallback.
  */
 export const LicenseGate = ({ children, fallback }: LicenseGateProps) => {
-  const { isDeveloper } = usePlatform();
+  const { isDeveloper, isLoading } = usePlatform();
+
+  if (isLoading) {
+    return null; // Or a subtle loading indicator
+  }
 
   if (isDeveloper) {
     return <>{children}</>;

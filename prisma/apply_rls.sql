@@ -33,6 +33,16 @@ ALTER TABLE "member_skills" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "permission_groups" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "member_permission_groups" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "teams" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "agents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "positions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "member_successions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "employment_contracts" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "remuneration_details" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "leave_balances" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "leave_requests" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "timesheets" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "timesheet_entries" ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLICIES FOR "users"
 -- Superadmins see all users
@@ -133,6 +143,66 @@ CREATE POLICY audit_log_isolation ON "audit_logs" FOR ALL USING (
     "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
 );
 
+-- Teams
+DROP POLICY IF EXISTS team_isolation ON "teams";
+CREATE POLICY team_isolation ON "teams" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+-- Agents
+DROP POLICY IF EXISTS agent_isolation ON "agents";
+CREATE POLICY agent_isolation ON "agents" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+-- Positions
+DROP POLICY IF EXISTS position_isolation ON "positions";
+CREATE POLICY position_isolation ON "positions" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+-- Succession
+DROP POLICY IF EXISTS succession_isolation ON "member_successions";
+CREATE POLICY succession_isolation ON "member_successions" FOR ALL USING (
+    EXISTS (
+        SELECT 1 FROM "tenant_members" m 
+        WHERE m.id = "member_successions".member_id 
+        AND m.tenant_id = current_setting('app.current_tenant_id', true)
+    ) OR is_superadmin()
+);
+
+-- Contracts & Pay
+DROP POLICY IF EXISTS contract_isolation ON "employment_contracts";
+CREATE POLICY contract_isolation ON "employment_contracts" FOR ALL USING (
+    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+);
+
+DROP POLICY IF EXISTS remuneration_isolation ON "remuneration_details";
+CREATE POLICY remuneration_isolation ON "remuneration_details" FOR ALL USING (
+    EXISTS (SELECT 1 FROM "employment_contracts" c WHERE c.id = "remuneration_details".contract_id AND c.tenant_id = current_setting('app.current_tenant_id', true)) OR is_superadmin()
+);
+
+-- Leave & Time
+DROP POLICY IF EXISTS leave_balance_isolation ON "leave_balances";
+CREATE POLICY leave_balance_isolation ON "leave_balances" FOR ALL USING (
+    EXISTS (SELECT 1 FROM "tenant_members" m WHERE m.id = "leave_balances".member_id AND m.tenant_id = current_setting('app.current_tenant_id', true)) OR is_superadmin()
+);
+
+DROP POLICY IF EXISTS leave_request_isolation ON "leave_requests";
+CREATE POLICY leave_request_isolation ON "leave_requests" FOR ALL USING (
+    EXISTS (SELECT 1 FROM "tenant_members" m WHERE m.id = "leave_requests".member_id AND m.tenant_id = current_setting('app.current_tenant_id', true)) OR is_superadmin()
+);
+
+DROP POLICY IF EXISTS timesheet_isolation ON "timesheets";
+CREATE POLICY timesheet_isolation ON "timesheets" FOR ALL USING (
+    EXISTS (SELECT 1 FROM "tenant_members" m WHERE m.id = "timesheets".member_id AND m.tenant_id = current_setting('app.current_tenant_id', true)) OR is_superadmin()
+);
+
+DROP POLICY IF EXISTS timesheet_entry_isolation ON "timesheet_entries";
+CREATE POLICY timesheet_entry_isolation ON "timesheet_entries" FOR ALL USING (
+    EXISTS (SELECT 1 FROM "timesheets" t JOIN "tenant_members" m ON t.member_id = m.id WHERE t.id = "timesheet_entries".timesheet_id AND m.tenant_id = current_setting('app.current_tenant_id', true)) OR is_superadmin()
+);
+
 -- 7. FORCE RLS (Ensures owner is also restricted)
 ALTER TABLE "users" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "tenants" FORCE ROW LEVEL SECURITY;
@@ -149,3 +219,13 @@ ALTER TABLE "member_skills" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "permission_groups" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "member_permission_groups" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "audit_logs" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "teams" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "agents" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "positions" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "member_successions" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "employment_contracts" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "remuneration_details" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "leave_balances" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "leave_requests" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "timesheets" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "timesheet_entries" FORCE ROW LEVEL SECURITY;

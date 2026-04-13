@@ -3,6 +3,7 @@ import { Modal } from '../../UI/TabsAndModal';
 import { Button, Input } from '../../UI/Primitives';
 import { useTeams } from '../../../hooks/useTeams';
 import { Users, Shield, LayoutGrid, Type } from 'lucide-react';
+import { AvatarUpload } from '../../Common/AvatarUpload';
 
 interface CreateTeamModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const CreateTeamModal = ({ isOpen, onClose }: CreateTeamModalProps) => {
   // Form states
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,9 +25,10 @@ export const CreateTeamModal = ({ isOpen, onClose }: CreateTeamModalProps) => {
     
     setSubmitting(true);
     try {
-      await createTeam({ name, description });
+      await createTeam({ name, description, avatarUrl });
       setName('');
       setDescription('');
+      setAvatarUrl('');
       onClose();
     } catch (err) {
       // toast is handled in hook
@@ -65,6 +68,14 @@ export const CreateTeamModal = ({ isOpen, onClose }: CreateTeamModalProps) => {
               Define a high-level organizational unit for human members and digital coworkers.
             </p>
           </div>
+        </div>
+        
+        <div className="flex justify-center py-2">
+          <AvatarUpload 
+            currentUrl={avatarUrl}
+            onUpload={async (url) => setAvatarUrl(url)}
+            name={name || 'New Team'}
+          />
         </div>
 
         <div className="space-y-4">

@@ -31,6 +31,7 @@ import { MemberDetailView } from './pages/Settings/MemberDetailView';
 import { TeamDetailView } from './pages/Settings/TeamDetailView';
 import { PositionDetailView } from './pages/Settings/PositionDetailView';
 import { BillingPage } from './pages/Settings/BillingPage';
+import { OrganizationPage } from './pages/Settings/OrganizationPage';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
 
 // Pages
@@ -96,7 +97,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<ComingSoon title="Organization Settings" description="Configure tenant branding, site metadata, and global workspace defaults." />} />
+                <Route index element={<OrganizationPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="usage" element={<ComingSoon title="Model Usage" description="Monitor tokens, API calls, and resource consumption for your AI models." />} />
                 <Route path="security" element={<ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." />} />

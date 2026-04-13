@@ -23,6 +23,7 @@ interface PlatformContextType {
   billingUsage: BillingUsage | null;
   billingLoading: boolean;
   refreshBilling: () => Promise<void>;
+  updateTenant: (updates: Partial<Tenant>) => Promise<void>;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -88,6 +89,35 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (err: any) {
       console.error('[PlatformContext] Failed to update menu config:', err);
+      toast.error(err.message);
+    }
+  };
+
+  const updateTenant = async (updates: Partial<Tenant>) => {
+    if (!tenant?.id) return;
+
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/platform/settings`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify(updates)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setTenant(prev => prev ? { ...prev, ...data.tenant } : data.tenant);
+        toast.success('Organization settings updated.');
+      } else {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to update settings');
+      }
+    } catch (err: any) {
+      console.error('[PlatformContext] Failed to update tenant:', err);
       toast.error(err.message);
     }
   };
@@ -166,7 +196,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
             if (!savedSection) return defaultSection;
             
             // Find items in the default that aren't in the saved config
-            const savedItemIds = new Set(savedSection.items.map((i: any) => i.id));
+            const savedItemIds = new Set((savedSection.items || []).map((i: any) => i.id));
             const missingItems = defaultSection.items.filter(i => {
               // Handle item rename transition: if we have 'people' saved but now expect 'entities'
               if (i.id === 'entities' && savedItemIds.has('people')) return false;
@@ -175,11 +205,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
             
             // Filter out saved items that are no longer in defaults, unless they are dynamically generated
             const currentDefaultItemIds = new Set(defaultSection.items.map(i => i.id));
-            const validSavedItems = savedSection.items
+            const validSavedItems = (savedSection.items || [])
               .filter((i: any) => 
                 currentDefaultItemIds.has(i.id) || 
                 (i.id === 'people' && currentDefaultItemIds.has('entities')) ||
-                i.id.startsWith('module:')
+                (i.id && i.id.startsWith('module:'))
               )
               .map((savedItem: any) => {
                 if (savedItem.id.startsWith('module:')) return savedItem;
@@ -196,7 +226,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
               ...savedSection,
               id: defaultSection.id, // Ensure we use the new ID
               title: defaultSection.title, // Ensure we use the new Title
-              items: [...validSavedItems, ...missingItems]
+              items: [...(validSavedItems || []), ...(missingItems || [])]
             };
           });
           // Legacy Transition: Filter out 'operations' from custom sections if 'platform' is now in defaults
@@ -250,7 +280,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       updateMenuConfig,
       billingUsage,
       billingLoading,
-      refreshBilling
+      refreshBilling,
+      updateTenant
     }}>
       {children}
     </PlatformContext.Provider>

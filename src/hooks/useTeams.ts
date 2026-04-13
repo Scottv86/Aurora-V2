@@ -44,7 +44,7 @@ export const useTeams = () => {
     fetchTeams();
   }, [fetchTeams]);
 
-  const createTeam = async (data: { name: string, description: string }) => {
+  const createTeam = async (data: { name: string, description: string, avatarUrl?: string }) => {
     if (!tenant?.id) return;
     try {
       const res = await fetch(API_BASE_URL, {
@@ -67,7 +67,7 @@ export const useTeams = () => {
     }
   };
 
-  const updateTeam = async (id: string, data: Partial<Team>) => {
+  const updateTeam = async (id: string, data: Partial<Team> & { avatarUrl?: string }) => {
     if (!tenant?.id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
@@ -145,7 +145,7 @@ export const useTeam = (id?: string) => {
     fetchTeam();
   }, [fetchTeam]);
 
-  const updateTeam = async (data: Partial<Team>) => {
+  const updateTeam = async (data: Partial<Team> & { avatarUrl?: string }) => {
     if (!tenant?.id || !id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/${id}`, {
