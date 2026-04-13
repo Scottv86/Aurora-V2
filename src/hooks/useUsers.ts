@@ -15,11 +15,12 @@ export interface TenantMember {
   positionId?: string;
   position?: string;
   positionNumber?: string;
-  avatar?: string;
+  avatarUrl?: string;
   modelType?: string; // For agents
   agentConfig?: any;
   lastActive?: string;
   createdAt: string;
+  updatedAt?: string;
 
   // New Staff Details
   firstName?: string;
@@ -35,7 +36,13 @@ export interface TenantMember {
   startDate?: string;
   endDate?: string;
 
-  // Relations
+  // Workforce Hub Enhancements
+  isContractor?: boolean;
+  licenceType?: string;
+  aiHumour?: number;
+  workEmail?: string;
+  signature?: string;
+
   phoneNumbers?: { label: string; number: string }[];
   certifications?: { name: string; issuer: string; dateObtained?: string; expiryDate?: string }[];
   education?: { institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[];
@@ -75,7 +82,16 @@ export const useUsers = () => {
     fetchMembers();
   }, [fetchMembers]);
 
-  const inviteHuman = async (data: { email: string, role: string, teamId?: string }) => {
+  const inviteHuman = async (data: { 
+    email: string, 
+    role: string, 
+    teamId?: string,
+    firstName?: string,
+    familyName?: string,
+    isContractor?: boolean,
+    licenceType?: string,
+    workArrangements?: string
+  }) => {
     if (!tenant?.id) return;
     try {
       const res = await fetch(`${API_BASE_URL}/invite`, {
@@ -90,7 +106,7 @@ export const useUsers = () => {
       if (!res.ok) throw new Error('Failed to send invitation');
       const newMember = await res.json();
       setMembers(prev => [newMember, ...prev]);
-      toast.success(`Invitation sent to ${data.email}`);
+      toast.success(`Invitation sent to ${data.firstName || data.email}`);
       return newMember;
     } catch (err: any) {
       toast.error(err.message);
@@ -98,10 +114,18 @@ export const useUsers = () => {
     }
   };
 
-  const provisionAgent = async (data: { modelType: string, teamId?: string, role: string }) => {
+  const provisionAgent = async (data: { 
+    modelType: string, 
+    teamId?: string, 
+    role: string,
+    name?: string,
+    aiHumour?: number,
+    agentConfig?: any,
+    licenceType?: string
+  }) => {
     if (!tenant?.id) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/members/provision`, {
+      const res = await fetch(`${API_BASE_URL}/provision`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,5 +145,26 @@ export const useUsers = () => {
     }
   };
 
-  return { members, loading, inviteHuman, provisionAgent, refetch: fetchMembers };
+  const cloneMember = async (id: string) => {
+    if (!tenant?.id) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/clone/${id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (!res.ok) throw new Error('Failed to clone member');
+      const cloned = await res.json();
+      setMembers(prev => [cloned, ...prev]);
+      toast.success('Staff record cloned successfully');
+      return cloned;
+    } catch (err: any) {
+      toast.error(err.message);
+      throw err;
+    }
+  };
+
+  return { members, loading, inviteHuman, provisionAgent, cloneMember, refetch: fetchMembers };
 };

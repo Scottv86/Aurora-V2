@@ -109,7 +109,7 @@ export const OrgVisualizer = () => {
       <div className="flex h-[600px] items-center justify-center rounded-3xl border border-zinc-200 bg-white/50 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/50">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
-          <span className="text-zinc-500 animate-pulse text-sm font-medium">Visualizing Report Lines...</span>
+          <span className="text-zinc-500 animate-pulse text-sm font-medium">Loading Chart...</span>
         </div>
       </div>
     );
@@ -119,9 +119,9 @@ export const OrgVisualizer = () => {
     return (
       <div className="flex h-[600px] flex-col items-center justify-center rounded-3xl border-2 border-dashed border-zinc-200 bg-white/50 dark:border-zinc-800 dark:bg-zinc-900/50">
         <Briefcase size={48} className="mb-4 text-zinc-200" />
-        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Reporting Structure Pending</h3>
+        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">No Structure Found</h3>
         <p className="text-zinc-500 max-w-sm text-center mt-2 text-sm leading-relaxed">
-          Define role architecture and reporting lines in the "Role Architecture" tab to visualize your organizational map.
+          Assign roles and reporting lines to see your organization chart.
         </p>
       </div>
     );
@@ -135,7 +135,7 @@ export const OrgVisualizer = () => {
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-500 transition-colors" />
           <input 
             type="text" 
-            placeholder="Search architecture..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-11 w-64 rounded-2xl border border-zinc-200 bg-white/90 pl-10 pr-4 text-sm shadow-2xl shadow-zinc-200/50 backdrop-blur-md outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900/90 dark:shadow-none"
@@ -227,7 +227,7 @@ export const OrgVisualizer = () => {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   whileHover={{ y: -6, scale: 1.05 }}
-                  onClick={() => navigate(`/dashboard/settings/workforce/roles/${node.data.id}`)}
+                  onClick={() => navigate(`/workspace/settings/workforce/roles/${node.data.id}`)}
                   className={`flex flex-col h-full rounded-2xl border bg-white p-3 shadow-xl transition-all cursor-pointer dark:bg-zinc-900 ${
                     searchQuery && (node.data.title.toLowerCase().includes(searchQuery.toLowerCase()) || node.data.positionNumber.toLowerCase().includes(searchQuery.toLowerCase()))
                       ? 'border-blue-500 ring-4 ring-blue-500/20' 
@@ -243,7 +243,7 @@ export const OrgVisualizer = () => {
                          {node.data.occupants?.[0]?.isSynthetic ? <Cpu size={10} /> : <User size={10} />}
                        </div>
                        <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-tighter">
-                         {node.data.occupantCount > 0 ? (node.data.occupants?.[0]?.isSynthetic ? 'Agent' : 'Expert') : 'Vacant'}
+                         {node.data.occupantCount > 0 ? (node.data.occupants?.[0]?.isSynthetic ? 'Agent' : 'Member') : 'Vacant'}
                        </span>
                     </div>
                   </div>
@@ -261,12 +261,12 @@ export const OrgVisualizer = () => {
                         </span>
                         {node.data.occupantCount > 1 && (
                           <span className="text-[9px] text-zinc-400 font-medium italic">
-                            + {node.data.occupantCount - 1} co-experts{node.data.occupantCount > 2 ? 's' : ''}
+                            + {node.data.occupantCount - 1} members
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-[10px] italic text-zinc-400 font-medium">Spot Unfilled</span>
+                      <span className="text-[10px] italic text-zinc-400 font-medium">Vacant</span>
                     )}
                   </div>
                   
@@ -292,16 +292,16 @@ export const OrgVisualizer = () => {
       <div className="absolute bottom-6 left-6 flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white/90 px-5 py-2.5 text-[10px] font-bold text-zinc-500 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-400 shadow-xl shadow-zinc-200/50 dark:shadow-none uppercase tracking-widest">
         <div className="flex items-center gap-2">
           <div className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-          <span>Human Staff</span>
+          <span>People</span>
         </div>
         <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
         <div className="flex items-center gap-2">
           <div className="h-2.5 w-2.5 rounded-full bg-purple-500" />
-          <span>Digital Coworkers</span>
+          <span>AI Agents</span>
         </div>
         <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
         <div className="flex items-center gap-2 text-zinc-900 dark:text-white">
-          Architecture Nodes: <span className="text-blue-600">{positions.length}</span>
+          Total Roles: <span className="text-blue-600">{positions.length}</span>
         </div>
       </div>
     </div>

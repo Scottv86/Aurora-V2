@@ -3,7 +3,7 @@ import { Modal } from '../../UI/TabsAndModal';
 import { Button, Input, Select } from '../../UI/Primitives';
 import { useUsers } from '../../../hooks/useUsers';
 import { useTeams } from '../../../hooks/useTeams';
-import { Zap, User, Shield, Users, Mail, Bot, Cpu, ArrowRight, Sparkles } from 'lucide-react';
+import { User, Shield, Mail, Bot, ArrowRight, Sparkles } from 'lucide-react';
 
 interface AddWorkforceModalProps {
   isOpen: boolean;
@@ -15,12 +15,14 @@ export const AddWorkforceModal = ({ isOpen, onClose, type: initialType }: AddWor
   const { inviteHuman, provisionAgent } = useUsers();
   const { teams } = useTeams();
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<'select' | 'form'>('form'); // Starting with form directly if triggered from a specific button, or select if general
   const [type, setType] = useState<'human' | 'agent'>(initialType);
 
   // Form states
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [familyName, setFamilyName] = useState('');
   const [role, setRole] = useState('Standard');
+  const [licenceType, setLicenceType] = useState('Standard');
   const [teamId, setTeamId] = useState('');
   const [modelType, setModelType] = useState('Gemini Analyst');
 
@@ -29,9 +31,9 @@ export const AddWorkforceModal = ({ isOpen, onClose, type: initialType }: AddWor
     setSubmitting(true);
     try {
       if (type === 'human') {
-        await inviteHuman({ email, role, teamId });
+        await inviteHuman({ email, role, teamId, firstName, familyName, licenceType });
       } else {
-        await provisionAgent({ modelType, teamId, role });
+        await provisionAgent({ modelType, teamId, role, name: firstName, licenceType });
       }
       onClose();
     } finally {
@@ -46,7 +48,7 @@ export const AddWorkforceModal = ({ isOpen, onClose, type: initialType }: AddWor
       </Button>
       <div className="flex gap-3">
         <Button variant="primary" type="submit" form="add-workforce-form" loading={submitting} className="gap-2">
-          {type === 'human' ? 'Send Invitation' : 'Hire Digital Coworker'}
+          {type === 'human' ? 'Send Invitation' : 'Add AI Agent'}
           <ArrowRight size={16} />
         </Button>
       </div>
@@ -57,7 +59,7 @@ export const AddWorkforceModal = ({ isOpen, onClose, type: initialType }: AddWor
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={type === 'human' ? 'Add Human Expert' : 'Hire Digital Coworker'}
+      title={type === 'human' ? 'Add Person' : 'Add AI Agent'}
       footer={footer}
     >
       <form id="add-workforce-form" onSubmit={handleSubmit} className="space-y-6">
@@ -85,29 +87,47 @@ export const AddWorkforceModal = ({ isOpen, onClose, type: initialType }: AddWor
           </div>
           <div className="flex-1">
             <p className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              {type === 'human' ? 'Onboard Human' : 'Scale with AI'}
+              {type === 'human' ? 'Add Person' : 'Add AI'}
             </p>
             <p className="text-xs text-zinc-500 leading-relaxed">
               {type === 'human' 
-                ? 'Send a secure invitation to a human expert to join your workspace and start collaborating.' 
-                : 'Deploy a high-performance digital coworker to automate complex cognitive tasks and data operations.'}
+                ? 'Send an invitation to a new person to join your team.' 
+                : 'Add an AI agent to help with tasks and research.'}
             </p>
           </div>
         </div>
 
         {type === 'human' ? (
-          <Input 
-            label="Email Address" 
-            placeholder="e.g. expert@yourorg.ai" 
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            type="email"
-            icon={<Mail size={16} />}
-          />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Input 
+                label="First Name" 
+                placeholder="John" 
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+              />
+              <Input 
+                label="Family Name" 
+                placeholder="Smith" 
+                value={familyName}
+                onChange={(e) => setFamilyName(e.target.value)}
+                required
+              />
+            </div>
+            <Input 
+              label="Email Address" 
+              placeholder="e.g. expert@yourorg.ai" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              type="email"
+              icon={<Mail size={16} />}
+            />
+          </div>
         ) : (
           <Select 
-            label="Digital Coworker Type" 
+            label="AI Model" 
             value={modelType}
             onChange={(e) => setModelType(e.target.value)}
             options={[
@@ -129,16 +149,29 @@ export const AddWorkforceModal = ({ isOpen, onClose, type: initialType }: AddWor
                ...teams.map(t => ({ label: t.name, value: t.id }))
              ]}
            />
-           <Select 
-             label="Platform Role" 
-             value={role}
-             onChange={(e) => setRole(e.target.value)}
-             options={[
-               { label: 'Standard', value: 'Standard' },
-               { label: 'Lead', value: 'Lead' },
-               { label: 'Admin', value: 'Admin' },
-             ]}
-           />
+            <Select 
+              label="Role" 
+              value={role}
+              onChange={(e) => {
+                setRole(e.target.value);
+                // Auto-set developer license if admin role selected
+                if (e.target.value === 'Admin') setLicenceType('Developer');
+              }}
+              options={[
+                { label: 'Standard', value: 'Standard' },
+                { label: 'Lead', value: 'Lead' },
+                { label: 'Admin', value: 'Admin' },
+              ]}
+            />
+            <Select 
+              label="License Seat" 
+              value={licenceType}
+              onChange={(e) => setLicenceType(e.target.value)}
+              options={[
+                { label: 'Standard Seat', value: 'Standard' },
+                { label: 'Developer Seat', value: 'Developer' },
+              ]}
+            />
         </div>
 
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-500/10 dark:bg-blue-500/5">

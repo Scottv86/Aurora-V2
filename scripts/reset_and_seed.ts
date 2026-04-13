@@ -138,16 +138,7 @@ async function createTestData() {
             console.log(`  -> Linked to ${tenant.name}`);
           }
         } else if (spec.isSuper) {
-           for(const tenant of dbTenants) {
-              await tx.tenantMember.create({
-                data: {
-                    userId: dbUser.id,
-                    tenantId: tenant.id,
-                    roleId: 'super_admin'
-                }
-              });
-           }
-           console.log('  -> Linked to all tenants as Super Admin');
+          console.log('  -> Global access only (no tenant membership)');
         }
       }
   });

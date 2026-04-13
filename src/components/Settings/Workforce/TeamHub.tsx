@@ -2,11 +2,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTeams, Team } from '../../../hooks/useTeams';
 import { Button, cn } from '../../UI/Primitives';
-import { Users, Bot, User, Plus, MoreHorizontal, ArrowUpRight } from 'lucide-react';
+import { Users, Bot, User, Plus, MoreHorizontal, ArrowUpRight, Network } from 'lucide-react';
 
 interface TeamHubProps {
   onCreateTeam?: () => void;
   searchQuery?: string;
+  activeFilter?: string; // Add activeFilter to props if needed, or just let useTeams handle it
 }
 
 export const TeamHub = ({ onCreateTeam, searchQuery = '' }: TeamHubProps) => {
@@ -26,6 +27,19 @@ export const TeamHub = ({ onCreateTeam, searchQuery = '' }: TeamHubProps) => {
           Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-48 animate-pulse rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50" />
           ))
+        ) : filteredTeams.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-24 px-6 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-[3rem] space-y-6 shadow-sm">
+             <div className="h-20 w-20 rounded-[2rem] bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-300 dark:text-zinc-700">
+                <Network size={40} className="opacity-50" />
+             </div>
+             <div className="space-y-2 max-w-sm">
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">No Teams Found</h3>
+                <p className="text-sm text-zinc-500 font-medium leading-relaxed">You haven't created any teams yet, or none match your search criteria.</p>
+             </div>
+             <Button variant="primary" onClick={onCreateTeam} className="gap-2 px-8 mt-4 font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20">
+                <Plus size={16} /> Create Team
+             </Button>
+          </div>
         ) : (
           filteredTeams.map((team) => (
             <TeamCard key={team.id} team={team} />
@@ -42,7 +56,7 @@ const TeamCard = ({ team }: { team: Team }) => {
 
   return (
     <div 
-      onClick={() => navigate(`/dashboard/settings/workforce/teams/${team.id}`)}
+      onClick={() => navigate(`/workspace/settings/workforce/teams/${team.id}`)}
       className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-200 bg-white p-6 transition-all hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/5 cursor-pointer dark:border-zinc-800 dark:bg-zinc-900"
     >
       <div className="space-y-4">

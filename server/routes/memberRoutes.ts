@@ -12,6 +12,12 @@ router.get('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const members = await db.tenantMember.findMany({
+      where: {
+        OR: [
+          { isSynthetic: true },
+          { user: { isSuperAdmin: false } }
+        ]
+      },
       include: {
         user: true,
         agent: true,
@@ -31,8 +37,10 @@ router.get('/', async (req: TenantRequest, res) => {
       status: m.status,
       isSynthetic: m.isSynthetic,
       position: m.position?.title || 'Undesignated',
-      avatar: m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || 'U')}&background=random`,
-      lastActive: m.isSynthetic ? 'Now' : 'Recent'
+      avatar: m.avatarUrl || (m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || 'U')}&background=random`),
+      lastActive: m.isSynthetic ? 'Now' : 'Recent',
+      isContractor: m.isContractor,
+      licenceType: m.licenceType
     }));
 
     res.json(formatted);
@@ -107,7 +115,15 @@ router.get('/:id', async (req: TenantRequest, res) => {
       certifications: member.certifications,
       education: member.education,
       skills: member.skills,
-      permissionGroups: member.permissionGroups.map(pg => pg.permissionGroup)
+      permissionGroups: member.permissionGroups.map(pg => pg.permissionGroup),
+
+      // Workforce Enhancements
+      avatarUrl: member.avatarUrl,
+      isContractor: member.isContractor,
+      licenceType: member.licenceType,
+      aiHumour: member.aiHumour,
+      workEmail: member.workEmail,
+      signature: member.signature
     };
 
     res.json(formatted);
@@ -171,7 +187,8 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
       role, teamId, positionId, status, agentConfig, modelType, name,
       firstName, otherName, familyName, personalEmail, homeAddress, workArrangements,
       emergencyContact, dateOfBirth, gender, nationality, startDate, endDate,
-      phoneNumbers, certifications, education, skills, permissionGroups
+      phoneNumbers, certifications, education, skills, permissionGroups,
+      avatarUrl, isContractor, licenceType, aiHumour, workEmail, signature
     } = req.body;
 
     const member = await db.tenantMember.findFirst({
@@ -197,25 +214,32 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
         homeAddress: homeAddress !== undefined ? homeAddress : member.homeAddress,
         workArrangements: workArrangements !== undefined ? workArrangements : member.workArrangements,
         emergencyContact: emergencyContact !== undefined ? emergencyContact : member.emergencyContact,
-        dateOfBirth: (dateOfBirth && dateOfBirth !== "") ? new Date(dateOfBirth) : member.dateOfBirth,
+        dateOfBirth: (dateOfBirth && !isNaN(Date.parse(dateOfBirth))) ? new Date(dateOfBirth) : member.dateOfBirth,
         gender: gender !== undefined ? gender : member.gender,
         nationality: nationality !== undefined ? nationality : member.nationality,
-        startDate: (startDate && startDate !== "") ? new Date(startDate) : member.startDate,
-        endDate: (endDate && endDate !== "") ? new Date(endDate) : member.endDate,
+        startDate: (startDate && !isNaN(Date.parse(startDate))) ? new Date(startDate) : member.startDate,
+        endDate: (endDate && !isNaN(Date.parse(endDate))) ? new Date(endDate) : member.endDate,
+        
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : member.avatarUrl,
+        isContractor: isContractor !== undefined ? isContractor : member.isContractor,
+        licenceType: licenceType !== undefined ? licenceType : member.licenceType,
+        aiHumour: aiHumour !== undefined ? aiHumour : member.aiHumour,
+        workEmail: workEmail !== undefined ? workEmail : member.workEmail,
+        signature: signature !== undefined ? signature : member.signature,
 
         // Nested updates for relations
         phoneNumbers: phoneNumbers ? {
           deleteMany: {},
-          create: phoneNumbers.map((p: any) => ({ label: p.label, number: p.number, tenant_id: req.tenantId }))
+          create: phoneNumbers.map((p: any) => ({ label: p.label, number: p.number, tenantId: req.tenantId }))
         } : undefined,
         certifications: certifications ? {
           deleteMany: {},
           create: certifications.map((c: any) => ({
             name: c.name,
             issuer: c.issuer,
-            dateObtained: (c.dateObtained && c.dateObtained !== "") ? new Date(c.dateObtained) : null,
-            expiryDate: (c.expiryDate && c.expiryDate !== "") ? new Date(c.expiryDate) : null,
-            tenant_id: req.tenantId
+            dateObtained: (c.dateObtained && !isNaN(Date.parse(c.dateObtained))) ? new Date(c.dateObtained) : null,
+            expiryDate: (c.expiryDate && !isNaN(Date.parse(c.expiryDate))) ? new Date(c.expiryDate) : null,
+            tenantId: req.tenantId
           }))
         } : undefined,
         education: education ? {
@@ -224,9 +248,9 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
             institution: e.institution,
             degree: e.degree,
             fieldOfStudy: e.fieldOfStudy,
-            startDate: (e.startDate && e.startDate !== "") ? new Date(e.startDate) : null,
-            endDate: (e.endDate && e.endDate !== "") ? new Date(e.endDate) : null,
-            tenant_id: req.tenantId
+            startDate: (e.startDate && !isNaN(Date.parse(e.startDate))) ? new Date(e.startDate) : null,
+            endDate: (e.endDate && !isNaN(Date.parse(e.endDate))) ? new Date(e.endDate) : null,
+            tenantId: req.tenantId
           }))
         } : undefined,
         skills: skills ? {
@@ -234,7 +258,7 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
           create: skills.map((s: any) => ({
             name: s.name,
             proficiencyLevel: s.proficiencyLevel,
-            tenant_id: req.tenantId
+            tenantId: req.tenantId
           }))
         } : undefined,
         permissionGroups: permissionGroups ? {
@@ -268,7 +292,7 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
         where: { id: member.agentId },
         data: {
           modelType: modelType || undefined,
-          config: agentConfig || undefined,
+          config: agentConfig ? { ...(member.agent.config as any || {}), ...agentConfig } : undefined,
           name: name || undefined
         }
       });
@@ -289,6 +313,160 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
     res.status(500).json({ error: err.message });
   }
 });
+
+// POST invite human
+router.post('/invite', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { email, role, teamId, firstName, familyName, isContractor, licenceType, workArrangements } = req.body;
+
+    // Check if user exists or create new placeholder
+    let user = await globalPrisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await globalPrisma.user.create({
+        data: {
+          id: `usr_${Math.random().toString(36).substring(2, 11)}`,
+          email
+        }
+      });
+    }
+
+    const member = await db.tenantMember.create({
+      data: {
+        tenantId,
+        userId: user.id,
+        roleId: role || 'Standard',
+        teamId: teamId || null,
+        status: 'Pending',
+        firstName,
+        familyName,
+        isContractor: !!isContractor,
+        licenceType: licenceType || 'Standard',
+        workArrangements,
+        isSynthetic: false
+      },
+      include: { user: true, team: true }
+    });
+
+    res.json(member);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST provision agent
+router.post('/provision', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { modelType, teamId, role, aiHumour, name } = req.body;
+
+    const agent = await db.agent.create({
+      data: {
+        name: name || `${modelType.split(' ')[0]} Assistant`,
+        modelType,
+        config: { humour: aiHumour || 0.5 }
+      }
+    });
+
+    const member = await db.tenantMember.create({
+      data: {
+        tenantId,
+        agentId: agent.id,
+        roleId: role || 'Standard',
+        teamId: teamId || null,
+        status: 'Active',
+        isSynthetic: true,
+        aiHumour: aiHumour || 0.5,
+        licenceType: 'Standard'
+      },
+      include: { agent: true, team: true }
+    });
+
+    res.json(member);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST clone member
+router.post('/clone/:id', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    const source = await db.tenantMember.findUnique({
+      where: { id },
+      include: { agent: true, skills: true }
+    });
+
+    if (!source) return res.status(404).json({ error: 'Source member not found' });
+
+    let newMember;
+    if (source.isSynthetic) {
+      const newAgent = await db.agent.create({
+        data: {
+          name: `${source.agent?.name} (Copy)`,
+          modelType: source.agent?.modelType!,
+          config: source.agent?.config as any
+        }
+      });
+
+      newMember = await db.tenantMember.create({
+        data: {
+          tenantId,
+          agentId: newAgent.id,
+          roleId: source.roleId,
+          teamId: source.teamId,
+          status: source.status,
+          isSynthetic: true,
+          aiHumour: source.aiHumour,
+          licenceType: source.licenceType,
+          skills: {
+            create: source.skills.map(s => ({
+              name: s.name,
+              proficiencyLevel: s.proficiencyLevel,
+              tenantId: tenantId
+            }))
+          }
+        },
+        include: { agent: true, team: true, skills: true }
+      });
+    } else {
+      // For humans, we clone the profile metadata but need a new email/user link usually.
+      // In this "Clone" context, we'll create a Pending member with "Copy" suffix on names.
+      newMember = await db.tenantMember.create({
+        data: {
+          tenantId,
+          roleId: source.roleId,
+          teamId: source.teamId,
+          status: 'Pending',
+          firstName: source.firstName,
+          familyName: `${source.familyName} (Copy)`,
+          isContractor: source.isContractor,
+          licenceType: source.licenceType,
+          workArrangements: source.workArrangements,
+          isSynthetic: false,
+          skills: {
+            create: source.skills.map(s => ({
+              name: s.name,
+              proficiencyLevel: s.proficiencyLevel,
+              tenantId: tenantId
+            }))
+          }
+        },
+        include: { team: true, skills: true }
+      });
+    }
+
+    res.json(newMember);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // DELETE member
 router.delete('/:id', authorize('decommission:staff'), async (req: TenantRequest, res) => {

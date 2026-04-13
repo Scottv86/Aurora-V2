@@ -10,9 +10,17 @@ export function cn(...inputs: ClassValue[]) {
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg' | 'icon';
+  loading?: boolean;
 }
 
-export const Button = ({ className, variant = 'primary', size = 'md', ...props }: ButtonProps) => {
+export const Button = ({ 
+  className, 
+  variant = 'primary', 
+  size = 'md', 
+  loading = false, 
+  children,
+  ...props 
+}: ButtonProps) => {
   const variants = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-500/20',
     secondary: 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700',
@@ -35,8 +43,17 @@ export const Button = ({ className, variant = 'primary', size = 'md', ...props }
         sizes[size],
         className
       )}
+      disabled={props.disabled || loading}
       {...props}
-    />
+    >
+      {loading && (
+        <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+      )}
+      {children}
+    </button>
   );
 };
 
@@ -44,20 +61,29 @@ export const Button = ({ className, variant = 'primary', size = 'md', ...props }
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  icon?: React.ReactNode;
 }
 
-export const Input = ({ className, label, error, ...props }: InputProps) => {
+export const Input = ({ className, label, error, icon, ...props }: InputProps) => {
   return (
     <div className="w-full space-y-1.5">
       {label && <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{label}</label>}
-      <input
-        className={cn(
-          'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600',
-          error && 'border-red-500 focus:border-red-500 focus:ring-red-500/10',
-          className
+      <div className="relative">
+        {icon && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
+            {icon}
+          </div>
         )}
-        {...props}
-      />
+        <input
+          className={cn(
+            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600',
+            icon && 'pl-11',
+            error && 'border-red-500 focus:border-red-500 focus:ring-red-500/10',
+            className
+          )}
+          {...props}
+        />
+      </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
   );

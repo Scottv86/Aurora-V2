@@ -17,7 +17,7 @@ const CAPABILITIES = [
     items: [
       { key: 'view:staff', label: 'View Employee Directory', description: 'Can see all staff profiles, teams, and contact info.' },
       { key: 'manage:staff', label: 'Modify Personnel Records', description: 'Permission to edit profiles, change titles, and update personal data.' },
-      { key: 'invite:staff', label: 'Invite & Onboard', description: 'Can send invites to new humans and provision digital coworkers.' },
+      { key: 'invite:staff', label: 'Invite & Onboard', description: 'Can send invites to new people and add AI agents.' },
       { key: 'decommission:staff', label: 'Decommission Staff', description: 'Permission to disable accounts and offboard staff members.' }
     ] 
   },
@@ -163,7 +163,7 @@ export const CreateEditGroupModal = ({ isOpen, onClose, group }: CreateEditGroup
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Capabilities</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Permissions</label>
             <div className="flex items-center gap-2">
               <span className="text-[10px] uppercase font-bold text-zinc-400">{selectedCaps.length} ACTIVE</span>
               <div className="h-1 w-12 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
@@ -196,7 +196,7 @@ export const CreateEditGroupModal = ({ isOpen, onClose, group }: CreateEditGroup
                         : 'text-zinc-400 border-zinc-200 hover:border-zinc-300 dark:border-zinc-800'
                     }`}
                   >
-                    {isMasterActive ? 'CATEGORY MASTER ACTIVE' : 'GRANT ALL CATEGORY'}
+                    {isMasterActive ? 'ALL SELECTED' : 'SELECT ALL'}
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-2">

@@ -105,8 +105,13 @@ export interface BusinessLogic {
 export interface User {
   id: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'STAFF' | 'EXTERNAL';
+  firstName?: string;
+  lastName?: string;
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'STAFF' | 'EXTERNAL' | string;
+  licenceType: 'Developer' | 'Standard' | string;
+  isSuperAdmin?: boolean;
   tenantId?: string;
+  avatarUrl?: string;
   capabilities?: string[];
 }
 
@@ -138,4 +143,26 @@ export interface GeneratedDocument {
   generatedBy?: string;
   dataSnapshot?: Record<string, any>;
   content?: string;
+}
+export interface PlanQuota {
+  developerSeats: number;
+  standardSeats: number;
+  price: number;
+}
+
+export interface BillingUsage {
+  plan: string;
+  quota: PlanQuota;
+  usage: {
+    developer: number;
+    standard: number;
+  };
+}
+
+export interface Invoice {
+  id: string;
+  date: string;
+  amount: number;
+  status: 'Paid' | 'Pending' | 'Overdue';
+  downloadUrl: string;
 }

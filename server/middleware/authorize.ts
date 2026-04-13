@@ -43,7 +43,20 @@ export const authorize = (capability: string) => {
         return res.status(403).json({ error: 'Forbidden: No member record found for this workspace' });
       }
 
-      // 2.5 Tenant Admin Bypass
+      // 2.5 License Type Check for Settings Side (Prioritized over role bypass)
+      const isSettingsCapability = capability.startsWith('manage:') || 
+                                   capability.startsWith('view:settings') || 
+                                   capability.startsWith('view:audit_logs');
+      
+      if (isSettingsCapability && member.licenceType !== 'Developer') {
+        return res.status(403).json({ 
+          error: 'Forbidden: This action requires a Developer license seat.',
+          requiredLicense: 'Developer',
+          currentLicense: member.licenceType
+        });
+      }
+
+      // 2.6 Tenant Admin Bypass (Now only applies if license check passed or is irrelevant)
       if (member.roleId === 'admin') {
         return next();
       }

@@ -87,10 +87,10 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
           <div className="flex flex-col gap-1">
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               <Shield className="text-blue-500" size={20} />
-              Assigned Permission Groups
+              Groups
             </h2>
             <p className="text-sm text-zinc-500 mt-1">
-              Groups determine the total capabilities granted to this staff member.
+              Groups determine what this member can see and do in the platform.
             </p>
           </div>
 
@@ -129,7 +129,7 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
               <div className="md:col-span-2 flex flex-col items-center justify-center p-10 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center bg-zinc-50/30 dark:bg-zinc-900/10">
                 <Shield className="text-zinc-300 dark:text-zinc-700 mb-3" size={36} strokeWidth={1.5} />
                 <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">No Groups Assigned</p>
-                <p className="text-xs text-zinc-500 mt-1 max-w-[240px]">This member currently relies on the default 'Standard' role permissions.</p>
+                <p className="text-xs text-zinc-500 mt-1 max-w-[240px]">This member currently has 'Standard' role permissions.</p>
               </div>
             )}
           </div>
@@ -137,7 +137,7 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
           {/* Available Groups Section */}
           <div className="pt-8 border-t border-zinc-100 dark:border-zinc-800">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-zinc-400">Add Permissions</h3>
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-zinc-400">Add Group</h3>
               <Button 
                 variant={isAdding ? 'secondary' : 'primary'}
                 size="sm" 
@@ -145,7 +145,7 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
                 onClick={() => setIsAdding(!isAdding)}
               >
                 {isAdding ? <X size={14} /> : <Plus size={14} />}
-                {isAdding ? 'Done Selection' : 'Assign Group'}
+                {isAdding ? 'Done' : 'Add Group'}
               </Button>
             </div>
 
@@ -182,8 +182,8 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
                 <Fingerprint size={18} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Access Summary</h3>
-                <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Effective Capabilities</p>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Permissions Summary</h3>
+                <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Total Permissions</p>
               </div>
             </div>
 
@@ -203,10 +203,10 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
                       <div key={category} className="p-4 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 border border-blue-400/20 shadow-lg shadow-blue-500/20 text-white space-y-2 animate-in fade-in zoom-in duration-500">
                         <div className="flex items-center gap-2">
                           <Crown size={16} className="text-yellow-300" />
-                          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em]">Universal Access</h4>
+                          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em]">Full Access</h4>
                         </div>
                         <p className="text-[10px] text-blue-50/80 leading-relaxed font-medium">
-                          This member has unrestricted administrative control across all platform categories and system modules.
+                          This member has full access to all areas of the platform.
                         </p>
                       </div>
                     );
@@ -247,14 +247,14 @@ export const PermissionsTab = ({ memberId, assignedGroups, onUpdate }: Permissio
                 
                 {Object.keys(effectivePerms.breakdown).length === 0 && (
                   <div className="py-8 text-center bg-white/50 dark:bg-black/20 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                    <p className="text-xs text-zinc-400 px-4">No active capabilities granted via permission groups.</p>
+                    <p className="text-xs text-zinc-400 px-4">No special permissions assigned.</p>
                   </div>
                 )}
 
                 <div className="p-3 bg-blue-50/50 dark:bg-blue-500/5 rounded-2xl flex items-start gap-3 border border-blue-100/50 dark:border-blue-500/10">
                   <Info className="text-blue-500 shrink-0 mt-0.5" size={14} />
                   <p className="text-[10px] leading-relaxed text-blue-900/70 dark:text-blue-300/60">
-                    This summary combines permissions from all assigned groups and their parents to show the final access state for this member.
+                    This summary shows all permissions for this member based on their assigned groups.
                   </p>
                 </div>
               </div>

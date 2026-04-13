@@ -10,16 +10,18 @@ import {
   LogOut,
   Settings as SettingsIcon,
   ChevronDown,
-  Settings
+  Settings,
+  CreditCard
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { cn } from '../../lib/utils';
 import { Environment } from '../../types/platform';
+import { LicenseGate } from '../Auth/LicenseGate';
 
 export const Navbar = () => {
-  const { tenant, environment, setEnvironment } = usePlatform();
+  const { tenant, environment, setEnvironment, user: platformUser, isDeveloper } = usePlatform();
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
@@ -38,9 +40,14 @@ export const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  // Get user details from Supabase metadata or fallback to email
-  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
-  const avatarUrl = user?.user_metadata?.avatar_url;
+  // Get user details from Platform Context (Database) or fallback to Supabase metadata/email
+  const platformName = platformUser?.firstName && platformUser?.lastName 
+    ? `${platformUser.firstName} ${platformUser.lastName}`
+    : (platformUser?.firstName || platformUser?.lastName);
+
+  const displayName = platformName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+  // Prioritize persistent DB avatar from platform context over Supabase metadata
+  const avatarUrl = platformUser?.avatarUrl || user?.user_metadata?.avatar_url;
 
   return (
     <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
@@ -84,21 +91,23 @@ export const Navbar = () => {
           {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
         </button>
 
-        <button 
-          onClick={() => {
-            const isAdminPath = location.pathname.startsWith('/admin');
-            navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
-          }}
-          className={cn(
-            "p-2 transition-colors",
-            location.pathname.includes('/settings') 
-              ? "text-indigo-600 dark:text-indigo-400" 
-              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-          )}
-          title="Platform Settings"
-        >
-          <Settings size={20} />
-        </button>
+        <LicenseGate>
+          <button 
+            onClick={() => {
+              const isAdminPath = location.pathname.startsWith('/admin');
+              navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
+            }}
+            className={cn(
+              "p-2 transition-colors",
+              location.pathname.includes('/settings') 
+                ? "text-indigo-600 dark:text-indigo-400" 
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title="Platform Settings"
+          >
+            <Settings size={20} />
+          </button>
+        </LicenseGate>
 
         <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors relative">
           <Bell size={20} />
@@ -142,13 +151,25 @@ export const Navbar = () => {
                   <UserIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
                   Profile Configuration
                 </button>
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
-                  onClick={() => setShowUserMenu(false)}
-                >
-                  <SettingsIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                  Account Settings
-                </button>
+                <LicenseGate>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <SettingsIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                    Account Settings
+                  </button>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      navigate('/workspace/settings/billing');
+                    }}
+                  >
+                    <CreditCard size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                    Billing & Plans
+                  </button>
+                </LicenseGate>
               </div>
 
               <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1" />

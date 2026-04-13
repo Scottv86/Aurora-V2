@@ -40,22 +40,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AuthTrace] onAuthStateChange: ${event}`, { hasSession: !!session });
+      console.log(`[AuthTrace] !! EVENT: ${event}`, { 
+        email: session?.user?.email,
+        hasSession: !!session,
+        timestamp: new Date().toISOString()
+      });
+      
       setLoading(true);
       setSession(session);
       setUser(session?.user ?? null);
       
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session) {
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION') && session) {
         console.log(`[AuthTrace] Triggering syncUser for ${session.user.email}`);
         await syncUser(session.access_token);
       } else if (event === 'SIGNED_OUT') {
-        console.log(`[AuthTrace] Clearing admin state on SIGNED_OUT`);
+        console.log(`[AuthTrace] Clearing all local state on SIGNED_OUT`);
         setIsSuperAdmin(false);
         setTenantIds([]);
         setCurrentRoleId(null);
       }
       
-      console.log(`[AuthTrace] Auth flow complete. Setting loading=false. isSuperAdmin=${isSuperAdmin}`);
+      console.log(`[AuthTrace] Auth flow complete for ${session?.user?.email || 'Anonymous'}. Setting loading=false.`);
       setLoading(false);
     });
 

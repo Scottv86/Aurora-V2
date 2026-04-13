@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 // Contexts
@@ -30,6 +30,8 @@ import { WorkforcePage } from './pages/Settings/WorkforcePage';
 import { MemberDetailView } from './pages/Settings/MemberDetailView';
 import { TeamDetailView } from './pages/Settings/TeamDetailView';
 import { PositionDetailView } from './pages/Settings/PositionDetailView';
+import { BillingPage } from './pages/Settings/BillingPage';
+import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
 
 // Pages
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
@@ -81,43 +83,59 @@ const App = () => {
               <Route path="/workspace/analytics" element={<ProtectedRoute><PlatformShell><Analytics /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/reminders" element={<ProtectedRoute><PlatformShell><ComingSoon title="Reminders" description="Set task alerts, keep track of deadlines, and manage your personal notifications." /></PlatformShell></ProtectedRoute>} />
               
-              {/* Settings & Studio (Consolidated) */}
-              <Route path="/workspace/settings" element={<ProtectedRoute><PlatformShell><ComingSoon title="Organization Settings" description="Configure tenant branding, site metadata, and global workspace defaults." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/billing" element={<ProtectedRoute><PlatformShell><ComingSoon title="Billing & Plans" description="Manage subscriptions, payment methods, and billing history." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/usage" element={<ProtectedRoute><PlatformShell><ComingSoon title="Model Usage" description="Monitor tokens, API calls, and resource consumption for your AI models." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/security" element={<ProtectedRoute><PlatformShell><ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/audit" element={<ProtectedRoute><PlatformShell><ComingSoon title="Audit Log" description="Review system activity, security events, and configuration changes across the platform." /></PlatformShell></ProtectedRoute>} />
-              
-              {/* Module Builder (within Settings) */}
-              <Route path="/workspace/settings/builder" element={<ProtectedRoute><PlatformShell><BuilderChoice /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/ai-builder" element={<ProtectedRoute><PlatformShell fullBleed><AIBuilder /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/builder/:id" element={<ProtectedRoute><PlatformShell fullBleed><ModuleEditor /></PlatformShell></ProtectedRoute>} />
-              
-              <Route path="/workspace/settings/modules" element={<ProtectedRoute><PlatformShell><ModuleCatalog /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/apps" element={<ProtectedRoute><PlatformShell><ComingSoon title="App Catalog" description="Discover, install, and manage third-party applications." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/email" element={<ProtectedRoute><PlatformShell><ComingSoon title="Email Exchange" description="Configure mail server settings, domain verification, and email communication protocols." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/database" element={<ProtectedRoute><PlatformShell><ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/lists" element={<ProtectedRoute><PlatformShell><ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/appearance" element={<ProtectedRoute><PlatformShell><ComingSoon title="Appearance & Branding" description="Customize the visual theme, organization logos, and brand identity settings." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/templates" element={<ProtectedRoute><PlatformShell><DocumentAutomation /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/automations" element={<ProtectedRoute><PlatformShell><ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/reports" element={<ProtectedRoute><PlatformShell><ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/knowledge" element={<ProtectedRoute><PlatformShell><ComingSoon title="Knowledge Base" description="Central repository for institutional knowledge, documentation, and training materials." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/intranet" element={<ProtectedRoute><PlatformShell><ComingSoon title="Intranet Hub" description="Internal corporate communication portal, employee directory, and centralized resource center." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/logic" element={<ProtectedRoute><PlatformShell><LogicBuilder /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/testing" element={<ProtectedRoute><PlatformShell><ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/deploy" element={<ProtectedRoute><PlatformShell><ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/settings/api" element={<ProtectedRoute><PlatformShell><ComingSoon title="API Management" description="Configure API keys, webhooks, and external integration points." /></PlatformShell></ProtectedRoute>} />
-              
-              {/* Workforce Management */}
-              <Route path="/dashboard/settings/workforce" element={<ProtectedRoute><PlatformShell><WorkforcePage /></PlatformShell></ProtectedRoute>} />
-              <Route path="/dashboard/settings/workforce/member/:id" element={<ProtectedRoute><PlatformShell><MemberDetailView /></PlatformShell></ProtectedRoute>} />
-              <Route path="/dashboard/settings/workforce/teams/:id" element={<ProtectedRoute><PlatformShell><TeamDetailView /></PlatformShell></ProtectedRoute>} />
-              <Route path="/dashboard/settings/workforce/roles/:id" element={<ProtectedRoute><PlatformShell><PositionDetailView /></PlatformShell></ProtectedRoute>} />
+              {/* Settings & Workforce (Developer Only) */}
+              <Route 
+                path="/workspace/settings" 
+                element={
+                  <ProtectedRoute>
+                    <PlatformShell>
+                      <LicenseGate fallback={<LicenseRestrictedPlaceholder />}>
+                        <Outlet />
+                      </LicenseGate>
+                    </PlatformShell>
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<ComingSoon title="Organization Settings" description="Configure tenant branding, site metadata, and global workspace defaults." />} />
+                <Route path="billing" element={<BillingPage />} />
+                <Route path="usage" element={<ComingSoon title="Model Usage" description="Monitor tokens, API calls, and resource consumption for your AI models." />} />
+                <Route path="security" element={<ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." />} />
+                <Route path="audit" element={<ComingSoon title="Audit Log" description="Review system activity, security events, and configuration changes across the platform." />} />
+                
+                {/* Module Builder */}
+                <Route path="builder" element={<BuilderChoice />} />
+                <Route path="ai-builder" element={<AIBuilder />} />
+                <Route path="builder/:id" element={<ModuleEditor />} />
+                
+                <Route path="modules" element={<ModuleCatalog />} />
+                <Route path="apps" element={<ComingSoon title="App Catalog" description="Discover, install, and manage third-party applications." />} />
+                <Route path="email" element={<ComingSoon title="Email Exchange" description="Configure mail server settings, domain verification, and email communication protocols." />} />
+                <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
+                <Route path="lists" element={<ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." />} />
+                <Route path="appearance" element={<ComingSoon title="Appearance & Branding" description="Customize the visual theme, organization logos, and brand identity settings." />} />
+                <Route path="templates" element={<DocumentAutomation />} />
+                <Route path="automations" element={<ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." />} />
+                <Route path="reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
+                <Route path="knowledge" element={<ComingSoon title="Knowledge Base" description="Central repository for institutional knowledge, documentation, and training materials." />} />
+                <Route path="intranet" element={<ComingSoon title="Intranet Hub" description="Internal corporate communication portal, employee directory, and centralized resource center." />} />
+                <Route path="logic" element={<LogicBuilder />} />
+                <Route path="testing" element={<ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." />} />
+                <Route path="deploy" element={<ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." />} />
+                <Route path="api" element={<ComingSoon title="API Management" description="Configure API keys, webhooks, and external integration points." />} />
+                
+                {/* Workforce Management (Integrated under Settings) */}
+                <Route path="workforce" element={<WorkforcePage />} />
+                <Route path="workforce/member/:id" element={<MemberDetailView />} />
+                <Route path="workforce/teams/:id" element={<TeamDetailView />} />
+                <Route path="workforce/roles/:id" element={<PositionDetailView />} />
+              </Route>
               
               {/* External / Public */}
               <Route path="/portal" element={<ExternalPortal />} />
               <Route path="/onboarding" element={<Onboarding />} />
+
+              {/* Redundant / Legacy Workforce Path support */}
+              <Route path="/dashboard/settings/workforce/*" element={<Navigate to="/workspace/settings/workforce" replace />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/workspace" replace />} />

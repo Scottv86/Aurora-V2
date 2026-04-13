@@ -64,6 +64,17 @@ router.get('/:id', async (req: TenantRequest, res) => {
         },
         parent: {
           select: { id: true, title: true, positionNumber: true }
+        },
+        successors: {
+          include: {
+            member: {
+              include: {
+                user: true,
+                agent: true
+              }
+            }
+          },
+          orderBy: { ranking: 'asc' }
         }
       }
     });
@@ -89,7 +100,14 @@ router.get('/:id', async (req: TenantRequest, res) => {
         isSynthetic: m.isSynthetic
       })),
       occupantCount: position.members.length,
-      createdAt: position.createdAt
+      createdAt: position.createdAt,
+      successors: position.successors.map(s => ({
+        id: s.id,
+        memberId: s.memberId,
+        ranking: s.ranking,
+        name: s.member.isSynthetic ? s.member.agent?.name : (s.member.firstName && s.member.familyName ? `${s.member.firstName} ${s.member.familyName}` : (s.member.user?.email.split('@')[0] || 'Unknown')),
+        isSynthetic: s.member.isSynthetic
+      }))
     };
 
     res.json(formatted);
@@ -196,6 +214,35 @@ router.delete('/:id', async (req: TenantRequest, res) => {
     });
 
     emitTenantUpdate(tenantId, 'position_deleted', { id });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST update successors
+router.post('/:id/successors', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+    const { successors } = req.body; // Array of { memberId, ranking }
+
+    if (!Array.isArray(successors)) {
+      return res.status(400).json({ error: 'Successors must be an array' });
+    }
+
+    // Atomic update of successors
+    await db.$transaction([
+      db.memberSuccession.deleteMany({ where: { positionId: id } }),
+      db.memberSuccession.createMany({
+        data: successors.map((s: any) => ({
+          positionId: id,
+          memberId: s.memberId,
+          ranking: s.ranking || 0
+        }))
+      })
+    ]);
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

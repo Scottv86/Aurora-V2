@@ -1,3 +1,12 @@
+-- Create auth schema if it doesn't exist (primarily for shadow database during migrations)
+CREATE SCHEMA IF NOT EXISTS auth;
+
+-- Create a dummy users table if it doesn't exist to satisfy the trigger reference
+CREATE TABLE IF NOT EXISTS auth.users (
+  id uuid PRIMARY KEY,
+  email text UNIQUE
+);
+
 -- Function to handle new user registration
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$

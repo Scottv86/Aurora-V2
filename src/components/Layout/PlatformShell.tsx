@@ -207,7 +207,7 @@ const SortableSection = ({
 
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading } = useAuth();
-  const { isLoading: platformLoading, modules, menuConfig, updateMenuConfig, setMenuConfig } = usePlatform();
+  const { user: platformUser, isLoading: platformLoading, modules, menuConfig, updateMenuConfig, setMenuConfig } = usePlatform();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -222,6 +222,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+  
+  const isDeveloper = platformUser?.licenceType === 'Developer' || platformUser?.isSuperAdmin || platformUser?.role === 'admin';
 
   const enabledModules = modules.filter(m => m.status === 'ACTIVE');
   const isAdminPath = location.pathname.startsWith('/admin');
@@ -370,7 +372,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 transition-colors duration-300 overflow-x-hidden">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 transition-colors duration-300">
       <Navbar />
       <div className="flex">
         <aside className={cn(
@@ -447,160 +449,164 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     <SidebarItem icon={ArrowLeft} label="Back to Workspace" to="/workspace" collapsed={!isSidebarOpen} />
                   </nav>
                   <div className="space-y-1">
-                    <SidebarItem 
-                      icon={LucideIcons.Building} 
-                      label="Organisation" 
-                      to="/workspace/settings" 
-                      active={location.pathname === '/workspace/settings'} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.UserCircle} 
-                      label="Workforce" 
-                      to="/dashboard/settings/workforce" 
-                      active={isActive('/dashboard/settings/workforce')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.CreditCard} 
-                      label="Billing & Plan" 
-                      to="/workspace/settings/billing" 
-                      active={isActive('/workspace/settings/billing')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.BarChart2} 
-                      label="Model usage" 
-                      to="/workspace/settings/usage" 
-                      active={isActive('/workspace/settings/usage')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Layers} 
-                      label="Modules" 
-                      to="/workspace/settings/modules" 
-                      active={isActive('/workspace/settings/modules')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.LayoutGrid} 
-                      label="Apps" 
-                      to="/workspace/settings/apps" 
-                      active={isActive('/workspace/settings/apps')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Mail} 
-                      label="Email exchange" 
-                      to="/workspace/settings/email" 
-                      active={isActive('/workspace/settings/email')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Database} 
-                      label="Database" 
-                      to="/workspace/settings/database" 
-                      active={isActive('/workspace/settings/database')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.ListTodo} 
-                      label="Lists" 
-                      to="/workspace/settings/lists" 
-                      active={isActive('/workspace/settings/lists')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Palette} 
-                      label="Appearance" 
-                      to="/workspace/settings/appearance" 
-                      active={isActive('/workspace/settings/appearance')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.FileText} 
-                      label="Templates" 
-                      to="/workspace/settings/templates" 
-                      active={isActive('/workspace/settings/templates')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Zap} 
-                      label="Automations" 
-                      to="/workspace/settings/automations" 
-                      active={isActive('/workspace/settings/automations')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Terminal} 
-                      label="Logic" 
-                      to="/workspace/settings/logic" 
-                      active={isActive('/workspace/settings/logic')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Lock} 
-                      label="Security" 
-                      to="/workspace/settings/security" 
-                      active={isActive('/workspace/settings/security')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.History} 
-                      label="Audit" 
-                      to="/workspace/settings/audit" 
-                      active={isActive('/workspace/settings/audit')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Globe} 
-                      label="Portals" 
-                      to="/portal" 
-                      active={isActive('/portal')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.BarChart3} 
-                      label="Reports" 
-                      to="/workspace/settings/reports" 
-                      active={isActive('/workspace/settings/reports')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Network} 
-                      label="Intranet" 
-                      to="/workspace/settings/intranet" 
-                      active={isActive('/workspace/settings/intranet')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.BookOpen} 
-                      label="Knowledge base" 
-                      to="/workspace/settings/knowledge" 
-                      active={isActive('/workspace/settings/knowledge')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.TestTube} 
-                      label="Testing" 
-                      to="/workspace/settings/testing" 
-                      active={isActive('/workspace/settings/testing')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.CloudUpload} 
-                      label="Deployments" 
-                      to="/workspace/settings/deploy" 
-                      active={isActive('/workspace/settings/deploy')} 
-                      collapsed={!isSidebarOpen} 
-                    />
-                    <SidebarItem 
-                      icon={LucideIcons.Key} 
-                      label="API" 
-                      to="/workspace/settings/api" 
-                      active={isActive('/workspace/settings/api')} 
-                      collapsed={!isSidebarOpen} 
-                    />
+                    {isDeveloper && (
+                      <>
+                        <SidebarItem 
+                          icon={LucideIcons.Building} 
+                          label="Organisation" 
+                          to="/workspace/settings" 
+                          active={location.pathname === '/workspace/settings'} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.UserCircle} 
+                          label="Workforce" 
+                          to="/workspace/settings/workforce" 
+                          active={isActive('/workspace/settings/workforce')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.CreditCard} 
+                          label="Billing & Plan" 
+                          to="/workspace/settings/billing" 
+                          active={isActive('/workspace/settings/billing')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.BarChart2} 
+                          label="Model usage" 
+                          to="/workspace/settings/usage" 
+                          active={isActive('/workspace/settings/usage')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Layers} 
+                          label="Modules" 
+                          to="/workspace/settings/modules" 
+                          active={isActive('/workspace/settings/modules')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.LayoutGrid} 
+                          label="Apps" 
+                          to="/workspace/settings/apps" 
+                          active={isActive('/workspace/settings/apps')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Mail} 
+                          label="Email exchange" 
+                          to="/workspace/settings/email" 
+                          active={isActive('/workspace/settings/email')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Database} 
+                          label="Database" 
+                          to="/workspace/settings/database" 
+                          active={isActive('/workspace/settings/database')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.ListTodo} 
+                          label="Lists" 
+                          to="/workspace/settings/lists" 
+                          active={isActive('/workspace/settings/lists')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Palette} 
+                          label="Appearance" 
+                          to="/workspace/settings/appearance" 
+                          active={isActive('/workspace/settings/appearance')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.FileText} 
+                          label="Templates" 
+                          to="/workspace/settings/templates" 
+                          active={isActive('/workspace/settings/templates')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Zap} 
+                          label="Automations" 
+                          to="/workspace/settings/automations" 
+                          active={isActive('/workspace/settings/automations')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Terminal} 
+                          label="Logic" 
+                          to="/workspace/settings/logic" 
+                          active={isActive('/workspace/settings/logic')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Lock} 
+                          label="Security" 
+                          to="/workspace/settings/security" 
+                          active={isActive('/workspace/settings/security')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.History} 
+                          label="Audit" 
+                          to="/workspace/settings/audit" 
+                          active={isActive('/workspace/settings/audit')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Globe} 
+                          label="Portals" 
+                          to="/portal" 
+                          active={isActive('/portal')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.BarChart3} 
+                          label="Reports" 
+                          to="/workspace/settings/reports" 
+                          active={isActive('/workspace/settings/reports')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Network} 
+                          label="Intranet" 
+                          to="/workspace/settings/intranet" 
+                          active={isActive('/workspace/settings/intranet')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.BookOpen} 
+                          label="Knowledge base" 
+                          to="/workspace/settings/knowledge" 
+                          active={isActive('/workspace/settings/knowledge')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.TestTube} 
+                          label="Testing" 
+                          to="/workspace/settings/testing" 
+                          active={isActive('/workspace/settings/testing')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.CloudUpload} 
+                          label="Deployments" 
+                          to="/workspace/settings/deploy" 
+                          active={isActive('/workspace/settings/deploy')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Key} 
+                          label="API" 
+                          to="/workspace/settings/api" 
+                          active={isActive('/workspace/settings/api')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -667,9 +673,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         </aside>
 
         <main className={cn(
-          "flex-1 transition-all duration-300",
-          isSidebarOpen ? "ml-64" : "ml-16",
-          fullBleed && "h-[calc(100vh-4rem)] overflow-y-auto"
+          "flex-1 h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300",
+          isSidebarOpen ? "ml-64" : "ml-16"
         )}>
           <div className={cn(
             "mx-auto",

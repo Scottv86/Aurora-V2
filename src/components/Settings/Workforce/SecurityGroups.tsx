@@ -11,6 +11,7 @@ interface SecurityGroupsProps {
   isModalOpen: boolean;
   onCloseModal: () => void;
   searchQuery?: string;
+  activeFilter?: string;
 }
 
 export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: SecurityGroupsProps) => {
@@ -30,7 +31,7 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: 
     setIsDeleting(true);
     try {
       await deleteGroup(deletingGroupId);
-      toast.success('Security protocol deleted');
+      toast.success('Group deleted');
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -41,7 +42,7 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: 
 
   const columns = [
     {
-      header: 'Group Identity',
+      header: 'Name',
       accessor: (g: PermissionGroup) => (
         <div className="flex items-center gap-4 py-1">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 shadow-sm dark:bg-zinc-800 ring-1 ring-zinc-900/5 dark:ring-white/5">
@@ -49,13 +50,13 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: 
           </div>
           <div>
             <div className="font-bold text-zinc-900 dark:text-zinc-100 text-sm">{g.name}</div>
-            <div className="text-[11px] text-zinc-500 font-medium line-clamp-1">{g.description || 'Global security protocol definition'}</div>
+            <div className="text-[11px] text-zinc-500 font-medium line-clamp-1">{g.description || 'Permission group definition'}</div>
           </div>
         </div>
       )
     },
     {
-      header: 'Assigned Capabilities',
+      header: 'Permissions',
       accessor: (g: PermissionGroup) => (
         <div className="flex flex-wrap gap-1.5 max-w-[350px]">
           {(g.capabilities as string[] || []).slice(0, 4).map(cap => (
@@ -68,13 +69,13 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: 
             <Badge variant="zinc" className="text-[9px] font-bold">+{(g.capabilities as string[]).length - 4} MORE</Badge>
           )}
           {(g.capabilities as string[] || []).length === 0 && (
-            <span className="text-xs text-zinc-400 italic font-medium">No active capabilities</span>
+            <span className="text-xs text-zinc-400 italic font-medium">No permissions assigned</span>
           )}
         </div>
       )
     },
     {
-      header: 'Protocol Status',
+      header: 'Status',
       accessor: (g: any) => (
         <div className="flex flex-col">
           <Badge variant="blue" className="w-fit text-[10px] font-bold uppercase tracking-widest px-2">Active</Badge>
@@ -143,7 +144,7 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: 
         onClose={() => setDeletingGroupId(null)}
         onConfirm={handleDelete}
         title="Delete Group"
-        description="Are you sure you want to remove this security group? Staff members relying on these capabilities may lose platform access immediately."
+        description="Are you sure you want to delete this group? Members in this group may lose access to certain features."
         isDeleting={isDeleting}
       />
     </div>

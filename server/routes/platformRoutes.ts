@@ -56,9 +56,13 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
+        firstName: primaryMembership?.firstName,
+        lastName: primaryMembership?.familyName,
         isSuperAdmin: user.isSuperAdmin,
-        role: primaryMembership?.roleId || (user.isSuperAdmin ? 'SUPERADMIN' : 'USER'),
-        capabilities: capabilities
+        role: user.isSuperAdmin ? 'SUPERADMIN' : (primaryMembership?.roleId || 'USER'),
+        licenceType: primaryMembership?.licenceType || (user.isSuperAdmin ? 'Enterprise' : 'Standard'),
+        avatarUrl: primaryMembership?.avatarUrl,
+        capabilities: user.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : capabilities
       },
       tenant: tenant ? {
         id: tenant.id,

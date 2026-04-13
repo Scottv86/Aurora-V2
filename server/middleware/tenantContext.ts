@@ -73,7 +73,7 @@ export const tenantMiddleware = async (
     req.tenant = {
       id: tenant.id,
       subdomain: tenant.subdomain,
-      db: getScopedPrisma(tenant.id, baseClient),
+      db: getScopedPrisma(tenant.id, '', false, baseClient),
       plan: tenant.planTier
     };
 

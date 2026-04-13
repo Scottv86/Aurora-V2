@@ -115,12 +115,27 @@ model TenantMember {
   nationality     String?   @map("nationality")
   startDate       DateTime? @map("start_date")
   endDate         DateTime? @map("end_date")
+  
+  // Workforce Hub Enhancements
+  avatarUrl       String?   @map("avatar_url")
+  isContractor    Boolean   @default(false) @map("is_contractor")
+  licenceType     String    @default("Standard") @map("licence_type")
+  aiHumour        Float     @default(0.5) @map("ai_humour")
+  workEmail       String?   @map("work_email")
+  signature       String?   @map("signature")
 
   phoneNumbers    MemberPhoneNumber[]
   certifications  MemberCertification[]
   education       MemberEducation[]
   skills          MemberSkill[]
   permissionGroups MemberPermissionGroup[]
+  
+  // HR & Succession Relations
+  successions      MemberSuccession[]
+  contracts        EmploymentContract[]
+  leaveBalances    LeaveBalance[]
+  leaveRequests    LeaveRequest[]
+  timesheets       Timesheet[]
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
   @@index([tenantId], map: "TenantMember_tenantId_idx")
@@ -274,6 +289,7 @@ model Position {
   parent         Position?      @relation("PositionToPosition", fields: [parentId], references: [id])
   children       Position[]     @relation("PositionToPosition")
   members        TenantMember[]
+  successors     MemberSuccession[]
 
   @@unique([tenantId, positionNumber])
   @@index([tenantId])
@@ -328,4 +344,97 @@ model AuditLog {
 
   @@index([tenantId, timestamp])
   @@map("audit_logs")
+}
+
+model MemberSuccession {
+  id         String   @id @default(cuid())
+  positionId String   @map("position_id")
+  memberId   String   @map("member_id")
+  ranking    Int      @default(0)
+  
+  position   Position     @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  member     TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([positionId])
+  @@map("member_successions")
+}
+
+model EmploymentContract {
+  id          String   @id @default(cuid())
+  memberId    String   @map("member_id")
+  tenantId    String   @map("tenant_id")
+  type        String   // e.g. 'Permanent', 'Fixed Term', 'Casual'
+  startDate   DateTime @map("start_date")
+  endDate     DateTime? @map("end_date")
+  status      String   @default("Active")
+  documentUrl String?  @map("document_url")
+  
+  member      TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  remuneration RemunerationDetail[]
+
+  @@index([memberId])
+  @@map("employment_contracts")
+}
+
+model RemunerationDetail {
+  id          String   @id @default(cuid())
+  contractId  String   @map("contract_id")
+  amount      Float
+  currency    String   @default("AUD")
+  effectiveDate DateTime @map("effective_date")
+  
+  contract    EmploymentContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("remuneration_details")
+}
+
+model LeaveBalance {
+  id        String @id @default(cuid())
+  memberId  String @map("member_id")
+  type      String // e.g. 'Annual', 'Sick', 'Long Service'
+  accrued   Float  @default(0)
+  used      Float  @default(0)
+  
+  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id        String   @id @default(cuid())
+  memberId  String   @map("member_id")
+  type      String
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  status    String   @default("Pending") // Pending, Approved, Rejected
+  reason    String?
+  
+  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("leave_requests")
+}
+
+model Timesheet {
+  id          String   @id @default(cuid())
+  memberId    String   @map("member_id")
+  status      String   @default("Draft")
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  
+  member      TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  entries     TimesheetEntry[]
+
+  @@map("timesheets")
+}
+
+model TimesheetEntry {
+  id          String   @id @default(cuid())
+  timesheetId String   @map("timesheet_id")
+  date        DateTime
+  hours       Float
+  description String?
+  
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@map("timesheet_entries")
 }

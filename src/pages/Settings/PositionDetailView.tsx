@@ -1,27 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
   ChevronRight, 
   Briefcase, 
-  Settings, 
   Activity, 
   Trash2, 
   Save, 
   GitMerge,
   Info,
-  Users
+  Users,
+  Target,
+  UserPlus,
+  Shield
 } from 'lucide-react';
 import { usePosition, usePositions } from '../../hooks/usePositions';
-import { Button, Input, Select, Badge, cn } from '../../components/UI/Primitives';
+import { useUsers } from '../../hooks/useUsers';
+import { Button, Input, Select, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
 export const PositionDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { position, loading, updatePosition, deletePosition } = usePosition(id);
+  const { position, loading, updatePosition, deletePosition, updateSuccessors } = usePosition(id);
   const { positions: allPositions } = usePositions();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSaving, setIsSaving] = useState(false);
@@ -40,8 +43,12 @@ export const PositionDetailView = () => {
       setPositionNumber(position.positionNumber);
       setDescription(position.description || '');
       setParentId(position.parentId || '');
+      setSuccessors(position.successors || []);
     }
   }, [position]);
+
+  const [successors, setSuccessors] = useState<any[]>([]);
+  const { members: allMembers } = useUsers();
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -66,7 +73,7 @@ export const PositionDetailView = () => {
     setIsDeleting(true);
     try {
       await deletePosition();
-      navigate('/dashboard/settings/workforce');
+      navigate('/workspace/settings/workforce');
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -88,7 +95,7 @@ export const PositionDetailView = () => {
     return (
       <div className="p-8 text-center bg-red-500/5 border border-red-500/10 rounded-2xl">
         <p className="text-red-500 font-medium">Position record not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/workforce')}>
+        <Button variant="ghost" className="mt-4" onClick={() => navigate('/workspace/settings/workforce')}>
           Return to Hub
         </Button>
       </div>
@@ -100,7 +107,7 @@ export const PositionDetailView = () => {
       {/* breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 
-          onClick={() => navigate('/dashboard/settings/workforce')}
+          onClick={() => navigate('/workspace/settings/workforce')}
           className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
         >
           <ArrowLeft size={20} className="text-zinc-500" />
@@ -148,6 +155,7 @@ export const PositionDetailView = () => {
           tabs={[
             { id: 'overview', label: 'Position Definition' },
             { id: 'occupants', label: 'Current Occupants' },
+            { id: 'succession', label: 'Succession Planning' },
             { id: 'activity', label: 'Audit Log' }
           ]}
           activeTab={activeTab}
@@ -244,7 +252,7 @@ export const PositionDetailView = () => {
                                 variant="ghost" 
                                 size="sm" 
                                 className="text-blue-500"
-                                onClick={() => navigate(`/dashboard/settings/workforce/member/${occ.id}`)}
+                                onClick={() => navigate(`/workspace/settings/workforce/member/${occ.id}`)}
                               >
                                 View Detailed Record
                               </Button>
@@ -261,6 +269,93 @@ export const PositionDetailView = () => {
                      )}
                   </tbody>
                </table>
+            </motion.div>
+          )}
+          {activeTab === 'succession' && (
+            <motion.div 
+               initial={{ opacity: 0, y: 10 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="space-y-6"
+            >
+               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-8">
+                  <div className="flex items-center justify-between">
+                     <div className="space-y-1">
+                        <h3 className="text-xl font-bold flex items-center gap-2">
+                           <Target size={20} className="text-indigo-500" /> Strategic Successors
+                        </h3>
+                        <p className="text-sm text-zinc-500">Identify and rank individuals ready to transition into this position context.</p>
+                     </div>
+                     <Button variant="primary" className="gap-2" onClick={async () => {
+                        await updateSuccessors(successors);
+                     }}>
+                        <Save size={16} /> Save Rankings
+                     </Button>
+                     <Button variant="ghost" className="gap-2" onClick={() => {
+                        const next = [...successors, { memberId: '', ranking: successors.length + 1 }];
+                        setSuccessors(next);
+                     }}>
+                        <UserPlus size={16} /> Add Candidate
+                     </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                     {successors.map((suc, idx) => (
+                        <div key={idx} className="flex items-center gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-2xl group transition-all hover:border-indigo-500/30">
+                           <div className="h-10 w-10 rounded-full bg-white dark:bg-zinc-800 border-2 border-zinc-200 dark:border-zinc-700 flex items-center justify-center font-black text-zinc-400">
+                              {suc.ranking || idx + 1}
+                           </div>
+                           <div className="flex-1">
+                              <Select 
+                                value={suc.memberId}
+                                onChange={e => {
+                                  const next = [...successors];
+                                  next[idx].memberId = e.target.value;
+                                  setSuccessors(next);
+                                }}
+                                options={[{ label: 'Select a candidate...', value: '' }, ...allMembers.map(m => ({ label: m.name, value: m.id }))]}
+                              />
+                           </div>
+                           <div className="w-24">
+                              <Input 
+                                type="number"
+                                label="Rank"
+                                value={suc.ranking}
+                                onChange={e => {
+                                  const next = [...successors];
+                                  next[idx].ranking = parseInt(e.target.value);
+                                  setSuccessors(next);
+                                }}
+                              />
+                           </div>
+                           <button 
+                              onClick={() => setSuccessors(successors.filter((_, i) => i !== idx))}
+                              className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
+                           >
+                              <Trash2 size={18} />
+                           </button>
+                        </div>
+                     ))}
+
+                     {!successors.length && (
+                        <div className="py-12 text-center bg-zinc-50/50 dark:bg-zinc-800/20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl">
+                           <p className="text-sm text-zinc-400 italic">No succession planning has been initiated for this position.</p>
+                        </div>
+                     )}
+                  </div>
+               </div>
+
+               <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-3xl p-6 flex gap-4">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0">
+                     <Shield size={20} />
+                  </div>
+                  <div className="space-y-1">
+                     <p className="text-sm font-bold text-indigo-900 dark:text-indigo-100">Succession Protocol</p>
+                     <p className="text-xs text-indigo-700/70 dark:text-indigo-400/70 leading-relaxed">
+                        Successors are monitored for skill readiness. When the primary occupant is decommissioned or moved, 
+                        the highest-ranked successor is automatically flagged for transition review.
+                     </p>
+                  </div>
+               </div>
             </motion.div>
           )}
 

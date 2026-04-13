@@ -1,6 +1,6 @@
 import { firebaseAdmin } from '../server/lib/firebaseAdmin';
 import { globalPrisma } from '../server/lib/prisma';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 async function migrate() {
   console.log('Starting Migration from Firestore to PostgreSQL (Prisma)...');
@@ -23,7 +23,7 @@ async function migrate() {
         data: {
           id: tenantId,
           name: tenantData.name || 'Unknown Tenant',
-          subdomain: tenantData.slug || uuidv4(),
+          subdomain: tenantData.slug || crypto.randomUUID(),
           status: tenantData.status || 'active',
         }
       });

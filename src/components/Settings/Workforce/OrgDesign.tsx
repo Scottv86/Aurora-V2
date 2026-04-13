@@ -25,7 +25,7 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', activeF
 
   const columns = [
     {
-      header: 'ID / Code',
+      header: 'ID',
       accessor: (p: Position) => (
         <div className="flex items-center gap-2">
           <Badge variant="blue" className="font-mono text-[10px] tracking-tight">{p.positionNumber}</Badge>
@@ -33,7 +33,7 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', activeF
       )
     },
     {
-      header: 'Functional Title',
+      header: 'Title',
       accessor: (p: Position) => (
         <div className="flex flex-col">
           <span className="font-bold text-zinc-900 dark:text-zinc-100">{p.title}</span>
@@ -46,20 +46,20 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', activeF
       )
     },
     {
-      header: 'Workforce Slotted',
+      header: 'Members',
       accessor: (p: Position) => (
         <div className="flex items-center gap-2">
           <Users size={14} className="text-zinc-400" />
           <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-            {p.occupantCount} {p.occupantCount === 1 ? 'expert' : 'experts'}
+            {p.occupantCount} {p.occupantCount === 1 ? 'member' : 'members'}
           </span>
         </div>
       )
     },
     {
-      header: 'Role Summary',
+      header: 'Description',
       accessor: (p: Position) => (
-        <span className="text-sm text-zinc-500 line-clamp-1">{p.description || 'Definition pending...'}</span>
+        <span className="text-sm text-zinc-500 line-clamp-1">{p.description || 'No description...'}</span>
       )
     }
   ];
@@ -98,8 +98,8 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', activeF
           columns={columns} 
           loading={loading}
           pagination={true}
-          onRowClick={(p) => navigate(`/dashboard/settings/workforce/roles/${p.id}`)}
-          emptyMessage="No roles defined yet. Define a role architecture to start building your organization."
+          onRowClick={(p) => navigate(`/workspace/settings/workforce/roles/${p.id}`)}
+          emptyMessage="No roles found. Add a role to get started."
         />
       </div>
 
@@ -117,7 +117,7 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', activeF
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input 
-              label="Position Number" 
+              label="ID" 
               placeholder="e.g. POS-001" 
               value={newPosition.positionNumber}
               onChange={(e) => setNewPosition(prev => ({ ...prev, positionNumber: e.target.value }))}

@@ -1,6 +1,6 @@
-import { createContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import type { User, Tenant, Environment } from '../types/platform';
+import type { User, Tenant, Environment, BillingUsage } from '../types/platform';
 import { API_BASE_URL } from '../config';
 import { MenuConfig } from '../types/menu';
 import { systemDefaultMenuConfig } from '../config/menuDefaults';
@@ -12,12 +12,17 @@ interface PlatformContextType {
   environment: Environment;
   setEnvironment: (env: Environment) => void;
   isLoading: boolean;
+  isDeveloper: boolean;
+  capabilities: Set<string>;
   modules: any[];
   modulesLoading: boolean;
   refreshModules: () => Promise<void>;
   menuConfig: MenuConfig | null;
   setMenuConfig: (config: MenuConfig) => void;
   updateMenuConfig: (config: MenuConfig, scope?: 'user' | 'tenant') => Promise<void>;
+  billingUsage: BillingUsage | null;
+  billingLoading: boolean;
+  refreshBilling: () => Promise<void>;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -28,10 +33,14 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [environment, setEnvironment] = useState<Environment>('DEV');
   const [isLoading, setIsLoading] = useState(true);
+  const [capabilities, setCapabilities] = useState<Set<string>>(new Set());
+  const [capabilityGroups, setCapabilityGroups] = useState<string[]>([]);
   
   const [modules, setModules] = useState<any[]>([]);
   const [modulesLoading, setModulesLoading] = useState(false);
   const [menuConfig, setMenuConfig] = useState<MenuConfig | null>(null);
+  const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   const refreshModules = async () => {
     if (!supabaseUser || !tenant?.id) return;
@@ -84,22 +93,56 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const refreshBilling = useCallback(async () => {
+    if (!supabaseUser || !tenant?.id) return;
+    
+    setBillingLoading(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/billing/usage`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBillingUsage(data);
+      }
+    } catch (err) {
+      console.error('[PlatformContext] Failed to fetch billing usage:', err);
+    } finally {
+      setBillingLoading(false);
+    }
+  }, [supabaseUser, tenant?.id, session?.access_token]);
+
   useEffect(() => {
+    console.log('[PlatformContext] Initializing sync effect...', { 
+      hasSupabaseUser: !!supabaseUser, 
+      authLoading,
+      tokenPresent: !!session?.access_token 
+    });
+
     if (authLoading) return;
+    
     if (!supabaseUser) {
+      console.log('[PlatformContext] No supabase user. Clearing state.');
       setUser(null);
       setTenant(null);
       setModules([]);
       setMenuConfig(null);
+      setCapabilities(new Set());
+      setCapabilityGroups([]);
       setIsLoading(false);
       return;
     }
 
     const fetchContext = async () => {
       try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const response = await fetch(`${API_BASE_URL}/api/platform/context`, {
           headers: {
-            'Authorization': `Bearer ${session?.access_token}`
+            'Authorization': `Bearer ${token}`
           }
         });
         
@@ -188,8 +231,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (tenant?.id) {
       refreshModules();
+      refreshBilling();
     }
-  }, [tenant?.id, supabaseUser]);
+  }, [tenant?.id, supabaseUser, refreshBilling]);
 
   return (
     <PlatformContext.Provider value={{ 
@@ -198,12 +242,17 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       environment, 
       setEnvironment, 
       isLoading,
+      isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || false,
+      capabilities,
       modules,
       modulesLoading,
       refreshModules,
       menuConfig,
       setMenuConfig,
-      updateMenuConfig
+      updateMenuConfig,
+      billingUsage,
+      billingLoading,
+      refreshBilling
     }}>
       {children}
     </PlatformContext.Provider>

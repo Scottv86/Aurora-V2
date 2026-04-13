@@ -52,9 +52,9 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = '
                  parts[1] === 'PROVISION' ? 'Hired' : 'Modified';
     
     const subject = parts[0] === 'MEMBER' ? 'Staff Member' :
-                    parts[0] === 'TEAM' ? 'Team Hub' :
-                    parts[0] === 'ROLE' ? 'Role Slot' :
-                    parts[0] === 'GROUP' ? 'Security Group' : 'System Resource';
+                    parts[0] === 'TEAM' ? 'Team' :
+                    parts[0] === 'ROLE' ? 'Role' :
+                    parts[0] === 'GROUP' ? 'Group' : 'System Resource';
 
     return `${verb} a ${subject}`;
   };
@@ -67,7 +67,7 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = '
 
   const columns = [
     {
-      header: 'Event Activity',
+      header: 'Action',
       accessor: (l: any) => (
         <div className="flex items-center gap-3 py-1">
            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-900/5">
@@ -85,7 +85,7 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = '
       )
     },
     {
-      header: 'Authorizing Actor',
+      header: 'User',
       accessor: (l: any) => (
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-full bg-zinc-200 dark:bg-zinc-800" />
@@ -96,15 +96,15 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = '
       )
     },
     {
-      header: 'Outcome',
+      header: 'Status',
       accessor: (l: any) => (
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-wider dark:bg-green-500/10 dark:text-green-400">
-          <ShieldCheck size={10} /> Authorized
+          <ShieldCheck size={10} /> Success
         </div>
       )
     },
     {
-      header: 'Time Relative',
+      header: 'Time',
       accessor: (l: any) => (
         <div className="flex items-center gap-1.5 text-xs text-zinc-400">
            <Clock size={12} /> 
@@ -155,7 +155,7 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = '
           <div className="flex flex-col items-center justify-center py-20">
             <Database className="text-zinc-200 dark:text-zinc-800 mb-4" size={48} />
             <p className="text-lg font-bold text-zinc-400 dark:text-zinc-600">No activity recorded</p>
-            <p className="text-sm text-zinc-400 dark:text-zinc-500">Activity signatures will appear here as the platform evolves.</p>
+            <p className="text-sm text-zinc-400 dark:text-zinc-500">Activity logs will appear here as members perform actions.</p>
           </div>
         )}
       </div>

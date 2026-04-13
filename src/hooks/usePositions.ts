@@ -18,6 +18,7 @@ export interface Position {
   parentTitle?: string;
   occupants: Occupant[];
   occupantCount: number;
+  successors?: { memberId: string; ranking: number; member?: any }[];
   createdAt: string;
 }
 
@@ -198,5 +199,26 @@ export const usePosition = (id?: string) => {
     }
   };
 
-  return { position, loading, updatePosition, deletePosition, refetch: fetchPosition };
+  const updateSuccessors = async (successors: { memberId: string, ranking: number }[]) => {
+    if (!tenant?.id || !id) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/${id}/successors`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({ successors })
+      });
+      if (!res.ok) throw new Error('Failed to update successors');
+      toast.success('Succession rankings updated');
+      fetchPosition(); // Refresh local state
+    } catch (err: any) {
+      toast.error(err.message);
+      throw err;
+    }
+  };
+
+  return { position, loading, updatePosition, deletePosition, updateSuccessors, refetch: fetchPosition };
 };

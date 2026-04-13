@@ -1,19 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
   ChevronRight, 
   Users, 
-  Settings, 
   Activity, 
   Trash2, 
-  Save, 
-  Network,
-  Info
+  Save
 } from 'lucide-react';
 import { useTeam } from '../../hooks/useTeams';
-import { Button, Input, Badge, cn } from '../../components/UI/Primitives';
+import { Button, Input, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
@@ -55,7 +52,7 @@ export const TeamDetailView = () => {
     setIsDeleting(true);
     try {
       await deleteTeam();
-      navigate('/dashboard/settings/workforce');
+      navigate('/workspace/settings/workforce');
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -77,7 +74,7 @@ export const TeamDetailView = () => {
     return (
       <div className="p-8 text-center bg-red-500/5 border border-red-500/10 rounded-2xl">
         <p className="text-red-500 font-medium">Team record not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => navigate('/dashboard/settings/workforce')}>
+        <Button variant="ghost" className="mt-4" onClick={() => navigate('/workspace/settings/workforce')}>
           Return to Hub
         </Button>
       </div>
@@ -89,7 +86,7 @@ export const TeamDetailView = () => {
       {/* breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 
-          onClick={() => navigate('/dashboard/settings/workforce')}
+          onClick={() => navigate('/workspace/settings/workforce')}
           className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
         >
           <ArrowLeft size={20} className="text-zinc-500" />
@@ -224,7 +221,7 @@ export const TeamDetailView = () => {
                                 variant="ghost" 
                                 size="sm" 
                                 className="text-blue-500"
-                                onClick={() => navigate(`/dashboard/settings/workforce/member/${m.id}`)}
+                                onClick={() => navigate(`/workspace/settings/workforce/member/${m.id}`)}
                               >
                                 View Profile
                               </Button>
