@@ -34,7 +34,6 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [environment, setEnvironment] = useState<Environment>('DEV');
   const [isLoading, setIsLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<Set<string>>(new Set());
-  const [capabilityGroups, setCapabilityGroups] = useState<string[]>([]);
   
   const [modules, setModules] = useState<any[]>([]);
   const [modulesLoading, setModulesLoading] = useState(false);
@@ -132,7 +131,6 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       setModules([]);
       setMenuConfig(null);
       setCapabilities(new Set());
-      setCapabilityGroups([]);
       setIsLoading(false);
       return;
     }

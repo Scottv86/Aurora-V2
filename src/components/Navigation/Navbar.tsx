@@ -21,7 +21,7 @@ import { Environment } from '../../types/platform';
 import { LicenseGate } from '../Auth/LicenseGate';
 
 export const Navbar = () => {
-  const { tenant, environment, setEnvironment, user: platformUser, isDeveloper } = usePlatform();
+  const { tenant, environment, setEnvironment, user: platformUser } = usePlatform();
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
