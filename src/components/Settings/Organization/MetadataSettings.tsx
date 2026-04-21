@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '../../UI/Primitives';
-import { Save, Search, Share2, Sparkles } from 'lucide-react';
+import { Search, Share2, Sparkles } from 'lucide-react';
 
 interface MetadataSettingsProps {
   tenant: any;

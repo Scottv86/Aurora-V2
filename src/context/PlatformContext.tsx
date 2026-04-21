@@ -187,10 +187,10 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         // Use backend menuConfig if available, otherwise fall back to system default
         // Merge any new default items that may have been added since the config was saved
         let resolvedConfig: MenuConfig;
-        if (data.menuConfig) {
+        if (data.menuConfig && Array.isArray(data.menuConfig.sections)) {
           const mergedSections = systemDefaultMenuConfig.sections.map(defaultSection => {
             // Support legacy ID mapping during transition
-            const savedSection = data.menuConfig.sections.find((s: any) => 
+            const savedSection = (data.menuConfig.sections as any[]).find((s: any) => 
               s.id === defaultSection.id || (defaultSection.id === 'platform' && s.id === 'operations')
             );
             

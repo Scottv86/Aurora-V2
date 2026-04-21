@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Button, Input, Select } from '../../UI/Primitives';
-import { Save, Building2, Globe, Mail, Phone, MapPin, Zap } from 'lucide-react';
-import { toast } from 'sonner';
+import { Save, Building2, Globe, Mail, Zap } from 'lucide-react';
 
 interface GeneralSettingsProps {
   tenant: any;
@@ -74,6 +73,7 @@ export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
               label="Primary Industry" 
               value={formData.industry}
               onChange={(e) => setFormData(prev => ({ ...prev, industry: e.target.value }))}
+              icon={<Building2 size={18} />}
               options={[
                 { label: 'Technology', value: 'Technology' },
                 { label: 'Finance', value: 'Finance' },

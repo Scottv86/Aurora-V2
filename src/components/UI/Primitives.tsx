@@ -93,16 +93,23 @@ export const Input = ({ className, label, error, icon, ...props }: InputProps) =
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   options: { label: string; value: string }[];
+  icon?: React.ReactNode;
 }
 
-export const Select = ({ className, label, options, ...props }: SelectProps) => {
+export const Select = ({ className, label, options, icon, ...props }: SelectProps) => {
   return (
     <div className="w-full space-y-1.5">
       {label && <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{label}</label>}
       <div className="relative">
+        {icon && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
+            {icon}
+          </div>
+        )}
         <select
           className={cn(
             'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100',
+            icon && 'pl-11',
             className
           )}
           {...props}

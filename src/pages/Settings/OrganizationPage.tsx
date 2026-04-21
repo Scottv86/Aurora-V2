@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { 
   Building2, 
-  Palette, 
   Globe2, 
   Search, 
-  Settings2, 
-  Zap
+  Settings2
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';

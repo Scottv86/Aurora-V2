@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Select, Input } from '../../UI/Primitives';
-import { Save, Settings2, Shield, Zap, Archive, Globe } from 'lucide-react';
+import { Settings2, Shield, Zap, Archive, Globe } from 'lucide-react';
 
 interface WorkspaceSettingsProps {
   tenant: any;

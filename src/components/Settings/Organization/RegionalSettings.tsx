@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Select } from '../../UI/Primitives';
-import { Save, Globe2, Clock, Banknote, Calendar } from 'lucide-react';
+import { Globe2, Clock, Banknote, Calendar } from 'lucide-react';
 
 interface RegionalSettingsProps {
   tenant: any;
@@ -46,6 +46,7 @@ export const RegionalSettings = ({ tenant, onUpdate }: RegionalSettingsProps) =>
               label="System Timezone" 
               value={localization.timezone}
               onChange={(e) => setLocalization(prev => ({ ...prev, timezone: e.target.value }))}
+              icon={<Clock size={18} />}
               options={[
                 { label: '(UTC+00:00) London', value: 'Europe/London' },
                 { label: '(UTC+01:00) Berlin', value: 'Europe/Berlin' },
@@ -61,6 +62,7 @@ export const RegionalSettings = ({ tenant, onUpdate }: RegionalSettingsProps) =>
               label="Primary Currency" 
               value={localization.currency}
               onChange={(e) => setLocalization(prev => ({ ...prev, currency: e.target.value }))}
+              icon={<Banknote size={18} />}
               options={[
                 { label: 'USD - US Dollar ($)', value: 'USD' },
                 { label: 'AUD - Australian Dollar ($)', value: 'AUD' },
@@ -74,6 +76,7 @@ export const RegionalSettings = ({ tenant, onUpdate }: RegionalSettingsProps) =>
               label="System Language" 
               value={localization.language}
               onChange={(e) => setLocalization(prev => ({ ...prev, language: e.target.value }))}
+              icon={<Globe2 size={18} />}
               options={[
                 { label: 'English (US)', value: 'en-US' },
                 { label: 'English (UK/AU)', value: 'en-GB' },
@@ -87,6 +90,7 @@ export const RegionalSettings = ({ tenant, onUpdate }: RegionalSettingsProps) =>
               label="Date Format" 
               value={localization.dateFormat}
               onChange={(e) => setLocalization(prev => ({ ...prev, dateFormat: e.target.value }))}
+              icon={<Calendar size={18} />}
               options={[
                 { label: 'DD/MM/YYYY', value: 'DD/MM/YYYY' },
                 { label: 'MM/DD/YYYY', value: 'MM/DD/YYYY' },
