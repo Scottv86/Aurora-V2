@@ -17,7 +17,7 @@ export const MODULES = [
     id: 'contacts', 
     name: 'Contacts', 
     type: 'RECORD',
-    category: 'CRM & Entities', 
+    category: 'CRM & People & Organisations', 
     icon: Users, 
     description: 'Manage people and relationships across your organization.',
     fields: [
@@ -74,7 +74,7 @@ export const MODULES = [
     id: 'onboarding', 
     name: 'Onboarding', 
     type: 'WORK_ITEM',
-    category: 'HR & Entities', 
+    category: 'HR & People & Organisations', 
     icon: UserPlus, 
     description: 'Streamline employee and contractor onboarding flows.',
     fields: [

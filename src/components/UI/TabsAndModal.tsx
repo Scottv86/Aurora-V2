@@ -13,20 +13,22 @@ interface TabsProps {
   activeTab: string;
   onChange: (id: string) => void;
   className?: string;
+  firstTabPadding?: boolean;
 }
 
-export const Tabs = ({ tabs, activeTab, onChange, className }: TabsProps) => {
+export const Tabs = ({ tabs, activeTab, onChange, className, firstTabPadding = true }: TabsProps) => {
   return (
     <div className={cn('flex items-center border-b border-zinc-200 dark:border-zinc-800 overflow-x-auto no-scrollbar', className)}>
       <div className="flex items-center gap-1 min-w-full">
-        {tabs.map((tab) => {
+        {tabs.map((tab, idx) => {
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => onChange(tab.id)}
               className={cn(
-                'relative flex items-center gap-2 px-4 py-4 text-sm font-bold transition-all outline-none whitespace-nowrap',
+                'relative flex items-center gap-2 py-4 text-sm font-bold transition-all outline-none whitespace-nowrap',
+                idx === 0 && !firstTabPadding ? 'pl-0 pr-4' : 'px-4',
                 isActive 
                   ? 'text-zinc-900 dark:text-zinc-100' 
                   : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200'
@@ -37,7 +39,10 @@ export const Tabs = ({ tabs, activeTab, onChange, className }: TabsProps) => {
               {isActive && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                  className={cn(
+                    "absolute bottom-0 h-0.5 bg-blue-600",
+                    idx === 0 && !firstTabPadding ? "left-0 right-4" : "left-0 right-0"
+                  )}
                   transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                 />
               )}
@@ -48,6 +53,7 @@ export const Tabs = ({ tabs, activeTab, onChange, className }: TabsProps) => {
     </div>
   );
 };
+
 
 interface ModalProps {
   isOpen: boolean;

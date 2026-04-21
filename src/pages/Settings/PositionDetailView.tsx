@@ -20,6 +20,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { Button, Input, Select, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { Table } from '../../components/UI/Table';
 
 export const PositionDetailView = () => {
   const { id } = useParams();
@@ -230,45 +231,33 @@ export const PositionDetailView = () => {
                animate={{ opacity: 1 }}
                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden"
             >
-               <table className="w-full text-left">
-                  <thead>
-                     <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
-                        <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase">Occupant</th>
-                        <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase">Type</th>
-                        <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase">Profile</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                     {position.occupants?.map((occ) => (
-                        <tr key={occ.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                           <td className="px-6 py-4">
-                              <div className="font-semibold text-zinc-900 dark:text-zinc-100">{occ.name}</div>
-                           </td>
-                           <td className="px-6 py-4">
-                              <Badge variant={occ.isSynthetic ? "purple" : "zinc"}>{occ.isSynthetic ? "Agent" : "Human"}</Badge>
-                           </td>
-                           <td className="px-6 py-4">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-blue-500"
-                                onClick={() => navigate(`/workspace/settings/workforce/member/${occ.id}`)}
-                              >
-                                View Detailed Record
-                              </Button>
-                           </td>
-                        </tr>
-                     ))}
-                     {!position.occupants?.length && (
-                        <tr>
-                           <td colSpan={3} className="px-6 py-12 text-center text-zinc-500 italic flex flex-col items-center gap-2">
-                             <Users size={24} className="text-zinc-300" />
-                             This position is currently vacant.
-                           </td>
-                        </tr>
-                     )}
-                  </tbody>
-               </table>
+               <Table 
+                 data={position.occupants || []}
+                 emptyMessage="This position is currently vacant."
+                 columns={[
+                   {
+                     header: 'Occupant',
+                     accessor: (occ) => <div className="font-semibold text-zinc-900 dark:text-zinc-100">{occ.name}</div>
+                   },
+                   {
+                     header: 'Type',
+                     accessor: (occ) => <Badge variant={occ.isSynthetic ? "purple" : "zinc"}>{occ.isSynthetic ? "Agent" : "Human"}</Badge>
+                   },
+                   {
+                     header: 'Profile',
+                     accessor: (occ) => (
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="text-blue-500"
+                         onClick={() => navigate(`/workspace/settings/workforce/member/${occ.id}`)}
+                       >
+                         View Detailed Record
+                       </Button>
+                     )
+                   }
+                 ]}
+               />
             </motion.div>
           )}
           {activeTab === 'succession' && (

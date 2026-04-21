@@ -12,6 +12,8 @@ import positionRoutes from './routes/positionRoutes';
 import permissionRoutes from './routes/permissionRoutes';
 import auditRoutes from './routes/auditRoutes';
 import billingRoutes from './routes/billingRoutes';
+import peopleOrgRoutes from './routes/peopleOrgRoutes';
+import taxonomyRoutes from './routes/taxonomyRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -30,6 +32,7 @@ initSocket(httpServer);
 app.use(cors({
   origin: [
     'http://localhost:3000',
+    'http://localhost:3002',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:4173',
@@ -38,7 +41,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Public Health Check
 app.get('/health', (req, res) => {
@@ -68,6 +72,9 @@ app.use('/api/positions', authenticate, requireTenantAccess, positionRoutes);
 app.use('/api/permissions', authenticate, requireTenantAccess, permissionRoutes);
 app.use('/api/audit', authenticate, requireTenantAccess, auditRoutes);
 app.use('/api/billing', authenticate, requireTenantAccess, billingRoutes);
+app.use('/api/people-organisations', authenticate, requireTenantAccess, peopleOrgRoutes);
+app.use('/api/taxonomies', authenticate, requireTenantAccess, taxonomyRoutes);
+
 
 // Public API Routes (Portal submissions)
 app.use('/api/public', publicRoutes);

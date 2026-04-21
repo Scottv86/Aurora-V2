@@ -52,7 +52,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     // Menu Configuration Resolution: User Customization > Tenant Default
     const menuConfig = primaryMembership?.menuConfig || tenant?.menuConfig || null;
 
-    res.json({
+    const contextData = {
       user: {
         id: user.id,
         email: user.email,
@@ -60,7 +60,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         lastName: primaryMembership?.familyName,
         isSuperAdmin: user.isSuperAdmin,
         role: user.isSuperAdmin ? 'SUPERADMIN' : (primaryMembership?.roleId || 'USER'),
-        licenceType: primaryMembership?.licenceType || (user.isSuperAdmin ? 'Enterprise' : 'Standard'),
+        licenceType: primaryMembership?.licenceType || (user.isSuperAdmin ? 'Developer' : 'Standard'),
         avatarUrl: primaryMembership?.avatarUrl,
         capabilities: user.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : capabilities
       },
@@ -72,13 +72,32 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         status: tenant.status,
         createdAt: tenant.createdAt,
         environments: ['production'],
-        menuConfig: tenant.menuConfig
+        menuConfig: tenant.menuConfig,
+        branding: tenant.branding,
+        localization: tenant.localization,
+        metadata: tenant.metadata,
+        workspaceSettings: tenant.workspaceSettings
       } : null,
       menuConfig // Resolved menu config (profile override or tenant default)
+    };
+
+    console.log(`[PlatformAPI] Returning context for ${user.email}:`, {
+      role: contextData.user.role,
+      licenceType: contextData.user.licenceType,
+      tenant: contextData.tenant?.name
     });
+
+    res.json(contextData);
   } catch (error: any) {
-    console.error('[PlatformAPI] Context error:', error);
-    res.status(500).json({ error: 'Failed to retrieve platform context' });
+    console.error(`[PlatformAPI] Context Error for UID ${uid}:`, {
+      message: error.message,
+      stack: error.stack,
+      tenantIds
+    });
+    res.status(500).json({ 
+      error: 'Failed to retrieve platform context',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -99,13 +118,15 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
 
   try {
     if (scope === 'tenant') {
-      // Check if user is admin of this tenant or superadmin
+      // Check if user has Developer license or is superadmin
       const membership = await globalPrisma.tenantMember.findUnique({
         where: { userId_tenantId: { userId: uid, tenantId } }
       });
 
-      if (!isSuperAdmin && membership?.roleId !== 'admin') {
-        return res.status(403).json({ error: 'Only administrators can update the organization menu.' });
+      const isDeveloper = membership?.licenceType === 'Developer' || isSuperAdmin;
+
+      if (!isDeveloper) {
+        return res.status(403).json({ error: 'A Developer license seat is required to update the organization menu.' });
       }
 
       await globalPrisma.tenant.update({
@@ -124,6 +145,58 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('[PlatformAPI] Menu config update error:', error);
     res.status(500).json({ error: 'Failed to save menu configuration' });
+  }
+});
+
+/**
+ * PATCH /api/platform/settings
+ * Updates the organization settings (name, branding, localization).
+ */
+router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) => {
+  const { name, subdomain, branding, localization, metadata, workspaceSettings } = req.body;
+  const { uid, tenantIds, isSuperAdmin } = req.user!;
+  const tenantId = req.headers['x-tenant-id'] as string || tenantIds[0];
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'No active tenant found for request' });
+  }
+
+  try {
+    // Check if user has Developer license or is superadmin
+    const membership = await globalPrisma.tenantMember.findUnique({
+      where: { userId_tenantId: { userId: uid, tenantId } }
+    });
+
+    const isDeveloper = membership?.licenceType === 'Developer' || isSuperAdmin;
+
+    if (!isDeveloper) {
+      return res.status(403).json({ error: 'A Developer license seat is required to update organization settings.' });
+    }
+
+    const updatedTenant = await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        ...(name && { name }),
+        ...(subdomain && { subdomain }),
+        ...(branding && { branding }),
+        ...(localization && { localization }),
+        ...(metadata && { metadata }),
+        ...(workspaceSettings && { workspaceSettings })
+      }
+    });
+
+    res.json({ success: true, tenant: {
+      id: updatedTenant.id,
+      name: updatedTenant.name,
+      subdomain: updatedTenant.subdomain,
+      branding: updatedTenant.branding,
+      localization: updatedTenant.localization,
+      metadata: updatedTenant.metadata,
+      workspaceSettings: updatedTenant.workspaceSettings
+    }});
+  } catch (error) {
+    console.error('[PlatformAPI] Settings update error:', error);
+    res.status(500).json({ error: 'Failed to update organization settings' });
   }
 });
 

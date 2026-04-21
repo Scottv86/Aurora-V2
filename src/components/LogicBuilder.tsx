@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { PageHeader } from './UI/PageHeader';
 
 const VARIABLES = [
   { name: 'API_KEY', value: 'sk_test_••••••••', type: 'Secret' },
@@ -79,16 +80,16 @@ export const LogicBuilder = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Business Logic</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage formulas, variables, and automated procedures.</p>
-        </div>
-        <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20">
-          <Plus size={18} />
-          <span>New Logic Asset</span>
-        </button>
-      </div>
+      <PageHeader 
+        title="Business Logic"
+        description="Manage formulas, variables, and automated procedures."
+        actions={
+          <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20">
+            <Plus size={18} />
+            <span>New Logic Asset</span>
+          </button>
+        }
+      />
 
       <div className="flex items-center gap-6 border-b border-zinc-200 dark:border-zinc-800">
         <button 

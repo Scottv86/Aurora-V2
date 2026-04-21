@@ -33,6 +33,9 @@ model Tenant {
   permissionGroups   PermissionGroup[]
   memberPermissionGroups MemberPermissionGroup[]
   auditLogs          AuditLog[]
+  parties            Party[]
+  partyRelationships PartyRelationship[]
+  taxonomies         Taxonomy[]
 
   @@map("tenants")
 }
@@ -357,6 +360,86 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+enum PartyType {
+  PERSON
+  ORGANIZATION
+}
+
+enum EntityStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  INACTIVE
+}
+
+model Party {
+  id                 String    @id @default(cuid())
+  tenantId           String    @map("tenant_id")
+  partyType          PartyType @map("party_type")
+  status             EntityStatus @default(DRAFT)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  
+  // Agentic Context
+  createdBySwarmId   String?   @map("created_by_swarm_id")
+  creationContextLog String?   @map("creation_context_log") @db.Text
+  
+  // Search
+  embeddings      Unsupported("vector(768)")? // Requires pgvector extension
+  
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  person             Person?
+  organization       Organization?
+  sourceRelationships PartyRelationship[] @relation("SourceParty")
+  targetRelationships PartyRelationship[] @relation("TargetParty")
+
+  @@index([tenantId])
+  @@map("parties")
+}
+
+model Person {
+  partyId        String   @id @map("party_id")
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  dateOfBirth    DateTime? @map("date_of_birth")
+  isHumanInLoop Boolean  @default(false) @map("is_human_in_loop")
+  
+  party          Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@map("persons")
+}
+
+model Organization {
+  partyId           String   @id @map("party_id")
+  legalName         String   @map("legal_name")
+  orgStructureType  String   @map("org_structure_type") // Mapped to taxonomy
+  incorporationDate DateTime? @map("incorporation_date")
+  taxIdentifier     String?  @map("tax_identifier")
+  
+  party             Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@map("organizations")
+}
+
+model PartyRelationship {
+  id                  String   @id @default(cuid())
+  tenantId            String   @map("tenant_id")
+  sourcePartyId       String   @map("source_party_id")
+  targetPartyId       String   @map("target_party_id")
+  relationshipType    String   @map("relationship_type") // Mapped to taxonomy
+  ownershipPercentage Decimal? @map("ownership_percentage") @db.Decimal(5, 2)
+  validFrom           DateTime @default(now()) @map("valid_from")
+  validTo             DateTime? @map("valid_to")
+  
+  tenant              Tenant   @relation(fields: [tenantId], references: [id])
+  sourceParty         Party    @relation("SourceParty", fields: [sourcePartyId], references: [id], onDelete: Cascade)
+  targetParty         Party    @relation("TargetParty", fields: [targetPartyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("party_relationships")
+}
+
+
 model MemberSuccession {
   id         String   @id @default(cuid())
   positionId String   @map("position_id")
@@ -448,4 +531,22 @@ model TimesheetEntry {
   timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
 
   @@map("timesheet_entries")
+}
+
+model Taxonomy {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  category    String   // e.g., "ORG_TYPE", "RELATIONSHIP_TYPE"
+  name        String
+  slug        String
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, category, slug])
+  @@index([tenantId])
+  @@map("taxonomies")
 }

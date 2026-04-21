@@ -16,6 +16,8 @@ import { RegionalSettings } from '../../components/Settings/Organization/Regiona
 import { MetadataSettings } from '../../components/Settings/Organization/MetadataSettings';
 import { WorkspaceSettings } from '../../components/Settings/Organization/WorkspaceSettings';
 
+import { PageHeader } from '../../components/UI/PageHeader';
+
 export const OrganizationPage = () => {
   const { tenant, updateTenant, isLoading } = usePlatform();
   const [activeTab, setActiveTab] = useState('general');
@@ -38,44 +40,21 @@ export const OrganizationPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className="flex min-h-full flex-col @container bg-zinc-50/30 dark:bg-zinc-950/30">
-        {/* Header */}
-        <div className="flex flex-col border-b border-zinc-200 bg-white/50 backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/50">
-          <div className="mx-auto max-w-7xl w-full">
-            <div className="flex flex-col gap-6 px-10 pt-10 pb-6">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.25em] text-indigo-600 dark:text-indigo-400">
-                    <Zap size={12} className="fill-current" /> System Configuration
-                  </div>
-                  <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-50">
-                    Organisation
-                  </h1>
-                </div>
-              </div>
-            </div>
+      <PageHeader 
+        title="Organisation"
+        description="Configure your organization's core identity, visual branding, and global system defaults. These settings apply to all members and workspaces within your tenancy."
+        tabs={
+          <Tabs 
+            tabs={tabs} 
+            activeTab={activeTab} 
+            onChange={setActiveTab} 
+            className="border-none"
+            firstTabPadding={false}
+          />
+        }
+      />
 
-            <div className="px-10 pb-10">
-              <p className="max-w-3xl text-sm font-medium leading-relaxed text-zinc-500">
-                Configure your organization's core identity, visual branding, and global system defaults. 
-                These settings apply to all members and workspaces within your tenancy.
-              </p>
-            </div>
-
-            <div className="px-10">
-              <Tabs 
-                tabs={tabs} 
-                activeTab={activeTab} 
-                onChange={setActiveTab} 
-                className="border-none" 
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 px-10 py-10">
-          <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-2 duration-700">
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
             {activeTab === 'general' && (
               <GeneralSettings tenant={tenant} onUpdate={updateTenant} />
             )}
@@ -91,9 +70,9 @@ export const OrganizationPage = () => {
             {activeTab === 'workspace' && (
               <WorkspaceSettings tenant={tenant} onUpdate={updateTenant} />
             )}
-          </div>
-        </div>
       </div>
     </LicenseGate>
   );
 };
+
+

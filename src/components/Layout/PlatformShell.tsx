@@ -207,7 +207,16 @@ const SortableSection = ({
 
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading } = useAuth();
-  const { user: platformUser, isLoading: platformLoading, modules, menuConfig, updateMenuConfig, setMenuConfig } = usePlatform();
+  const { 
+    user: platformUser, 
+    isLoading: platformLoading, 
+    isDeveloper, 
+    modules, 
+    menuConfig, 
+    updateMenuConfig, 
+    setMenuConfig 
+  } = usePlatform();
+  
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -223,8 +232,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     })
   );
   
-  const isDeveloper = platformUser?.licenceType === 'Developer' || platformUser?.isSuperAdmin;
-
   const enabledModules = modules.filter(m => m.status === 'ACTIVE');
   const isAdminPath = location.pathname.startsWith('/admin');
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
@@ -487,6 +494,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           collapsed={!isSidebarOpen} 
                         />
                         <SidebarItem 
+                          icon={LucideIcons.Cpu} 
+                          label="Platform modules" 
+                          to="/workspace/settings/platform-modules" 
+                          active={location.pathname.startsWith('/workspace/settings/platform-modules')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
                           icon={LucideIcons.LayoutGrid} 
                           label="Apps" 
                           to="/workspace/settings/apps" 
@@ -558,9 +572,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                         />
                         <SidebarItem 
                           icon={LucideIcons.Globe} 
-                          label="Portals" 
-                          to="/portal" 
-                          active={isActive('/portal')} 
+                          label="Sites" 
+                          to="/workspace/settings/sites" 
+                          active={isActive('/workspace/settings/sites')} 
                           collapsed={!isSidebarOpen} 
                         />
                         <SidebarItem 
@@ -568,13 +582,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           label="Reports" 
                           to="/workspace/settings/reports" 
                           active={isActive('/workspace/settings/reports')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Network} 
-                          label="Intranet" 
-                          to="/workspace/settings/intranet" 
-                          active={isActive('/workspace/settings/intranet')} 
                           collapsed={!isSidebarOpen} 
                         />
                         <SidebarItem 
@@ -603,6 +610,55 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           label="API" 
                           to="/workspace/settings/api" 
                           active={isActive('/workspace/settings/api')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Database} 
+                          label="Records" 
+                          to="/workspace/settings/records" 
+                          active={isActive('/workspace/settings/records')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Tag} 
+                          label="Fees & Products" 
+                          to="/workspace/settings/fees-products" 
+                          active={isActive('/workspace/settings/fees-products')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Banknote} 
+                          label="Finance" 
+                          to="/workspace/settings/finance" 
+                          active={isActive('/workspace/settings/finance')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.ClipboardPlus} 
+                          label="Intake" 
+                          to="/workspace/settings/intake" 
+                          active={isActive('/workspace/settings/intake')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.RotateCcw} 
+                          label="Factory reset" 
+                          to="/workspace/settings/reset" 
+                          active={isActive('/workspace/settings/reset')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.ArrowRightLeft} 
+                          label="Migration tools" 
+                          to="/workspace/settings/migration" 
+                          active={isActive('/workspace/settings/migration')} 
+                          collapsed={!isSidebarOpen} 
+                        />
+                        <SidebarItem 
+                          icon={LucideIcons.Share2} 
+                          label="Data sources" 
+                          to="/workspace/settings/data-sources" 
+                          active={isActive('/workspace/settings/data-sources')} 
                           collapsed={!isSidebarOpen} 
                         />
                       </>

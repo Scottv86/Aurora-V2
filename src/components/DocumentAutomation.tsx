@@ -17,9 +17,10 @@ import { DocumentService } from '../services/documentService';
 import { usePlatform } from '../hooks/usePlatform';
 import { DocumentTemplateBuilder } from './DocumentTemplateBuilder';
 import { toast } from 'sonner';
+import { PageHeader } from './UI/PageHeader';
 
 export const DocumentAutomation = () => {
-  const { tenant } = usePlatform();
+  const { tenant, isLoading: platformLoading } = usePlatform();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -73,7 +74,7 @@ export const DocumentAutomation = () => {
     );
   }
 
-  if (!tenant) {
+  if (!tenant && !platformLoading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full">
@@ -90,20 +91,20 @@ export const DocumentAutomation = () => {
   }
 
   return (
-    <div className="space-y-8 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Templates</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 mt-1">Create and manage reusable document templates for your platform.</p>
-        </div>
-        <button
-          onClick={handleCreateNew}
-          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-500/20"
-        >
-          <Plus size={20} />
-          Create Template
-        </button>
-      </div>
+    <div className="space-y-8">
+      <PageHeader 
+        title="Templates"
+        description="Create and manage reusable document templates for your platform."
+        actions={
+          <button
+            onClick={handleCreateNew}
+            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-500/20"
+          >
+            <Plus size={20} />
+            Create Template
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm dark:shadow-none">

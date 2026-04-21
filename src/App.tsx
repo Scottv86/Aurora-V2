@@ -20,9 +20,13 @@ import { ExternalPortal } from './components/ExternalPortal';
 import { ModuleEditor } from './components/ModuleEditor';
 import { LogicBuilder } from './components/LogicBuilder';
 import { Analytics } from './components/Analytics';
-import { Entities } from './components/Entities';
+
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
+import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
+import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
+import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
+import { PlatformModulesSettings } from './pages/Settings/PlatformModules/PlatformModulesSettings';
 import { HealthMonitor } from './components/HealthMonitor';
 import { FleetManager } from './components/FleetManager';
 import { ComputeMatrix } from './components/ComputeMatrix';
@@ -39,6 +43,8 @@ import { DashboardPage } from './pages/Dashboard/DashboardPage';
 import { BuilderChoice } from './pages/Builder/BuilderChoice';
 import { ModuleView } from './pages/Module/ModuleView';
 import { RecordDetailView } from './pages/Record/RecordDetailView';
+import { SitesPage } from './pages/Settings/SitesPage';
+import { UsagePage } from './pages/Settings/UsagePage';
 
 const App = () => {
   return (
@@ -80,7 +86,9 @@ const App = () => {
               
               {/* Platform Operations */}
               <Route path="/workspace/queue" element={<ProtectedRoute><PlatformShell><WorkQueue /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/entities" element={<ProtectedRoute><PlatformShell><Entities /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
+              <Route path="/workspace/platform/people-organisations" element={<ProtectedRoute><PlatformShell><PeopleOrgDirectory /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace/platform/people-organisations/:id" element={<ProtectedRoute><PlatformShell><PeopleOrgDetail /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/analytics" element={<ProtectedRoute><PlatformShell><Analytics /></PlatformShell></ProtectedRoute>} />
               <Route path="/workspace/reminders" element={<ProtectedRoute><PlatformShell><ComingSoon title="Reminders" description="Set task alerts, keep track of deadlines, and manage your personal notifications." /></PlatformShell></ProtectedRoute>} />
               
@@ -99,7 +107,7 @@ const App = () => {
               >
                 <Route index element={<OrganizationPage />} />
                 <Route path="billing" element={<BillingPage />} />
-                <Route path="usage" element={<ComingSoon title="Model Usage" description="Monitor tokens, API calls, and resource consumption for your AI models." />} />
+                <Route path="usage" element={<UsagePage />} />
                 <Route path="security" element={<ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." />} />
                 <Route path="audit" element={<ComingSoon title="Audit Log" description="Review system activity, security events, and configuration changes across the platform." />} />
                 
@@ -114,15 +122,29 @@ const App = () => {
                 <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
                 <Route path="lists" element={<ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." />} />
                 <Route path="appearance" element={<ComingSoon title="Appearance & Branding" description="Customize the visual theme, organization logos, and brand identity settings." />} />
+                <Route path="platform-modules" element={<PlatformModulesSettings />}>
+                   <Route index element={<Navigate to="people-organisations" replace />} />
+                   <Route path="people-organisations" element={<PeopleOrgSettings />} />
+                   <Route path="entities" element={<Navigate to="people-organisations" replace />} />
+                </Route>
                 <Route path="templates" element={<DocumentAutomation />} />
                 <Route path="automations" element={<ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." />} />
                 <Route path="reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
                 <Route path="knowledge" element={<ComingSoon title="Knowledge Base" description="Central repository for institutional knowledge, documentation, and training materials." />} />
-                <Route path="intranet" element={<ComingSoon title="Intranet Hub" description="Internal corporate communication portal, employee directory, and centralized resource center." />} />
+                <Route path="sites" element={<SitesPage />} />
                 <Route path="logic" element={<LogicBuilder />} />
                 <Route path="testing" element={<ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." />} />
                 <Route path="deploy" element={<ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." />} />
                 <Route path="api" element={<ComingSoon title="API Management" description="Configure API keys, webhooks, and external integration points." />} />
+                
+                {/* New Settings Placeholder Routes */}
+                <Route path="records" element={<ComingSoon title="Records" description="Manage system records, data entries, and historical logs across all modules." />} />
+                <Route path="fees-products" element={<ComingSoon title="Fees & Products" description="Configure service fees, product catalogs, and pricing structures." />} />
+                <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
+                <Route path="intake" element={<ComingSoon title="Intake" description="Design and manage intake forms, onboarding flows, and data capture processes." />} />
+                <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
+                <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
+                <Route path="data-sources" element={<ComingSoon title="Data Sources" description="Connect and manage external data providers, storage systems, and third-party integrations." />} />
                 
                 {/* Workforce Management (Integrated under Settings) */}
                 <Route path="workforce" element={<WorkforcePage />} />

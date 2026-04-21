@@ -18,4 +18,20 @@ router.get('/', authorize('view:audit_logs'), async (req: TenantRequest, res) =>
   }
 });
 
+router.get('/:resourceId', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { resourceId } = req.params;
+    const logs = await db.auditLog.findMany({
+      where: { resourceId },
+      orderBy: { timestamp: 'desc' },
+      take: 100
+    });
+
+    res.json(logs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

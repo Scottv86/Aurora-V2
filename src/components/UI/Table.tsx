@@ -24,7 +24,7 @@ export const Table = <T extends { id: string | number }>({
   loading,
   onRowClick,
   emptyMessage = 'No data found',
-  pagination = false,
+  pagination = true,
   pageSize = 10
 }: TableProps<T>) => {
   const [currentPage, setCurrentPage] = useState(1);

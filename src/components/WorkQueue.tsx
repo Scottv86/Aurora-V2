@@ -21,7 +21,7 @@ import { DocumentList } from './DocumentList';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 
 export const WorkQueue = () => {
-  const { tenant } = usePlatform();
+  const { tenant, isLoading: platformLoading } = usePlatform();
   const { data: cases, loading: casesLoading, mutate: mutateCases } = useData('records');
   const { data: modules, loading: modulesLoading } = useData('modules');
   
@@ -73,7 +73,7 @@ export const WorkQueue = () => {
     );
   }
 
-  if (!tenant) {
+  if (!tenant && !platformLoading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full">

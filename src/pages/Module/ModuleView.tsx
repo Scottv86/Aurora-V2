@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { PageHeader } from '../../components/UI/PageHeader';
 import { 
   motion, 
   AnimatePresence 
@@ -228,37 +229,34 @@ export const ModuleView = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-500/20">
-            <Icon size={24} className="text-white" />
+      <PageHeader 
+        title={moduleData.name}
+        description={moduleData.description}
+        icon={Icon}
+        iconClassName="bg-indigo-600 shadow-indigo-500/20"
+        actions={
+          <div className="flex gap-4">
+            <button className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors">
+              Configure
+            </button>
+            <button 
+              onClick={() => {
+                setNewEntryData({});
+                setEditingRecord(null);
+                if (moduleData.tabs && moduleData.tabs.length > 0) {
+                  setActiveTabId(moduleData.tabs[0].id);
+                } else {
+                  setActiveTabId(null);
+                }
+                setShowNewEntryModal(true);
+              }}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20"
+            >
+              New Entry
+            </button>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">{moduleData.name}</h1>
-            <p className="text-zinc-500 dark:text-zinc-400 mt-1">{moduleData.description}</p>
-          </div>
-        </div>
-        <div className="flex gap-4">
-          <button className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors">
-            Configure
-          </button>
-          <button 
-            onClick={() => {
-              setNewEntryData({});
-              setEditingRecord(null);
-              if (moduleData.tabs && moduleData.tabs.length > 0) {
-                setActiveTabId(moduleData.tabs[0].id);
-              } else {
-                setActiveTabId(null);
-              }
-              setShowNewEntryModal(true);
-            }}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20"
-          >
-            New Entry
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[

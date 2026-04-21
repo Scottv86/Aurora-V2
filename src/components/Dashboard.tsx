@@ -16,7 +16,7 @@ import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 
 export const Dashboard = () => {
-  const { tenant } = usePlatform();
+  const { tenant, isLoading } = usePlatform();
   const { user, session, isSuperAdmin, loading } = useAuth();
   const navigate = useNavigate();
 
@@ -101,7 +101,7 @@ export const Dashboard = () => {
     };
   }, [tenant?.id, user, session]);
 
-  if (!tenant) {
+  if (!tenant && !isLoading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full text-zinc-300 dark:text-zinc-700">

@@ -166,6 +166,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const fetchContext = async () => {
+      setIsLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const response = await fetch(`${API_BASE_URL}/api/platform/context`, {
@@ -198,8 +199,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
             // Find items in the default that aren't in the saved config
             const savedItemIds = new Set((savedSection.items || []).map((i: any) => i.id));
             const missingItems = defaultSection.items.filter(i => {
-              // Handle item rename transition: if we have 'people' saved but now expect 'entities'
-              if (i.id === 'entities' && savedItemIds.has('people')) return false;
+              // Handle item rename transition: if we have 'people' or 'entities' saved but now expect 'people-orgs'
+              if (i.id === 'people-orgs' && (savedItemIds.has('people') || savedItemIds.has('entities'))) return false;
               return !savedItemIds.has(i.id);
             });
             
@@ -208,14 +209,16 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
             const validSavedItems = (savedSection.items || [])
               .filter((i: any) => 
                 currentDefaultItemIds.has(i.id) || 
-                (i.id === 'people' && currentDefaultItemIds.has('entities')) ||
+                (i.id === 'people' && currentDefaultItemIds.has('people-orgs')) ||
+                (i.id === 'entities' && currentDefaultItemIds.has('people-orgs')) ||
                 (i.id && i.id.startsWith('module:'))
               )
               .map((savedItem: any) => {
                 if (savedItem.id.startsWith('module:')) return savedItem;
                 
                 // Handle item rename transition
-                const lookupId = (savedItem.id === 'people' && currentDefaultItemIds.has('entities')) ? 'entities' : savedItem.id;
+                const isLegacy = savedItem.id === 'people' || savedItem.id === 'entities';
+                const lookupId = (isLegacy && currentDefaultItemIds.has('people-orgs')) ? 'people-orgs' : savedItem.id;
                 const defaultItem = defaultSection.items.find(i => i.id === lookupId);
                 
                 // Inherit code updates (like 'to', 'label') but preserve user's visibility setting
@@ -270,7 +273,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       environment, 
       setEnvironment, 
       isLoading,
-      isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || false,
+      isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || false,
       capabilities,
       modules,
       modulesLoading,

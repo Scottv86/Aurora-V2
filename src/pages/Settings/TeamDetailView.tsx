@@ -14,6 +14,7 @@ import { Button, Input, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { AvatarUpload } from '../../components/Common/AvatarUpload';
+import { Table } from '../../components/UI/Table';
 
 export const TeamDetailView = () => {
   const { id } = useParams();
@@ -200,51 +201,39 @@ export const TeamDetailView = () => {
               </div>
             </motion.div>
           )}
-
           {activeTab === 'members' && (
             <motion.div 
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden"
             >
-               <table className="w-full text-left">
-                  <thead>
-                     <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30">
-                        <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase">Member Name</th>
-                        <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase">Role / Type</th>
-                        <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase">Action</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                     {team.members?.map((m) => (
-                        <tr key={m.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                           <td className="px-6 py-4">
-                              <div className="font-semibold text-zinc-900 dark:text-zinc-100">{m.name}</div>
-                           </td>
-                           <td className="px-6 py-4">
-                              <Badge variant={m.isSynthetic ? "purple" : "zinc"}>{m.isSynthetic ? "Agent" : "Human"}</Badge>
-                           </td>
-                           <td className="px-6 py-4">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-blue-500"
-                                onClick={() => navigate(`/workspace/settings/workforce/member/${m.id}`)}
-                              >
-                                View Profile
-                              </Button>
-                           </td>
-                        </tr>
-                     ))}
-                     {!team.members?.length && (
-                        <tr>
-                           <td colSpan={3} className="px-6 py-12 text-center text-zinc-500 italic">
-                             No members assigned to this team yet.
-                           </td>
-                        </tr>
-                     )}
-                  </tbody>
-               </table>
+               <Table 
+                 data={team.members || []}
+                 emptyMessage="No members assigned to this team yet."
+                 columns={[
+                   {
+                     header: 'Member Name',
+                     accessor: (m) => <div className="font-semibold text-zinc-900 dark:text-zinc-100">{m.name}</div>
+                   },
+                   {
+                     header: 'Role / Type',
+                     accessor: (m) => <Badge variant={m.isSynthetic ? "purple" : "zinc"}>{m.isSynthetic ? "Agent" : "Human"}</Badge>
+                   },
+                   {
+                     header: 'Action',
+                     accessor: (m) => (
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="text-blue-500"
+                         onClick={() => navigate(`/workspace/settings/workforce/member/${m.id}`)}
+                       >
+                         View Profile
+                       </Button>
+                     )
+                   }
+                 ]}
+               />
             </motion.div>
           )}
 

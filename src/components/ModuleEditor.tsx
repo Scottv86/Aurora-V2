@@ -46,6 +46,7 @@ import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
 import { DATA_API_URL } from '../config';
 import { ModuleType } from '../types/platform';
+import { MODULES } from '../constants/modules';
 
 // --- Types ---
 
@@ -247,7 +248,25 @@ export const ModuleEditor = () => {
           }
         });
 
-        if (!response.ok) throw new Error('Failed to load module');
+        if (!response.ok) {
+          if (response.status === 404) {
+            const standardModule = MODULES.find(m => m.id === id);
+            if (standardModule) {
+              console.log(`[ModuleEditor] Loading default settings for standard module: ${id}`);
+              setModuleSettings({
+                name: standardModule.name,
+                description: standardModule.description || '',
+                category: standardModule.category || 'Custom',
+                iconName: 'Box', // Defaulting to Box for standard modules as the icon is a component
+                type: (standardModule.type as ModuleType) || 'RECORD',
+                status: 'ACTIVE',
+              });
+              setIsLoading(false);
+              return;
+            }
+          }
+          throw new Error('Failed to load module');
+        }
         
         const data = await response.json();
         
@@ -286,10 +305,11 @@ export const ModuleEditor = () => {
       });
 
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const isNew = id === 'new';
+      const isNew = id === 'new' || MODULES.some(m => m.id === id);
       
       const payload = {
         ...moduleSettings,
+        id: isNew && id !== 'new' ? id : undefined, // Pass templateId if standard module
         layout,
         tabs
       };

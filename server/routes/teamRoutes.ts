@@ -24,6 +24,7 @@ router.get('/', async (req: TenantRequest, res) => {
         id: t.id,
         name: t.name,
         description: t.description,
+        avatar: t.avatarUrl,
         memberCount: humanCount,
         agentCount: agentCount
       };
@@ -40,13 +41,14 @@ router.post('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { name, description } = req.body;
+    const { name, description, avatarUrl } = req.body;
 
     const team = await db.team.create({
       data: {
         tenantId,
         name,
-        description
+        description,
+        avatarUrl
       }
     });
 
@@ -54,6 +56,7 @@ router.post('/', async (req: TenantRequest, res) => {
       id: team.id,
       name: team.name,
       description: team.description,
+      avatar: team.avatarUrl,
       memberCount: 0,
       agentCount: 0
     };
@@ -97,6 +100,7 @@ router.get('/:id', async (req: TenantRequest, res) => {
       id: team.id,
       name: team.name,
       description: team.description,
+      avatar: team.avatarUrl,
       members: team.members.map(m => ({
         id: m.id,
         name: m.isSynthetic ? m.agent?.name : (m.user?.email.split('@')[0] || 'Unknown'),
@@ -119,20 +123,48 @@ router.patch('/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, avatarUrl } = req.body;
 
-    const updated = await db.team.update({
+    // Verify team existence first to provide a better error response if missing
+    const existing = await db.team.findFirst({ where: { id } });
+    if (!existing) {
+      console.warn(`[TeamAPI] Update failed: Team ${id} not found in tenant ${tenantId}`);
+      return res.status(404).json({ error: 'Team not found or access denied' });
+    }
+
+    const updated = await db.team.updateMany({
       where: { id },
       data: {
-        name,
-        description
+        name: name !== undefined ? name : undefined,
+        description: description !== undefined ? description : undefined,
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : undefined
       }
     });
 
-    emitTenantUpdate(tenantId, 'team_updated', updated);
-    res.json(updated);
+    if (updated.count === 0) {
+      console.warn(`[TeamAPI] Update failed: Team ${id} not found in tenant ${tenantId}`);
+      return res.status(404).json({ error: 'Team not found or access denied' });
+    }
+
+    // Fetch the updated record for the response
+    const team = await db.team.findFirst({ where: { id } });
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    const formatted = {
+      id: team.id,
+      name: team.name,
+      description: team.description,
+      avatar: team.avatarUrl,
+      memberCount: 0, // Simplified for the immediate response
+      agentCount: 0
+    };
+
+    console.log(`[TeamAPI] Successfully updated team ${id}`);
+    emitTenantUpdate(tenantId, 'team_updated', formatted);
+    res.json(formatted);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error(`[TeamAPI] Update error for team ${req.params.id}:`, err);
+    res.status(500).json({ error: err.message || 'Failed to update team' });
   }
 });
 

@@ -37,7 +37,7 @@ router.get('/', async (req: TenantRequest, res) => {
       status: m.status,
       isSynthetic: m.isSynthetic,
       position: m.position?.title || 'Undesignated',
-      avatar: m.avatarUrl || (m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || 'U')}&background=random`),
+      avatarUrl: m.avatarUrl || (m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || 'U')}&background=random`),
       lastActive: m.isSynthetic ? 'Now' : 'Recent',
       isContractor: m.isContractor,
       licenceType: m.licenceType

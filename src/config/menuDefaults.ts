@@ -19,7 +19,7 @@ export const systemDefaultMenuConfig: MenuConfig = {
       id: 'platform',
       title: 'Platform',
       items: [
-        { id: 'entities', label: 'Entities', iconName: 'Users', to: '/workspace/entities', isVisible: true }
+        { id: 'people-orgs', label: 'People & Organisations', iconName: 'Users', to: '/workspace/platform/people-organisations', isVisible: true }
       ]
     },
     {
