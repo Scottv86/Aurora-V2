@@ -38,33 +38,35 @@ export const OrganizationPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <PageHeader 
-        title="Organisation"
-        description="Configure your organization's core identity, visual branding, and global system defaults. These settings apply to all members and workspaces within your tenancy."
-        tabs={
-          <Tabs 
-            tabs={tabs} 
-            activeTab={activeTab} 
-            onChange={setActiveTab} 
-            className="border-none"
-            firstTabPadding={false}
-          />
-        }
-      />
+      <div className="max-w-[1600px] mx-auto pb-20">
+        <PageHeader 
+          title="Organisation"
+          description="Configure your organization's core identity, visual branding, and global system defaults. These settings apply to all members and workspaces within your tenancy."
+          tabs={
+            <Tabs 
+              tabs={tabs} 
+              activeTab={activeTab} 
+              onChange={setActiveTab} 
+              className="border-none"
+              firstTabPadding={false}
+            />
+          }
+        />
 
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
-            {activeTab === 'general' && (
-              <GeneralSettings tenant={tenant} onUpdate={updateTenant} />
-            )}
-            {activeTab === 'regional' && (
-              <RegionalSettings tenant={tenant} onUpdate={updateTenant} />
-            )}
-            {activeTab === 'metadata' && (
-              <MetadataSettings tenant={tenant} onUpdate={updateTenant} />
-            )}
-            {activeTab === 'workspace' && (
-              <WorkspaceSettings tenant={tenant} onUpdate={updateTenant} />
-            )}
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+              {activeTab === 'general' && (
+                <GeneralSettings tenant={tenant} onUpdate={updateTenant} />
+              )}
+              {activeTab === 'regional' && (
+                <RegionalSettings tenant={tenant} onUpdate={updateTenant} />
+              )}
+              {activeTab === 'metadata' && (
+                <MetadataSettings tenant={tenant} onUpdate={updateTenant} />
+              )}
+              {activeTab === 'workspace' && (
+                <WorkspaceSettings tenant={tenant} onUpdate={updateTenant} />
+              )}
+        </div>
       </div>
     </LicenseGate>
   );

@@ -32,7 +32,7 @@ export const RegionalSettings = ({ tenant, onUpdate }: RegionalSettingsProps) =>
 
   return (
     <form onSubmit={handleSubmit} className="space-y-12">
-      <div className="px-10 space-y-12">
+      <div className="space-y-12">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-3">
           <div className="lg:col-span-1 space-y-4">
             <h3 className="text-lg font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Regional Settings</h3>
@@ -98,7 +98,7 @@ export const RegionalSettings = ({ tenant, onUpdate }: RegionalSettingsProps) =>
         </div>
       </div>
 
-      <div className="flex items-center justify-end px-10 pt-8 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center justify-end pt-8 border-t border-zinc-200 dark:border-zinc-800">
         <Button 
           type="submit" 
           variant="primary" 
