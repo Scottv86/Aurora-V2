@@ -8,7 +8,7 @@ import { SecurityGroups } from '../../components/Settings/Workforce/SecurityGrou
 import { ActivityLog } from '../../components/Settings/Workforce/ActivityLog';
 import { OnboardingWizard } from '../../components/Settings/Workforce/OnboardingWizard';
 import { CreateTeamModal } from '../../components/Settings/Workforce/CreateTeamModal';
-import { LayoutGrid, Users, ShieldCheck, Search, Filter, Plus, Zap, Network, Shield, Activity } from 'lucide-react';
+import { LayoutGrid, Users, ShieldCheck, Search, Filter, Plus, Network, Shield, Activity } from 'lucide-react';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';

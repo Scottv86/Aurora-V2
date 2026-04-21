@@ -124,7 +124,6 @@ const App = () => {
                 <Route path="lists" element={<ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." />} />
                 <Route path="appearance" element={<AppearanceSettings />} />
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
-                   <Route index element={<Navigate to="people-organisations" replace />} />
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />
                 </Route>

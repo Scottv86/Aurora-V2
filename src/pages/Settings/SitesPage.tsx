@@ -3,9 +3,7 @@ import { Tabs } from '../../components/UI/TabsAndModal';
 import { 
   Network, 
   Globe, 
-  Layout,
-  ExternalLink,
-  Zap
+  ExternalLink
 } from 'lucide-react';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
 import { ComingSoon } from '../../components/Common/ComingSoon';
