@@ -45,6 +45,7 @@ import { ModuleView } from './pages/Module/ModuleView';
 import { RecordDetailView } from './pages/Record/RecordDetailView';
 import { SitesPage } from './pages/Settings/SitesPage';
 import { UsagePage } from './pages/Settings/UsagePage';
+import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
 
 const App = () => {
   return (
@@ -121,7 +122,7 @@ const App = () => {
                 <Route path="email" element={<ComingSoon title="Email Exchange" description="Configure mail server settings, domain verification, and email communication protocols." />} />
                 <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
                 <Route path="lists" element={<ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." />} />
-                <Route path="appearance" element={<ComingSoon title="Appearance & Branding" description="Customize the visual theme, organization logos, and brand identity settings." />} />
+                <Route path="appearance" element={<AppearanceSettings />} />
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
                    <Route index element={<Navigate to="people-organisations" replace />} />
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />

@@ -14,6 +14,7 @@ import auditRoutes from './routes/auditRoutes';
 import billingRoutes from './routes/billingRoutes';
 import peopleOrgRoutes from './routes/peopleOrgRoutes';
 import taxonomyRoutes from './routes/taxonomyRoutes';
+import tenantRoutes from './routes/tenantRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -74,6 +75,7 @@ app.use('/api/audit', authenticate, requireTenantAccess, auditRoutes);
 app.use('/api/billing', authenticate, requireTenantAccess, billingRoutes);
 app.use('/api/people-organisations', authenticate, requireTenantAccess, peopleOrgRoutes);
 app.use('/api/taxonomies', authenticate, requireTenantAccess, taxonomyRoutes);
+app.use('/api/tenants', tenantRoutes);
 
 
 // Public API Routes (Portal submissions)

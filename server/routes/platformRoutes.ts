@@ -200,4 +200,39 @@ router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) 
   }
 });
 
+/**
+ * PATCH /api/platform/config
+ * Specific endpoint for navigation manifest updates.
+ */
+router.patch('/config', authenticate, async (req: AuthRequest, res: Response) => {
+  const { navigation_manifest } = req.body;
+  const { uid, tenantIds, isSuperAdmin } = req.user!;
+  const tenantId = req.headers['x-tenant-id'] as string || tenantIds[0];
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'No active tenant found for request' });
+  }
+
+  try {
+    const membership = await globalPrisma.tenantMember.findUnique({
+      where: { userId_tenantId: { userId: uid, tenantId } }
+    });
+
+    const isDeveloper = membership?.licenceType === 'Developer' || isSuperAdmin;
+    if (!isDeveloper) {
+      return res.status(403).json({ error: 'A Developer license seat is required to update organization config.' });
+    }
+
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: { menuConfig: navigation_manifest }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[PlatformAPI] Config update error:', error);
+    res.status(500).json({ error: 'Failed to update organization configuration' });
+  }
+});
+
 export default router;

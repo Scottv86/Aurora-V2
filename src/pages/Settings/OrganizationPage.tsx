@@ -11,7 +11,6 @@ import {
 import { usePlatform } from '../../hooks/usePlatform';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
 import { GeneralSettings } from '../../components/Settings/Organization/GeneralSettings';
-import { BrandingSettings } from '../../components/Settings/Organization/BrandingSettings';
 import { RegionalSettings } from '../../components/Settings/Organization/RegionalSettings';
 import { MetadataSettings } from '../../components/Settings/Organization/MetadataSettings';
 import { WorkspaceSettings } from '../../components/Settings/Organization/WorkspaceSettings';
@@ -32,7 +31,6 @@ export const OrganizationPage = () => {
 
   const tabs = [
     { id: 'general', label: 'General', icon: Building2 },
-    { id: 'branding', label: 'Branding', icon: Palette },
     { id: 'regional', label: 'Localization', icon: Globe2 },
     { id: 'metadata', label: 'SEO & Social', icon: Search },
     { id: 'workspace', label: 'Workspace', icon: Settings2 },
@@ -57,9 +55,6 @@ export const OrganizationPage = () => {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
             {activeTab === 'general' && (
               <GeneralSettings tenant={tenant} onUpdate={updateTenant} />
-            )}
-            {activeTab === 'branding' && (
-              <BrandingSettings tenant={tenant} onUpdate={updateTenant} />
             )}
             {activeTab === 'regional' && (
               <RegionalSettings tenant={tenant} onUpdate={updateTenant} />

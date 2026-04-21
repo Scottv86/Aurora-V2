@@ -57,7 +57,7 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
 
   return (
     <form onSubmit={handleSubmit} className="space-y-12">
-      <div className="px-10 space-y-12">
+      <div className="space-y-12">
         {/* Visual Identity Section */}
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-3">
           <div className="lg:col-span-1 space-y-4">
@@ -190,7 +190,7 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
         </div>
       </div>
 
-      <div className="flex items-center justify-end px-10 pt-8 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center justify-end pt-8 border-t border-zinc-200 dark:border-zinc-800">
         <Button 
           type="submit" 
           variant="primary" 

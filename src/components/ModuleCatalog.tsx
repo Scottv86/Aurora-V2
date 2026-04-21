@@ -8,7 +8,6 @@ import {
   Trash2,
   XCircle,
   Settings2,
-  Zap,
   LayoutGrid,
   List as ListIcon,
   Sparkles,
