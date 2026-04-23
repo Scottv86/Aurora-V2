@@ -46,6 +46,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState<'left' | 'right' | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isContentHovered, setIsContentHovered] = useState(false);
 
   const { snapToGrid } = useGridEngine();
 
@@ -114,7 +115,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         onSelect(block.id);
       }}
       className={cn(
-        "group/field relative p-6 rounded-[24px] cursor-pointer transition-all duration-300",
+        "group/group relative p-6 rounded-[24px] cursor-pointer transition-all duration-300",
         "bg-white dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800",
         isSelected ? "border-indigo-500 ring-4 ring-indigo-500/10 z-20 shadow-2xl" : "hover:border-zinc-300 dark:hover:border-zinc-700 z-10",
         isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30"
@@ -141,7 +142,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 px-2 py-1 bg-zinc-100 dark:bg-zinc-900 rounded-lg opacity-0 group-hover/field:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 px-2 py-1 bg-zinc-100 dark:bg-zinc-900 rounded-lg opacity-0 group-hover/group:opacity-100 transition-opacity">
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-tighter">W: {block.colSpan}</span>
           </div>
           <button 
@@ -158,14 +159,29 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
       </div>
 
+      {/* Top-Right Delete Button (Hover State) */}
+      <button 
+        onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
+        className={cn(
+          "absolute -top-2 -right-2 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center transition-opacity shadow-lg z-30 hover:scale-110 active:scale-95",
+          "opacity-0",
+          !isContentHovered && "group-hover/group:opacity-100"
+        )}
+        title="Delete Group"
+      >
+        <Trash2 size={16} />
+      </button>
+
       {/* Nested Content Area */}
       <div 
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
         onDrop={(e) => onDrop(e, block.id)}
+        onMouseEnter={() => setIsContentHovered(true)}
+        onMouseLeave={() => setIsContentHovered(false)}
         className={cn(
           "relative min-h-[120px] rounded-[18px] border-2 border-dashed transition-all duration-300 p-4",
           "bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800",
-          "group-hover/field:border-indigo-500/30 group-hover/field:bg-indigo-500/5"
+          "group-hover/group:border-indigo-500/30 group-hover/group:bg-indigo-500/5"
         )}
       >
         {block.fields && block.fields.length > 0 ? (

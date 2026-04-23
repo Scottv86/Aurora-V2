@@ -812,7 +812,7 @@ export const ModuleEditor = () => {
     });
   };
 
-  const selectedField = selectedId ? layout.find(f => f.id === selectedId) : null;
+  const selectedField = selectedId ? findFieldRecursive(layout, selectedId) : null;
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-zinc-950 overflow-hidden">
