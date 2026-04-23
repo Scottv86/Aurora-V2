@@ -70,6 +70,10 @@ model Module {
   tenantId    String    @map("tenant_id")
   workspaceId String    @map("workspace_id")
   name        String
+  category    String    @default("Custom")
+  icon        String    @default("Box")
+  type        String    @default("RECORD")
+  enabled     Boolean   @default(true)
   config      Json
   createdAt   DateTime  @default(now()) @map("created_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], map: "Module_workspaceId_fkey")

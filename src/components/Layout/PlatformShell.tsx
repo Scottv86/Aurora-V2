@@ -1,4 +1,4 @@
-import { ReactNode, useState, useMemo } from 'react';
+import { ReactNode, useState, useMemo, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { 
@@ -218,8 +218,15 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   } = usePlatform();
   
   const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(!fullBleed);
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Automatically collapse sidebar when entering builder (fullBleed mode)
+  useEffect(() => {
+    if (fullBleed) {
+      setIsSidebarOpen(false);
+    }
+  }, [fullBleed]);
   
   const sensors = useSensors(
     useSensor(PointerSensor, {

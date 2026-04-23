@@ -25,11 +25,49 @@ export const isFieldVisible = (field: any, data: any) => {
   
   switch (operator) {
     case 'equals':
-      return String(actualValue) === value;
+      return String(actualValue) === String(value);
     case 'not_equals':
-      return String(actualValue) !== value;
+      return String(actualValue) !== String(value);
+    case 'contains':
+      return String(actualValue).toLowerCase().includes(String(value).toLowerCase());
+    case 'greater_than':
+      return Number(actualValue) > Number(value);
+    case 'less_than':
+      return Number(actualValue) < Number(value);
+    case 'is_empty':
+      return !actualValue || String(actualValue).trim() === '';
+    case 'not_empty':
+      return !!actualValue && String(actualValue).trim() !== '';
     default:
       return true;
+  }
+};
+
+/**
+ * Basic formula evaluator for calculation fields
+ * Supported format: {fieldId} + {fieldId} * 10
+ */
+export const evaluateFormula = (formula: string, data: any): string | number => {
+  if (!formula) return '';
+  
+  try {
+    // Replace {fieldId} with actual values from data
+    const expression = formula.replace(/\{(\w+)\}/g, (match, fieldId) => {
+      const val = data?.[fieldId];
+      return val !== undefined ? (isNaN(Number(val)) ? `"${val}"` : val) : '0';
+    });
+    
+    // Use Function constructor for a safe-ish sandbox evaluation of simple math
+    // In a production app, use a dedicated library like mathjs
+    const result = new Function(`return ${expression}`)();
+    
+    if (typeof result === 'number') {
+      return Number.isInteger(result) ? result : Number(result.toFixed(2));
+    }
+    return result ?? '';
+  } catch (err) {
+    console.error("Formula Eval Error:", err);
+    return '#ERROR!';
   }
 };
 

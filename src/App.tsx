@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 // Contexts
@@ -46,6 +46,18 @@ import { RecordDetailView } from './pages/Record/RecordDetailView';
 import { SitesPage } from './pages/Settings/SitesPage';
 import { UsagePage } from './pages/Settings/UsagePage';
 import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
+
+const SettingsLayout = () => {
+  const location = useLocation();
+  const isBuilder = location.pathname.includes('/builder/') || location.pathname.includes('/ai-builder');
+  return (
+    <PlatformShell fullBleed={isBuilder}>
+      <LicenseGate fallback={<LicenseRestrictedPlaceholder />}>
+        <Outlet />
+      </LicenseGate>
+    </PlatformShell>
+  );
+};
 
 const App = () => {
   return (
@@ -98,11 +110,7 @@ const App = () => {
                 path="/workspace/settings" 
                 element={
                   <ProtectedRoute>
-                    <PlatformShell>
-                      <LicenseGate fallback={<LicenseRestrictedPlaceholder />}>
-                        <Outlet />
-                      </LicenseGate>
-                    </PlatformShell>
+                    <SettingsLayout />
                   </ProtectedRoute>
                 }
               >

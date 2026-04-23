@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -25,6 +25,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [tenantIds, setTenantIds] = useState<string[]>([]);
   const [currentRoleId, setCurrentRoleId] = useState<string | null>(null);
+  const userRef = useRef<User | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     // 1. Initial Session Check
@@ -46,7 +51,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         timestamp: new Date().toISOString()
       });
       
-      setLoading(true);
+      // Determine if this is a background event (like token refresh or focus-triggered check)
+      // that doesn't need to block the UI with a spinner.
+      const isInitialEvent = event === 'INITIAL_SESSION' && !userRef.current;
+      const isSignOut = event === 'SIGNED_OUT';
+      const isFirstSignIn = event === 'SIGNED_IN' && !userRef.current;
+      
+      const shouldShowSpinner = isInitialEvent || isSignOut || isFirstSignIn;
+
+      if (shouldShowSpinner) {
+        setLoading(true);
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       
@@ -60,8 +76,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setCurrentRoleId(null);
       }
       
-      console.log(`[AuthTrace] Auth flow complete for ${session?.user?.email || 'Anonymous'}. Setting loading=false.`);
-      setLoading(false);
+      if (shouldShowSpinner) {
+        console.log(`[AuthTrace] Auth flow complete for ${session?.user?.email || 'Anonymous'}. Setting loading=false.`);
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();

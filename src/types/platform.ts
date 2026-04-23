@@ -70,6 +70,8 @@ export interface ModuleField {
   calculationLogic?: string;
   targetModuleId?: string;
   fields?: ModuleField[]; // For nested structures if needed in the future
+  colSpan?: number; // 1-12
+  startCol?: number; // 1-12
 }
 
 export interface ModuleColumn {

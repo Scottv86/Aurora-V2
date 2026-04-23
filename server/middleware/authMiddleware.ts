@@ -104,9 +104,12 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     };
 
     next();
-  } catch (error) {
+  } catch (error: any) {
     console.error('Auth verification error:', error);
-    res.status(401).json({ error: 'Unauthorized: Internal verify error' });
+    res.status(401).json({ 
+      error: 'Unauthorized: Internal verify error',
+      details: error.message || String(error)
+    });
   }
 };
 

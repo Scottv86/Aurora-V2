@@ -166,7 +166,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const fetchContext = async () => {
-      setIsLoading(true);
+      // Only show global spinner if we don't have the core context yet
+      if (!user || !tenant) {
+        setIsLoading(true);
+      }
+      
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const response = await fetch(`${API_BASE_URL}/api/platform/context`, {

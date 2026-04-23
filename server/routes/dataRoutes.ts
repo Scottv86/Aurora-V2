@@ -16,8 +16,12 @@ router.get('/modules', async (req: TenantRequest, res) => {
         ...config,
         id: m.id,
         name: m.name,
+        category: m.category,
+        iconName: m.icon,
+        type: m.type,
+        enabled: m.enabled,
         templateId: config.id,
-        status: config.status || 'ACTIVE',
+        status: m.enabled ? 'ACTIVE' : 'INACTIVE',
         createdAt: m.createdAt,
       };
     });
@@ -42,6 +46,11 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
       id: module.id,
       templateId: config.id,
       name: module.name,
+      category: module.category,
+      iconName: module.icon,
+      type: module.type,
+      enabled: module.enabled,
+      status: module.enabled ? 'ACTIVE' : 'INACTIVE',
       createdAt: module.createdAt,
     };
     res.json(formatted);
@@ -209,7 +218,7 @@ router.post('/modules', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { name, ...config } = req.body;
+    const { name, category, iconName, type, enabled, ...config } = req.body;
     console.log(`[DataAPI] Creating module: "${name}" for tenant: ${tenantId}`);
 
     // Find first workspace for this tenant (Prisma client is already scoped to tenant via RLS)
@@ -230,6 +239,10 @@ router.post('/modules', async (req: TenantRequest, res) => {
         tenantId,
         workspaceId: workspace.id,
         name,
+        category: category || 'Custom',
+        icon: iconName || 'Box',
+        type: type || 'RECORD',
+        enabled: enabled !== undefined ? enabled : true,
         config: config as any
       }
     });
@@ -258,12 +271,16 @@ router.put('/modules/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, ...config } = req.body;
+    const { name, category, iconName, type, enabled, ...config } = req.body;
 
     const module = await db.module.update({
       where: { id },
       data: {
         name,
+        category,
+        icon: iconName,
+        type,
+        enabled,
         config: config as any
       }
     });

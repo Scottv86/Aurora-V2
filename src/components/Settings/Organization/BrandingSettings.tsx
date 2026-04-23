@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Button, Input } from '../../UI/Primitives';
-import { Save, Image as ImageIcon, Palette, Sparkles, Upload, X } from 'lucide-react';
+import { Image as ImageIcon, Palette, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BrandingSettingsProps {
