@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  ChevronLeft, 
   Save, 
   Eye, 
   Search, 
   Trash2, 
-  Settings, 
   Settings2,
   Plus, 
   Layers,
@@ -13,11 +11,7 @@ import {
   Monitor,
   Tablet,
   Smartphone,
-  Info,
   Layout as GridIcon,
-  GitFork,
-  Box,
-  Columns,
   Grid3X3,
   Maximize2,
   Folder,
@@ -144,43 +138,43 @@ export const FIELD_CATEGORIES = [
     id: 'inputs',
     label: 'Inputs',
     fields: [
-      { id: 'text', label: 'Short Text', icon: Type },
-      { id: 'textarea', label: 'Long Text', icon: AlignLeft },
-      { id: 'number', label: 'Number', icon: Hash },
-      { id: 'currency', label: 'Currency', icon: DollarSign },
-      { id: 'date', label: 'Date Picker', icon: Calendar },
-      { id: 'select', label: 'Dropdown', icon: ListFilter },
-      { id: 'checkbox', label: 'Checkbox', icon: CheckSquare },
-      { id: 'file', label: 'File Upload', icon: UploadCloud },
+      { id: 'text', label: 'Short Text', icon: Type, defaultSpan: 6 },
+      { id: 'textarea', label: 'Long Text', icon: AlignLeft, defaultSpan: 12 },
+      { id: 'number', label: 'Number', icon: Hash, defaultSpan: 4 },
+      { id: 'currency', label: 'Currency', icon: DollarSign, defaultSpan: 4 },
+      { id: 'date', label: 'Date Picker', icon: Calendar, defaultSpan: 4 },
+      { id: 'select', label: 'Dropdown', icon: ListFilter, defaultSpan: 6 },
+      { id: 'checkbox', label: 'Checkbox', icon: CheckSquare, defaultSpan: 3 },
+      { id: 'file', label: 'File Upload', icon: UploadCloud, defaultSpan: 12 },
     ]
   },
   {
     id: 'display',
     label: 'Display',
     fields: [
-      { id: 'heading', label: 'Heading', icon: Heading },
-      { id: 'divider', label: 'Divider', icon: Minus },
-      { id: 'spacer', label: 'Spacer', icon: Maximize2 },
-      { id: 'alert', label: 'Alert Notice', icon: AlertCircle },
-      { id: 'image', label: 'Image Holder', icon: Image },
+      { id: 'heading', label: 'Heading', icon: Heading, defaultSpan: 12 },
+      { id: 'divider', label: 'Divider', icon: Minus, defaultSpan: 12 },
+      { id: 'spacer', label: 'Spacer', icon: Maximize2, defaultSpan: 12 },
+      { id: 'alert', label: 'Alert Notice', icon: AlertCircle, defaultSpan: 12 },
+      { id: 'image', label: 'Image Holder', icon: Image, defaultSpan: 12 },
     ]
   },
   {
     id: 'layout',
     label: 'Layout',
     fields: [
-      { id: 'group', label: 'Group Container', icon: Layers },
-      { id: 'fieldGroup', label: 'Field Section', icon: Folder },
-      { id: 'repeatableGroup', label: 'Repeatable List', icon: ListPlus },
+      { id: 'group', label: 'Group Container', icon: Layers, defaultSpan: 12 },
+      { id: 'fieldGroup', label: 'Field Section', icon: Folder, defaultSpan: 12 },
+      { id: 'repeatableGroup', label: 'Repeatable List', icon: ListPlus, defaultSpan: 12 },
     ]
   },
   {
     id: 'logic',
     label: 'Logic & AI',
     fields: [
-      { id: 'calculation', label: 'Calculation', icon: Calculator },
-      { id: 'lookup', label: 'Data Lookup', icon: Search },
-      { id: 'automation', label: 'AI Prompt', icon: Sparkles },
+      { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 12 },
+      { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
+      { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 12 },
     ]
   }
 ];
@@ -351,7 +345,7 @@ export const ModuleEditor = () => {
   const [isArchitectThinking, setIsArchitectThinking] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string } | null>(null);
-  const [editMode, setEditMode] = useState<'LAYOUT' | 'WORKFLOW'>('LAYOUT');
+
   const [workflow, setWorkflow] = useState<Workflow | undefined>({
     id: `wf-${Date.now()}`,
     name: 'New Workflow',
@@ -363,12 +357,9 @@ export const ModuleEditor = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
-  const { resolveCollisions, snapToGrid } = useGridEngine(12);
+  const { resolveCollisions } = useGridEngine(12);
 
-  const onLayoutChange = useCallback((newLayout: Field[]) => {
-    setLayout(newLayout);
-    console.log('[Aurora] Layout context updated for sync');
-  }, []);
+
 
   const handleArchitectCommand = async (command: string) => {
     if (!command.trim() || !tenant?.id) return;

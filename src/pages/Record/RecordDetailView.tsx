@@ -5,18 +5,18 @@ import {
   AnimatePresence 
 } from 'motion/react';
 import { 
-  Plus, 
   Trash2, 
   Edit2, 
-  Loader2, 
-  AlertCircle,
-  ArrowLeft,
-  Check,
-  X,
-  Sparkles,
+  Loader2,
+  ArrowLeft, 
+  ChevronRight,
+  Sparkles, 
+  History, 
+  AlertCircle, 
   GitFork,
   ArrowRight,
-  History
+  Plus,
+  X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -27,7 +27,7 @@ import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
-import { Module, ModuleField, ModuleLayout, ModuleColumn, WorkflowNode } from '../../types/platform';
+import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
 import { WorkflowState } from '../../../server/services/workflowEngine';
 
 export const RecordDetailView = () => {
@@ -55,7 +55,6 @@ export const RecordDetailView = () => {
     // Fallback for empty objects or other invalid data
     return LucideIcons.Layers;
   }, [moduleData]);
-  const [history] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -457,7 +456,7 @@ export const RecordDetailView = () => {
               {/* Current Node Display */}
               {(() => {
                 const wState = record.workflowState as WorkflowState | undefined;
-                const currentNode = moduleData.workflow?.nodes.find(n => n.id === wState?.currentNodeId);
+                const currentNode = moduleData.workflow?.nodes.find((n: any) => n.id === wState?.currentNodeId);
                 
                 if (!currentNode) return (
                   <div className="p-4 bg-zinc-50 dark:bg-zinc-950/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-center">
@@ -485,14 +484,14 @@ export const RecordDetailView = () => {
                 <div className="space-y-2">
                   {(() => {
                     const wState = record.workflowState as WorkflowState | undefined;
-                    const edges = moduleData.workflow?.edges.filter(e => e.source === wState?.currentNodeId) || [];
+                    const edges = moduleData.workflow?.edges.filter((e: any) => e.source === wState?.currentNodeId) || [];
                     
                     if (edges.length === 0) return (
                       <p className="text-[10px] text-zinc-500 italic px-1">No further transitions available from this node.</p>
                     );
 
-                    return edges.map((edge) => {
-                      const targetNode = moduleData.workflow?.nodes.find(n => n.id === edge.target);
+                    return edges.map((edge: any) => {
+                      const targetNode = moduleData.workflow?.nodes.find((n: any) => n.id === edge.target);
                       if (!targetNode) return null;
 
                       return (
@@ -534,7 +533,7 @@ export const RecordDetailView = () => {
                   );
 
                   return history.map((h, i) => {
-                    const node = moduleData.workflow?.nodes.find(n => n.id === h.nodeId);
+                    const node = moduleData.workflow?.nodes.find((n: any) => n.id === h.nodeId);
                     return (
                       <div key={i} className="relative pl-10">
                         <div className={cn(

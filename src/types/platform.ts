@@ -99,7 +99,7 @@ export interface Module {
   isCustom?: boolean;
   layout: ModuleLayout[];
   tabs?: { id: string; label: string }[];
-  workflow?: { statuses: { name: string }[] };
+  workflow?: Workflow;
   workflows?: Workflow[];
 }
 
