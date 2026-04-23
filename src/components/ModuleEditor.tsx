@@ -57,6 +57,8 @@ import { ModuleType } from '../types/platform';
 import { MODULES } from '../constants/modules';
 import { FieldGroup } from './Builder/FieldGroup';
 import { useGridEngine } from '../hooks/useGridEngine';
+import { IconPicker } from './Common/IconPicker';
+
 
 // --- Types ---
 
@@ -933,7 +935,7 @@ export const ModuleEditor = () => {
           </div>
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {(['build', 'workflow', 'settings'] as const).map((tab) => (
+            {(['settings', 'build', 'workflow'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -949,30 +951,34 @@ export const ModuleEditor = () => {
             ))}
           </div>
 
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+          {activeTab === 'build' && (
+            <>
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
 
-          {/* Viewport Toggle */}
-          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {[
-              { id: 'desktop', icon: Monitor },
-              { id: 'tablet', icon: Tablet },
-              { id: 'mobile', icon: Smartphone }
-            ].map((v) => (
-              <button
-                key={v.id}
-                onClick={() => setViewportSize(v.id as any)}
-                className={cn(
-                  "p-1.5 rounded-md transition-all",
-                  viewportSize === v.id 
-                    ? "bg-white dark:bg-zinc-800 text-indigo-600 shadow-sm" 
-                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
-                )}
-                title={`${v.id.charAt(0).toUpperCase() + v.id.slice(1)} View`}
-              >
-                <v.icon size={14} />
-              </button>
-            ))}
-          </div>
+              {/* Viewport Toggle */}
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                {[
+                  { id: 'desktop', icon: Monitor },
+                  { id: 'tablet', icon: Tablet },
+                  { id: 'mobile', icon: Smartphone }
+                ].map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setViewportSize(v.id as any)}
+                    className={cn(
+                      "p-1.5 rounded-md transition-all",
+                      viewportSize === v.id 
+                        ? "bg-white dark:bg-zinc-800 text-indigo-600 shadow-sm" 
+                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
+                    )}
+                    title={`${v.id.charAt(0).toUpperCase() + v.id.slice(1)} View`}
+                  >
+                    <v.icon size={14} />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -1080,9 +1086,13 @@ export const ModuleEditor = () => {
         <main 
           className={cn(
             "flex-1 relative",
-            activeTab === 'build' ? "bg-zinc-50 dark:bg-zinc-950 p-6 overflow-y-auto" : 
-            activeTab === 'workflow' ? "bg-zinc-50 dark:bg-zinc-950 p-0 overflow-hidden" : 
-            "bg-zinc-100 dark:bg-zinc-900 p-10 overflow-y-auto"
+            (activeTab === 'build' || activeTab === 'workflow' || activeTab === 'settings') 
+              ? "bg-zinc-50 dark:bg-zinc-950" 
+              : "bg-zinc-100 dark:bg-zinc-900",
+            activeTab === 'build' ? "p-6 overflow-y-auto" : 
+            activeTab === 'workflow' ? "p-0 overflow-hidden" : 
+            activeTab === 'settings' ? "p-0 overflow-hidden" :
+            "p-10 overflow-y-auto"
           )}
           onClick={() => activeTab === 'build' && setSelectedId(null)}
         >
@@ -1539,75 +1549,112 @@ export const ModuleEditor = () => {
               </div>
             </div>
           ) : activeTab === 'settings' ? (
-            <div className="w-full px-8">
-              <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl overflow-hidden p-12 space-y-8">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Module Settings</h2>
-                  <p className="text-zinc-500 text-sm">Configure the core properties of this module.</p>
+            <div className="flex h-full w-full overflow-hidden">
+              {/* Settings Sidebar */}
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
+                <div className="mb-6 px-2">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Configuration</h3>
                 </div>
-                
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Name</label>
-                    <input 
-                      type="text" 
-                      value={moduleSettings.name}
-                      onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                      placeholder="e.g. Grant Applications"
-                    />
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all">
+                  <Settings2 size={14} />
+                  General Properties
+                </button>
+              </aside>
+
+              {/* Settings Content */}
+              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
+                <div className="max-w-3xl mx-auto space-y-12 pb-20">
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Module Settings</h2>
+                    <p className="text-zinc-500 text-sm">Configure the core properties and identity of this module.</p>
                   </div>
                   
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Category</label>
-                    <input 
-                      type="text" 
-                      value={moduleSettings.category}
-                      onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                      placeholder="e.g. Operations"
-                    />
-                  </div>
+                  <div className="grid gap-10">
+                    {/* Identity Section */}
+                    <section className="space-y-6">
+                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
+                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Module Identity</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Name</label>
+                          <input 
+                            type="text" 
+                            value={moduleSettings.name}
+                            onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
+                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            placeholder="e.g. Grant Applications"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Category</label>
+                          <input 
+                            type="text" 
+                            value={moduleSettings.category}
+                            onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
+                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            placeholder="e.g. Operations"
+                          />
+                        </div>
+                      </div>
+                    </section>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Type</label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
-                        <button
-                          key={type}
-                          onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
-                          className={cn(
-                            "px-4 py-3 rounded-xl border text-[10px] font-bold transition-all uppercase tracking-widest",
-                            moduleSettings.type === type
-                              ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-                              : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
-                          )}
-                        >
-                          {type.replace('_', ' ')}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                    {/* Classification Section */}
+                    <section className="space-y-6">
+                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
+                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Classification</h3>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Type</label>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
+                            <button
+                              key={type}
+                              onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold transition-all uppercase tracking-widest",
+                                moduleSettings.type === type
+                                  ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                              )}
+                            >
+                              {type.replace('_', ' ')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Description</label>
-                    <textarea 
-                      value={moduleSettings.description}
-                      onChange={(e) => setModuleSettings(prev => ({ ...prev, description: e.target.value }))}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all min-h-[100px]"
-                      placeholder="Brief description of what this module does..."
-                    />
-                  </div>
+                    {/* Metadata Section */}
+                    <section className="space-y-6">
+                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
+                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Appearance & Description</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 gap-6">
+                        <IconPicker 
+                          label="Module Icon"
+                          value={moduleSettings.iconName || 'Box'}
+                          onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
+                        />
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Icon Name (Lucide)</label>
-                    <input 
-                      type="text" 
-                      value={moduleSettings.iconName}
-                      onChange={(e) => setModuleSettings(prev => ({ ...prev, iconName: e.target.value }))}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                      placeholder="e.g. Box, Users, FileText"
-                    />
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Description</label>
+                          <textarea 
+                            value={moduleSettings.description}
+                            onChange={(e) => setModuleSettings(prev => ({ ...prev, description: e.target.value }))}
+                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all min-h-[120px] resize-none"
+                            placeholder="Brief description of what this module does..."
+                          />
+                        </div>
+                      </div>
+                    </section>
                   </div>
                 </div>
               </div>
