@@ -20,9 +20,10 @@ export interface AISolution {
   modules: Module[];
   workflows: {
     name: string;
-    steps: string[];
     description: string;
     targetModuleId: string;
+    nodes: { id: string; type: string; name: string; config?: any }[];
+    edges: { id: string; source: string; target: string; condition?: string }[];
   }[];
   automations: {
     trigger: string;
@@ -139,11 +140,36 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
               type: Type.OBJECT,
               properties: {
                 name: { type: Type.STRING },
-                steps: { type: Type.ARRAY, items: { type: Type.STRING } },
                 description: { type: Type.STRING },
-                targetModuleId: { type: Type.STRING }
+                targetModuleId: { type: Type.STRING },
+                nodes: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      type: { type: Type.STRING, enum: ['STATUS', 'DECISION', 'ACTION', 'DELAY', 'START', 'END'] },
+                      name: { type: Type.STRING },
+                      config: { type: Type.OBJECT }
+                    },
+                    required: ["id", "type", "name"]
+                  }
+                },
+                edges: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      source: { type: Type.STRING },
+                      target: { type: Type.STRING },
+                      condition: { type: Type.STRING }
+                    },
+                    required: ["id", "source", "target"]
+                  }
+                }
               },
-              required: ["name", "steps", "description", "targetModuleId"]
+              required: ["name", "description", "targetModuleId", "nodes", "edges"]
             }
           },
           automations: {

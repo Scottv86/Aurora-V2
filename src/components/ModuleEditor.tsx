@@ -40,11 +40,12 @@ import {
   BrainCircuit,
   Palette,
   ArrowUp,
-  X
+  X,
+  Bug
 } from 'lucide-react';
-import { WorkflowEditor } from './WorkflowEditor';
+import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow } from '../types/platform';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CommandPalette } from './CommandPalette';
 import { cn } from '../lib/utils';
@@ -117,6 +118,7 @@ export interface Field {
 export interface Tab {
   id: string;
   label: string;
+  visibilityRule?: VisibilityRule;
 }
 
 export interface Column {
@@ -181,12 +183,7 @@ export const FIELD_CATEGORIES = [
   }
 ];
 
-const LAYOUT_TYPES = [
-  { id: 1, label: 'Full Width', icon: Box, columnCount: 1 },
-  { id: 2, label: '50 / 50', icon: Columns, columnCount: 2 },
-  { id: 3, label: '33 / 33 / 33', icon: Grid3X3, columnCount: 3 },
-  { id: 4, label: '25 x 4', icon: Maximize2, columnCount: 4 },
-];
+
 
 // --- Helper Components ---
 
@@ -218,6 +215,101 @@ const BlockThumbnail = ({ type }: { type: string }) => {
     </div>
   );
 };
+
+const VisibilityRuleEditor = ({ 
+  rule, 
+  onUpdate, 
+  onRemove, 
+  availableFields, 
+  label = "Conditional Visibility" 
+}: { 
+  rule?: VisibilityRule, 
+  onUpdate: (rule: VisibilityRule) => void, 
+  onRemove: () => void, 
+  availableFields: Field[],
+  label?: string
+}) => {
+  if (!rule) {
+    return (
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{label}</label>
+        <button
+          onClick={() => onUpdate({ fieldId: '', operator: 'equals', value: '' })}
+          className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest"
+        >
+          Add Rule
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{label}</label>
+        <button
+          onClick={onRemove}
+          className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest"
+        >
+          Remove
+        </button>
+      </div>
+      
+      <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 space-y-3">
+        <div className="relative">
+          <select
+            value={rule.fieldId}
+            onChange={(e) => onUpdate({ ...rule, fieldId: e.target.value })}
+            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none pr-8"
+          >
+            <option value="">Select Field...</option>
+            {availableFields.map(f => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+            <ListFilter size={12} />
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <select
+              value={rule.operator}
+              onChange={(e) => onUpdate({ ...rule, operator: e.target.value as any })}
+              className={cn(
+                "w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none pr-8",
+                ['is_empty', 'not_empty'].includes(rule.operator) ? "w-full" : ""
+              )}
+            >
+              <option value="equals">Equals</option>
+              <option value="not_equals">Not Equals</option>
+              <option value="contains">Contains</option>
+              <option value="greater_than">Greater Than</option>
+              <option value="less_than">Less Than</option>
+              <option value="is_empty">Is Empty</option>
+              <option value="not_empty">Not Empty</option>
+            </select>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+              <Plus size={12} className="rotate-45" />
+            </div>
+          </div>
+          {!['is_empty', 'not_empty'].includes(rule.operator) && (
+            <input
+              type="text"
+              placeholder="Value"
+              value={rule.value}
+              onChange={(e) => onUpdate({ ...rule, value: e.target.value })}
+              className="w-1/2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 
 // --- Components ---
 
@@ -258,7 +350,16 @@ export const ModuleEditor = () => {
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string } | null>(null);
   const [editMode, setEditMode] = useState<'LAYOUT' | 'WORKFLOW'>('LAYOUT');
-  const [workflow, setWorkflow] = useState<Workflow | undefined>();
+  const [workflow, setWorkflow] = useState<Workflow | undefined>({
+    id: `wf-${Date.now()}`,
+    name: 'New Workflow',
+    nodes: [],
+    edges: []
+  });
+  const [showDebugger, setShowDebugger] = useState(true);
+  const [rightSidebarTabWorkflow, setRightSidebarTabWorkflow] = useState<'inspector' | 'debugger' | 'architect'>('inspector');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   const { resolveCollisions, snapToGrid } = useGridEngine(12);
 
@@ -813,6 +914,11 @@ export const ModuleEditor = () => {
   };
 
   const selectedField = selectedId ? findFieldRecursive(layout, selectedId) : null;
+  const selectedTab = selectedId ? tabs.find(t => t.id === selectedId) : null;
+
+  const updateTab = (tabId: string, updates: Partial<Tab>) => {
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, ...updates } : t));
+  };
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-zinc-950 overflow-hidden">
@@ -870,6 +976,26 @@ export const ModuleEditor = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {activeTab === 'workflow' && (
+            <>
+              <button 
+                onClick={() => setShowDebugger(!showDebugger)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest",
+                  showDebugger 
+                    ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-500 shadow-inner" 
+                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                )}
+              >
+                <Bug size={12} />
+                <span>{showDebugger ? 'Hide Sidebar' : 'Show Sidebar'}</span>
+              </button>
+              <button className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg text-[10px] font-bold hover:text-zinc-900 dark:hover:text-white transition-all uppercase tracking-widest">
+                <Sparkles size={12} />
+                <span>AI Optimize</span>
+              </button>
+            </>
+          )}
           <button 
             onClick={() => setActiveTab(activeTab === 'preview' ? 'build' : 'preview')}
             className={cn(
@@ -945,25 +1071,7 @@ export const ModuleEditor = () => {
                 );
               })}
 
-              <div className="pt-8 border-t border-zinc-100 dark:border-zinc-900">
-                <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest mb-4 px-1">Layout Presets</h4>
-                <div className="space-y-2">
-                  {LAYOUT_TYPES.map((layoutType) => (
-                    <div
-                      key={layoutType.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, { type: 'layout', columnCount: layoutType.columnCount })}
-                      onDragEnd={handleDragEnd}
-                      className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-xl cursor-grab hover:border-indigo-500/50 hover:bg-white dark:hover:bg-zinc-900 transition-all group"
-                    >
-                      <div className="w-8 h-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:border-indigo-500/20 transition-colors shadow-sm">
-                        <layoutType.icon size={16} />
-                      </div>
-                      <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{layoutType.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+
             </div>
           </aside>
         )}
@@ -971,8 +1079,10 @@ export const ModuleEditor = () => {
         {/* Canvas / Preview */}
         <main 
           className={cn(
-            "flex-1 overflow-y-auto relative",
-            activeTab === 'build' ? "bg-zinc-50 dark:bg-zinc-950 p-6" : "bg-zinc-100 dark:bg-zinc-900 p-10"
+            "flex-1 relative",
+            activeTab === 'build' ? "bg-zinc-50 dark:bg-zinc-950 p-6 overflow-y-auto" : 
+            activeTab === 'workflow' ? "bg-zinc-50 dark:bg-zinc-950 p-0 overflow-hidden" : 
+            "bg-zinc-100 dark:bg-zinc-900 p-10 overflow-y-auto"
           )}
           onClick={() => activeTab === 'build' && setSelectedId(null)}
         >
@@ -985,58 +1095,76 @@ export const ModuleEditor = () => {
               <div className="w-full space-y-4 relative px-4">
                 {/* Tab Management */}
                 <div className="flex items-center gap-2 mb-8 overflow-x-auto pt-2 pb-2 px-2 scrollbar-hide">
-                  {tabs.map((tab) => (
-                    <div key={tab.id} className="group relative flex-shrink-0">
-                      {isEditingTab === tab.id ? (
-                        <input
-                          autoFocus
-                          className="px-4 py-2 bg-white dark:bg-zinc-900 border-2 border-indigo-500 rounded-xl text-sm font-bold focus:outline-none min-w-[120px]"
-                          value={tab.label}
-                          onChange={(e) => {
-                            const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                            setTabs(newTabs);
-                          }}
-                          onBlur={() => setIsEditingTab(null)}
-                          onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                        />
-                      ) : (
-                        <div className="flex items-center">
-                          <button
-                            onClick={() => setCurrentTabId(tab.id)}
-                            onDoubleClick={() => setIsEditingTab(tab.id)}
-                            className={cn(
-                              "px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2",
-                              currentTabId === tab.id
-                                ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
-                            )}
-                          >
-                            {tab.label}
-                          </button>
-                          {tabs.length > 1 && (
+                  <Reorder.Group 
+                    axis="x" 
+                    values={tabs} 
+                    onReorder={setTabs}
+                    className="flex items-center gap-2"
+                  >
+                    {tabs.map((tab) => (
+                      <Reorder.Item 
+                        key={tab.id} 
+                        value={tab}
+                        dragListener={isEditingTab !== tab.id}
+                        className="group relative flex-shrink-0"
+                      >
+                        {isEditingTab === tab.id ? (
+                          <input
+                            autoFocus
+                            className="px-4 py-2 bg-white dark:bg-zinc-900 border-2 border-indigo-500 rounded-xl text-sm font-bold focus:outline-none min-w-[120px]"
+                            value={tab.label}
+                            onChange={(e) => {
+                              const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                              setTabs(newTabs);
+                            }}
+                            onBlur={() => setIsEditingTab(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                          />
+                        ) : (
+                          <div className="flex items-center">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const newTabs = tabs.filter(t => t.id !== tab.id);
-                                setTabs(newTabs);
-                                if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                setLayout(layout.filter(field => field.tabId !== tab.id));
+                                setCurrentTabId(tab.id);
+                                setSelectedId(tab.id);
                               }}
-                              className="absolute -top-2 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                              onDoubleClick={() => setIsEditingTab(tab.id)}
+                              className={cn(
+                                "px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2",
+                                currentTabId === tab.id
+                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                              )}
                             >
-                              <X size={10} />
+                              {tab.label}
                             </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                            {tabs.length > 1 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newTabs = tabs.filter(t => t.id !== tab.id);
+                                  setTabs(newTabs);
+                                  if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
+                                  setLayout(layout.filter(field => field.tabId !== tab.id));
+                                }}
+                                className="absolute -top-2 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                              >
+                                <X size={10} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </Reorder.Item>
+                    ))}
+                  </Reorder.Group>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       const newId = `tab-${generateId()}`;
                       setTabs([...tabs, { id: newId, label: 'New Tab' }]);
                       setCurrentTabId(newId);
                       setIsEditingTab(newId);
+                      setSelectedId(newId);
                     }}
                     className="p-2.5 bg-zinc-100 dark:bg-zinc-900 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0"
                   >
@@ -1486,9 +1614,17 @@ export const ModuleEditor = () => {
             </div>
           ) : activeTab === 'workflow' ? (
             <div className="w-full h-full">
-              <WorkflowEditor 
+              <WorkflowGraphEditor 
                 workflow={workflow}
                 onChange={setWorkflow}
+                showDebugger={showDebugger}
+                setShowDebugger={setShowDebugger}
+                selectedNodeId={selectedNodeId}
+                onNodeSelect={setSelectedNodeId}
+                selectedEdgeId={selectedEdgeId}
+                onEdgeSelect={setSelectedEdgeId}
+                rightSidebarTab={rightSidebarTabWorkflow}
+                setRightSidebarTab={setRightSidebarTabWorkflow}
               />
             </div>
           ) : null}
@@ -1583,10 +1719,13 @@ export const ModuleEditor = () => {
                       <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Grid Layout</h4>
                         
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Column Span</label>
-                            <div className="flex items-center gap-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2">
+                        <div className="space-y-5">
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between px-1">
+                              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Column Span</label>
+                              <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">{selectedField.colSpan || 12} Columns</span>
+                            </div>
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3.5 flex items-center">
                               <input 
                                 type="range" 
                                 min="1" 
@@ -1594,15 +1733,17 @@ export const ModuleEditor = () => {
                                 step="1"
                                 value={selectedField.colSpan || 12}
                                 onChange={(e) => updateField(selectedField.id, { colSpan: parseInt(e.target.value) })}
-                                className="flex-1 accent-indigo-600"
+                                className="w-full accent-indigo-600 cursor-pointer h-1.5"
                               />
-                              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 min-w-[20px] text-center">{selectedField.colSpan || 12}</span>
                             </div>
                           </div>
 
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Start Column</label>
-                            <div className="flex items-center gap-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2">
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between px-1">
+                              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Start Column</label>
+                              <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">Column {selectedField.startCol || 1}</span>
+                            </div>
+                            <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3.5 flex items-center">
                               <input 
                                 type="range" 
                                 min="1" 
@@ -1610,9 +1751,8 @@ export const ModuleEditor = () => {
                                 step="1"
                                 value={selectedField.startCol || 1}
                                 onChange={(e) => updateField(selectedField.id, { startCol: parseInt(e.target.value) })}
-                                className="flex-1 accent-indigo-600"
+                                className="w-full accent-indigo-600 cursor-pointer h-1.5"
                               />
-                              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 min-w-[20px] text-center">{selectedField.startCol || 1}</span>
                             </div>
                           </div>
                         </div>
@@ -1805,70 +1945,13 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
-                      <div className="pt-6 border-t border-zinc-800 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Conditional Visibility</label>
-                          <button
-                            onClick={() => {
-                              if (selectedField.visibilityRule) {
-                                updateField(selectedField.id, { visibilityRule: undefined });
-                              } else {
-                                updateField(selectedField.id, { visibilityRule: { fieldId: '', operator: 'equals', value: '' } });
-                              }
-                            }}
-                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest"
-                          >
-                            {selectedField.visibilityRule ? 'Remove' : 'Add Rule'}
-                          </button>
-                        </div>
-                        
-                        {selectedField.visibilityRule && (
-                          <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 space-y-3">
-                            <select
-                              value={selectedField.visibilityRule.fieldId}
-                              onChange={(e) => updateField(selectedField.id, { 
-                                visibilityRule: { ...selectedField.visibilityRule!, fieldId: e.target.value } 
-                              })}
-                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
-                            >
-                              <option value="">Select Field...</option>
-                              {layout.filter(f => f.id !== selectedField.id).map(f => (
-                                <option key={f.id} value={f.id}>{f.label}</option>
-                              ))}
-                            </select>
-                              <div className="flex gap-2">
-                                <select
-                                  value={selectedField.visibilityRule.operator}
-                                  onChange={(e) => updateField(selectedField.id, { 
-                                    visibilityRule: { ...selectedField.visibilityRule!, operator: e.target.value as any } 
-                                  })}
-                                  className={cn(
-                                    "bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none",
-                                    ['is_empty', 'not_empty'].includes(selectedField.visibilityRule.operator) ? "w-full" : "w-1/2"
-                                  )}
-                                >
-                                  <option value="equals">Equals</option>
-                                  <option value="not_equals">Not Equals</option>
-                                  <option value="contains">Contains</option>
-                                  <option value="greater_than">Greater Than</option>
-                                  <option value="less_than">Less Than</option>
-                                  <option value="is_empty">Is Empty</option>
-                                  <option value="not_empty">Not Empty</option>
-                                </select>
-                                {!['is_empty', 'not_empty'].includes(selectedField.visibilityRule.operator) && (
-                                  <input
-                                    type="text"
-                                    placeholder="Value"
-                                    value={selectedField.visibilityRule.value}
-                                    onChange={(e) => updateField(selectedField.id, { 
-                                      visibilityRule: { ...selectedField.visibilityRule!, value: e.target.value } 
-                                    })}
-                                    className="w-1/2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                                  />
-                                )}
-                              </div>
-                          </div>
-                        )}
+                      <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <VisibilityRuleEditor 
+                          rule={selectedField.visibilityRule}
+                          onUpdate={(rule) => updateField(selectedField.id, { visibilityRule: rule })}
+                          onRemove={() => updateField(selectedField.id, { visibilityRule: undefined })}
+                          availableFields={layout.filter(f => f.id !== selectedField.id)}
+                        />
                       </div>
                     </div>
 
@@ -1884,6 +1967,73 @@ export const ModuleEditor = () => {
                       >
                         <Trash2 size={12} />
                         <span>Delete Field</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : selectedTab ? (
+                  <motion.div 
+                    key={selectedTab.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="p-6 space-y-8"
+                  >
+                    {/* Header with Close */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                        <h3 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">
+                          Tab Properties
+                        </h3>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedId(null)}
+                        className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Tab Label</label>
+                        <input 
+                          type="text" 
+                          value={selectedTab.label}
+                          onChange={(e) => updateTab(selectedTab.id, { label: e.target.value })}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                          placeholder="e.g. General"
+                        />
+                      </div>
+
+                      <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <VisibilityRuleEditor 
+                          rule={selectedTab.visibilityRule}
+                          onUpdate={(rule) => updateTab(selectedTab.id, { visibilityRule: rule })}
+                          onRemove={() => updateTab(selectedTab.id, { visibilityRule: undefined })}
+                          availableFields={layout}
+                          label="Tab Visibility Rule"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-12">
+                      <button 
+                        onClick={() => {
+                          if (tabs.length > 1) {
+                            const newTabs = tabs.filter(t => t.id !== selectedTab.id);
+                            setTabs(newTabs);
+                            if (currentTabId === selectedTab.id) setCurrentTabId(newTabs[0].id);
+                            setLayout(layout.filter(field => field.tabId !== selectedTab.id));
+                            setSelectedId(null);
+                          } else {
+                            toast.error("Cannot delete the last remaining tab");
+                          }
+                        }}
+                        className="w-full py-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-[10px] font-bold text-rose-500 hover:bg-rose-500 hover:text-white transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                      >
+                        <Trash2 size={12} />
+                        <span>Delete Tab</span>
                       </button>
                     </div>
                   </motion.div>

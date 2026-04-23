@@ -103,18 +103,31 @@ export interface Module {
   workflows?: Workflow[];
 }
 
+export type WorkflowNodeType = 'STATUS' | 'DECISION' | 'ACTION' | 'DELAY' | 'START' | 'END' | 'ZONE';
+
+export interface WorkflowNode {
+  id: string;
+  type: WorkflowNodeType;
+  name: string;
+  config?: Record<string, any>;
+  position?: { x: number; y: number }; // Visual positioning
+}
+
+export interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  condition?: string; // Aurora expression syntax
+  label?: string;
+}
+
 export interface Workflow {
   id: string;
   name: string;
-  steps: WorkflowStep[];
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
 }
 
-export interface WorkflowStep {
-  id: string;
-  name: string;
-  type: 'MANUAL' | 'AUTOMATED' | 'AI_ASSISTED';
-  assignee?: string;
-}
 
 export interface GlobalObject {
   id: string;

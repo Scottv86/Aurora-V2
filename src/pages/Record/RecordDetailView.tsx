@@ -13,7 +13,10 @@ import {
   ArrowLeft,
   Check,
   X,
-  Sparkles
+  Sparkles,
+  GitFork,
+  ArrowRight,
+  History
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,7 +27,8 @@ import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
-import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
+import { Module, ModuleField, ModuleLayout, ModuleColumn, WorkflowNode } from '../../types/platform';
+import { WorkflowState } from '../../../server/services/workflowEngine';
 
 export const RecordDetailView = () => {
   const { moduleId, recordId } = useParams();
@@ -441,56 +445,115 @@ export const RecordDetailView = () => {
 
         <div className="space-y-8">
           <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 space-y-8 shadow-sm">
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-1">Actions & Status</h3>
-              <div className="space-y-3">
-                {moduleData.workflow?.statuses?.map((st: any) => (
-                  <button
-                    key={st.name}
-                    onClick={() => handleStatusTransition(st.name)}
-                    disabled={record.status === st.name}
-                    className={cn(
-                      "w-full flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group",
-                      record.status === st.name
-                        ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-                        : "bg-white dark:bg-zinc-950/30 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-indigo-500/50 hover:text-zinc-900 dark:hover:text-white"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      {record.status === st.name ? (
-                        <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
-                          <Check size={12} className="text-white" />
-                        </div>
-                      ) : (
-                        <div className="w-5 h-5 bg-zinc-100 dark:bg-zinc-800 rounded-full group-hover:bg-indigo-500/20 transition-colors" />
-                      )}
-                      <span className="text-sm font-bold">{st.name}</span>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">Current State</h3>
+                <div className="flex items-center gap-2 px-2 py-1 bg-indigo-500/10 rounded-lg text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+                  <GitFork size={12} />
+                  Graph Active
+                </div>
+              </div>
+
+              {/* Current Node Display */}
+              {(() => {
+                const wState = record.workflowState as WorkflowState | undefined;
+                const currentNode = moduleData.workflow?.nodes.find(n => n.id === wState?.currentNodeId);
+                
+                if (!currentNode) return (
+                  <div className="p-4 bg-zinc-50 dark:bg-zinc-950/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-center">
+                    <p className="text-xs text-zinc-500 italic">No active workflow state found.</p>
+                  </div>
+                );
+
+                return (
+                  <div className="p-5 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-500/20 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
+                      <Sparkles size={48} className="text-white" />
                     </div>
-                    {record.status === st.name && <Sparkles size={14} className="text-white/50" />}
-                  </button>
-                ))}
+                    <div className="relative z-10 space-y-1">
+                      <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Active Node</p>
+                      <h4 className="text-xl font-black text-white">{currentNode.name}</h4>
+                      <p className="text-[11px] text-white/70 font-medium">{currentNode.type} State</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Available Transitions */}
+              <div className="space-y-3">
+                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-1">Available Transitions</h3>
+                <div className="space-y-2">
+                  {(() => {
+                    const wState = record.workflowState as WorkflowState | undefined;
+                    const edges = moduleData.workflow?.edges.filter(e => e.source === wState?.currentNodeId) || [];
+                    
+                    if (edges.length === 0) return (
+                      <p className="text-[10px] text-zinc-500 italic px-1">No further transitions available from this node.</p>
+                    );
+
+                    return edges.map((edge) => {
+                      const targetNode = moduleData.workflow?.nodes.find(n => n.id === edge.target);
+                      if (!targetNode) return null;
+
+                      return (
+                        <button
+                          key={edge.id}
+                          onClick={() => handleStatusTransition(targetNode.name)} // Update this to handle graph transitions properly
+                          className="w-full flex items-center justify-between p-4 bg-white dark:bg-zinc-950/30 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 transition-colors">
+                              <ArrowRight size={14} />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-xs font-bold text-zinc-900 dark:text-white">{targetNode.name}</p>
+                              {edge.condition && <p className="text-[9px] text-zinc-500 truncate max-w-[150px]">{edge.condition}</p>}
+                            </div>
+                          </div>
+                          <ChevronRight size={14} className="text-zinc-400" />
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-1">History</h3>
+            <div className="space-y-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">Execution Audit</h3>
+                <History size={12} className="text-zinc-600" />
+              </div>
               <div className="space-y-6 relative before:absolute before:inset-0 before:left-3 before:w-px before:bg-zinc-200 dark:before:bg-zinc-800 py-2">
-                {history.map((h, i) => (
-                  <div key={i} className="relative pl-10">
-                    <div className="absolute left-1 top-1.5 w-4 h-4 rounded-full bg-white dark:bg-zinc-950 border-2 border-indigo-500 z-10" />
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
-                        Status changed to <span className="text-indigo-500">{h.to}</span>
-                      </p>
-                      <p className="text-[10px] text-zinc-500 font-medium">
-                        {h.timestamp?.toDate ? h.timestamp.toDate().toLocaleString() : 'Just now'} • {h.user}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {history.length === 0 && (
-                  <p className="text-[10px] text-zinc-400 italic pl-10">No history available.</p>
-                )}
+                {(() => {
+                  const wState = record.workflowState as WorkflowState | undefined;
+                  const history = wState?.history || [];
+
+                  if (history.length === 0) return (
+                    <p className="text-[10px] text-zinc-400 italic pl-10">No execution history available.</p>
+                  );
+
+                  return history.map((h, i) => {
+                    const node = moduleData.workflow?.nodes.find(n => n.id === h.nodeId);
+                    return (
+                      <div key={i} className="relative pl-10">
+                        <div className={cn(
+                          "absolute left-1 top-1.5 w-4 h-4 rounded-full bg-white dark:bg-zinc-950 border-2 z-10 transition-colors",
+                          i === history.length - 1 ? "border-indigo-500 scale-110 shadow-lg shadow-indigo-500/20" : "border-zinc-300 dark:border-zinc-700"
+                        )} />
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
+                            {node?.name || 'Unknown Node'}
+                            {node?.type === 'ACTION' && <span className="ml-2 text-[8px] px-1 bg-emerald-500/10 text-emerald-400 rounded">ACTION EXECUTED</span>}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 font-medium">
+                            {new Date(h.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>

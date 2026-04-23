@@ -245,8 +245,9 @@ model Record {
   tenantId  String   @map("tenant_id")
   moduleId  String   @map("module_id")
   data      Json
-  status    String   @default("active")
-  createdAt DateTime @default(now()) @map("created_at")
+  status        String   @default("active")
+  workflowState Json?    @map("workflow_state")
+  createdAt     DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
 
