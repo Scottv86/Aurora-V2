@@ -386,7 +386,7 @@ export const ModuleEditor = () => {
   const { id: routeId } = useParams();
   const id = routeId || 'new';
   const navigate = useNavigate();
-  const { tenant, refreshModules } = usePlatform();
+  const { tenant, modules, refreshModules } = usePlatform();
   const { session } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -443,6 +443,40 @@ export const ModuleEditor = () => {
     logic?: string;
     triggers?: string[];
   } | null>(null);
+
+  const [relatedModulesMap, setRelatedModulesMap] = useState<Record<string, Field[]>>({});
+
+  // Fetch Related Module Schemas for Lookups
+  useEffect(() => {
+    const lookupFields = layout.filter(f => f.type === 'lookup' && f.targetModuleId);
+    const uniqueModuleIds = [...new Set(lookupFields.map(f => f.targetModuleId as string))];
+    
+    uniqueModuleIds.forEach(async (moduleId) => {
+      if (relatedModulesMap[moduleId] || !tenant?.id) return;
+      
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const response = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.layout) {
+            setRelatedModulesMap(prev => ({
+              ...prev,
+              [moduleId]: data.layout
+            }));
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to fetch related module schema for ${moduleId}:`, err);
+      }
+    });
+  }, [layout, tenant?.id, session?.access_token, relatedModulesMap]);
 
 
 
@@ -2460,6 +2494,8 @@ export const ModuleEditor = () => {
           initialLogic={editingCalculation?.logic}
           initialTriggers={editingCalculation?.triggers}
           availableFields={layout.filter(f => f.id !== editingCalculation?.targetId)}
+          relatedFields={relatedModulesMap}
+          allModules={modules}
           targetLabel={layout.find(f => f.id === editingCalculation?.targetId)?.label || 'Calculation'}
         />
 
