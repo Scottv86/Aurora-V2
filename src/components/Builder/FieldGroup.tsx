@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move } from 'lucide-react';
+import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useGridEngine, GridItem, GridPos } from '../../hooks/useGridEngine';
 
@@ -142,6 +142,12 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {block.visibilityRule && (
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20 shadow-sm shadow-indigo-500/10" title="Conditional Logic Applied">
+              <BrainCircuit size={12} className="text-indigo-500" />
+              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">Logic</span>
+            </div>
+          )}
           <div className="flex items-center gap-1 px-2 py-1 bg-zinc-100 dark:bg-zinc-900 rounded-lg opacity-0 group-hover/group:opacity-100 transition-opacity">
             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-tighter">W: {block.colSpan}</span>
           </div>
@@ -256,6 +262,3 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   );
 };
 
-const Settings2 = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
-);

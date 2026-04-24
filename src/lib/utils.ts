@@ -18,22 +18,47 @@ export function stripUndefined(obj: any) {
 
 export const isFieldVisible = (field: any, data: any) => {
   if (!field.visibilityRule) return true;
-  const { fieldId, operator, value } = field.visibilityRule;
+  return checkCondition(field.visibilityRule, data);
+};
+
+const checkCondition = (condition: any, data: any): boolean => {
+  if (!condition) return true;
+
+  // Handle nested group
+  if (condition.type === 'group') {
+    const { logicalOperator, rules } = condition;
+    if (!rules || rules.length === 0) return true;
+    
+    if (logicalOperator === 'AND') {
+      return rules.every((r: any) => checkCondition(r, data));
+    } else {
+      return rules.some((r: any) => checkCondition(r, data));
+    }
+  }
+
+  // Handle single rule (new or old format)
+  const { fieldId, operator, value, valueType } = condition;
   if (!fieldId) return true;
   
   const actualValue = data?.[fieldId];
+  let compareValue = value;
+
+  // If comparing against another field, fetch its value from data
+  if (valueType === 'field' && value) {
+    compareValue = data?.[value];
+  }
   
   switch (operator) {
     case 'equals':
-      return String(actualValue) === String(value);
+      return String(actualValue) === String(compareValue);
     case 'not_equals':
-      return String(actualValue) !== String(value);
+      return String(actualValue) !== String(compareValue);
     case 'contains':
-      return String(actualValue).toLowerCase().includes(String(value).toLowerCase());
+      return String(actualValue).toLowerCase().includes(String(compareValue || '').toLowerCase());
     case 'greater_than':
-      return Number(actualValue) > Number(value);
+      return Number(actualValue) > Number(compareValue);
     case 'less_than':
-      return Number(actualValue) < Number(value);
+      return Number(actualValue) < Number(compareValue);
     case 'is_empty':
       return !actualValue || String(actualValue).trim() === '';
     case 'not_empty':

@@ -35,7 +35,10 @@ import {
   Palette,
   ArrowUp,
   X,
-  Bug
+  Bug,
+  Database,
+  FileText,
+  Upload
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow } from '../types/platform';
@@ -52,6 +55,8 @@ import { MODULES } from '../constants/modules';
 import { FieldGroup } from './Builder/FieldGroup';
 import { useGridEngine } from '../hooks/useGridEngine';
 import { IconPicker } from './Common/IconPicker';
+import { ConditionModal } from './Builder/ConditionModal';
+import { CalculatorModal } from './Builder/CalculatorModal';
 
 
 // --- Types ---
@@ -85,9 +90,16 @@ export type FieldType =
   | 'repeatableGroup';
 
 export interface VisibilityRule {
-  fieldId: string;
-  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
-  value: string;
+  id: string;
+  type: 'rule' | 'group';
+  fieldId?: string;
+  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
+  value?: string;
+  valueType?: 'literal' | 'field';
+  logicalOperator?: 'AND' | 'OR';
+  rules?: VisibilityRule[];
+  isCollapsed?: boolean;
+  name?: string;
 }
 
 export interface Field {
@@ -101,6 +113,7 @@ export interface Field {
   currencySymbol?: string;
   options?: string[];
   calculationLogic?: string;
+  calculationTriggers?: string[];
   targetModuleId?: string;
   // For nested fields (fieldGroup, repeatableGroup)
   fields?: Field[];
@@ -201,6 +214,87 @@ const BlockThumbnail = ({ type }: { type: string }) => {
         </div>
       ) : type === 'divider' ? (
         <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800" />
+      ) : type === 'spacer' ? (
+        <div className="w-full h-full border border-dashed border-zinc-200 dark:border-zinc-800/50 rounded-lg flex items-center justify-center">
+          <Maximize2 size={12} className="text-zinc-200 dark:text-zinc-800" />
+        </div>
+      ) : type === 'checkbox' ? (
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded-md border-2 border-indigo-500/50 bg-indigo-500/10 flex items-center justify-center">
+            <CheckSquare size={10} className="text-indigo-500" />
+          </div>
+          <div className="h-1.5 w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+        </div>
+      ) : (type === 'select' || type === 'dropdown') ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-5 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md flex items-center justify-between px-2">
+            <div className="h-1 w-1/2 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
+            <ListFilter size={10} className="text-zinc-400" />
+          </div>
+        </div>
+      ) : type === 'date' ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-5 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md flex items-center justify-between px-2">
+            <div className="h-1 w-1/2 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
+            <Calendar size={10} className="text-zinc-400" />
+          </div>
+        </div>
+      ) : type === 'textarea' ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-8 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md p-1.5 space-y-1">
+            <div className="h-1 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full" />
+            <div className="h-1 w-3/4 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
+          </div>
+        </div>
+      ) : (type === 'number' || type === 'currency') ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-5 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md flex items-center px-2 gap-2">
+            {type === 'currency' ? <DollarSign size={10} className="text-zinc-400" /> : <Hash size={10} className="text-zinc-400" />}
+            <div className="h-1 w-1/3 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
+          </div>
+        </div>
+      ) : (type === 'group' || type === 'fieldGroup' || type === 'repeatableGroup') ? (
+        <div className="w-full h-10 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-100/50 dark:bg-zinc-900/50 flex flex-col p-1.5 gap-1">
+          <div className="h-1.5 w-1/2 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+          <div className="flex-1 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg bg-white/50 dark:bg-zinc-950/50" />
+        </div>
+      ) : type === 'alert' ? (
+        <div className="w-full h-8 bg-amber-500/5 border border-amber-500/20 rounded-lg flex items-center px-2 gap-2">
+          <AlertCircle size={12} className="text-amber-500" />
+          <div className="h-1 w-1/2 bg-amber-500/20 rounded-full" />
+        </div>
+      ) : type === 'file' ? (
+        <div className="w-full h-full border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg flex flex-col items-center justify-center gap-1 bg-zinc-100/50 dark:bg-zinc-900/50">
+          <div className="flex items-center gap-1">
+            <FileText size={8} className="text-zinc-400" />
+            <UploadCloud size={12} className="text-indigo-500" />
+            <Image size={8} className="text-zinc-400" />
+          </div>
+          <div className="h-0.5 w-1/2 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+        </div>
+      ) : type === 'lookup' ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-5 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md flex items-center px-2 gap-2">
+            <Database size={10} className="text-indigo-400" />
+            <div className="h-1 w-2/3 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
+          </div>
+        </div>
+      ) : type === 'calculation' ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-indigo-500/30 rounded-full" />
+          <div className="h-5 w-full bg-indigo-500/5 border border-indigo-500/20 rounded-md flex items-center justify-center">
+            <Calculator size={12} className="text-indigo-400" />
+          </div>
+        </div>
+      ) : type === 'automation' ? (
+        <div className="h-full flex items-center justify-center">
+          <Sparkles size={16} className="text-indigo-400 animate-pulse" />
+        </div>
       ) : (
         <div className="space-y-1.5">
           <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
@@ -212,17 +306,29 @@ const BlockThumbnail = ({ type }: { type: string }) => {
   );
 };
 
+const migrateVisibilityRule = (rule: any): VisibilityRule | undefined => {
+  if (!rule) return undefined;
+  if (rule.type) return rule as VisibilityRule; // Already in new format
+  
+  // Migrate old format { fieldId, operator, value }
+  return {
+    id: `rule-${Math.random().toString(36).substring(2, 11)}`,
+    type: 'rule',
+    fieldId: rule.fieldId,
+    operator: rule.operator,
+    value: rule.value
+  };
+};
+
 const VisibilityRuleEditor = ({ 
   rule, 
-  onUpdate, 
+  onEdit, 
   onRemove, 
-  availableFields, 
   label = "Conditional Visibility" 
 }: { 
   rule?: VisibilityRule, 
-  onUpdate: (rule: VisibilityRule) => void, 
+  onEdit: () => void, 
   onRemove: () => void, 
-  availableFields: Field[],
   label?: string
 }) => {
   if (!rule) {
@@ -230,7 +336,7 @@ const VisibilityRuleEditor = ({
       <div className="flex items-center justify-between">
         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{label}</label>
         <button
-          onClick={() => onUpdate({ fieldId: '', operator: 'equals', value: '' })}
+          onClick={onEdit}
           className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest"
         >
           Add Rule
@@ -243,62 +349,29 @@ const VisibilityRuleEditor = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">{label}</label>
-        <button
-          onClick={onRemove}
-          className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest"
-        >
-          Remove
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={onEdit}
+            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest"
+          >
+            Edit
+          </button>
+          <button
+            onClick={onRemove}
+            className="text-[10px] font-bold text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+          >
+            Remove
+          </button>
+        </div>
       </div>
       
-      <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 space-y-3">
-        <div className="relative">
-          <select
-            value={rule.fieldId}
-            onChange={(e) => onUpdate({ ...rule, fieldId: e.target.value })}
-            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none pr-8"
-          >
-            <option value="">Select Field...</option>
-            {availableFields.map(f => (
-              <option key={f.id} value={f.id}>{f.label}</option>
-            ))}
-          </select>
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
-            <ListFilter size={12} />
-          </div>
+      <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center gap-3">
+        <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500">
+          <BrainCircuit size={14} />
         </div>
-
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <select
-              value={rule.operator}
-              onChange={(e) => onUpdate({ ...rule, operator: e.target.value as any })}
-              className={cn(
-                "w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none pr-8",
-                ['is_empty', 'not_empty'].includes(rule.operator) ? "w-full" : ""
-              )}
-            >
-              <option value="equals">Equals</option>
-              <option value="not_equals">Not Equals</option>
-              <option value="contains">Contains</option>
-              <option value="greater_than">Greater Than</option>
-              <option value="less_than">Less Than</option>
-              <option value="is_empty">Is Empty</option>
-              <option value="not_empty">Not Empty</option>
-            </select>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
-              <Plus size={12} className="rotate-45" />
-            </div>
-          </div>
-          {!['is_empty', 'not_empty'].includes(rule.operator) && (
-            <input
-              type="text"
-              placeholder="Value"
-              value={rule.value}
-              onChange={(e) => onUpdate({ ...rule, value: e.target.value })}
-              className="w-1/2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-            />
-          )}
+        <div className="flex-1">
+          <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Active Logic Applied</p>
+          <p className="text-[9px] text-zinc-500">Complex visibility rules are active for this element.</p>
         </div>
       </div>
     </div>
@@ -344,7 +417,7 @@ export const ModuleEditor = () => {
   const [architectInput, setArchitectInput] = useState('');
   const [isArchitectThinking, setIsArchitectThinking] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
-  const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string } | null>(null);
+  const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string, height?: number } | null>(null);
 
   const [workflow, setWorkflow] = useState<Workflow | undefined>({
     id: `wf-${Date.now()}`,
@@ -358,6 +431,18 @@ export const ModuleEditor = () => {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   const { resolveCollisions } = useGridEngine(12);
+
+  const [editingCondition, setEditingCondition] = useState<{
+    targetId: string;
+    targetType: 'field' | 'tab';
+    rule?: VisibilityRule;
+  } | null>(null);
+
+  const [editingCalculation, setEditingCalculation] = useState<{
+    targetId: string;
+    logic?: string;
+    triggers?: string[];
+  } | null>(null);
 
 
 
@@ -640,12 +725,23 @@ export const ModuleEditor = () => {
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
 
   // --- Helpers ---
+  
+  const calculateHeight = (f: Field) => {
+    if (f.type === 'repeatableGroup' || f.type === 'fieldGroup' || f.type === 'group') return 2;
+    if (f.type === 'file' || f.type === 'textarea' || f.type === 'lookup') return 2;
+    return 1;
+  };
+
+  const getFieldHeight = (type: string) => {
+    if (type === 'repeatableGroup' || type === 'fieldGroup' || type === 'group') return 240;
+    if (type === 'file') return 230;
+    if (type === 'textarea' || type === 'lookup') return 150;
+    if (type === 'spacer') return 80;
+    if (type === 'heading') return 90;
+    return 110;
+  };
 
   const resolveCollisionsInArray = useCallback((triggerField: Field, fields: Field[]) => {
-    const calculateHeight = (f: Field) => {
-      if (f.type === 'repeatableGroup' || f.type === 'fieldGroup' || f.type === 'group') return 2;
-      return 1;
-    };
 
     const otherFields = fields.filter(f => f.id !== triggerField.id);
     
@@ -755,23 +851,40 @@ export const ModuleEditor = () => {
     // Calculate insertion row based on Y
     const container = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - container.top - 16;
-    const rowHeight = parentId ? 120 : 216; 
+    const rowHeight = 130; // Unified row height for better density
     const rowIndex = Math.max(0, Math.floor(y / rowHeight)); 
     
-    // Determine span from activeDragItem
+    // Determine span and height from activeDragItem
     let span = 12;
+    let isGroupDrag = false;
+
     if (activeDragItem) {
       if (activeDragItem.type === 'field') {
         const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === activeDragItem.fieldType);
         if (fieldDef?.defaultSpan) span = fieldDef.defaultSpan;
+        isGroupDrag = activeDragItem.fieldType === 'group' || activeDragItem.fieldType === 'fieldGroup' || activeDragItem.fieldType === 'repeatableGroup';
       } else if (activeDragItem.type === 'move') {
         const field = layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || '');
-        if (field) span = field.colSpan || 12;
+        if (field) {
+          span = field.colSpan || 12;
+          isGroupDrag = field.type === 'group' || field.type === 'fieldGroup' || field.type === 'repeatableGroup';
+        }
       }
     }
 
     const constrainedSpan = Math.min(span, 13 - col);
-    setDragOverInfo({ col, span: constrainedSpan, index: rowIndex, active: true, parentId });
+    const fieldType = activeDragItem.type === 'field' 
+      ? activeDragItem.fieldType 
+      : (layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || ''))?.type;
+
+    setDragOverInfo({ 
+      col, 
+      span: constrainedSpan, 
+      index: rowIndex, 
+      active: true, 
+      parentId,
+      height: getFieldHeight(fieldType || 'text')
+    });
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -792,7 +905,7 @@ export const ModuleEditor = () => {
       
       const container = e.currentTarget.getBoundingClientRect();
       const y = e.clientY - container.top - 16;
-      const rowHeight = parentId ? 120 : 216; 
+      const rowHeight = 130; 
       const dropRow = Math.max(0, Math.floor(y / rowHeight));
 
       const fieldId = data.type === 'move' ? data.fieldId : null;
@@ -1236,22 +1349,6 @@ export const ModuleEditor = () => {
                           });
                         
                         const items = [...currentFields];
-                        
-                        // Inject placeholder into the list visually
-                        if (dragOverInfo && dragOverInfo.active) {
-                          const placeholder = (
-                            <div 
-                              key="drag-placeholder"
-                              className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-2xl z-0 pointer-events-none transition-all duration-150 h-24"
-                              style={{
-                                gridColumn: `${dragOverInfo.col} / span ${dragOverInfo.span}`,
-                                gridRow: `${(dragOverInfo.index || 0) + 1} / span 1`
-                              }}
-                            />
-                          );
-                          // For 2D grid, we don't splice, we just append to the render list
-                          items.push(placeholder as any);
-                        }
 
 
                           const renderFieldBlocks = (fields: Field[], parentId?: string): React.ReactNode => {
@@ -1269,8 +1366,8 @@ export const ModuleEditor = () => {
                                   className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse"
                                   style={{ 
                                     gridColumn: `${dragOverInfo.col} / span ${dragOverInfo.span}`,
-                                    gridRow: `${dragOverInfo.index + 1} / span 1`,
-                                    height: isNested ? '100px' : '180px'
+                                    gridRow: `${dragOverInfo.index + 1} / span ${Math.ceil((dragOverInfo.height || 110) / 130)}`,
+                                    height: `${dragOverInfo.height || 110}px`
                                   }}
                                 />
                               );
@@ -1333,6 +1430,12 @@ export const ModuleEditor = () => {
                                         </label>
                                       </div>
                                       <div className="flex items-center gap-2">
+                                        {block.visibilityRule && (
+                                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-indigo-500/10 rounded-full border border-indigo-500/20 shadow-sm shadow-indigo-500/10" title="Conditional Logic Applied">
+                                            <BrainCircuit size={10} className="text-indigo-500" />
+                                            <span className="text-[8px] font-black text-indigo-500 uppercase tracking-tighter">Logic</span>
+                                          </div>
+                                        )}
                                         <GripVertical size={12} className="text-zinc-300 group-hover/field:text-zinc-500" />
                                       </div>
                                     </div>
@@ -1362,6 +1465,111 @@ export const ModuleEditor = () => {
                                         "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
                                       )}>
                                         {block.label}
+                                      </div>
+                                    ) : block.type === 'checkbox' ? (
+                                      <div className="flex items-center gap-3 py-2 px-1">
+                                        <div className="w-5 h-5 rounded-md border-2 border-indigo-500/50 bg-white dark:bg-zinc-950 flex items-center justify-center">
+                                          <CheckSquare size={14} className="text-indigo-500 opacity-20" />
+                                        </div>
+                                        <span className="text-xs text-zinc-500 dark:text-zinc-400">Checkbox Option</span>
+                                      </div>
+                                    ) : (block.type === 'select' || block.type === 'dropdown') ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none cursor-default">
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Select ${block.label.toLowerCase()}...`}</span>
+                                        <ListFilter size={14} className="text-zinc-400" />
+                                      </div>
+                                    ) : block.type === 'date' ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none cursor-default">
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || 'Select date...'}</span>
+                                        <Calendar size={14} className="text-zinc-400" />
+                                      </div>
+                                    ) : block.type === 'textarea' ? (
+                                      <div className="min-h-[80px] bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl p-4 shadow-sm dark:shadow-none">
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Enter ${block.label.toLowerCase()}...`}</span>
+                                      </div>
+                                    ) : (block.type === 'number' || block.type === 'currency') ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 shadow-sm dark:shadow-none gap-3">
+                                        {block.type === 'currency' ? (
+                                          <span className="text-xs font-bold text-zinc-400">{block.currencySymbol || '$'}</span>
+                                        ) : (
+                                          <Hash size={14} className="text-zinc-400" />
+                                        )}
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || '0.00'}</span>
+                                      </div>
+                                    ) : block.type === 'file' ? (
+                                      <div className="h-40 bg-zinc-50 dark:bg-zinc-900/20 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2rem] flex flex-col items-center justify-center gap-4 group-hover/field:border-indigo-500/50 group-hover/field:bg-indigo-500/5 transition-all relative overflow-hidden group/dropzone">
+                                        <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/[0.03] to-transparent pointer-events-none" />
+                                        
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <div className="w-10 h-10 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center -rotate-6 transition-transform group-hover/dropzone:-rotate-12">
+                                            <FileText size={18} className="text-zinc-400" />
+                                          </div>
+                                          <div className="w-12 h-12 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-indigo-500/20 flex items-center justify-center z-10 scale-110">
+                                            <UploadCloud size={24} className="text-indigo-500" />
+                                          </div>
+                                          <div className="w-10 h-10 bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center rotate-6 transition-transform group-hover/dropzone:rotate-12">
+                                            <Image size={18} className="text-zinc-400" />
+                                          </div>
+                                        </div>
+
+                                        <div className="text-center space-y-2">
+                                          <div className="space-y-0.5">
+                                            <span className="block text-xs font-bold text-zinc-900 dark:text-zinc-100">Drop files here to upload</span>
+                                            <span className="block text-[10px] font-medium text-zinc-500 uppercase tracking-widest opacity-60">or click to browse local files</span>
+                                          </div>
+                                          
+                                          <div className="flex items-center justify-center gap-3 pt-2">
+                                            <button className="px-4 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all shadow-sm">
+                                              Browse Files
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Floating Format Labels */}
+                                        <div className="absolute top-4 right-4 flex gap-1">
+                                          {['PDF', 'JPG', 'PNG'].map(ext => (
+                                            <span key={ext} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-[8px] font-bold text-zinc-500 dark:text-zinc-400">{ext}</span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : block.type === 'lookup' ? (
+                                      <div className="min-h-[48px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col shadow-sm group-hover/field:border-indigo-500/50 transition-all overflow-hidden">
+                                        <div className="flex items-center justify-between px-4 h-12 border-b border-zinc-50 dark:border-zinc-900/50">
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-7 h-7 bg-indigo-500/10 rounded-lg flex items-center justify-center">
+                                              <Database size={14} className="text-indigo-500" />
+                                            </div>
+                                            <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || 'Search records...'}</span>
+                                          </div>
+                                          <Search size={14} className="text-zinc-300" />
+                                        </div>
+                                        
+                                        {/* Symbolic Recent Records */}
+                                        <div className="p-2 flex gap-2 overflow-hidden">
+                                          {[1, 2].map(i => (
+                                            <div key={i} className="flex-shrink-0 flex items-center gap-2 px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                              <div className="w-2 h-2 rounded-full bg-indigo-500/40" />
+                                              <div className="w-16 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+                                              <X size={10} className="text-zinc-400" />
+                                            </div>
+                                          ))}
+                                          <div className="flex-shrink-0 w-8 h-7 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-center">
+                                            <Plus size={12} className="text-zinc-300" />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : block.type === 'calculation' ? (
+                                      <div className="flex flex-col gap-2">
+                                        <div className="h-10 bg-zinc-950 dark:bg-black border border-zinc-800 dark:border-zinc-900 rounded-xl flex items-center px-4 gap-3 font-mono shadow-inner group-hover/field:border-indigo-500/30 transition-colors">
+                                          <Calculator size={14} className="text-indigo-500" />
+                                          <span className="text-[11px] text-indigo-400 opacity-80 truncate">{block.calculationLogic || 'Enter formula (e.g. {price} * {qty})...'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 px-2">
+                                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500/40 animate-pulse" />
+                                          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Computed Result Preview</span>
+                                          <div className="flex-1 h-px bg-zinc-100 dark:bg-zinc-800/50" />
+                                          <span className="text-xs font-black text-indigo-500 tracking-tight">0.00</span>
+                                        </div>
                                       </div>
                                     ) : (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 shadow-sm dark:shadow-none">
@@ -1923,15 +2131,30 @@ export const ModuleEditor = () => {
                       )}
 
                       {selectedField.type === 'calculation' && (
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Calculation Logic</label>
-                          <textarea 
-                            value={selectedField.calculationLogic || ''}
-                            onChange={(e) => updateField(selectedField.id, { calculationLogic: e.target.value })}
-                            className="w-full h-32 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white font-mono focus:outline-none focus:border-indigo-500 transition-all resize-none"
-                            placeholder="{price} * 1.1"
-                          />
-                          <p className="text-[9px] text-zinc-600 italic px-1">Use {"{field_id}"} to reference other fields.</p>
+                          <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500">
+                                <Calculator size={14} />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Active Formula</p>
+                                <p className="text-[9px] text-zinc-500 truncate font-mono">{selectedField.calculationLogic || 'No logic defined'}</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => setEditingCalculation({
+                                targetId: selectedField.id,
+                                logic: selectedField.calculationLogic,
+                                triggers: selectedField.calculationTriggers
+                              })}
+                              className="w-full py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[10px] font-bold text-indigo-500 hover:bg-indigo-500/5 transition-all uppercase tracking-widest"
+                            >
+                              Configure Logic
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-zinc-600 italic px-1">Complex mathematical and logical operations.</p>
                         </div>
                       )}
 
@@ -1986,9 +2209,13 @@ export const ModuleEditor = () => {
                       <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <VisibilityRuleEditor 
                           rule={selectedField.visibilityRule}
-                          onUpdate={(rule) => updateField(selectedField.id, { visibilityRule: rule })}
+                          onEdit={() => setEditingCondition({
+                            targetId: selectedField.id,
+                            targetType: 'field',
+                            rule: migrateVisibilityRule(selectedField.visibilityRule)
+                          })}
                           onRemove={() => updateField(selectedField.id, { visibilityRule: undefined })}
-                          availableFields={layout.filter(f => f.id !== selectedField.id)}
+                          label="Conditional Visibility"
                         />
                       </div>
                     </div>
@@ -2047,9 +2274,12 @@ export const ModuleEditor = () => {
                       <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <VisibilityRuleEditor 
                           rule={selectedTab.visibilityRule}
-                          onUpdate={(rule) => updateTab(selectedTab.id, { visibilityRule: rule })}
+                          onEdit={() => setEditingCondition({
+                            targetId: selectedTab.id,
+                            targetType: 'tab',
+                            rule: migrateVisibilityRule(selectedTab.visibilityRule)
+                          })}
                           onRemove={() => updateTab(selectedTab.id, { visibilityRule: undefined })}
-                          availableFields={layout}
                           label="Tab Visibility Rule"
                         />
                       </div>
@@ -2190,6 +2420,48 @@ export const ModuleEditor = () => {
             </div>
           </aside>
         )}
+
+        {/* Condition Modal */}
+        <ConditionModal 
+          isOpen={!!editingCondition}
+          onClose={() => setEditingCondition(null)}
+          onSave={(rule) => {
+            if (editingCondition) {
+              if (editingCondition.targetType === 'field') {
+                updateField(editingCondition.targetId, { visibilityRule: rule });
+              } else {
+                updateTab(editingCondition.targetId, { visibilityRule: rule });
+              }
+            }
+            setEditingCondition(null);
+          }}
+          initialRule={editingCondition?.rule}
+          availableFields={layout.filter(f => f.id !== editingCondition?.targetId)}
+          targetLabel={
+            editingCondition?.targetType === 'field' 
+              ? (layout.find(f => f.id === editingCondition?.targetId)?.label || 'Field')
+              : (tabs.find(t => t.id === editingCondition?.targetId)?.label || 'Tab')
+          }
+        />
+
+        {/* Calculator Modal */}
+        <CalculatorModal 
+          isOpen={!!editingCalculation}
+          onClose={() => setEditingCalculation(null)}
+          onSave={(logic, triggers) => {
+            if (editingCalculation) {
+              updateField(editingCalculation.targetId, { 
+                calculationLogic: logic,
+                calculationTriggers: triggers
+              });
+            }
+            setEditingCalculation(null);
+          }}
+          initialLogic={editingCalculation?.logic}
+          initialTriggers={editingCalculation?.triggers}
+          availableFields={layout.filter(f => f.id !== editingCalculation?.targetId)}
+          targetLabel={layout.find(f => f.id === editingCalculation?.targetId)?.label || 'Calculation'}
+        />
 
         {/* Command Palette */}
         <CommandPalette 
