@@ -267,6 +267,87 @@ Data: ${dataString}`;
 };
 
 /**
+ * Generates a calculation expression based on a prompt.
+ */
+export const generateExpression = async (prompt: string, fields: any[], functions: any[]): Promise<string> => {
+  try {
+    const ai = getAI();
+    if (!ai) return "// Gemini API Key missing. Please check your .env file.";
+
+    const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, type: f.type })), null, 2);
+    const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: `You are an expert logic architect for the Aurora Platform. 
+      Your task is to convert a natural language request into a valid Aurora Expression.
+
+      USER REQUEST: "${prompt}"
+
+      AVAILABLE FIELDS (Always wrap in curly braces, e.g., {Price}):
+      ${fieldsString}
+
+      AVAILABLE FUNCTIONS:
+      ${functionsString}
+
+      STRICT RULES:
+      1. Return ONLY the expression string. No markdown, no comments, no intro.
+      2. If you don't understand the request, return a helpful comment starting with "// AI: " explaining why.
+      3. Use single quotes for strings: 'Value'.
+      4. For boolean values, use true/false (no quotes).
+      5. Correctly handle singular vs plural requests (e.g. "first letter" = 1, "first 3 letters" = 3).
+      6. For collection operations (SUM, AVG, COUNT), ensure the field is a list or repeatable group.`,
+    });
+
+    return response.text.trim().replace(/^```[a-z]*\n|```$/gi, '');
+  } catch (error) {
+    console.error("Error generating AI expression:", error);
+    return "// Error connecting to Gemini. Please try again.";
+  }
+};
+
+/**
+ * Fixes an expression with errors using AI.
+ */
+export const fixExpression = async (expression: string, errors: any[], fields: any[], functions: any[]): Promise<string> => {
+  try {
+    const ai = getAI();
+    if (!ai) return expression;
+
+    const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, type: f.type })), null, 2);
+    const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
+    const errorsString = JSON.stringify(errors, null, 2);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: `You are an expert logic architect for the Aurora Platform. 
+      The user has an expression with errors, and you need to fix it.
+
+      CURRENT EXPRESSION: "${expression}"
+      ERRORS: ${errorsString}
+
+      AVAILABLE FIELDS:
+      ${fieldsString}
+
+      AVAILABLE FUNCTIONS:
+      ${functionsString}
+
+      STRICT RULES:
+      1. Return ONLY the fixed expression string. No markdown, no comments, no intro.
+      2. If you can't fix it, return the original expression.
+      3. Ensure all fields are wrapped in curly braces {}.
+      4. Fix common syntax errors like missing commas, unbalanced parentheses, or wrong parameter counts.
+      5. Correct field names if they are slightly misspelled (fuzzy match).`,
+    });
+
+    return response.text.trim().replace(/^```[a-z]*\n|```$/gi, '');
+  } catch (error) {
+    console.error("Error fixing AI expression:", error);
+    return expression;
+  }
+};
+
+/**
  * Safely evaluates calculation fields locally.
  */
 export const evaluateCalculations = (data: Record<string, any>, fields: ModuleField[]): Record<string, any> => {

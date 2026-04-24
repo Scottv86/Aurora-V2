@@ -6,7 +6,6 @@ import {
   Minus,
   Asterisk,
   Divide,
-  Calculator,
   FunctionSquare,
   Settings2,
   RotateCcw,
@@ -40,6 +39,7 @@ import { cn } from '../../lib/utils';
 import { Field } from '../ModuleEditor';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL } from '../../config';
+import { generateExpression, fixExpression } from '../../services/aiService';
 
 interface Snapshot {
   logic: string;
@@ -691,206 +691,38 @@ export const CalculatorModal = ({
     if (!sandbox.error && currentValidation.errors.length === 0) return;
     setIsFixing(true);
     
-    // Simulate Advanced AI Reasoning
-    await new Promise(resolve => setTimeout(resolve, 1200)); 
-    
-    let fixed = logic;
-    
-    // 1. Structural Fixes (Parentheses/Braces) - Always apply to the working 'fixed' string
-    const openParen = (fixed.match(/\(/g) || []).length;
-    const closeParen = (fixed.match(/\)/g) || []).length;
-    if (openParen > closeParen) fixed += ')'.repeat(openParen - closeParen);
-    
-    const openBraces = (fixed.match(/\{/g) || []).length;
-    const closeBraces = (fixed.match(/\}/g) || []).length;
-    if (openBraces > closeBraces) fixed += '}'.repeat(openBraces - closeBraces);
-
-    // 2. Intelligent Error Reconciliation
-    currentValidation.errors.forEach(err => {
-      const msg = err.message.toLowerCase();
-      
-      // Handle Unknown Identifiers / Missing Variables / Trailing Garbage
-      if (msg.includes('unknown identifier') || msg.includes('missing variable') || msg.includes('not defined')) {
-        const match = err.message.match(/"([^"]+)"/) || err.message.match(/'([^']+)'/);
-        if (match) {
-          const idName = match[1];
-          const trimmed = fixed.trim();
-          
-          // Case A: Trailing garbage (token at the very end of the logic)
-          if (trimmed.endsWith(idName)) {
-            fixed = trimmed.substring(0, trimmed.length - idName.length).trim();
-          } else {
-            // Case B: Try to find a matching field
-            const closestField = availableFields.find(f => 
-              f.label.toLowerCase() === idName.toLowerCase() ||
-              f.label.toLowerCase().includes(idName.toLowerCase())
-            );
-            if (closestField) {
-              fixed = fixed.replace(new RegExp(`\\b${idName}\\b`, 'g'), `{${closestField.label}}`);
-            } else {
-              // Case C: Try to find a matching function (misspelled or lowercase)
-              const closestFunc = FUNCTIONS.find(fn => 
-                fn.name.toLowerCase().includes(idName.toLowerCase())
-              );
-              if (closestFunc) {
-                fixed = fixed.replace(new RegExp(`\\b${idName}\\b`, 'g'), closestFunc.name);
-              }
-            }
-          }
-        }
+    try {
+      const fixed = await fixExpression(logic, currentValidation.errors, availableFields, FUNCTIONS);
+      if (fixed) {
+        setLogic(fixed);
       }
-
-      // Handle Unknown Functions
-      if (msg.includes('unknown function')) {
-        const match = err.message.match(/"([^"]+)"/);
-        if (match) {
-          const funcName = match[1];
-          const closestFunc = FUNCTIONS.find(fn => 
-            fn.name.toLowerCase() === funcName.toLowerCase() ||
-            fn.name.toLowerCase().includes(funcName.toLowerCase())
-          );
-          if (closestFunc) {
-            fixed = fixed.replace(new RegExp(`\\b${funcName}\\b`, 'g'), closestFunc.name);
-          }
-        }
-      }
-
-      // Handle Comparison Typos (= vs ==)
-      if (msg.includes("detected '=' instead of '=='")) {
-         fixed = fixed.replace(/([^=])=([^=])/g, '$1==$2');
-      }
-
-      // Handle Incomplete Arguments
-      if (msg.includes('incomplete arguments')) {
-        const match = err.message.match(/"([^"]+)"/);
-        if (match) {
-          const funcName = match[1];
-          const funcDef = FUNCTIONS.find(fn => fn.name === funcName);
-          if (funcDef && funcDef.params) {
-            const minArgs = funcDef.params.filter((p: any) => !p.optional).length;
-            // Simple regex for top-level function call (doesn't handle deep nesting perfectly but fixes common cases)
-            const callRegex = new RegExp(`\\b${funcName}\\s*\\(([^)]*)\\)`, 'g');
-            fixed = fixed.replace(callRegex, (fullCall, currentArgs) => {
-              // Split by comma but respect brackets (simplified)
-              const argList = (currentArgs as string).split(/,(?![^{]*})/).map((a: string) => a.trim()).filter(Boolean);
-              if (argList.length < minArgs) {
-                const missingCount = minArgs - argList.length;
-                const placeholders = Array(missingCount).fill('1');
-                return `${funcName}(${[...argList, ...placeholders].join(', ')})`;
-              }
-              return fullCall;
-            });
-          }
-        }
-      }
-
-      // Handle Unknown Fields (Fuzzy Matching)
-      // Handle Unknown Fields / Missing Variables (using suggestions from validation)
-      if (msg.includes('did you mean')) {
-        const fieldMatch = err.message.match(/(?:field not found|missing variable): "([^"]+)"/i);
-        const suggestionMatch = err.message.match(/did you mean "([^"]+)"/i);
-        
-        if (fieldMatch && suggestionMatch) {
-          const unknownField = fieldMatch[1]; // This might include braces if it's a Missing Variable
-          const suggestion = suggestionMatch[1];
-          
-          // Clean up braces if present in the match
-          const cleanUnknown = unknownField.startsWith('{') ? unknownField.slice(1, -1) : unknownField;
-          const cleanSuggestion = suggestion.startsWith('{') ? suggestion.slice(1, -1) : suggestion;
-          
-          fixed = fixed.split(`{${cleanUnknown}}`).join(`{${cleanSuggestion}}`);
-        }
-      }
-    });
-
-    // 3. Logic Safety & Runtime Fixes
-    if (sandbox.error) {
-       const sErr = sandbox.error.toLowerCase();
-       if (sErr.includes('division by zero')) {
-          const parts = fixed.split('/');
-          if (parts.length > 1) {
-             const denominator = parts[1].split(/[+\-*%(),]/)[0].trim();
-             if (denominator) {
-                fixed = `IF(${denominator} == 0, 0, ${fixed})`;
-             }
-          }
-       }
+    } catch (error) {
+      console.error("AI Fix failed:", error);
+    } finally {
+      setIsFixing(false);
     }
-    
-    setLogic(fixed);
-    setIsFixing(false);
   };
+
+
 
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim()) return;
     setIsAiGenerating(true);
     
-    setTimeout(() => {
-      let generated = '';
-      const prompt = aiPrompt.toLowerCase();
+    try {
+      const generated = await generateExpression(aiPrompt, availableFields, FUNCTIONS);
       
-      // 1. Better Field Detection
-      const matchedFieldObj = availableFields.find(f => prompt.includes(f.label.toLowerCase()));
-      const matchedField = matchedFieldObj?.label || "Field";
-
-      // 2. Simple Field "Echo"
-      if (prompt.includes('render') || prompt.includes('show') || prompt.includes('get') || prompt.includes('value of') || prompt.includes('echo')) {
-        generated = `{${matchedField}}`;
-      }
-      // 3. Math & Percentages
-      else if (prompt.includes('percentage') || prompt.includes('%')) {
-        generated = `PERCENT({Value}, {Total})`;
-      } else if (prompt.includes('add') || prompt.includes('plus')) {
-        generated = `{Field1} + {Field2}`;
-      } else if (prompt.includes('multiply') || prompt.includes('times')) {
-        generated = `{Field1} * {Field2}`;
-      }
-      
-      // 3. Null/Empty Checks
-      else if (prompt.includes('not null') || prompt.includes('not empty') || prompt.includes('has a value')) {
-        generated = `NOT(IS_NULL({${matchedField}}))`;
-      } else if (prompt.includes('is empty') || prompt.includes('is null')) {
-        generated = `IS_NULL({${matchedField}})`;
-      }
-      
-      // 4. Date Math
-      else if (prompt.includes('days') && (prompt.includes('since') || prompt.includes('between') || prompt.includes('diff'))) {
-        generated = `DIFF_DAYS({StartDate}, {EndDate})`;
-      } else if (prompt.includes('end of') && prompt.includes('month')) {
-        generated = `EOMONTH(TODAY(), 0)`;
-      } else if (prompt.includes('work') && prompt.includes('days')) {
-        generated = `WORKDAY(TODAY(), 5)`;
-      }
-      
-      // 5. Conditionals
-      else if (prompt.includes('if')) {
-        if (prompt.includes('status') || prompt.includes('is')) {
-           generated = `IF({${matchedField}} == "Value", "Yes", "No")`;
-        } else {
-           generated = `IF(condition, "Result If True", "Result If False")`;
-        }
-      }
-      
-      // 6. String Cleaning
-      else if (prompt.includes('proper') || prompt.includes('title case')) {
-        generated = `PROPER({${matchedField}})`;
-      } else if (prompt.includes('trim') || prompt.includes('clean')) {
-        generated = `TRIM({${matchedField}})`;
-      }
-
-      // 7. Fallback with Smart Suggestion
-      else {
-        generated = `// AI: I understood "${aiPrompt}"\n// Tip: Try phrases like "Sum of...", "If {Status} is...", or "Days since {Date}"`;
-      }
-
       if (generated) {
         setLogic(generated);
       }
-      
+    } catch (error) {
+      console.error("AI Generation failed:", error);
+      setLogic("// Error: AI generation failed. Please try again.");
+    } finally {
       setIsAiGenerating(false);
       setShowAiBuild(false);
       setAiPrompt('');
-    }, 1500);
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, label: string) => {
@@ -1780,12 +1612,11 @@ export const CalculatorModal = ({
             <div className="px-6 py-2.5 border-b border-zinc-100 dark:border-zinc-900/50 flex items-center justify-between bg-zinc-50/30 dark:bg-zinc-900/20">
               <div className="flex items-center gap-6">
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-2xl shadow-indigo-500/30">
-                  <Calculator size={20} className="text-white" />
+                  <FunctionSquare size={20} className="text-white" />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">Logic Architect</h2>
+                  <h2 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">Expression Editor</h2>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Building Logic for:</span>
                     <span className="px-3 py-1 bg-indigo-500/10 text-indigo-500 rounded-lg text-xs font-black uppercase tracking-tight">{targetLabel}</span>
                   </div>
                 </div>
@@ -2131,25 +1962,13 @@ export const CalculatorModal = ({
               ) : null}
                 </div>
                 
-                <div className="p-6 border-t border-zinc-100 dark:border-zinc-900 bg-indigo-500/[0.02]">
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0">
-                      <BrainCircuit size={16} className="text-white" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Architect Tip</p>
-                      <p className="text-[9px] text-zinc-500 leading-relaxed italic">
-                        "Use curly brackets to reference fields."
-                      </p>
-                    </div>
-                  </div>
-                </div>
+
               </aside>
 
               {/* Center Column - Editor & Operators */}
               <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-zinc-950 p-6 space-y-6 border-r border-zinc-100 dark:border-zinc-900">
                 {/* Editor Area */}
-                <div className="flex-[2] relative group flex flex-col min-h-[300px]">
+                <div className="flex-1 relative group flex flex-col min-h-0">
                   <div className="absolute -inset-0.5 bg-gradient-to-br from-indigo-500/20 to-transparent rounded-[2.5rem] blur opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   
                   <div className="relative flex-1 flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm">
@@ -2157,18 +1976,7 @@ export const CalculatorModal = ({
                     <div className="px-6 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20 flex items-center justify-between">
                       <div className="flex-1 min-w-0 mr-4">
                         <AnimatePresence mode="wait">
-                          {!activeInsight ? (
-                            <motion.div 
-                              key="title"
-                              initial={{ opacity: 0, x: -5 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: 5 }}
-                              className="flex items-center gap-2"
-                            >
-                              <Terminal size={14} className="text-indigo-500" />
-                              <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Logic Expression Editor</span>
-                            </motion.div>
-                          ) : (
+                          {activeInsight && (
                             <motion.div 
                               key="insight"
                               initial={{ opacity: 0, x: -5 }}
@@ -2662,15 +2470,15 @@ export const CalculatorModal = ({
                   </div>
 
                   {/* Logic Intelligence Panel */}
-                  <div className="bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden flex flex-col min-h-[160px]">
-                    <div className="px-6 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 flex items-center justify-between">
+                  <div className="bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] flex flex-col relative">
+                    <div className="px-6 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 flex items-center justify-between rounded-t-[2rem]">
                       <button 
                         type="button"
                         onClick={() => setIsIntelliExpanded(!isIntelliExpanded)}
                         className="flex items-center gap-3 hover:opacity-70 transition-opacity"
                       >
                         <BrainCircuit size={14} className="text-indigo-500" />
-                        <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Logic Intelligence</span>
+                        <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Console</span>
                         <HelpTooltip text="Our AI-powered engine checks for syntax errors, circular dependencies, and suggests improvements to your logic." />
                         {isIntelliExpanded ? <ChevronDown size={12} className="text-zinc-400" /> : <ChevronRight size={12} className="text-zinc-400" />}
                       </button>
@@ -2690,13 +2498,13 @@ export const CalculatorModal = ({
                       {isIntelliExpanded && (
                         <motion.div 
                           initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 280, opacity: 1 }}
+                          animate={{ height: 220, opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="flex-1 grid grid-cols-2 divide-x divide-zinc-100 dark:divide-zinc-800 bg-white/30 dark:bg-zinc-900/20 overflow-hidden"
+                          className="grid grid-cols-2 divide-x divide-zinc-100 dark:divide-zinc-800 bg-white/30 dark:bg-zinc-900/20 overflow-hidden rounded-b-[2rem] h-[220px]"
                         >
                           {/* Left: Issues & Tips */}
-                          <div className="p-6 space-y-3 overflow-y-auto custom-scrollbar">
-                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-4">Issues & Tips</p>
+                          <div className="p-6 space-y-3 overflow-y-auto custom-scrollbar min-h-0">
+                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-4">Problems</p>
                         
                         {validation.errors.length === 0 && validation.warnings.length === 0 && validation.suggestions.length === 0 && (
                           <div className="flex flex-col items-center justify-center py-8 text-center space-y-2 opacity-50">
@@ -2725,12 +2533,23 @@ export const CalculatorModal = ({
                           </div>
                         ))}
 
-                        {validation.warnings.map((warn, i) => (
-                          <div key={i} className="flex items-start gap-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl animate-in fade-in slide-in-from-left-2">
-                            <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 leading-relaxed">{warn}</p>
-                          </div>
-                        ))}
+                        {validation.warnings.map((warn, i) => {
+                          const isEmptinessWarning = warn.includes("Expression is empty");
+                          if (isEmptinessWarning) {
+                            return (
+                              <div key={i} className="flex flex-col items-center justify-center py-8 text-center space-y-2 opacity-50">
+                                <Terminal size={16} className="text-zinc-300" />
+                                <p className="text-[9px] font-medium text-zinc-400 uppercase tracking-widest leading-tight">{warn}</p>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div key={i} className="flex items-start gap-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl animate-in fade-in slide-in-from-left-2">
+                              <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                              <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 leading-relaxed">{warn}</p>
+                            </div>
+                          );
+                        })}
 
                         {validation.suggestions.map((sug, i) => (
                           <div key={i} className="flex items-start gap-3 p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl animate-in fade-in slide-in-from-left-2">
@@ -2741,7 +2560,7 @@ export const CalculatorModal = ({
                       </div>
 
                       {/* Right: Variable Map */}
-                      <div className="p-6 space-y-3 overflow-y-auto custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/10">
+                      <div className="p-6 space-y-3 overflow-y-auto custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/10 min-h-0">
                         <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-4">Variable Map</p>
                         
                         {!logic.includes('{') ? (
@@ -2985,17 +2804,16 @@ export const CalculatorModal = ({
                       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                       className="absolute inset-0 z-[500] bg-white dark:bg-zinc-950 flex flex-col"
                     >
-                      <div className="px-12 py-8 border-b border-zinc-100 dark:border-zinc-900 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-                        <div className="flex items-center gap-6">
-                          <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-500/40">
-                            <BookOpen size={28} className="text-white" />
+                      <div className="px-8 py-4 border-b border-zinc-100 dark:border-zinc-900 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-2xl shadow-indigo-500/40">
+                            <BookOpen size={20} className="text-white" />
                           </div>
-                          <div className="space-y-1">
-                            <h3 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">Documentation</h3>
-                            <div className="flex items-center gap-3">
-                              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.2em]">Logic Guides & Function Reference</p>
+                          <div className="space-y-0.5">
+                            <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight">Documentation</h3>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-[0.2em]">Guides & Function Reference</p>
                               <div className="w-1 h-1 bg-zinc-300 rounded-full" />
-                              <span className="text-[10px] text-indigo-500 font-black uppercase">{FUNCTIONS.length} Functions Available</span>
                             </div>
                           </div>
                         </div>
@@ -3019,9 +2837,9 @@ export const CalculatorModal = ({
                         </div>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto custom-scrollbar p-12 space-y-16">
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
                         {/* Syntax Guide & Help Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="space-y-6">
                             <div className="flex items-center gap-3 mb-6">
                               <Terminal size={20} className="text-indigo-500" />
@@ -3030,7 +2848,7 @@ export const CalculatorModal = ({
                             <div className="space-y-8">
                               <div className="space-y-3">
                                 <p className="text-sm font-bold text-zinc-900 dark:text-white">Collection Processing</p>
-                                <p className="text-xs text-zinc-500 leading-relaxed bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                                <p className="text-xs text-zinc-500 leading-relaxed bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
                                   Use <code className="text-indigo-500 px-1.5 py-0.5 bg-indigo-500/5 rounded font-mono font-bold">FILTER</code> or <code className="text-indigo-500 px-1.5 py-0.5 bg-indigo-500/5 rounded font-mono font-bold">MAP</code> with the <code className="text-emerald-500 font-mono font-black">$</code> token representing the current item.
                                   <br /><br />
                                   <span className="text-zinc-400 block mb-1 text-[10px] font-black uppercase tracking-widest">Example:</span>
@@ -3039,7 +2857,7 @@ export const CalculatorModal = ({
                               </div>
                               <div className="space-y-3">
                                 <p className="text-sm font-bold text-zinc-900 dark:text-white">Code Documentation</p>
-                                <p className="text-xs text-zinc-500 leading-relaxed bg-zinc-50 dark:bg-zinc-900/50 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                                <p className="text-xs text-zinc-500 leading-relaxed bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
                                   Add notes to your logic using <code className="text-zinc-400 font-mono text-sm">// single line</code> or <code className="text-zinc-400 font-mono text-sm">/* multi-line */</code>. 
                                   Comments are completely ignored during the calculation process.
                                 </p>
@@ -3053,11 +2871,11 @@ export const CalculatorModal = ({
                               <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-widest">Pro Tips</h4>
                             </div>
                             <div className="grid grid-cols-2 gap-6">
-                              <div className="p-6 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 rounded-[2.5rem] space-y-3">
+                              <div className="p-4 bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/30 rounded-3xl space-y-2">
                                 <p className="text-[11px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest">Dynamic Types</p>
                                 <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">Calculations automatically handle numbers, text, and dates based on context.</p>
                               </div>
-                              <div className="p-6 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-[2.5rem] space-y-3">
+                              <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-3xl space-y-2">
                                 <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Zero Safety</p>
                                 <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">Always wrap divisions in an IF check to prevent 'Division by Zero' runtime errors.</p>
                               </div>
@@ -3075,11 +2893,11 @@ export const CalculatorModal = ({
                             <span className="text-xs font-black text-zinc-400 uppercase tracking-widest">Click + to insert into editor</span>
                           </div>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {FUNCTIONS
                               .filter(f => !docsSearch || f.name.toLowerCase().includes(docsSearch.toLowerCase()))
                               .map(f => (
-                               <div key={f.name} className="p-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[3rem] space-y-6 group hover:border-indigo-500/50 transition-all hover:shadow-2xl hover:shadow-indigo-500/10">
+                               <div key={f.name} className="p-5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 group hover:border-indigo-500/50 transition-all hover:shadow-xl hover:shadow-indigo-500/10">
                                   <div className="flex items-center justify-between">
                                      <span className="text-lg font-black text-indigo-500 font-mono tracking-tight">{f.name}</span>
                                      <button 
@@ -3100,7 +2918,7 @@ export const CalculatorModal = ({
                                         <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Parameters</p>
                                         <div className="space-y-2">
                                           {f.params.map(p => (
-                                             <div key={p.name} className="flex gap-3 bg-zinc-50/50 dark:bg-zinc-900/50 p-3 rounded-xl border border-zinc-100/50 dark:border-zinc-800/50">
+                                             <div key={p.name} className="flex gap-2 bg-zinc-50/50 dark:bg-zinc-900/50 p-2 rounded-lg border border-zinc-100/50 dark:border-zinc-800/50">
                                                 <span className="text-xs font-mono font-bold text-emerald-500 shrink-0">{p.name}</span>
                                                 <span className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-tight font-medium">{p.desc}</span>
                                              </div>
@@ -3123,7 +2941,7 @@ export const CalculatorModal = ({
                                                   setTimeout(() => setCopiedLabel(null), 2000);
                                                 }}
                                                 className={cn(
-                                                  "w-full p-3 rounded-xl text-xs font-mono break-all text-left transition-all flex items-center justify-between group/ex",
+                                                  "w-full p-2 rounded-lg text-xs font-mono break-all text-left transition-all flex items-center justify-between group/ex",
                                                   copiedLabel === ex 
                                                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
                                                     : "bg-zinc-50 dark:bg-zinc-900 text-indigo-500/80 hover:bg-indigo-500/5 hover:text-indigo-500"
@@ -3219,13 +3037,7 @@ export const CalculatorModal = ({
                 )}
               </div>
 
-                {/* Footer Tip */}
-                <div className="p-6 border-t border-zinc-100 dark:border-zinc-900">
-                   <div className="flex items-center gap-3 text-zinc-400 group">
-                      <Info size={14} className="group-hover:text-indigo-500 transition-colors" />
-                      <p className="text-[9px] font-medium leading-relaxed uppercase tracking-widest">Deploying logic will update all active records.</p>
-                   </div>
-                </div>
+
               </aside>
             </div>
 
