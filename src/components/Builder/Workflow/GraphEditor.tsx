@@ -50,6 +50,7 @@ interface GraphEditorProps {
   onEdgeSelect: (id: string | null) => void;
   rightSidebarTab: 'inspector' | 'debugger' | 'architect';
   setRightSidebarTab: (tab: 'inspector' | 'debugger' | 'architect') => void;
+  showGridlines?: boolean;
 }
 
 const nodeTypes = {
@@ -71,7 +72,8 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
   selectedEdgeId,
   onEdgeSelect,
   rightSidebarTab,
-  setRightSidebarTab
+  setRightSidebarTab,
+  showGridlines
 }) => {
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -491,7 +493,9 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
             }}
             fitView
           >
-            <Background variant={BackgroundVariant.Dots} gap={25} size={1} color="#27272a" />
+            {showGridlines !== false && (
+              <Background variant={BackgroundVariant.Dots} gap={25} size={1} color="#27272a" />
+            )}
             <Controls className="!bg-white !dark:bg-zinc-900 !border-zinc-200 !dark:border-zinc-800 !rounded-xl !shadow-2xl" />
             <MiniMap 
               className="!bg-zinc-900 !border-zinc-800 !rounded-xl !shadow-2xl overflow-hidden" 

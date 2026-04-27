@@ -21,7 +21,7 @@ import { Environment } from '../../types/platform';
 import { LicenseGate } from '../Auth/LicenseGate';
 
 export const Navbar = () => {
-  const { tenant, environment, setEnvironment, user: platformUser } = usePlatform();
+  const { tenant, environment, setEnvironment, user: platformUser, isAIAssistantOpen, setIsAIAssistantOpen } = usePlatform();
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
@@ -117,6 +117,26 @@ export const Navbar = () => {
             <Settings size={20} />
           </button>
         </LicenseGate>
+
+        {!(location.pathname.includes('/settings') || location.pathname.startsWith('/admin')) && (
+          <button 
+            onClick={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
+            className={cn(
+              "p-2 transition-all duration-300 rounded-lg",
+              isAIAssistantOpen 
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/10" 
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title="AI Assistant"
+          >
+            <div className="relative">
+              <Sparkles size={20} />
+              {isAIAssistantOpen && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              )}
+            </div>
+          </button>
+        )}
 
         <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors relative">
           <Bell size={20} />

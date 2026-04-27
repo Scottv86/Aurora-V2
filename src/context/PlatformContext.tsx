@@ -24,6 +24,8 @@ interface PlatformContextType {
   billingLoading: boolean;
   refreshBilling: () => Promise<void>;
   updateTenant: (updates: Partial<Tenant>) => Promise<void>;
+  isAIAssistantOpen: boolean;
+  setIsAIAssistantOpen: (open: boolean) => void;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -41,6 +43,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [menuConfig, setMenuConfig] = useState<MenuConfig | null>(null);
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
 
   const refreshModules = async () => {
     if (!supabaseUser || !tenant?.id) return;
@@ -288,7 +291,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       billingUsage,
       billingLoading,
       refreshBilling,
-      updateTenant
+      updateTenant,
+      isAIAssistantOpen,
+      setIsAIAssistantOpen
     }}>
       {children}
     </PlatformContext.Provider>

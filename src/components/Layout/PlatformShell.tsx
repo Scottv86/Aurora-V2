@@ -42,6 +42,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { MenuSection, MenuItem } from '../../types/menu';
+import { AIAssistant } from '../AI/AIAssistant';
+import { AnimatePresence } from 'motion/react';
 
 const SortableSidebarItem = ({ 
   item, 
@@ -214,7 +216,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     modules, 
     menuConfig, 
     updateMenuConfig, 
-    setMenuConfig 
+    setMenuConfig,
+    isAIAssistantOpen
   } = usePlatform();
   
   const location = useLocation();
@@ -737,7 +740,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
         <main className={cn(
           "flex-1 h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300",
-          isSidebarOpen ? "ml-64" : "ml-16"
+          isSidebarOpen ? "ml-64" : "ml-16",
+          isAIAssistantOpen && !isSettingsMode && !isAdminPath && "mr-96"
         )}>
           <div className={cn(
             "mx-auto",
@@ -746,6 +750,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             {children}
           </div>
         </main>
+        <AnimatePresence>
+          {isAIAssistantOpen && !isSettingsMode && !isAdminPath && <AIAssistant />}
+        </AnimatePresence>
       </div>
     </div>
   );

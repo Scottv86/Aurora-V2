@@ -1392,6 +1392,7 @@ export const ModuleEditor = () => {
   const [showConsole, setShowConsole] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
+  const [showGridlines, setShowGridlines] = useState(true);
 
   // Handle tab visibility auto-switch in Preview
   useEffect(() => {
@@ -1835,6 +1836,19 @@ export const ModuleEditor = () => {
           )}
 
           <button 
+            onClick={() => setShowGridlines(!showGridlines)}
+            className={cn(
+              "p-1.5 rounded-lg border transition-all",
+              showGridlines 
+                ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-500 shadow-inner" 
+                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title={showGridlines ? "Hide Gridlines" : "Show Gridlines"}
+          >
+            <Grid3X3 size={14} />
+          </button>
+
+          <button 
             onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest",
@@ -1945,8 +1959,10 @@ export const ModuleEditor = () => {
           {activeTab === 'builder' ? (
             <>
               {/* Blueprint Grid Background */}
-              <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.05]" 
-                   style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+              {showGridlines && (
+                <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.05]" 
+                     style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+              )}
               
               <div className="w-full space-y-4 relative px-4">
                 {/* Tab Management */}
@@ -2051,11 +2067,13 @@ export const ModuleEditor = () => {
                   onDrop={handleDropOnCanvas}
                 >
                   {/* Grid Lines Overlay (Builder Mode Only) */}
-                  <div className="absolute inset-0 pointer-events-none grid grid-cols-12 gap-4 px-8 py-8 opacity-[0.03] dark:opacity-[0.05]">
-                    {Array.from({ length: 12 }).map((_, i) => (
-                      <div key={i} className="h-full border-x border-zinc-900 dark:border-white" />
-                    ))}
-                  </div>
+                  {showGridlines && (
+                    <div className="absolute inset-0 pointer-events-none grid grid-cols-12 gap-4 px-8 py-8 opacity-[0.03] dark:opacity-[0.05]">
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <div key={i} className="h-full border-x border-zinc-900 dark:border-white" />
+                      ))}
+                    </div>
+                  )}
 
                   <div 
                     id="main-grid-container"
@@ -4004,6 +4022,7 @@ export const ModuleEditor = () => {
                 onEdgeSelect={setSelectedEdgeId}
                 rightSidebarTab={rightSidebarTabWorkflow}
                 setRightSidebarTab={setRightSidebarTabWorkflow}
+                showGridlines={showGridlines}
               />
             </div>
           ) : activeTab === 'security' ? (
@@ -4240,9 +4259,11 @@ export const ModuleEditor = () => {
           ) : activeTab === 'map' ? (
             <div className="h-full w-full bg-zinc-900 relative overflow-hidden flex items-center justify-center">
               {/* Dependency Grid Background */}
-              <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-                style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
-              />
+              {showGridlines && (
+                <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+                  style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
+                />
+              )}
               
               {/* Visual Map Content */}
               <div className="relative z-10 space-y-12 flex flex-col items-center">
