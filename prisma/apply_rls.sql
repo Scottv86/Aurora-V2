@@ -94,7 +94,14 @@ CREATE POLICY module_isolation ON "modules" FOR ALL USING (
 -- Record
 DROP POLICY IF EXISTS record_isolation ON "records";
 CREATE POLICY record_isolation ON "records" FOR ALL USING (
-    "tenant_id" = current_setting('app.current_tenant_id', true) OR is_superadmin()
+    "tenant_id" = current_setting('app.current_tenant_id', true) 
+    OR is_superadmin()
+    OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements(associations) AS assoc
+        WHERE (assoc->>'record_id') IN (
+            SELECT id FROM "records" WHERE "tenant_id" = current_setting('app.current_tenant_id', true)
+        )
+    )
 );
 
 -- DocumentTemplate

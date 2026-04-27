@@ -28,10 +28,13 @@ import { generateAISummary, evaluateCalculations } from '../../services/aiServic
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
 
+import { useModalStack } from '../../context/ModalStackContext';
+
 export const ModuleView = () => {
   const { id } = useParams();
   const { session } = useAuth();
   const { tenant, isLoading: platformLoading } = usePlatform();
+  const { pushModal } = useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -314,7 +317,12 @@ export const ModuleView = () => {
                 {records.map((record, i) => (
                   <tr 
                     key={i} 
-                    onClick={() => navigate(`/workspace/modules/${id}/records/${record.id}`)}
+                    onClick={() => pushModal({ 
+                      moduleId: id!, 
+                      recordId: record.id, 
+                      type: 'view', 
+                      title: record.name || record.title || record.id 
+                    })}
                     className="hover:bg-zinc-50 dark:hover:bg-zinc-800/20 transition-colors group cursor-pointer"
                   >
                     {displayFields.slice(0, 4).map((field: any, j: number) => (

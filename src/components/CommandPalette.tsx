@@ -9,25 +9,55 @@ interface CommandPaletteProps {
   onClose: () => void;
   onSelectBlock: (type: string) => void;
   onAction: (action: string) => void;
+  tabs: any[];
+  layout: any[];
+  activeTab: string;
 }
 
-export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction }: CommandPaletteProps) => {
+export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs, layout, activeTab }: CommandPaletteProps) => {
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const allBlocks = FIELD_CATEGORIES.flatMap(cat => cat.fields.map(f => ({ ...f, category: cat.label })));
-  const filteredBlocks = allBlocks.filter(b => 
-    b.label.toLowerCase().includes(search.toLowerCase()) || 
-    b.category.toLowerCase().includes(search.toLowerCase())
+  const blockTypes = FIELD_CATEGORIES.flatMap(cat => cat.fields.map(f => ({ ...f, category: cat.label, type: 'block_type' })));
+  
+  const existingFields = layout.map(f => ({
+    id: f.id,
+    label: f.label,
+    icon: FIELD_CATEGORIES.flatMap(c => c.fields).find(def => def.id === f.type)?.icon || Command,
+    category: 'Existing Field',
+    type: 'existing_field'
+  }));
+
+  const navigationActions = [
+    { id: 'tab:details', label: 'Go to Details', icon: Settings, shortcut: 'G D', type: 'nav' },
+    { id: 'tab:schema', label: 'Go to Schema', icon: Play, shortcut: 'G S', type: 'nav' },
+    { id: 'tab:builder', label: 'Go to Builder', icon: Zap, shortcut: 'G B', type: 'nav' },
+    { id: 'tab:workflow', label: 'Go to Workflow', icon: Play, shortcut: 'G W', type: 'nav' },
+    { id: 'tab:rules', label: 'Go to Rules', icon: Play, shortcut: 'G R', type: 'nav' },
+    { id: 'tab:experience', label: 'Go to Experience', icon: Play, shortcut: 'G E', type: 'nav' },
+    { id: 'tab:security', label: 'Go to Security', icon: Play, shortcut: 'G SEC', type: 'nav' },
+    { id: 'tab:localization', label: 'Go to Localization', icon: Play, shortcut: 'G LOC', type: 'nav' },
+    { id: 'tab:map', label: 'Go to Dependency Map', icon: Play, shortcut: 'G M', type: 'nav' },
+    { id: 'tab:assets', label: 'Go to Assets', icon: Play, shortcut: 'G A', type: 'nav' },
+    { id: 'tab:forms', label: 'Go to Forms', icon: Play, shortcut: 'G F', type: 'nav' },
+    { id: 'tab:deployment', label: 'Go to Deployment', icon: Play, shortcut: 'G P', type: 'nav' },
+  ];
+
+  const systemActions = [
+    { id: 'preview', label: 'Toggle Preview', icon: Play, shortcut: 'P', type: 'action' },
+    { id: 'save', label: 'Save Module', icon: Zap, shortcut: 'Cmd+S', type: 'action' },
+    { id: 'console', label: 'Toggle Console', icon: Plus, shortcut: 'C', type: 'action' },
+  ];
+
+  const results = [
+    ...navigationActions,
+    ...systemActions,
+    ...existingFields,
+    ...blockTypes
+  ].filter(item => 
+    item.label.toLowerCase().includes(search.toLowerCase()) || 
+    (item.category && item.category.toLowerCase().includes(search.toLowerCase()))
   );
-
-  const actions = [
-    { id: 'preview', label: 'Preview Module', icon: Play, shortcut: 'P' },
-    { id: 'settings', label: 'Module Settings', icon: Settings, shortcut: 'S' },
-    { id: 'save', label: 'Save Changes', icon: Zap, shortcut: 'Cmd+S' },
-  ].filter(a => a.label.toLowerCase().includes(search.toLowerCase()));
-
-  const results = [...actions.map(a => ({ ...a, type: 'action' })), ...filteredBlocks.map(b => ({ ...b, type: 'block' }))];
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -42,7 +72,7 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction }: Com
       }
       if (e.key === 'Enter' && results[selectedIndex]) {
         const item = results[selectedIndex];
-        if (item.type === 'block') {
+        if (item.type === 'block_type') {
           onSelectBlock(item.id);
         } else {
           onAction(item.id);

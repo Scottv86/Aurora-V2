@@ -5,6 +5,8 @@ import { Toaster } from 'sonner';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { PlatformProvider } from './context/PlatformContext';
+import { ModalStackProvider } from './context/ModalStackContext';
+import { StackedModalManager } from './components/UI/StackedModal';
 
 // Components & Layout
 import { PlatformShell } from './components/Layout/PlatformShell';
@@ -64,9 +66,11 @@ const App = () => {
     <ThemeProvider>
       <AuthProvider>
         <PlatformProvider>
-          <Router>
-            <Toaster position="top-right" expand={false} richColors />
-            <Routes>
+          <ModalStackProvider>
+            <Router>
+              <Toaster position="top-right" expand={false} richColors />
+              <StackedModalManager />
+              <Routes>
               {/* Login & Root Redirect */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/workspace" replace />} />
@@ -171,7 +175,8 @@ const App = () => {
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/workspace" replace />} />
             </Routes>
-          </Router>
+            </Router>
+          </ModalStackProvider>
         </PlatformProvider>
       </AuthProvider>
     </ThemeProvider>

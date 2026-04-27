@@ -245,6 +245,8 @@ model Record {
   tenantId  String   @map("tenant_id")
   moduleId  String   @map("module_id")
   data      Json
+  associations Json     @default("[]")
+  path      String?  @map("_path")
   status        String   @default("active")
   workflowState Json?    @map("workflow_state")
   createdAt     DateTime @default(now()) @map("created_at")

@@ -63,23 +63,47 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
 router.get('/records', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
-    const { moduleId } = req.query;
+    const { moduleId, associationId } = req.query;
 
     const whereClause: any = {};
     if (moduleId) {
       whereClause.moduleId = moduleId as string;
     }
+    
+    if (associationId) {
+      whereClause.associations = {
+        path: '$[*].record_id',
+        array_contains: associationId as string
+      };
+      // Note: Prisma's path operator for JSONB depends on the DB provider.
+      // For Postgres, we might need a raw query or use the 'path' feature if supported.
+      // Alternatively, we can use 'array_contains' if it's a simple array.
+      // But associations is an array of objects [{record_id, ...}]
+    }
 
-    const records = await db.record.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' }
-    });
+    // Actually, Prisma doesn't support @> for array of objects easily without raw SQL.
+    // Let's use raw SQL for associationId if provided.
+    let records;
+    if (associationId) {
+      records = await db.$queryRaw`
+        SELECT * FROM records 
+        WHERE associations @> ${JSON.stringify([{ record_id: associationId }])}::jsonb
+        ORDER BY created_at DESC
+      `;
+    } else {
+      records = await db.record.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' }
+      });
+    }
     
     // Format records for frontend consumption (Hydrate top-level with 'data' payload)
     const formatted = records.map((r: any) => ({
       id: r.id,
       moduleId: r.moduleId,
       status: r.status,
+      associations: r.associations,
+      path: r.path,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       ...(r.data as any)
@@ -105,6 +129,8 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
       id: record.id,
       moduleId: record.moduleId,
       status: record.status,
+      associations: record.associations,
+      path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       ...(record.data as any)
@@ -120,13 +146,15 @@ router.post('/records', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { moduleId, ...data } = req.body;
+    const { moduleId, associations, path, ...data } = req.body;
 
     const record = await db.record.create({
       data: {
         tenantId, // still required by schema, but RLS will verify it matches app.current_tenant_id
         moduleId,
         data: data as any,
+        associations: associations || [],
+        path: path || null,
         status: data.status || 'New'
       }
     });
@@ -136,6 +164,8 @@ router.post('/records', async (req: TenantRequest, res) => {
       id: record.id,
       moduleId: record.moduleId,
       status: record.status,
+      associations: record.associations,
+      path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       ...(record.data as any)
@@ -154,7 +184,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { moduleId, status, ...data } = req.body;
+    const { moduleId, status, associations, path, ...data } = req.body;
 
     // Fetch existing (RLS will ensure we can't see records from other tenants)
     const existing = await db.record.findUnique({ where: { id } });
@@ -171,7 +201,9 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       where: { id },
       data: {
         data: updatedData,
-        status: status || existing.status
+        status: status || existing.status,
+        associations: associations !== undefined ? associations : existing.associations,
+        path: path !== undefined ? path : existing.path
       }
     });
 
@@ -180,6 +212,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       id: record.id,
       moduleId: record.moduleId,
       status: record.status,
+      associations: record.associations,
+      path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       ...(record.data as any)

@@ -250,6 +250,8 @@ export const generateAISummary = async (data: any, fields: any[]): Promise<strin
     
     const prompt = `You are an AI assistant integrated into a CRM system. 
 Generate a concise, professional summary of this record data.
+Hierarchy: ${data.path || 'Root'}
+Associations: ${JSON.stringify(data.associations || [])}
 Fields: ${fieldsString}
 Data: ${dataString}`;
 
