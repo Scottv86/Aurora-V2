@@ -19,6 +19,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { cn } from '../../lib/utils';
 import { Environment } from '../../types/platform';
 import { LicenseGate } from '../Auth/LicenseGate';
+import { AppLauncher } from './AppLauncher';
 
 export const Navbar = () => {
   const { tenant, environment, setEnvironment, user: platformUser, isAIAssistantOpen, setIsAIAssistantOpen } = usePlatform();
@@ -117,6 +118,8 @@ export const Navbar = () => {
             <Settings size={20} />
           </button>
         </LicenseGate>
+
+        <AppLauncher />
 
         {!(location.pathname.includes('/settings') || location.pathname.startsWith('/admin')) && (
           <button 

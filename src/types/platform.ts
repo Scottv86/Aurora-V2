@@ -13,6 +13,7 @@ export interface Tenant {
   createdAt: string;
   environments: Environment[];
   currentEnvironment: Environment;
+  enabledApps?: string[];
   branding?: {
     logoUrl?: string;
     primaryColor?: string;

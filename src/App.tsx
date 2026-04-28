@@ -25,6 +25,7 @@ import { Analytics } from './components/Analytics';
 
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
+import { AppsSettings } from './components/Settings/Organization/AppsSettings';
 import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
 import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
 import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
@@ -130,8 +131,8 @@ const App = () => {
                 <Route path="builder/:id" element={<ModuleEditor />} />
                 
                 <Route path="modules" element={<ModuleCatalog />} />
-                <Route path="apps" element={<ComingSoon title="App Catalog" description="Discover, install, and manage third-party applications." />} />
-                <Route path="email" element={<ComingSoon title="Email Exchange" description="Configure mail server settings, domain verification, and email communication protocols." />} />
+                <Route path="apps" element={<AppsSettings />} />
+                <Route path="messaging" element={<ComingSoon title="Messaging" description="View messaging logs including emails, SMS, Push notifications, and Portal notifications." />} />
                 <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
                 <Route path="lists" element={<ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." />} />
                 <Route path="appearance" element={<AppearanceSettings />} />

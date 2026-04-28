@@ -280,7 +280,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       environment, 
       setEnvironment, 
       isLoading,
-      isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || false,
+      isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || user?.role === 'Admin' || false,
       capabilities,
       modules,
       modulesLoading,

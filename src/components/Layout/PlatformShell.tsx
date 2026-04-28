@@ -283,7 +283,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       }
       return section;
     }).filter(section => {
-      // Hide the modules section if it's empty
+      if (section.id === 'apps') return false;
       if (section.id === 'modules') {
         return section.items.length > 0;
       }
@@ -518,10 +518,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           collapsed={!isSidebarOpen} 
                         />
                         <SidebarItem 
-                          icon={LucideIcons.Mail} 
-                          label="Email exchange" 
-                          to="/workspace/settings/email" 
-                          active={isActive('/workspace/settings/email')} 
+                          icon={LucideIcons.MessageSquare} 
+                          label="Messaging" 
+                          to="/workspace/settings/messaging" 
+                          active={isActive('/workspace/settings/messaging')} 
                           collapsed={!isSidebarOpen} 
                         />
                         <SidebarItem 

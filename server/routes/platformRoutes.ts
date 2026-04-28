@@ -76,7 +76,8 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         branding: tenant.branding,
         localization: tenant.localization,
         metadata: tenant.metadata,
-        workspaceSettings: tenant.workspaceSettings
+        workspaceSettings: tenant.workspaceSettings,
+        enabledApps: tenant.enabledApps
       } : null,
       menuConfig // Resolved menu config (profile override or tenant default)
     };
@@ -123,10 +124,10 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
         where: { userId_tenantId: { userId: uid, tenantId } }
       });
 
-      const isDeveloper = membership?.licenceType === 'Developer' || isSuperAdmin;
+      const canUpdate = membership?.licenceType === 'Developer' || membership?.roleId === 'Admin' || isSuperAdmin;
 
-      if (!isDeveloper) {
-        return res.status(403).json({ error: 'A Developer license seat is required to update the organization menu.' });
+      if (!canUpdate) {
+        return res.status(403).json({ error: 'An Admin role or Developer license seat is required to update the organization menu.' });
       }
 
       await globalPrisma.tenant.update({
@@ -153,7 +154,7 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
  * Updates the organization settings (name, branding, localization).
  */
 router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) => {
-  const { name, subdomain, branding, localization, metadata, workspaceSettings } = req.body;
+  const { name, subdomain, branding, localization, metadata, workspaceSettings, enabledApps } = req.body;
   const { uid, tenantIds, isSuperAdmin } = req.user!;
   const tenantId = req.headers['x-tenant-id'] as string || tenantIds[0];
 
@@ -167,10 +168,10 @@ router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) 
       where: { userId_tenantId: { userId: uid, tenantId } }
     });
 
-    const isDeveloper = membership?.licenceType === 'Developer' || isSuperAdmin;
+    const canUpdate = membership?.licenceType === 'Developer' || membership?.roleId === 'Admin' || isSuperAdmin;
 
-    if (!isDeveloper) {
-      return res.status(403).json({ error: 'A Developer license seat is required to update organization settings.' });
+    if (!canUpdate) {
+      return res.status(403).json({ error: 'An Admin role or Developer license seat is required to update organization settings.' });
     }
 
     const updatedTenant = await globalPrisma.tenant.update({
@@ -181,7 +182,8 @@ router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) 
         ...(branding && { branding }),
         ...(localization && { localization }),
         ...(metadata && { metadata }),
-        ...(workspaceSettings && { workspaceSettings })
+        ...(workspaceSettings && { workspaceSettings }),
+        ...(enabledApps && { enabledApps })
       }
     });
 
@@ -192,7 +194,8 @@ router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) 
       branding: updatedTenant.branding,
       localization: updatedTenant.localization,
       metadata: updatedTenant.metadata,
-      workspaceSettings: updatedTenant.workspaceSettings
+      workspaceSettings: updatedTenant.workspaceSettings,
+      enabledApps: updatedTenant.enabledApps
     }});
   } catch (error) {
     console.error('[PlatformAPI] Settings update error:', error);
@@ -218,9 +221,9 @@ router.patch('/config', authenticate, async (req: AuthRequest, res: Response) =>
       where: { userId_tenantId: { userId: uid, tenantId } }
     });
 
-    const isDeveloper = membership?.licenceType === 'Developer' || isSuperAdmin;
-    if (!isDeveloper) {
-      return res.status(403).json({ error: 'A Developer license seat is required to update organization config.' });
+    const canUpdate = membership?.licenceType === 'Developer' || membership?.roleId === 'Admin' || isSuperAdmin;
+    if (!canUpdate) {
+      return res.status(403).json({ error: 'An Admin role or Developer license seat is required to update organization config.' });
     }
 
     await globalPrisma.tenant.update({

@@ -30,6 +30,7 @@ model Tenant {
   localization       Json?
   metadata           Json?
   workspaceSettings  Json?          @map("workspace_settings")
+  enabledApps        Json?          @map("enabled_apps")
   permissionGroups   PermissionGroup[]
   memberPermissionGroups MemberPermissionGroup[]
   auditLogs          AuditLog[]
