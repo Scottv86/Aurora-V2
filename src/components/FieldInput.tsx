@@ -41,7 +41,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   // Layout & Content Components (No Value)
   if (type === 'heading') {
     const Tag = (options?.[0] || 'h2') as keyof JSX.IntrinsicElements;
-    const size = options?.[0] === 'h1' ? 'text-3xl' : options?.[0] === 'h2' ? 'text-2xl' : 'text-xl';
+    const size = options?.[0] === 'h1' ? 'text-2xl' : options?.[0] === 'h2' ? 'text-xl' : 'text-lg';
     return <Tag className={cn("font-bold text-zinc-900 dark:text-white tracking-tight", size)}>{label}</Tag>;
   }
 

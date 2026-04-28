@@ -51,7 +51,7 @@ export const OrganizationPage = () => {
           }
         />
 
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+        <div>
               {activeTab === 'general' && (
                 <GeneralSettings tenant={tenant} onUpdate={updateTenant} />
               )}

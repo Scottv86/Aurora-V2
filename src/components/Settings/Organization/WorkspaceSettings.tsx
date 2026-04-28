@@ -30,7 +30,7 @@ export const WorkspaceSettings = ({ tenant, onUpdate }: WorkspaceSettingsProps) 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <form onSubmit={handleSubmit} className="space-y-12">
       <div className="space-y-12">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-3">
           <div className="lg:col-span-1 space-y-4">

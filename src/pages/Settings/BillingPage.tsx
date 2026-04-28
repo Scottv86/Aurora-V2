@@ -221,7 +221,7 @@ export const BillingPage = () => {
           }
         />
 
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+        <div>
               {activeTab === 'overview' && (
                 <div className="space-y-10">
                   {/* Plan Hero Card */}

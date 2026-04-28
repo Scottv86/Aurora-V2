@@ -176,7 +176,7 @@ export const WorkforcePage = () => {
       </div>
 
       {/* Content */}
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-700">
+      <div>
               {activeTab === 'directory' && (
                 <PeopleCenter searchQuery={searchQuery} activeFilter={activeFilter} />
               )}

@@ -81,7 +81,7 @@ export const TenantOverview = () => {
           </button>
           <div>
             <div className="flex items-center gap-3">
-               <h1 className="text-3xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">Instance Briefing: {tenant.name}</h1>
+               <h1 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">Instance Briefing: {tenant.name}</h1>
                <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black text-indigo-500 uppercase rounded-lg shadow-sm">
                  Active Tenancy
                </span>

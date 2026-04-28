@@ -95,7 +95,7 @@ export const PeopleOrgDirectory = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== 'all').length;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       <PageHeader 
         title="People & Organisations"
         description="Centralized management of all internal and external parties, personnel, and organizational structures."

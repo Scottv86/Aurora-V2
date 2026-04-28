@@ -86,7 +86,7 @@ export const TeamDetailView = () => {
   }
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl mx-auto">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       {/* breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 
@@ -117,7 +117,7 @@ export const TeamDetailView = () => {
           />
           <div className="space-y-2">
              <div className="flex items-center gap-3">
-               <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">{team.name}</h1>
+               <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">{team.name}</h1>
                <Badge variant="blue">Operational Unit</Badge>
              </div>
              <p className="text-zinc-500 font-medium">

@@ -207,7 +207,7 @@ export const PeopleOrgDetail = () => {
     : formData.organization.legalName;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 
@@ -237,7 +237,7 @@ export const PeopleOrgDetail = () => {
           </div>
           <div className="space-y-4">
              <div className="flex items-center gap-3">
-               <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">{displayName}</h1>
+               <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">{displayName}</h1>
                 <Badge variant={isPerson ? "amber" : "indigo"}>
                   {isPerson ? "Person" : "Organisation"}
                 </Badge>

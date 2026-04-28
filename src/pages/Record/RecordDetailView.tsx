@@ -254,7 +254,7 @@ export const RecordDetailView = () => {
   if (!moduleData || !record) return <Navigate to="/workspace" replace />;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700 pb-20">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 pb-20">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link 
@@ -268,7 +268,7 @@ export const RecordDetailView = () => {
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
                 {record.name || record.title || record.id || 'Record Details'}
               </h1>
               <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold border border-indigo-500/20 shadow-sm">
@@ -344,7 +344,7 @@ export const RecordDetailView = () => {
                               {field.type === 'heading' ? (
                                 <h4 className={cn(
                                   "font-bold text-zinc-900 dark:text-white mt-4 first:mt-0",
-                                  field.options?.[0] === 'h1' ? "text-3xl" :
+                                  field.options?.[0] === 'h1' ? "text-2xl" :
                                   field.options?.[0] === 'h3' ? "text-lg" :
                                   field.options?.[0] === 'h4' ? "text-base" : "text-xl"
                                 )}>{field.label}</h4>
@@ -627,7 +627,7 @@ export const RecordDetailView = () => {
                                 {field.type === 'heading' ? (
                                   <h4 className={cn(
                                     "font-bold text-zinc-900 dark:text-white",
-                                    field.options?.[0] === 'h1' ? "text-3xl" :
+                                    field.options?.[0] === 'h1' ? "text-2xl" :
                                     field.options?.[0] === 'h3' ? "text-lg" :
                                     field.options?.[0] === 'h4' ? "text-base" : "text-xl"
                                   )}>{field.label}</h4>

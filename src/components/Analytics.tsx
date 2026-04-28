@@ -150,10 +150,10 @@ export const Analytics = () => {
   ];
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Analytics</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Analytics</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Real-time performance metrics and system insights.</p>
         </div>
         <div className="flex gap-3">

@@ -231,7 +231,7 @@ export const ModuleView = () => {
   if (!moduleData) return <Navigate to="/workspace" replace />;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       <PageHeader 
         title={moduleData.name}
         description={moduleData.description}
@@ -410,9 +410,9 @@ export const ModuleView = () => {
               className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
@@ -470,7 +470,7 @@ export const ModuleView = () => {
                                 {field.type === 'heading' ? (
                                   <h4 className={cn(
                                     "font-bold text-zinc-900 dark:text-white",
-                                    field.options?.[0] === 'h1' ? "text-3xl" :
+                                    field.options?.[0] === 'h1' ? "text-2xl" :
                                     field.options?.[0] === 'h3' ? "text-lg" :
                                     field.options?.[0] === 'h4' ? "text-base" : "text-xl"
                                   )}>{field.label}</h4>
@@ -586,9 +586,9 @@ export const ModuleView = () => {
               className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               className="relative w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl p-8 space-y-6"
             >
               <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center text-rose-500 mx-auto">

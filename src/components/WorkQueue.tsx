@@ -90,10 +90,10 @@ export const WorkQueue = () => {
   }
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Queue</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Queue</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage and process active cases across all modules.</p>
         </div>
         <div className="flex gap-3">
@@ -114,11 +114,8 @@ export const WorkQueue = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
           {cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length > 0 ? cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).map((c, i) => (
-            <motion.div
+            <div
               key={c.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
               onClick={() => setSelectedCase(c)}
               className={cn(
                 "p-4 bg-white dark:bg-zinc-900/50 border rounded-2xl cursor-pointer transition-all hover:bg-zinc-50 dark:hover:bg-zinc-900 group shadow-sm",
@@ -166,9 +163,9 @@ export const WorkQueue = () => {
             {selectedCase ? (
               <motion.div
                 key={selectedCase.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 className="p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl sticky top-24 space-y-6 shadow-sm"
               >
                 <div className="flex items-center justify-between">

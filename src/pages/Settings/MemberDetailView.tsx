@@ -250,7 +250,7 @@ export const MemberDetailView = () => {
   }
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl mx-auto">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       {/* Breadcrumbs & Navigation */}
       <div className="flex items-center gap-4">
         <button 
@@ -281,7 +281,7 @@ export const MemberDetailView = () => {
           />
           <div className="space-y-4">
              <div className="flex items-center gap-3">
-               <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight">{fullName}</h1>
+               <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">{fullName}</h1>
                 <Badge variant={member.isSynthetic ? "purple" : "blue"}>
                   {member.isSynthetic ? "AI Agent" : "Person"}
                 </Badge>
@@ -360,11 +360,7 @@ export const MemberDetailView = () => {
 
         <div className="min-h-[400px]">
           {activeTab === 'overview' && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="space-y-6"
-            >
+            <div className="space-y-6">
                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
                   <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
                      <h3 className="text-lg font-bold flex items-center gap-2">
@@ -471,7 +467,7 @@ export const MemberDetailView = () => {
                     </div>
                   )}
                </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'personal' && (
@@ -578,7 +574,7 @@ export const MemberDetailView = () => {
                       </div>
                    </div>
                 </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'employment' && (
@@ -668,11 +664,11 @@ export const MemberDetailView = () => {
                       />
                     </div>
                  </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'professional' && (
-            <motion.div initial={{ opacity: 0, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+            <div className="space-y-6">
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
                   <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
                      <h3 className="text-lg font-bold flex items-center gap-2">
@@ -799,7 +795,7 @@ export const MemberDetailView = () => {
                      </div>
                   </div>
                 </div>
-            </motion.div>
+            </div>
           )}
 
            {activeTab === 'contracts' && (
@@ -857,11 +853,11 @@ export const MemberDetailView = () => {
                     </div>
                   </div>
                 </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'leave' && (
-            <motion.div initial={{ opacity: 0, scale: 0.99 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
+            <div className="space-y-8">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   {[
                     { label: 'Annual Leave', balance: '12.4 Days', color: 'blue' },
@@ -945,15 +941,11 @@ export const MemberDetailView = () => {
                     </div>
                   </div>
                 </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'configuration' && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-8"
-            >
+            <div className="space-y-8">
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-sm relative">
                    <div className="absolute top-0 right-0 w-64 h-64 -mr-16 -mt-16 bg-zinc-500/5 rounded-full" />
                    <div className="px-10 py-8 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 flex items-center justify-between relative">
@@ -1081,7 +1073,7 @@ export const MemberDetailView = () => {
                       )}
                    </div>
                 </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'permissions' && (
@@ -1093,11 +1085,7 @@ export const MemberDetailView = () => {
           )}
 
           {activeTab === 'activity' && (
-            <motion.div 
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4"
-            >
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4">
                <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400">
                   <Activity size={32} />
                </div>
@@ -1105,7 +1093,7 @@ export const MemberDetailView = () => {
                   <h3 className="font-bold">No activity yet</h3>
                   <p className="text-sm text-zinc-500">Activity and event logs for this {member.isSynthetic ? 'agent' : 'person'} will appear here as they interact with the platform.</p>
                </div>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>

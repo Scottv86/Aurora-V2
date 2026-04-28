@@ -43,7 +43,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { MenuSection, MenuItem } from '../../types/menu';
 import { AIAssistant } from '../AI/AIAssistant';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 
 const SortableSidebarItem = ({ 
   item, 
@@ -206,6 +206,63 @@ const SortableSection = ({
     </div>
   );
 };
+
+const AuroraBackground = () => (
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20 transition-opacity duration-1000">
+    <motion.div 
+      animate={{
+        scale: [1, 1.2, 1],
+        x: [0, 50, 0],
+        y: [0, 30, 0],
+      }}
+      transition={{
+        duration: 20,
+        repeat: Infinity,
+        ease: "linear"
+      }}
+      className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-indigo-500/20 dark:bg-indigo-500/40 blur-[120px] rounded-full" 
+    />
+    <motion.div 
+      animate={{
+        scale: [1.2, 1, 1.2],
+        x: [0, -40, 0],
+        y: [0, -20, 0],
+      }}
+      transition={{
+        duration: 25,
+        repeat: Infinity,
+        ease: "linear"
+      }}
+      className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-teal-500/20 dark:bg-teal-500/30 blur-[120px] rounded-full" 
+    />
+    <motion.div 
+      animate={{
+        scale: [1, 1.3, 1],
+        x: [0, 30, 0],
+        y: [0, -40, 0],
+      }}
+      transition={{
+        duration: 18,
+        repeat: Infinity,
+        ease: "linear"
+      }}
+      className="absolute top-[20%] right-[10%] w-[40%] h-[40%] bg-purple-500/10 dark:bg-purple-500/20 blur-[120px] rounded-full" 
+    />
+    <motion.div 
+      animate={{
+        scale: [1.3, 1, 1.3],
+        x: [0, -20, 0],
+        y: [0, 50, 0],
+      }}
+      transition={{
+        duration: 22,
+        repeat: Infinity,
+        ease: "linear"
+      }}
+      className="absolute bottom-[10%] left-[20%] w-[35%] h-[35%] bg-emerald-500/10 dark:bg-emerald-500/20 blur-[120px] rounded-full" 
+    />
+  </div>
+);
 
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading } = useAuth();
@@ -394,7 +451,28 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 transition-colors duration-300">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 transition-colors duration-300 relative overflow-hidden">
+      <AuroraBackground />
+      <AnimatePresence>
+        {isSettingsMode && (
+          <motion.div 
+            initial={{ opacity: 0, scaleX: 0 }}
+            animate={{ 
+              opacity: 0.8, 
+              scaleX: 1,
+              backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] 
+            }}
+            exit={{ opacity: 0, scaleX: 0 }}
+            transition={{
+              opacity: { duration: 0.3 },
+              scaleX: { duration: 0.5, ease: "circOut" },
+              backgroundPosition: { duration: 15, repeat: Infinity, ease: "linear" }
+            }}
+            style={{ backgroundSize: '200% 100%' }}
+            className="fixed top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-indigo-500 via-teal-500 to-indigo-500 z-[100] pointer-events-none origin-left shadow-[0_0_15px_rgba(99,102,241,0.4)] dark:shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+          />
+        )}
+      </AnimatePresence>
       <Navbar />
       <div className="flex">
         <aside className={cn(

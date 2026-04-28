@@ -113,7 +113,7 @@ export const Onboarding = () => {
               className="space-y-8"
             >
               <div className="text-center space-y-2">
-                <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">Welcome to Aurora</h2>
+                <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Welcome to Aurora</h2>
                 <p className="text-zinc-500 dark:text-zinc-400">Let's set up your new business operating workspace.</p>
               </div>
               <div className="space-y-6">
@@ -163,7 +163,7 @@ export const Onboarding = () => {
               className="space-y-8"
             >
               <div className="text-center space-y-2">
-                <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">Select your Industry</h2>
+                <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Select your Industry</h2>
                 <p className="text-zinc-500 dark:text-zinc-400">We'll recommend modules and workflows based on your sector.</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -215,7 +215,7 @@ export const Onboarding = () => {
               className="space-y-8"
             >
               <div className="text-center space-y-2">
-                <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">AI-Assisted Setup</h2>
+                <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">AI-Assisted Setup</h2>
                 <p className="text-zinc-500 dark:text-zinc-400">Describe your core business process or upload requirements.</p>
               </div>
               <div className="p-8 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-6">
@@ -257,7 +257,7 @@ export const Onboarding = () => {
               className="space-y-8"
             >
               <div className="text-center space-y-2">
-                <h2 className="text-3xl font-bold text-zinc-900 dark:text-white">Ready to Launch</h2>
+                <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Ready to Launch</h2>
                 <p className="text-zinc-500 dark:text-zinc-400">We've architected your workspace. Review the components below.</p>
               </div>
               <div className="grid grid-cols-1 gap-4">
