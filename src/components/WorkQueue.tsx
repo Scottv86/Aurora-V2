@@ -150,7 +150,7 @@ export const WorkQueue = () => {
                   <ChevronRight size={16} className="text-zinc-300 dark:text-zinc-700 group-hover:text-zinc-500 dark:group-hover:text-zinc-400 transition-colors" />
                 </div>
               </div>
-            </motion.div>
+            </div>
           )) : (
             <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center">
               <p className="text-zinc-500">No active cases found in the queue.</p>

@@ -26,6 +26,34 @@ interface Message {
   };
 }
 
+const AuroraGlow = () => {
+  return (
+    <div className="absolute -left-[200px] top-0 bottom-0 w-[500px] pointer-events-none z-[-1]">
+      {/* Shifted Core - positioned more 'underneath' the sidebar */}
+      <div className="absolute inset-y-0 -right-40 w-[300px] bg-gradient-to-b from-teal-400/25 via-indigo-500/35 to-purple-500/25 blur-[60px]" />
+      
+      {/* Blobs also shifted inward */}
+      <motion.div
+        animate={{
+          scale: [1, 1.1, 1],
+          opacity: [0.2, 0.4, 0.2],
+        }}
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute top-10 -right-20 w-[250px] h-[450px] bg-indigo-600/20 blur-[90px] rounded-full"
+      />
+      
+      <motion.div
+        animate={{
+          scale: [1.1, 1, 1.1],
+          opacity: [0.15, 0.3, 0.15],
+        }}
+        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute bottom-10 -right-20 w-[280px] h-[550px] bg-teal-500/15 blur-[100px] rounded-full"
+      />
+    </div>
+  );
+};
+
 export const AIAssistant = () => {
   const { isAIAssistantOpen, setIsAIAssistantOpen } = usePlatform();
   const [input, setInput] = useState('');
@@ -55,8 +83,9 @@ export const AIAssistant = () => {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 400, opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed right-0 top-16 bottom-0 w-96 bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-40 shadow-2xl shadow-black/20"
+      className="fixed right-0 top-16 bottom-0 w-96 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-40 shadow-2xl shadow-black/20"
     >
+      <AuroraGlow />
       {/* Header */}
       <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/30 backdrop-blur-md">
         <div className="flex items-center gap-3">

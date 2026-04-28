@@ -209,14 +209,14 @@ export const PeopleOrgDirectory = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-4"
+              className="bg-white/5 dark:bg-zinc-900/20 backdrop-blur-xl rounded-[2.5rem] border border-white/10 dark:border-zinc-800/50 p-6 lg:p-8 shadow-2xl space-y-8"
             >
               <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
                 <input 
                   type="text" 
                   placeholder="Search by name, legal name or tax ID..."
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  className="w-full bg-zinc-100/50 dark:bg-zinc-950/40 backdrop-blur-md border border-zinc-200/50 dark:border-zinc-800/50 rounded-2xl pl-10 pr-4 py-3 text-sm text-zinc-900 dark:text-zinc-300 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -226,6 +226,7 @@ export const PeopleOrgDirectory = () => {
                 data={filteredEntities}
                 loading={loading}
                 onRowClick={(entity) => navigate(`/workspace/platform/people-organisations/${entity.id}`)}
+                className="bg-transparent dark:bg-transparent border-none shadow-none"
                 columns={[
                   {
                     header: 'Name',

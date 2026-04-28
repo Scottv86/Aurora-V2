@@ -1897,7 +1897,7 @@ export const ModuleEditor = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 custom-scrollbar">
               {FIELD_CATEGORIES.map((category) => {
                 const filteredFields = category.fields.filter(f => 
                   f.label.toLowerCase().includes(sidebarSearch.toLowerCase())

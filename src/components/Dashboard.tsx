@@ -12,6 +12,7 @@ import { cn } from '../lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
+import { PageWrapper, itemVariants } from './Common/PageWrapper';
 
 export const Dashboard = () => {
   const { tenant, isLoading } = usePlatform();
@@ -101,7 +102,7 @@ export const Dashboard = () => {
 
   if (!tenant && !isLoading) {
     return (
-      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+      <PageWrapper className="h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-full text-zinc-300 dark:text-zinc-700">
           <Database size={48} />
         </div>
@@ -111,34 +112,44 @@ export const Dashboard = () => {
             You don't seem to be associated with a workspace. Please contact your administrator.
           </p>
         </div>
-      </div>
+      </PageWrapper>
     );
   }
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <PageWrapper className="flex flex-col w-full flex-1 min-h-full px-6 lg:px-12 py-10 space-y-8 relative overflow-hidden">
+      {/* Polymorphic Background Glows */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-[150px] pointer-events-none" />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
         {stats.map((stat, i) => (
-          <div 
+          <motion.div 
             key={i}
-            className="p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-zinc-300 dark:hover:border-zinc-700 transition-all group shadow-sm dark:shadow-none"
+            variants={itemVariants}
+            className="p-6 bg-white/5 dark:bg-white/[0.03] backdrop-blur-xl border border-white/10 dark:border-white/5 rounded-3xl group shadow-2xl shadow-black/20 will-change-[transform,opacity] relative overflow-hidden"
           >
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110", stat.bg, stat.color)}>
+            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform relative z-10", stat.bg, stat.color)}>
               {stat.icon}
             </div>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{stat.label}</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{stat.value}</p>
+            <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 relative z-10">{stat.label}</p>
+            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 relative z-10">{stat.value}</p>
           </motion.div>
         ))}
       </div>
 
-      <div className="space-y-6">
-        <div className="p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm dark:shadow-none">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <Workflow size={18} className="text-indigo-600 dark:text-indigo-400" />
-              Active Workflows
-            </h3>
+      <motion.div 
+        variants={itemVariants} 
+        className="p-8 bg-white/5 dark:bg-white/[0.03] backdrop-blur-2xl border border-white/10 dark:border-white/5 rounded-[2.5rem] shadow-2xl shadow-black/20 space-y-6 will-change-[transform,opacity] relative overflow-hidden"
+      >
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <Workflow size={18} className="text-indigo-600 dark:text-indigo-400" />
+            Active Workflows
+          </h3>
             <Link to="/workspace/queue" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 flex items-center gap-1">
               View All <ChevronRight size={14} />
             </Link>
@@ -171,9 +182,8 @@ export const Dashboard = () => {
                 </div>
               </div>
             ))}
-          </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </PageWrapper>
   );
 };

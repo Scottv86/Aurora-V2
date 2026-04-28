@@ -16,6 +16,7 @@ interface TableProps<T> {
   emptyMessage?: string;
   pagination?: boolean;
   pageSize?: number;
+  className?: string;
 }
 
 export const Table = <T extends { id: string | number }>({
@@ -25,7 +26,8 @@ export const Table = <T extends { id: string | number }>({
   onRowClick,
   emptyMessage = 'No data found',
   pagination = true,
-  pageSize = 10
+  pageSize = 10,
+  className
 }: TableProps<T>) => {
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -44,7 +46,10 @@ export const Table = <T extends { id: string | number }>({
     : data;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className={cn(
+      "relative w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900",
+      className
+    )}>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-zinc-100 bg-zinc-50/50 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">

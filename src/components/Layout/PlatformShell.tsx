@@ -822,13 +822,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         </aside>
 
         <main className={cn(
-          "flex-1 h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300",
+          "flex-1 h-[calc(100vh-4rem)] flex flex-col overflow-y-auto transition-all duration-300",
           isSidebarOpen ? "ml-64" : "ml-16",
           isAIAssistantOpen && !isSettingsMode && !isAdminPath && "mr-96"
         )}>
           <div className={cn(
-            "mx-auto",
-            fullBleed ? "w-full h-full" : "p-8 max-w-7xl"
+            "mx-auto flex flex-col min-h-full",
+            fullBleed ? "w-full flex-1" : "p-8 max-w-7xl"
           )}>
             {children}
           </div>

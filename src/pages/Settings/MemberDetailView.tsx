@@ -574,7 +574,7 @@ export const MemberDetailView = () => {
                       </div>
                    </div>
                 </div>
-            </div>
+            </motion.div>
           )}
 
           {activeTab === 'employment' && (
@@ -664,7 +664,7 @@ export const MemberDetailView = () => {
                       />
                     </div>
                  </div>
-            </div>
+            </motion.div>
           )}
 
           {activeTab === 'professional' && (
@@ -853,7 +853,7 @@ export const MemberDetailView = () => {
                     </div>
                   </div>
                 </div>
-            </div>
+            </motion.div>
           )}
 
           {activeTab === 'leave' && (
