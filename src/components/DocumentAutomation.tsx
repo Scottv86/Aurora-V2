@@ -91,7 +91,7 @@ export const DocumentAutomation = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
       <PageHeader 
         title="Templates"
         description="Create and manage reusable document templates for your platform."

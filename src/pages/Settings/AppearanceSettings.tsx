@@ -114,7 +114,7 @@ export const AppearanceSettings = () => {
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto pb-20">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 animate-in fade-in slide-in-from-bottom-2 duration-700">
       <PageHeader 
         title="Appearance & Navigation" 
         description="Configure the platform's visual shell, layout behavior, and global navigation structure."

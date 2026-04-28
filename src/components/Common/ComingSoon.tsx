@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Sparkles, LayoutDashboard } from 'lucide-react';
 
 export const ComingSoon = ({ title, description }: { title: string, description?: string }) => (
-  <div className="h-[calc(100vh-12rem)] flex flex-col items-center justify-center text-center space-y-6 p-8">
+  <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700 min-h-[calc(100vh-12rem)] items-center justify-center text-center">
     <div className="w-20 h-20 bg-white dark:bg-zinc-900 rounded-3xl flex items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-indigo-500/10 relative group overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       <Sparkles size={32} className="text-zinc-400 dark:text-zinc-600 group-hover:text-indigo-400 transition-colors relative z-10" />

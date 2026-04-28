@@ -221,16 +221,23 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   } = usePlatform();
   
   const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(!fullBleed);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isEditMode, setIsEditMode] = useState(false);
 
-  // Automatically collapse sidebar when entering builder (fullBleed mode)
+  const isAdminPath = location.pathname.startsWith('/admin');
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
+  const isNewBuilder = location.pathname === '/workspace/settings/builder/new';
+
+  // Automatically collapse sidebar ONLY when entering the module builder for a new module
+  // and expand it when leaving that specific page
   useEffect(() => {
-    if (fullBleed) {
+    if (isNewBuilder) {
       setIsSidebarOpen(false);
+    } else {
+      setIsSidebarOpen(true);
     }
-  }, [fullBleed]);
-  
+  }, [isNewBuilder]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
        activationConstraint: {
@@ -243,8 +250,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   );
   
   const enabledModules = modules.filter(m => m.status === 'ACTIVE');
-  const isAdminPath = location.pathname.startsWith('/admin');
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
 
   const resolvedConfig = useMemo(() => {
     if (!menuConfig) return null;

@@ -207,7 +207,7 @@ export const PeopleOrgDetail = () => {
     : formData.organization.legalName;
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl mx-auto">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-4">
         <button 

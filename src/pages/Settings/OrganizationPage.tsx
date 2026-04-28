@@ -36,7 +36,7 @@ export const OrganizationPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className="max-w-[1600px] mx-auto pb-20">
+      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
         <PageHeader 
           title="Organisation"
           description="Configure your organization's core identity, visual branding, and global system defaults. These settings apply to all members and workspaces within your tenancy."

@@ -61,7 +61,7 @@ export const AppsSettings = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
       <div>
         <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">App Catalog</h2>
         <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage which utility applications are enabled for your organization.</p>

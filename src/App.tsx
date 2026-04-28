@@ -26,6 +26,7 @@ import { Analytics } from './components/Analytics';
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
 import { AppsSettings } from './components/Settings/Organization/AppsSettings';
+import { GlobalListsSettings } from './components/Settings/Organization/GlobalListsSettings';
 import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
 import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
 import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
@@ -52,9 +53,21 @@ import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
 
 const SettingsLayout = () => {
   const location = useLocation();
-  const isBuilder = location.pathname.includes('/builder/') || location.pathname.includes('/ai-builder');
+  const isFullBleed = location.pathname.includes('/builder/') || 
+                     location.pathname.includes('/ai-builder') ||
+                     location.pathname.startsWith('/workspace/settings');
   return (
-    <PlatformShell fullBleed={isBuilder}>
+    <PlatformShell fullBleed={isFullBleed}>
+      <LicenseGate fallback={<LicenseRestrictedPlaceholder />}>
+        <Outlet />
+      </LicenseGate>
+    </PlatformShell>
+  );
+};
+
+const WorkspaceLayout = () => {
+  return (
+    <PlatformShell fullBleed={true}>
       <LicenseGate fallback={<LicenseRestrictedPlaceholder />}>
         <Outlet />
       </LicenseGate>
@@ -85,30 +98,33 @@ const App = () => {
               <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><PlatformShell><ComingSoon title="Platform Controls" description="Global organization settings, security policies, and administrative keys." /></PlatformShell></ProtectedRoute>} />
 
               {/* Workspace Routes (Authenticated Standard Users) */}
-              <Route path="/workspace" element={<ProtectedRoute><PlatformShell><DashboardPage /></PlatformShell></ProtectedRoute>} />
-              {/* Legacy Redirects to new Settings location */}
-              <Route path="/workspace/builder" element={<Navigate to="/workspace/settings/builder" replace />} />
-              <Route path="/workspace/ai-builder" element={<Navigate to="/workspace/settings/ai-builder" replace />} />
-              <Route path="/workspace/builder/:id" element={<Navigate to="/workspace/settings/builder/:id" replace />} />
-              <Route path="/workspace/catalog" element={<Navigate to="/workspace/settings/modules" replace />} />
-              <Route path="/workspace/documents" element={<Navigate to="/workspace/settings/templates" replace />} />
-              <Route path="/workspace/workflows" element={<Navigate to="/workspace/settings/automations" replace />} />
-              <Route path="/workspace/automations" element={<Navigate to="/workspace/settings/automations" replace />} />
-              <Route path="/workspace/logic" element={<Navigate to="/workspace/settings/logic" replace />} />
-              <Route path="/workspace/deployments" element={<Navigate to="/workspace/settings/deploy" replace />} />
-              <Route path="/workspace/reports" element={<Navigate to="/workspace/settings/reports" replace />} />
-              
-              {/* Dynamic Module Routes */}
-              <Route path="/workspace/modules/:id" element={<ProtectedRoute><PlatformShell><ModuleView /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/modules/:moduleId/records/:recordId" element={<ProtectedRoute><PlatformShell><RecordDetailView /></PlatformShell></ProtectedRoute>} />
-              
-              {/* Platform Operations */}
-              <Route path="/workspace/queue" element={<ProtectedRoute><PlatformShell><WorkQueue /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
-              <Route path="/workspace/platform/people-organisations" element={<ProtectedRoute><PlatformShell><PeopleOrgDirectory /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/platform/people-organisations/:id" element={<ProtectedRoute><PlatformShell><PeopleOrgDetail /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/analytics" element={<ProtectedRoute><PlatformShell><Analytics /></PlatformShell></ProtectedRoute>} />
-              <Route path="/workspace/reminders" element={<ProtectedRoute><PlatformShell><ComingSoon title="Reminders" description="Set task alerts, keep track of deadlines, and manage your personal notifications." /></PlatformShell></ProtectedRoute>} />
+              <Route path="/workspace" element={<ProtectedRoute><WorkspaceLayout /></ProtectedRoute>}>
+                <Route index element={<DashboardPage />} />
+                
+                {/* Legacy Redirects */}
+                <Route path="builder" element={<Navigate to="/workspace/settings/builder" replace />} />
+                <Route path="ai-builder" element={<Navigate to="/workspace/settings/ai-builder" replace />} />
+                <Route path="builder/:id" element={<Navigate to="/workspace/settings/builder/:id" replace />} />
+                <Route path="catalog" element={<Navigate to="/workspace/settings/modules" replace />} />
+                <Route path="documents" element={<Navigate to="/workspace/settings/templates" replace />} />
+                <Route path="workflows" element={<Navigate to="/workspace/settings/automations" replace />} />
+                <Route path="automations" element={<Navigate to="/workspace/settings/automations" replace />} />
+                <Route path="logic" element={<Navigate to="/workspace/settings/logic" replace />} />
+                <Route path="deployments" element={<Navigate to="/workspace/settings/deploy" replace />} />
+                <Route path="reports" element={<Navigate to="/workspace/settings/reports" replace />} />
+                <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
+                
+                {/* Dynamic Module Routes */}
+                <Route path="modules/:id" element={<ModuleView />} />
+                <Route path="modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
+                
+                {/* Platform Operations */}
+                <Route path="queue" element={<WorkQueue />} />
+                <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
+                <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="reminders" element={<ComingSoon title="Reminders" description="Set task alerts, keep track of deadlines, and manage your personal notifications." />} />
+              </Route>
               
               {/* Settings & Workforce (Developer Only) */}
               <Route 
@@ -134,7 +150,7 @@ const App = () => {
                 <Route path="apps" element={<AppsSettings />} />
                 <Route path="messaging" element={<ComingSoon title="Messaging" description="View messaging logs including emails, SMS, Push notifications, and Portal notifications." />} />
                 <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
-                <Route path="lists" element={<ComingSoon title="Global Lists" description="Manage system-wide options, category lists, and lookup tables used across all modules." />} />
+                <Route path="lists" element={<GlobalListsSettings />} />
                 <Route path="appearance" element={<AppearanceSettings />} />
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />

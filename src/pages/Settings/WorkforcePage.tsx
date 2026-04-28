@@ -87,7 +87,8 @@ export const WorkforcePage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <PageHeader 
+      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
+        <PageHeader 
         title="Workforce"
         description="Manage your team of people and AI agents in one place. Organize teams, define roles, and control access permissions."
         actions={
@@ -220,9 +221,10 @@ export const WorkforcePage = () => {
             isOpen={isTeamModalOpen}
             onClose={() => setIsTeamModalOpen(false)}
           />
-      </LicenseGate>
-    );
-  };
+      </div>
+    </LicenseGate>
+  );
+};
 
 
 

@@ -19,7 +19,7 @@ export const SitesPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className="flex min-h-full flex-col @container">
+      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
         <PageHeader 
           title="Sites"
           description="Manage your organization's internal communication hubs and public-facing portals. Configure access controls, branding, and content delivery for all digital touchpoints."
@@ -36,7 +36,7 @@ export const SitesPage = () => {
 
         {/* Content Area */}
         <div className="flex-1">
-          <div className="mx-auto max-w-7xl py-10 animate-in fade-in slide-in-from-bottom-2 duration-700">
+          <div className="py-10 animate-in fade-in slide-in-from-bottom-2 duration-700">
             {activeTab === 'internal' && (
               <div className="space-y-6">
                 <ComingSoon 

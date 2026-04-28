@@ -38,7 +38,7 @@ export const PlatformModulesSettings = () => {
   const activeModule = !isIndex ? PLATFORM_MODULES.find(m => location.pathname.includes(m.slug)) : null;
 
   return (
-    <div className="flex min-h-full flex-col @container">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 animate-in fade-in slide-in-from-bottom-2 duration-700">
       {isIndex ? (
         <>
           <PageHeader 

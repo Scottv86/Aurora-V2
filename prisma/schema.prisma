@@ -37,6 +37,7 @@ model Tenant {
   parties            Party[]
   partyRelationships PartyRelationship[]
   taxonomies         Taxonomy[]
+  globalLists        GlobalList[]
 
   @@map("tenants")
 }
@@ -557,4 +558,34 @@ model Taxonomy {
   @@unique([tenantId, category, slug])
   @@index([tenantId])
   @@map("taxonomies")
+}
+
+model GlobalList {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  columns     Json?    // [{ id: string, name: string, type: string, options?: any }]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  items       GlobalListItem[]
+
+  @@unique([id, tenantId])
+  @@map("global_lists")
+}
+
+model GlobalListItem {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listId      String    @map("list_id") @db.Uuid
+  tenantId    String    @map("tenant_id")
+  data        Json      // { columnId: value }
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  validFrom   DateTime  @default(now()) @map("valid_from")
+  validTo     DateTime? @map("valid_to")
+
+  list        GlobalList @relation(fields: [listId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@map("global_list_items")
 }
