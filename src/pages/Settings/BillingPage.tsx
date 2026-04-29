@@ -103,7 +103,7 @@ export const BillingPage = () => {
       header: 'Member',
       accessor: (member: TenantMember) => (
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 overflow-hidden border border-zinc-200 dark:border-zinc-700">
+          <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-white/5 overflow-hidden border border-zinc-200 dark:border-zinc-700">
             {member.avatarUrl ? (
               <img src={member.avatarUrl} alt={member.name} className="h-full w-full object-cover" />
             ) : (
@@ -150,7 +150,7 @@ export const BillingPage = () => {
               "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
               member.licenceType === 'Standard' 
               ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20 cursor-default"
-              : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-zinc-900 dark:border-zinc-800"
+              : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-white/10 dark:border-zinc-800"
             )}
           >
             Standard
@@ -162,7 +162,7 @@ export const BillingPage = () => {
               "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
               member.licenceType === 'Developer' 
               ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 cursor-default"
-              : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-zinc-900 dark:border-zinc-800"
+              : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-white/10 dark:border-zinc-800"
             )}
           >
             Developer
@@ -225,7 +225,7 @@ export const BillingPage = () => {
               {activeTab === 'overview' && (
                 <div className="space-y-10">
                   {/* Plan Hero Card */}
-                  <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 shadow-sm">
+                  <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40 dark:backdrop-blur-xl shadow-sm">
                     <div className="relative flex flex-col md:flex-row items-stretch">
                       {/* Left Side: Current Plan */}
                       <div className="flex-1 p-8 space-y-8">
@@ -266,7 +266,7 @@ export const BillingPage = () => {
                       </div>
 
                       {/* Right Side: Quick Stats Summary */}
-                      <div className="md:w-80 bg-zinc-50/50 dark:bg-zinc-900/30 p-8 flex flex-col justify-center gap-8 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800">
+                      <div className="md:w-80 bg-zinc-50/50 dark:bg-white/5 p-8 flex flex-col justify-center gap-8 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800">
                         <div className="space-y-1">
                             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Total Active Seats</p>
                             <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">{usage.developer + usage.standard}</p>
@@ -288,7 +288,7 @@ export const BillingPage = () => {
                   {/* Usage Section */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Developer Licenses */}
-                    <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm">
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-500 text-white">
@@ -303,7 +303,7 @@ export const BillingPage = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-full overflow-hidden">
                           <div 
                             className={cn(
                               "h-full rounded-full transition-all duration-1000 ease-out",
@@ -324,7 +324,7 @@ export const BillingPage = () => {
                     </div>
 
                     {/* Standard Licenses */}
-                    <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm">
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-purple-500 text-white">
@@ -339,7 +339,7 @@ export const BillingPage = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-purple-500 rounded-full transition-all duration-1000 ease-out" 
                             style={{ width: `${stdPercent}%` }} 
@@ -404,7 +404,7 @@ export const BillingPage = () => {
                         placeholder="Search member name, email or licence..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="h-12 w-full max-w-md rounded-2xl border border-zinc-200 bg-white/80 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm"
+                        className="h-12 w-full max-w-md rounded-2xl border border-zinc-200 bg-white/80 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
                       />
                     </div>
                   </div>
@@ -423,7 +423,7 @@ export const BillingPage = () => {
               {activeTab === 'invoices' && (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-900">
+                      <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-white/5">
                           <Receipt size={16} className="text-zinc-600 dark:text-zinc-400" />
                       </div>
                       <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Invoice History</h3>
@@ -442,15 +442,15 @@ export const BillingPage = () => {
               {activeTab === 'payment' && (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-900">
+                      <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-white/5">
                           <Wallet size={16} className="text-zinc-600 dark:text-zinc-400" />
                       </div>
                       <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Payment Methods</h3>
                   </div>
 
-                  <div className="rounded-3xl border border-zinc-200 bg-white p-10 dark:border-zinc-800 dark:bg-zinc-950 shadow-sm flex flex-col md:flex-row items-center justify-between gap-8">
+                  <div className="rounded-3xl border border-zinc-200 bg-white p-10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-8">
                     <div className="flex items-center gap-6">
-                      <div className="h-16 w-16 flex items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800">
+                      <div className="h-16 w-16 flex items-center justify-center rounded-2xl bg-zinc-100 dark:bg-white/5 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800">
                         <CreditCard size={32} />
                       </div>
                       <div>

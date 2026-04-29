@@ -70,13 +70,13 @@ export const Input = ({ className, label, error, icon, ...props }: InputProps) =
       {label && <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{label}</label>}
       <div className="relative">
         {icon && (
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 z-10">
             {icon}
           </div>
         )}
         <input
           className={cn(
-            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600',
+            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 dark:placeholder:text-zinc-600',
             icon && 'pl-11',
             error && 'border-red-500 focus:border-red-500 focus:ring-red-500/10',
             className
@@ -102,13 +102,13 @@ export const Select = ({ className, label, options, icon, ...props }: SelectProp
       {label && <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{label}</label>}
       <div className="relative">
         {icon && (
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 z-10">
             {icon}
           </div>
         )}
         <select
           className={cn(
-            'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100',
+            'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100',
             icon && 'pl-11',
             className
           )}

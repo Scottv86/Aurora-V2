@@ -21,8 +21,11 @@ export const OrganizationPage = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-indigo-600" />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <div className="p-8 rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-zinc-200/20 border-t-indigo-600" />
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] animate-pulse">Syncing Organisation</p>
+        </div>
       </div>
     );
   }

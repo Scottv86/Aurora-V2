@@ -90,7 +90,7 @@ export const WorkQueue = () => {
   }
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+    <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-10 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Queue</h1>

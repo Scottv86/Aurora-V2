@@ -55,7 +55,7 @@ export const MetadataSettings = ({ tenant, onUpdate }: MetadataSettingsProps) =>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Meta Description</label>
               <textarea 
-                className="flex min-h-[100px] w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-600 outline-none"
+                className="flex min-h-[100px] w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 dark:placeholder:text-zinc-600 outline-none"
                 placeholder="A brief description of your organization..."
                 value={metadata.metaDescription}
                 onChange={(e) => setMetadata(prev => ({ ...prev, metaDescription: e.target.value }))}
@@ -64,8 +64,8 @@ export const MetadataSettings = ({ tenant, onUpdate }: MetadataSettingsProps) =>
 
             <div className="space-y-4">
               <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Social Share Preview</label>
-              <div className="p-1 rounded-[2.5rem] bg-zinc-100 dark:bg-zinc-800/50">
-                  <div className="aspect-video rounded-[2.25rem] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+              <div className="p-1 rounded-[2.5rem] bg-zinc-100 dark:bg-white/5">
+                  <div className="aspect-video rounded-[2.25rem] bg-white dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
                     <div className="flex-1 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
                         <Sparkles className="text-white/20 animate-pulse" size={48} />
                     </div>

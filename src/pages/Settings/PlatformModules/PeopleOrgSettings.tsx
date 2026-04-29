@@ -200,7 +200,7 @@ export const PeopleOrgSettings = () => {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
             <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
               <Info size={18} className="text-indigo-500" />
               Governance Guide
@@ -244,7 +244,7 @@ export const PeopleOrgSettings = () => {
           <div className="space-y-1">
             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Description</label>
             <textarea 
-              className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               rows={3}
               value={formData.description}
               onChange={e => setFormData({ ...formData, description: e.target.value })}
@@ -280,7 +280,7 @@ const TaxonomyList = ({ title, items, loading, onAdd, onEdit, onDelete, addLabel
         <span>{addLabel}</span>
       </button>
     </div>
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm min-h-[200px]">
+    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm min-h-[200px]">
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
           <Loader2 className="animate-spin mb-2" size={32} />
@@ -311,7 +311,7 @@ const TaxonomyList = ({ title, items, loading, onAdd, onEdit, onDelete, addLabel
 const TaxonomyItem = ({ item, onEdit, onDelete }: { item: Taxonomy; onEdit: () => void; onDelete: () => void }) => (
   <div className="flex items-center justify-between p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
     <div className="flex items-center gap-4">
-      <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-500">
+      <div className="w-10 h-10 bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-xl flex items-center justify-center text-zinc-500">
         <Database size={20} />
       </div>
       <div>
@@ -345,9 +345,9 @@ const CustomFieldsList = () => (
           <span>Define Field</span>
         </button>
       </div>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
+      <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
          <div className="p-12 text-center">
-            <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-200 dark:border-zinc-800 mb-4">
+            <div className="w-16 h-16 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md rounded-3xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-200 dark:border-zinc-800 mb-4">
                <Database size={32} />
             </div>
             <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Coming Soon</h3>

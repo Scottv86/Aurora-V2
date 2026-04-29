@@ -71,8 +71,8 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
             {/* Logo Upload Mock */}
             <div className="space-y-4">
               <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Workspace Logo</label>
-              <div className="flex items-center gap-8 p-8 rounded-3xl border-2 border-dashed border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="h-24 w-24 flex items-center justify-center rounded-2xl bg-zinc-50 border border-zinc-100 dark:bg-zinc-800 dark:border-zinc-700 overflow-hidden shadow-inner relative group/logo">
+              <div className="flex items-center gap-8 p-8 rounded-3xl border-2 border-dashed border-zinc-200 bg-white dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md">
+                <div className="h-24 w-24 flex items-center justify-center rounded-2xl bg-zinc-50 border border-zinc-100 dark:bg-white/5 dark:border-zinc-700 overflow-hidden shadow-inner relative group/logo">
                   {branding.logoUrl ? (
                     <>
                       <img src={branding.logoUrl} alt="Logo Preview" className="h-full w-full object-contain p-2" />
@@ -159,7 +159,7 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
           </div>
 
           <div className="lg:col-span-2">
-            <div className="p-6 rounded-3xl bg-zinc-50 border border-zinc-100 dark:bg-zinc-900/50 dark:border-zinc-800 space-y-6">
+            <div className="p-6 rounded-3xl bg-zinc-50 border border-zinc-100 dark:bg-white/5 dark:backdrop-blur-xl dark:border-zinc-800 space-y-6">
               <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <p className="text-sm font-bold text-zinc-900 dark:text-white">Aesthetic Intelligence (AI)</p>
@@ -167,7 +167,7 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
                   </div>
                   <div 
                     onClick={() => setBranding(prev => ({ ...prev, aiEnabled: !prev.aiEnabled }))}
-                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${branding.aiEnabled ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-zinc-800'}`}
+                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${branding.aiEnabled ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-white/10'}`}
                   >
                     <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${branding.aiEnabled ? 'right-1' : 'left-1'}`} />
                   </div>
@@ -180,7 +180,7 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
                   </div>
                   <div 
                     onClick={() => setBranding(prev => ({ ...prev, forceDarkMode: !prev.forceDarkMode }))}
-                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${branding.forceDarkMode ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-zinc-800'}`}
+                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${branding.forceDarkMode ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-white/10'}`}
                   >
                     <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${branding.forceDarkMode ? 'right-1' : 'left-1'}`} />
                   </div>

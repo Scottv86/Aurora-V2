@@ -53,17 +53,17 @@ export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Workspace URL</label>
               <div className="flex items-stretch">
-                <div className="flex items-center px-4 rounded-l-xl border border-r-0 border-zinc-200 bg-zinc-50 text-sm text-zinc-500 font-medium dark:border-zinc-800 dark:bg-zinc-900/50">
+                <div className="flex items-center px-4 rounded-l-xl border border-r-0 border-zinc-200 bg-zinc-50 text-sm text-zinc-500 font-medium dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md">
                   https://
                 </div>
                 <input 
-                  className="flex-1 h-11 border border-zinc-200 bg-white px-4 text-sm text-zinc-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 outline-none transition-all"
+                  className="flex-1 h-11 border border-zinc-200 bg-white px-4 text-sm text-zinc-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 outline-none transition-all"
                   placeholder="subdomain"
                   value={formData.subdomain}
                   onChange={(e) => setFormData(prev => ({ ...prev, subdomain: e.target.value }))}
                   required
                 />
-                <div className="flex items-center px-4 rounded-r-xl border border-l-0 border-zinc-200 bg-zinc-50 text-sm text-zinc-500 font-medium dark:border-zinc-800 dark:bg-zinc-900/50">
+                <div className="flex items-center px-4 rounded-r-xl border border-l-0 border-zinc-200 bg-zinc-50 text-sm text-zinc-500 font-medium dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md">
                   .aurora.app
                 </div>
               </div>
@@ -103,7 +103,7 @@ export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
               onChange={(e) => setFormData(prev => ({ ...prev, contactEmail: e.target.value }))}
             />
 
-            <div className="p-6 rounded-2xl bg-indigo-50/50 border border-indigo-100 dark:bg-indigo-500/5 dark:border-indigo-500/10">
+            <div className="p-6 rounded-2xl bg-indigo-50/50 border border-indigo-100 dark:bg-blue-500/10 dark:backdrop-blur-xl dark:border-blue-500/20 shadow-lg shadow-blue-500/5">
               <h4 className="flex items-center gap-2 text-sm font-bold text-indigo-900 dark:text-indigo-400">
                 <Zap size={16} className="fill-current" /> Identity & Access
               </h4>

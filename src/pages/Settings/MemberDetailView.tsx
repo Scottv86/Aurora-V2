@@ -229,10 +229,10 @@ export const MemberDetailView = () => {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-sm text-zinc-500 animate-pulse font-medium">Loading...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <div className="p-8 rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-zinc-200/20 border-t-indigo-600" />
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] animate-pulse">Retrieving Profile</p>
         </div>
       </div>
     );
@@ -361,7 +361,7 @@ export const MemberDetailView = () => {
         <div className="min-h-[400px]">
           {activeTab === 'overview' && (
             <div className="space-y-6">
-               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
+               <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
                   <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
                      <h3 className="text-lg font-bold flex items-center gap-2">
                         <Shield size={18} className="text-blue-500" /> General Info
@@ -420,7 +420,7 @@ export const MemberDetailView = () => {
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
+                  <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
                      <h3 className="font-bold flex items-center gap-2 text-zinc-900 dark:text-white pb-3 border-b border-zinc-100 dark:border-zinc-800">
                         <Network size={18} className="text-purple-500" /> Team
                      </h3>
@@ -442,7 +442,7 @@ export const MemberDetailView = () => {
                   </div>
 
                   {!member.isSynthetic && (
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
                        <h3 className="font-bold flex items-center gap-2 text-zinc-900 dark:text-white pb-3 border-b border-zinc-100 dark:border-zinc-800">
                           <Mail size={18} className="text-emerald-500" /> Work Contact
                        </h3>
@@ -473,7 +473,7 @@ export const MemberDetailView = () => {
           {activeTab === 'personal' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
+                  <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
                      <h3 className="text-lg font-black flex items-center gap-3 text-zinc-900 dark:text-white pb-3 border-b border-zinc-100 dark:border-zinc-800">
                        <Contact size={20} className="text-blue-500" /> Personal Details
                      </h3>
@@ -486,7 +486,7 @@ export const MemberDetailView = () => {
                      </div>
                   </div>
 
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
+                  <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
                      <h3 className="text-lg font-black flex items-center gap-3 text-zinc-900 dark:text-white pb-3 border-b border-zinc-100 dark:border-zinc-800">
                        <Globe size={20} className="text-purple-500" /> Background
                      </h3>
@@ -511,7 +511,7 @@ export const MemberDetailView = () => {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm overflow-hidden relative">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm overflow-hidden relative">
                    <div className="absolute top-0 right-0 w-32 h-32 -mr-8 -mt-8 bg-red-500/5 rounded-full" />
                    <h3 className="text-xl font-black flex items-center gap-3 text-zinc-900 dark:text-white pb-4 border-b border-zinc-100 dark:border-zinc-800 relative">
                      <MapPin size={24} className="text-red-500" /> Personal Contact Info
@@ -579,7 +579,7 @@ export const MemberDetailView = () => {
 
           {activeTab === 'employment' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-10 shadow-sm relative overflow-hidden">
+                 <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-10 shadow-sm relative overflow-hidden">
                     <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-6">
                        <h3 className="text-xl font-bold flex items-center gap-3">
                           <Briefcase size={24} className="text-orange-500" /> Job Details
@@ -669,7 +669,7 @@ export const MemberDetailView = () => {
 
           {activeTab === 'professional' && (
             <div className="space-y-6">
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-8 shadow-sm">
                   <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
                      <h3 className="text-lg font-bold flex items-center gap-2">
                         <GraduationCap size={18} className="text-blue-500" /> Education & Certifications
@@ -745,7 +745,7 @@ export const MemberDetailView = () => {
                      </div>
                   </div>
 
-                  <div className="p-10 bg-zinc-50 dark:bg-black/20 rounded-3xl border border-zinc-200 dark:border-zinc-800 space-y-8 mt-12 relative overflow-hidden shadow-sm">
+                  <div className="p-10 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-xl rounded-3xl border border-zinc-200 dark:border-zinc-800 space-y-8 mt-12 relative overflow-hidden shadow-sm">
                      <div className="absolute top-0 right-0 w-64 h-64 -mr-16 -mt-16 bg-yellow-500/5 rounded-full" />
                      <div className="flex items-center justify-between relative">
                         <h3 className="text-xl font-black flex items-center gap-3">
@@ -760,7 +760,7 @@ export const MemberDetailView = () => {
                      </div>
                      <div className="flex flex-wrap gap-4 relative">
                         {skills.map((skill, idx) => (
-                          <div key={idx} className="flex items-center gap-4 bg-white dark:bg-zinc-900 px-6 py-3 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 group hover:border-indigo-500/50 hover:shadow-indigo-500/5 transition-all">
+                          <div key={idx} className="flex items-center gap-4 bg-white dark:bg-white/5 dark:backdrop-blur-md px-6 py-3 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-700 group hover:border-indigo-500/50 hover:shadow-indigo-500/5 transition-all">
                             <input 
                                className="bg-transparent text-sm font-black focus:outline-none w-36 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-300"
                                value={skill.name}
@@ -800,7 +800,7 @@ export const MemberDetailView = () => {
 
            {activeTab === 'contracts' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm relative overflow-hidden">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-64 h-64 -mr-16 -mt-16 bg-zinc-500/5 rounded-full" />
                   <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-8 relative">
                     <div>
@@ -828,7 +828,7 @@ export const MemberDetailView = () => {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm">
                   <div className="flex items-center justify-between pb-8 border-b border-zinc-100 dark:border-zinc-800">
                     <h3 className="font-black flex items-center gap-3 text-xl">
                       <Briefcase size={24} className="text-emerald-500" /> Salary & Pay
@@ -865,7 +865,7 @@ export const MemberDetailView = () => {
                     { label: 'Unpaid Leave', balance: '0.0 Days', color: 'zinc' },
                     { label: 'Banked Overtime', balance: '2.5 Hrs', color: 'green' }
                   ].map((l, i) => (
-                    <div key={i} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 shadow-sm relative overflow-hidden group hover:scale-[1.03] transition-all hover:shadow-xl">
+                    <div key={i} className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 shadow-sm relative overflow-hidden group hover:scale-[1.03] transition-all hover:shadow-xl">
                       <div className={cn(
                         "absolute top-0 right-0 w-32 h-32 -mr-12 -mt-12 rounded-full opacity-5 group-hover:opacity-15 transition-opacity",
                         l.color === 'blue' ? 'bg-blue-500' : 
@@ -880,7 +880,7 @@ export const MemberDetailView = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                   <div className="lg:col-span-3">
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-10 space-y-10 shadow-sm relative overflow-hidden">
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-10 space-y-10 shadow-sm relative overflow-hidden">
                       <div className="absolute bottom-0 right-0 w-64 h-64 -mr-16 -mb-16 bg-orange-500/5 rounded-full" />
                       <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-8 relative">
                         <div className="flex items-center gap-6">
@@ -946,7 +946,7 @@ export const MemberDetailView = () => {
 
           {activeTab === 'configuration' && (
             <div className="space-y-8">
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-sm relative">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-sm relative">
                    <div className="absolute top-0 right-0 w-64 h-64 -mr-16 -mt-16 bg-zinc-500/5 rounded-full" />
                    <div className="px-10 py-8 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/30 flex items-center justify-between relative">
                       <div className="space-y-2">
@@ -1085,7 +1085,7 @@ export const MemberDetailView = () => {
           )}
 
           {activeTab === 'activity' && (
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4">
+            <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4">
                <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400">
                   <Activity size={32} />
                </div>

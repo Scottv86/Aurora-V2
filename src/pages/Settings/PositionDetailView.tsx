@@ -83,10 +83,10 @@ export const PositionDetailView = () => {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-sm text-zinc-500 animate-pulse font-medium">Accessing Position Records...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <div className="p-8 rounded-[2rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-zinc-200/20 border-t-indigo-600" />
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] animate-pulse">Accessing Position Records</p>
         </div>
       </div>
     );
@@ -171,7 +171,7 @@ export const PositionDetailView = () => {
                className="grid grid-cols-1 md:grid-cols-3 gap-6"
             >
               <div className="col-span-2 space-y-6">
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6">
                    <div className="grid grid-cols-2 gap-6">
                       <Input 
                         label="Position Title" 
@@ -212,7 +212,7 @@ export const PositionDetailView = () => {
               </div>
 
               <div className="space-y-6">
-                 <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-6 space-y-4">
+                 <div className="bg-blue-500/5 dark:bg-blue-500/10 dark:backdrop-blur-xl border border-blue-500/10 rounded-2xl p-6 space-y-4">
                     <div className="flex items-center gap-2 text-blue-600 font-bold text-sm">
                        <Info size={16} /> Hierarchy Concept
                     </div>
@@ -229,7 +229,7 @@ export const PositionDetailView = () => {
             <motion.div 
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
-               className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden"
+               className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden"
             >
                <Table 
                  data={position.occupants || []}
@@ -266,7 +266,7 @@ export const PositionDetailView = () => {
                animate={{ opacity: 1, y: 0 }}
                className="space-y-6"
             >
-               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-8">
+               <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-8">
                   <div className="flex items-center justify-between">
                      <div className="space-y-1">
                         <h3 className="text-xl font-bold flex items-center gap-2">
@@ -352,7 +352,7 @@ export const PositionDetailView = () => {
             <motion.div 
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
-               className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4"
+               className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4"
             >
                <div className="h-16 w-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400">
                   <Activity size={32} />

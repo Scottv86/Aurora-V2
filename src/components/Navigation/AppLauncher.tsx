@@ -23,6 +23,12 @@ const APPS: AppItem[] = [
   { id: 'notes', label: 'Notes', iconName: 'StickyNote', description: 'Quick thoughts and ideas', color: 'text-yellow-500' },
   { id: 'reminders', label: 'Reminders', iconName: 'Bell', description: 'Tasks and notifications', color: 'text-purple-500' },
   { id: 'reports', label: 'Reports', iconName: 'BarChart3', description: 'Data insights and analytics', color: 'text-cyan-500' },
+  { id: 'converter', label: 'File converter', iconName: 'FileType', description: 'Convert files instantly', color: 'text-orange-500' },
+  { id: 'feed', label: 'Feed', iconName: 'Rss', description: 'Stay informed with your feed', color: 'text-red-500' },
+  { id: 'draw', label: 'Draw', iconName: 'Palette', description: 'Digital sketching canvas', color: 'text-pink-500' },
+  { id: 'whiteboard', label: 'Whiteboard', iconName: 'Presentation', description: 'Collaborative brainstorming', color: 'text-teal-500' },
+  { id: 'calculator', label: 'Calculator', iconName: 'Calculator', description: 'Advanced calculation tool', color: 'text-slate-500' },
+  { id: 'snipper', label: 'Snipping tool', iconName: 'Scissors', description: 'Capture your screen', color: 'text-violet-500' },
 ];
 
 export const AppLauncher = () => {

@@ -95,7 +95,7 @@ export const PeopleOrgDirectory = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== 'all').length;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+    <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-10 space-y-8">
       <PageHeader 
         title="People & Organisations"
         description="Centralized management of all internal and external parties, personnel, and organizational structures."
@@ -104,7 +104,7 @@ export const PeopleOrgDirectory = () => {
             <button 
               onClick={() => setShowFilters(!showFilters)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border rounded-xl text-sm font-bold transition-all",
+                "flex items-center gap-2 px-4 py-2 bg-white dark:bg-white/5 dark:backdrop-blur-md border rounded-xl text-sm font-bold transition-all",
                 activeFilterCount > 0 
                   ? "border-indigo-500 text-indigo-600 bg-indigo-50/50" 
                   : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
@@ -125,7 +125,7 @@ export const PeopleOrgDirectory = () => {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl z-50 p-4 space-y-4"
+                  className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-zinc-900/60 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl z-50 p-4 space-y-4"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Active Filters</h4>
@@ -185,7 +185,7 @@ export const PeopleOrgDirectory = () => {
         }
       />
 
-      <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-900/50 rounded-2xl w-fit border border-zinc-200 dark:border-zinc-800">
+      <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-2xl w-fit border border-zinc-200 dark:border-zinc-800">
         <TabButton 
           active={activeTab === 'all'} 
           onClick={() => setActiveTab('all')}
@@ -209,7 +209,7 @@ export const PeopleOrgDirectory = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-white/5 dark:bg-zinc-900/20 backdrop-blur-xl rounded-[2.5rem] border border-white/10 dark:border-zinc-800/50 p-6 lg:p-8 shadow-2xl space-y-8"
+              className="bg-white/5 dark:bg-zinc-900/40 dark:backdrop-blur-xl rounded-[2.5rem] border border-white/10 dark:border-zinc-800/50 p-6 lg:p-8 shadow-2xl space-y-8"
             >
               <div className="relative max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
@@ -343,7 +343,7 @@ const TabButton = ({ active, onClick, icon, label, count }: TabButtonProps) => (
     onClick={onClick}
     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
       active 
-        ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' 
+        ? 'bg-white dark:bg-white/10 text-zinc-900 dark:text-white shadow-sm' 
         : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
     }`}
   >

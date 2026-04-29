@@ -36,7 +36,7 @@ export const SitesPage = () => {
 
         {/* Content Area */}
         <div className="flex-1">
-          <div className="py-10 animate-in fade-in slide-in-from-bottom-2 duration-700">
+          <div className="py-10">
             {activeTab === 'internal' && (
               <div className="space-y-6">
                 <ComingSoon 

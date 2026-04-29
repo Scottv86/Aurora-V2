@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table } from '../../UI/Table';
-import { Shield, Clock, Info, ShieldCheck, UserCog, Database } from 'lucide-react';
+import { Shield, Clock, Info, ShieldCheck, UserCog, Database, Search } from 'lucide-react';
 import { Badge, Button } from '../../UI/Primitives';
 import { useAuth } from '../../../hooks/useAuth';
 import { usePlatform } from '../../../hooks/usePlatform';
@@ -10,10 +10,11 @@ import { formatDistanceToNow } from 'date-fns';
 interface ActivityLogProps {
   refreshTrigger?: number;
   searchQuery?: string;
+  onSearchChange?: (val: string) => void;
   activeFilter?: string;
 }
 
-export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = 'all' }: ActivityLogProps) => {
+export const ActivityLog = ({ refreshTrigger, searchQuery = '', onSearchChange, activeFilter = 'all' }: ActivityLogProps) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
@@ -143,13 +144,25 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', activeFilter = '
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-[2.5rem] border border-white/20 dark:border-white/5 p-6 lg:p-8 shadow-2xl overflow-hidden">
+        <div className="relative max-w-md mb-8 group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+          <input 
+            type="text" 
+            placeholder="Search activity logs..." 
+            value={searchQuery}
+            onChange={(e) => onSearchChange?.(e.target.value)}
+            className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
+          />
+        </div>
+
         {filteredLogs.length > 0 ? (
           <Table 
             data={filteredLogs} 
             columns={columns} 
             pagination={true} 
             pageSize={20}
+            className="bg-transparent dark:bg-transparent border-none shadow-none"
           />
         ) : (
           <div className="flex flex-col items-center justify-center py-20">

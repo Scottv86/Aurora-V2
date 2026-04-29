@@ -26,7 +26,7 @@ const SegmentedProgress = ({ value }: { value: number }) => {
         const segmentValue = Math.max(0, Math.min(25, value - threshold));
         const percentage = (segmentValue / 25) * 100;
         return (
-          <div key={threshold} className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+          <div key={threshold} className="flex-1 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
             <div 
               className="h-full bg-blue-600 transition-all duration-500 shadow-[0_0_8px_rgba(37,99,235,0.4)]" 
               style={{ width: `${percentage}%` }}
@@ -44,7 +44,7 @@ const Switch = ({ checked, onChange }: { checked: boolean; onChange: (val: boole
       onClick={() => onChange(!checked)}
       className={cn(
         "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-        checked ? "bg-blue-600" : "bg-zinc-200 dark:bg-zinc-700"
+        checked ? "bg-blue-600" : "bg-zinc-200 dark:bg-white/5 dark:backdrop-blur-md"
       )}
     >
       <span
@@ -134,7 +134,7 @@ export const UsagePage = () => {
                      <Button 
                         variant="secondary" 
                         size="sm" 
-                        className="bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-100 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-700 h-9 px-4 rounded-lg font-bold transition-all shadow-sm"
+                        className="bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-white/10 h-9 px-4 rounded-lg font-bold transition-all shadow-sm"
                         onClick={handleRefresh}
                         loading={isRefreshing}
                      >
@@ -145,7 +145,7 @@ export const UsagePage = () => {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {models.map((model) => (
-                      <div key={model.name} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-sm">
+                      <div key={model.name} className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-sm">
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">{model.name}</h3>
                           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Refreshes: {model.refresh}</span>
@@ -166,7 +166,7 @@ export const UsagePage = () => {
                 <div className="space-y-10">
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                      {/* Intent Distribution */}
-                     <div className="lg:col-span-2 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-8 shadow-sm">
+                     <div className="lg:col-span-2 bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-8 shadow-sm">
                         <div className="flex items-center justify-between">
                            <div className="space-y-1">
                               <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Usage by Intent</h3>
@@ -205,7 +205,7 @@ export const UsagePage = () => {
                            </div>
                         </div>
 
-                        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4 shadow-sm">
+                        <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4 shadow-sm">
                            <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
                                  <MessageSquare size={18} />
@@ -217,7 +217,7 @@ export const UsagePage = () => {
                            </div>
                         </div>
 
-                        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4 shadow-sm">
+                        <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4 shadow-sm">
                            <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
                                  <Bot size={18} />
@@ -233,7 +233,7 @@ export const UsagePage = () => {
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                      {/* Usage by User */}
-                     <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
+                     <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
                         <div className="flex items-center justify-between">
                            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight flex items-center gap-3">
                               <Users size={20} className="text-blue-600" /> Usage by User
@@ -263,7 +263,7 @@ export const UsagePage = () => {
                      </div>
 
                      {/* Usage by Agent */}
-                     <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
+                     <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
                         <div className="flex items-center justify-between">
                            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight flex items-center gap-3">
                               <Bot size={20} className="text-purple-600" /> Usage by Agent
@@ -275,7 +275,7 @@ export const UsagePage = () => {
                            {topAgents.map((agent) => (
                               <div key={agent.name} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-2xl border border-zinc-100 dark:border-zinc-800/50">
                                  <div className="flex items-center gap-4">
-                                    <div className="h-10 w-10 rounded-xl bg-white dark:bg-zinc-900 flex items-center justify-center text-purple-600 shadow-sm border border-zinc-100 dark:border-zinc-800">
+                                    <div className="h-10 w-10 rounded-xl bg-white dark:bg-white/5 dark:backdrop-blur-md flex items-center justify-center text-purple-600 shadow-sm border border-zinc-100 dark:border-zinc-800">
                                        <agent.icon size={20} />
                                     </div>
                                     <div>
@@ -305,7 +305,7 @@ export const UsagePage = () => {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
                       <div className="flex items-start justify-between gap-8">
                         <div className="space-y-3">
                           <div className="h-12 w-12 rounded-2xl bg-blue-600/10 text-blue-600 flex items-center justify-center">
@@ -339,7 +339,7 @@ export const UsagePage = () => {
 
               {activeTab === 'activity' && (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-                   <div className="h-16 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                   <div className="h-16 w-16 rounded-full bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md flex items-center justify-center text-zinc-400">
                       <Activity size={32} />
                    </div>
                    <div className="space-y-1">

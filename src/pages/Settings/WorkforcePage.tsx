@@ -12,6 +12,7 @@ import { LayoutGrid, Users, ShieldCheck, Search, Filter, Plus, Network, Shield, 
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
+import { cn } from '../../lib/utils';
 
 import { PageHeader } from '../../components/UI/PageHeader';
 
@@ -92,16 +93,65 @@ export const WorkforcePage = () => {
         title="Workforce"
         description="Manage your team of people and AI agents in one place. Organize teams, define roles, and control access permissions."
         actions={
-          action && (
-            <Button 
-              variant="primary" 
-              size="sm"
-              className="gap-2 shadow-lg shadow-blue-500/20 px-6 font-bold"
-              onClick={action.onClick}
-            >
-              <action.icon size={16} /> {action.label}
-            </Button>
-          )
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <button 
+                onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                className={cn(
+                  "flex h-9 items-center gap-2 px-4 rounded-xl border transition-all active:scale-95 shadow-sm text-[10px] font-bold uppercase tracking-widest",
+                  activeFilter !== 'all' 
+                    ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10" 
+                    : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md"
+                )}
+              >
+                <Filter size={14} /> 
+                {activeFilter === 'all' ? 'Filter' : filterOptions.find(o => o.id === activeFilter)?.label || 'Filtered'}
+              </button>
+
+              {isFilterMenuOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setIsFilterMenuOpen(false)} 
+                  />
+                  <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:backdrop-blur-xl">
+                    <div className="mb-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+                      Filter by Status & Type
+                    </div>
+                    {filterOptions.map(option => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setActiveFilter(option.id);
+                          setIsFilterMenuOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-bold transition-colors",
+                          activeFilter === option.id
+                            ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10"
+                            : "text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        )}
+                      >
+                        {option.label}
+                        {activeFilter === option.id && <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {action && (
+              <Button 
+                variant="primary" 
+                size="sm"
+                className="gap-2 shadow-lg shadow-blue-500/20 px-6 font-bold h-9"
+                onClick={action.onClick}
+              >
+                <action.icon size={16} /> {action.label}
+              </Button>
+            )}
+          </div>
         }
         tabs={
           <Tabs 
@@ -114,76 +164,21 @@ export const WorkforcePage = () => {
         }
       />
 
-      {/* Utility Bar */}
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 mb-8 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-80 rounded-xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm"
-            />
-          </div>
-          
-          <div className="relative">
-            <button 
-              onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
-              className={`flex h-10 items-center gap-2 px-4 rounded-xl border transition-all active:scale-95 shadow-sm text-[10px] font-bold uppercase tracking-widest ${
-                activeFilter !== 'all' 
-                ? 'border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10' 
-                : 'border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900'
-              }`}
-            >
-              <Filter size={14} /> 
-              {activeFilter === 'all' ? 'Filter' : filterOptions.find(o => o.id === activeFilter)?.label || 'Filtered'}
-            </button>
-
-            {isFilterMenuOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setIsFilterMenuOpen(false)} 
-                />
-                <div className="absolute left-0 top-12 z-50 w-56 rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-200 dark:border-zinc-800 dark:bg-zinc-900">
-                  <div className="mb-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                    Filter by Status & Type
-                  </div>
-                  {filterOptions.map(option => (
-                    <button
-                      key={option.id}
-                      onClick={() => {
-                        setActiveFilter(option.id);
-                        setIsFilterMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-bold transition-colors ${
-                        activeFilter === option.id
-                        ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10'
-                        : 'text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      {option.label}
-                      {activeFilter === option.id && <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Content */}
       <div>
               {activeTab === 'directory' && (
-                <PeopleCenter searchQuery={searchQuery} activeFilter={activeFilter} />
+                <PeopleCenter 
+                  searchQuery={searchQuery} 
+                  onSearchChange={setSearchQuery}
+                  activeFilter={activeFilter} 
+                />
               )}
               {activeTab === 'teams' && (
                 <TeamHub 
                   onCreateTeam={() => setIsTeamModalOpen(true)} 
                   searchQuery={searchQuery} 
+                  onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}
                 />
               )}
@@ -192,6 +187,7 @@ export const WorkforcePage = () => {
                   isModalOpen={isRoleModalOpen} 
                   onCloseModal={() => setIsRoleModalOpen(false)} 
                   searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}
                 />
               )}
@@ -200,6 +196,7 @@ export const WorkforcePage = () => {
                   isModalOpen={isGroupModalOpen} 
                   onCloseModal={() => setIsGroupModalOpen(false)} 
                   searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}
                 />
               )}
@@ -208,6 +205,7 @@ export const WorkforcePage = () => {
                 <ActivityLog 
                   refreshTrigger={refreshTrigger} 
                   searchQuery={searchQuery} 
+                  onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}
                 />
               )}

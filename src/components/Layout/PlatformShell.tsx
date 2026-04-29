@@ -1,6 +1,6 @@
 import { ReactNode, useState, useMemo, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, 
   Activity, 
@@ -44,6 +44,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { MenuSection, MenuItem } from '../../types/menu';
 import { AIAssistant } from '../AI/AIAssistant';
 import { AnimatePresence, motion } from 'motion/react';
+import { Breadcrumbs } from '../Navigation/Breadcrumbs';
 
 const SortableSidebarItem = ({ 
   item, 
@@ -208,7 +209,7 @@ const SortableSection = ({
 };
 
 const AuroraBackground = () => (
-  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20 transition-opacity duration-1000">
+  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20">
     <motion.div 
       animate={{
         scale: [1, 1.2, 1],
@@ -274,15 +275,20 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     menuConfig, 
     updateMenuConfig, 
     setMenuConfig,
-    isAIAssistantOpen
+    isAIAssistantOpen,
+    tenant
   } = usePlatform();
   
   const location = useLocation();
+  const navigate = useNavigate();
+  const pathnames = location.pathname.split('/').filter(x => x);
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isEditMode, setIsEditMode] = useState(false);
 
   const isAdminPath = location.pathname.startsWith('/admin');
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
+  const isDeepSettings = (location.pathname.startsWith('/workspace/settings/') && location.pathname !== '/workspace/settings') || 
+                         (location.pathname.startsWith('/dashboard/settings/') && location.pathname !== '/dashboard/settings');
   const isNewBuilder = location.pathname === '/workspace/settings/builder/new';
 
   // Automatically collapse sidebar ONLY when entering the module builder for a new module
@@ -357,8 +363,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   if (authLoading || platformLoading) {
     return (
-      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center transition-colors duration-300">
-        <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center relative overflow-hidden">
+        <AuroraBackground />
+        <div className="relative z-10 p-8 rounded-[2.5rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] animate-pulse">Initializing Aurora</p>
+        </div>
       </div>
     );
   }
@@ -451,7 +461,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 transition-colors duration-300 relative overflow-hidden">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 relative overflow-hidden">
       <AuroraBackground />
       <AnimatePresence>
         {isSettingsMode && (
@@ -479,7 +489,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl transition-all duration-300 z-40 overflow-y-auto overflow-x-hidden",
           isSidebarOpen ? "w-64" : "w-16"
         )}>
-          <div className="p-4 flex flex-col h-full">
+          <div className={cn("flex flex-col h-full", isSidebarOpen ? "p-4" : "p-2")}>
             <div className="flex-1 space-y-6">
               {/* System Governance (Admin Mode Only) */}
               {isAdminPath && (
@@ -545,8 +555,23 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
               {!isAdminPath && isSettingsMode && (
                 <div>
-                  <nav className="mb-6">
-                    <SidebarItem icon={ArrowLeft} label="Back to Workspace" to="/workspace" collapsed={!isSidebarOpen} />
+                  <nav className={cn("mb-6", isSidebarOpen ? "px-2" : "px-0")}>
+                    <button
+                      onClick={() => navigate(isDeepSettings ? '/workspace/settings' : '/workspace')}
+                      className={cn(
+                        "w-full flex items-center transition-all duration-300 group relative",
+                        isSidebarOpen 
+                          ? "premium-pill h-9 gap-2 px-4" 
+                          : "justify-center h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400"
+                      )}
+                    >
+                      <ArrowLeft size={16} className={cn("shrink-0", isSidebarOpen ? "text-zinc-400 group-hover:text-white" : "")} />
+                      {isSidebarOpen && (
+                        <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 truncate">
+                          {isDeepSettings ? 'Back to Settings' : 'Back to Workspace'}
+                        </span>
+                      )}
+                    </button>
                   </nav>
                   <div className="space-y-1">
                     {isDeveloper && (
@@ -828,8 +853,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         )}>
           <div className={cn(
             "mx-auto flex flex-col min-h-full",
-            fullBleed ? "w-full flex-1" : "p-8 max-w-7xl"
+            fullBleed ? "w-full flex-1" : "max-w-7xl w-full"
           )}>
+            {pathnames.length > 0 && (
+              <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center px-6 lg:px-12 shrink-0">
+                <Breadcrumbs />
+              </div>
+            )}
             {children}
           </div>
         </main>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Plus, MoreVertical, Trash2, Edit2, Users, CheckCircle2 } from 'lucide-react';
+import { Shield, Plus, MoreVertical, Trash2, Edit2, Users, CheckCircle2, Search } from 'lucide-react';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
 import { Table } from '../../UI/Table';
 import { Badge, Button } from '../../UI/Primitives';
@@ -11,10 +11,11 @@ interface SecurityGroupsProps {
   isModalOpen: boolean;
   onCloseModal: () => void;
   searchQuery?: string;
+  onSearchChange?: (val: string) => void;
   activeFilter?: string;
 }
 
-export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: SecurityGroupsProps) => {
+export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '', onSearchChange }: SecurityGroupsProps) => {
   const { groups, loading, deleteGroup } = usePermissionGroups();
   const [editingGroup, setEditingGroup] = useState<PermissionGroup | null>(null);
   const [isModalOpenState, setIsModalOpenState] = useState(false); // internal for edit mode
@@ -119,13 +120,25 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '' }: 
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-[2.5rem] border border-white/20 dark:border-white/5 p-6 lg:p-8 shadow-2xl overflow-hidden">
+        <div className="relative max-w-md mb-8 group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+          <input 
+            type="text" 
+            placeholder="Search security groups..." 
+            value={searchQuery}
+            onChange={(e) => onSearchChange?.(e.target.value)}
+            className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
+          />
+        </div>
+
         <Table 
           data={filteredGroups} 
           columns={columns} 
           loading={loading}
           pagination={true}
           onRowClick={handleEdit}
+          className="bg-transparent dark:bg-transparent border-none shadow-none"
         />
       </div>
 

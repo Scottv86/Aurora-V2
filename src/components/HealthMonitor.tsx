@@ -68,7 +68,7 @@ export const HealthMonitor = () => {
   }
 
   return (
-    <div className="space-y-10 pb-20 animate-in fade-in duration-700">
+    <div className="space-y-10 pb-20">
       {/* 🚀 Infrastructure HUD Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative">
         <div className="flex items-center gap-6">

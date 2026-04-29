@@ -19,7 +19,7 @@ interface TableProps<T> {
   className?: string;
 }
 
-export const Table = <T extends { id: string | number }>({
+export function Table<T extends { id: string | number }>({
   data,
   columns,
   loading,
@@ -28,7 +28,7 @@ export const Table = <T extends { id: string | number }>({
   pagination = true,
   pageSize = 10,
   className
-}: TableProps<T>) => {
+}: TableProps<T>) {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Reset to page 1 when data changes (search/filter applied)
@@ -47,12 +47,12 @@ export const Table = <T extends { id: string | number }>({
 
   return (
     <div className={cn(
-      "relative w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900",
+      "relative w-full overflow-hidden rounded-[2rem] border border-white/20 bg-white/40 backdrop-blur-xl shadow-xl dark:border-zinc-800 dark:bg-zinc-900/40 dark:backdrop-blur-xl",
       className
     )}>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-100 bg-zinc-50/50 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">
+          <thead className="border-b border-white/10 bg-white/5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-white/5 dark:text-zinc-400">
             <tr>
               {columns.map((col, idx) => (
                 <th key={idx} className={cn('px-6 py-4', col.className)}>
@@ -61,13 +61,13 @@ export const Table = <T extends { id: string | number }>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <tbody className="divide-y divide-white/5 dark:divide-zinc-800">
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
                   {columns.map((_, j) => (
                     <td key={j} className="px-6 py-4">
-                      <div className="h-4 w-full rounded bg-zinc-100 dark:bg-zinc-800" />
+                      <div className="h-4 w-full rounded bg-white/10 dark:bg-zinc-800/50" />
                     </td>
                   ))}
                 </tr>
@@ -84,7 +84,7 @@ export const Table = <T extends { id: string | number }>({
                   key={item.id}
                   onClick={() => onRowClick?.(item)}
                   className={cn(
-                    'group transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50',
+                    'group transition-colors hover:bg-white/20 dark:hover:bg-white/5',
                     onRowClick && 'cursor-pointer'
                   )}
                 >
@@ -103,7 +103,7 @@ export const Table = <T extends { id: string | number }>({
       </div>
 
       {pagination && totalItems > 0 && (
-        <div className="flex items-center justify-between border-t border-zinc-100 bg-zinc-50/30 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/30">
+        <div className="flex items-center justify-between border-t border-white/10 bg-white/5 px-6 py-4 dark:border-zinc-800 dark:bg-white/5">
           <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
             Showing <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}</span> to <span className="text-zinc-900 dark:text-zinc-100">{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span> results
           </div>
@@ -111,7 +111,7 @@ export const Table = <T extends { id: string | number }>({
             <Button 
               variant="secondary" 
               size="sm" 
-              className="h-8 w-8 p-0 rounded-lg"
+              className="h-8 w-8 p-0 rounded-lg bg-white/10 border-white/10"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
             >
@@ -129,7 +129,7 @@ export const Table = <T extends { id: string | number }>({
                       'h-8 w-8 rounded-lg text-xs font-bold transition-all',
                       currentPage === pageNum 
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                        : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                        : 'text-zinc-500 hover:bg-white/20 dark:hover:bg-white/10'
                     )}
                   >
                     {pageNum}
@@ -142,7 +142,7 @@ export const Table = <T extends { id: string | number }>({
             <Button 
               variant="secondary" 
               size="sm" 
-              className="h-8 w-8 p-0 rounded-lg"
+              className="h-8 w-8 p-0 rounded-lg bg-white/10 border-white/10"
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             >
@@ -153,4 +153,4 @@ export const Table = <T extends { id: string | number }>({
       )}
     </div>
   );
-};
+}

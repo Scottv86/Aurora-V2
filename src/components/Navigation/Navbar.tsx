@@ -52,7 +52,7 @@ export const Navbar = () => {
 
   return (
     <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-1">
         <div className="flex items-center gap-2">
           <div className={cn(
             "w-8 h-8 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 overflow-hidden",
@@ -83,15 +83,20 @@ export const Navbar = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-          <input 
-            type="text" 
-            placeholder="Search platform..." 
-            className="bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-full pl-10 pr-4 py-1.5 text-sm text-zinc-600 dark:text-zinc-300 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 w-64 transition-all"
-          />
-        </div>
+      <div className="hidden md:flex flex-1 justify-center px-4">
+        <button className="relative w-full max-w-md group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-hover:text-indigo-500 transition-colors" size={16} />
+          <div className="w-full bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400 text-left flex items-center justify-between group-hover:border-zinc-300 dark:group-hover:border-zinc-700 transition-all shadow-sm">
+            <span>Search or type a command...</span>
+            <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+              <kbd className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-bold text-zinc-400">⌘</kbd>
+              <kbd className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-bold text-zinc-400">K</kbd>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <div className="flex items-center gap-4 flex-1 justify-end">
         
         <button 
           onClick={toggleTheme}

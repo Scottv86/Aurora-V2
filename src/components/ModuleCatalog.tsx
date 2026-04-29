@@ -70,7 +70,8 @@ const Row = ({
 
   return (
     <div style={style} className="px-1" {...ariaAttributes}>
-      <div className="flex items-center gap-4 p-4 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-zinc-300 dark:hover:border-zinc-700 transition-all shadow-sm dark:shadow-none group">
+      <div className="flex items-center gap-4 p-4 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition-all shadow-xl shadow-black/5 dark:shadow-none group relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-950 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
           <mod.icon size={20} />
         </div>
@@ -315,7 +316,12 @@ export const ModuleCatalog = () => {
   }), [filteredModules, navigate, handleEnable, handleDisable, enabling]);
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 relative">
+      {/* Background Glows */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+
+      <div className="relative z-10 space-y-8 flex flex-col flex-1">
       <PageHeader 
         title="Module Catalog"
         description="Browse and enable prebuilt business capabilities. Extend your workspace with records, workflows, and custom data models."
@@ -485,8 +491,10 @@ export const ModuleCatalog = () => {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.02 }}
-                          className="group p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl transition-all shadow-sm dark:shadow-none hover:border-zinc-300 dark:hover:border-zinc-700 flex flex-col"
+                          className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col relative overflow-hidden h-full"
                         >
+                          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <div className="relative z-10 flex flex-col h-full">
                           <div className="flex items-start justify-between mb-4">
                             <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 group-hover:border-zinc-200 dark:group-hover:border-zinc-700 transition-colors text-indigo-600 dark:text-indigo-400">
                               <mod.icon size={24} />
@@ -559,6 +567,7 @@ export const ModuleCatalog = () => {
                               )}
                             </div>
                           </div>
+                          </div>
                         </motion.div>
                       ))}
                     </div>
@@ -592,6 +601,7 @@ export const ModuleCatalog = () => {
           onConfirm={() => handleDeleteCustom(moduleToDelete)}
         />
       )}
+      </div>
     </div>
   );
 };

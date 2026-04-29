@@ -254,7 +254,7 @@ export const RecordDetailView = () => {
   if (!moduleData || !record) return <Navigate to="/workspace" replace />;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 pb-20">
+    <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-10 space-y-8 pb-20">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link 

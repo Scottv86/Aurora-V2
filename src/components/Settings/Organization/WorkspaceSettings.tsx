@@ -63,7 +63,7 @@ export const WorkspaceSettings = ({ tenant, onUpdate }: WorkspaceSettingsProps) 
               />
             </div>
 
-            <div className="p-8 rounded-[2rem] bg-zinc-50 border border-zinc-100 dark:bg-zinc-900/50 dark:border-zinc-800 space-y-8">
+            <div className="p-8 rounded-[2rem] bg-zinc-50 border border-zinc-100 dark:bg-white/5 dark:backdrop-blur-xl dark:border-zinc-800 space-y-8">
               <div className="flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ export const WorkspaceSettings = ({ tenant, onUpdate }: WorkspaceSettingsProps) 
                   </div>
                   <div 
                     onClick={() => setSettings(prev => ({ ...prev, autoCategorization: !prev.autoCategorization }))}
-                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${settings.autoCategorization ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-zinc-800'}`}
+                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${settings.autoCategorization ? 'bg-blue-600' : 'bg-zinc-200 dark:bg-white/10'}`}
                   >
                     <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${settings.autoCategorization ? 'right-1' : 'left-1'}`} />
                   </div>

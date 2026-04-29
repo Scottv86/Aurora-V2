@@ -128,7 +128,7 @@ export const OrgVisualizer = () => {
   }
 
   return (
-    <div className="relative h-[700px] w-full overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-950 shadow-inner" ref={containerRef}>
+    <div className="relative h-[700px] w-full overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/40 dark:backdrop-blur-xl shadow-inner" ref={containerRef}>
       {/* Search & Controls Overlay */}
       <div className="absolute left-6 top-6 z-10 flex flex-col gap-3">
         <div className="relative group">
