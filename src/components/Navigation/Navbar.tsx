@@ -12,7 +12,8 @@ import {
   ChevronDown,
   CreditCard,
   MessageSquare,
-  LayoutGrid
+  LayoutGrid,
+  Monitor
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -303,17 +304,26 @@ export const Navbar = () => {
             <button 
               onClick={() => {
                 const isAdminPath = location.pathname.startsWith('/admin');
-                navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
+                const isSettingsPath = location.pathname.includes('/settings');
+                if (isSettingsPath) {
+                  navigate(isAdminPath ? '/admin' : '/workspace');
+                } else {
+                  navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
+                }
               }}
               className={cn(
                 "p-2 transition-colors",
                 location.pathname.includes('/settings') 
-                  ? "text-indigo-600 dark:text-indigo-400" 
+                  ? "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300" 
                   : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
               )}
-              title="Platform Settings"
+              title={location.pathname.includes('/settings') ? "Return to Workspace" : "Platform Settings"}
             >
-              <SettingsIcon size={20} />
+              {location.pathname.includes('/settings') ? (
+                <Monitor size={20} />
+              ) : (
+                <SettingsIcon size={20} />
+              )}
             </button>
           </div>
         </LicenseGate>
