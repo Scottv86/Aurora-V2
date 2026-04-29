@@ -42,13 +42,18 @@ export const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showEnvMenu, setShowEnvMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const envMenuRef = useRef<HTMLDivElement>(null);
   
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
+      }
+      if (envMenuRef.current && !envMenuRef.current.contains(event.target as Node)) {
+        setShowEnvMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -83,17 +88,53 @@ export const Navbar = () => {
           </span>
         </div>
         <div className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-2" />
-        <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-full px-3 py-1">
-          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Env:</span>
-          <select 
-            value={environment}
-            onChange={(e) => setEnvironment(e.target.value as Environment)}
-            className="bg-transparent text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none cursor-pointer"
+        <div className="relative" ref={envMenuRef}>
+          <button 
+            onClick={() => setShowEnvMenu(!showEnvMenu)}
+            className="group relative flex items-center gap-2 bg-zinc-100/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/30 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10 rounded-full pl-3 pr-2 py-1 transition-all duration-300 shadow-sm"
           >
-            {(tenant?.environments || ['production']).map(env => (
-              <option key={env} value={env} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{env}</option>
-            ))}
-          </select>
+            <div className="flex items-center gap-1.5 pointer-events-none">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+              <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mt-0.5">Env:</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 pr-4 transition-colors">
+                {environment}
+              </span>
+              <ChevronDown size={12} className={cn("absolute right-2 text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-all duration-200", showEnvMenu && "rotate-180")} />
+            </div>
+          </button>
+
+          {/* Environment Dropdown Menu */}
+          {showEnvMenu && (
+            <div className="absolute left-0 top-full mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden py-1 z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Select Environment</p>
+              </div>
+              <div className="p-1">
+                {(tenant?.environments || ['production']).map(env => (
+                  <button
+                    key={env}
+                    onClick={() => {
+                      setEnvironment(env as Environment);
+                      setShowEnvMenu(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors",
+                      environment === env 
+                        ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
+                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5"
+                    )}
+                  >
+                    {env}
+                    {environment === env && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
