@@ -1763,13 +1763,6 @@ export const ModuleEditor = () => {
       {/* Sub-Header / Toolbar */}
       <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-600 rounded-lg">
-              <Sparkles size={14} className="text-white" />
-            </div>
-            <span className="text-xs font-bold text-zinc-900 dark:text-white tracking-tight">Aurora Architect</span>
-          </div>
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
             {(['details', 'schema', 'builder', 'workflow', 'rules', 'experience', 'security', 'localization', 'map', 'assets', 'forms', 'deployment'] as const).map((tab) => (
               <button

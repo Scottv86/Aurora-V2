@@ -10,8 +10,9 @@ import {
   LogOut,
   Settings as SettingsIcon,
   ChevronDown,
-  Settings,
-  CreditCard
+  CreditCard,
+  MessageSquare,
+  LayoutGrid
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -19,10 +20,22 @@ import { useTheme } from '../../hooks/useTheme';
 import { cn } from '../../lib/utils';
 import { Environment } from '../../types/platform';
 import { LicenseGate } from '../Auth/LicenseGate';
-import { AppLauncher } from './AppLauncher';
 
 export const Navbar = () => {
-  const { tenant, environment, setEnvironment, user: platformUser, isAIAssistantOpen, setIsAIAssistantOpen } = usePlatform();
+  const { 
+    tenant, 
+    environment, 
+    setEnvironment, 
+    user: platformUser, 
+    isAIAssistantOpen, 
+    setIsAIAssistantOpen,
+    isChatOpen,
+    setIsChatOpen,
+    isAppLauncherOpen,
+    setIsAppLauncherOpen,
+    isNotificationsOpen,
+    setIsNotificationsOpen
+  } = usePlatform();
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
@@ -99,61 +112,109 @@ export const Navbar = () => {
       <div className="flex items-center gap-4 flex-1 justify-end">
         
         <button 
-          onClick={toggleTheme}
-          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+          onClick={() => {
+            setIsAppLauncherOpen(!isAppLauncherOpen);
+            if (!isAppLauncherOpen) {
+              setIsChatOpen(false);
+              setIsAIAssistantOpen(false);
+              setIsNotificationsOpen(false);
+            }
+          }}
+          className={cn(
+            "p-2 transition-all duration-300 rounded-lg group",
+            isAppLauncherOpen 
+              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+          )}
+          title="App Launcher"
         >
-          {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          <LayoutGrid size={20} />
         </button>
 
-        <LicenseGate>
-          <button 
-            onClick={() => {
-              const isAdminPath = location.pathname.startsWith('/admin');
-              navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
-            }}
-            className={cn(
-              "p-2 transition-colors",
-              location.pathname.includes('/settings') 
-                ? "text-indigo-600 dark:text-indigo-400" 
-                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+        {!location.pathname.startsWith('/admin') && (
+          <>
+            {/* Chat App Icon */}
+            {tenant?.enabledApps?.includes('chat') && (
+              <button 
+                onClick={() => {
+                  setIsChatOpen(!isChatOpen);
+                  if (!isChatOpen) {
+                    setIsAIAssistantOpen(false);
+                    setIsAppLauncherOpen(false);
+                    setIsNotificationsOpen(false);
+                  }
+                }}
+                className={cn(
+                  "p-2 transition-all duration-300 rounded-lg",
+                  isChatOpen 
+                    ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                )}
+                title="Team Chat"
+              >
+                <div className="relative">
+                  <MessageSquare size={20} />
+                  {isChatOpen && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                  )}
+                </div>
+              </button>
             )}
-            title="Platform Settings"
-          >
-            <Settings size={20} />
-          </button>
-        </LicenseGate>
 
-        <AppLauncher />
-
-        {!(location.pathname.includes('/settings') || location.pathname.startsWith('/admin')) && (
-          <button 
-            onClick={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
-            className={cn(
-              "p-2 transition-all duration-300 rounded-lg",
-              isAIAssistantOpen 
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-500/10" 
-                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-            title="AI Assistant"
-          >
-            <div className="relative">
-              <Sparkles size={20} />
-              {isAIAssistantOpen && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            {/* AI Assistant Icon */}
+            <button 
+              onClick={() => {
+                setIsAIAssistantOpen(!isAIAssistantOpen);
+                if (!isAIAssistantOpen) {
+                  setIsChatOpen(false);
+                  setIsAppLauncherOpen(false);
+                  setIsNotificationsOpen(false);
+                }
+              }}
+              className={cn(
+                "p-2 transition-all duration-300 rounded-lg",
+                isAIAssistantOpen 
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
               )}
-            </div>
-          </button>
+              title="AI Assistant"
+            >
+              <div className="relative">
+                <Sparkles size={20} />
+                {isAIAssistantOpen && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                )}
+              </div>
+            </button>
+          </>
         )}
 
-        <button className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors relative">
+        <button 
+          onClick={() => {
+            setIsNotificationsOpen(!isNotificationsOpen);
+            if (!isNotificationsOpen) {
+              setIsChatOpen(false);
+              setIsAIAssistantOpen(false);
+              setIsAppLauncherOpen(false);
+            }
+          }}
+          className={cn(
+            "p-2 transition-all duration-300 rounded-lg relative",
+            isNotificationsOpen
+              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10"
+              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+          )}
+          title="Notifications"
+        >
           <Bell size={20} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full border-2 border-white dark:border-zinc-950" />
+          {!isNotificationsOpen && <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full border-2 border-white dark:border-zinc-950" />}
         </button>
         <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800 relative" ref={menuRef}>
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none">{displayName}</p>
-            <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter">{tenant?.name || tenant?.id || 'No Workspace'}</p>
+            <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter">
+              {platformUser?.position || platformUser?.role?.replace(/_/g, ' ') || 'User'}
+            </p>
           </div>
           <button 
             onClick={() => setShowUserMenu(!showUserMenu)}
@@ -186,7 +247,26 @@ export const Navbar = () => {
                   onClick={() => setShowUserMenu(false)}
                 >
                   <UserIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                  Profile Configuration
+                  Profile
+                </button>
+                <button 
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTheme();
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    {theme === 'light' ? (
+                      <Sun size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                    ) : (
+                      <Moon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                    )}
+                    Appearance
+                  </div>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                    {theme}
+                  </span>
                 </button>
                 <LicenseGate>
                   <button 
@@ -194,18 +274,9 @@ export const Navbar = () => {
                     onClick={() => setShowUserMenu(false)}
                   >
                     <SettingsIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                    Account Settings
+                    Account
                   </button>
-                  <button 
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      navigate('/workspace/settings/billing');
-                    }}
-                  >
-                    <CreditCard size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                    Billing & Plans
-                  </button>
+
                 </LicenseGate>
               </div>
 
@@ -226,6 +297,26 @@ export const Navbar = () => {
             </div>
           )}
         </div>
+
+        <LicenseGate>
+          <div className="pl-4 border-l border-zinc-200 dark:border-zinc-800">
+            <button 
+              onClick={() => {
+                const isAdminPath = location.pathname.startsWith('/admin');
+                navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
+              }}
+              className={cn(
+                "p-2 transition-colors",
+                location.pathname.includes('/settings') 
+                  ? "text-indigo-600 dark:text-indigo-400" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+              )}
+              title="Platform Settings"
+            >
+              <SettingsIcon size={20} />
+            </button>
+          </div>
+        </LicenseGate>
       </div>
     </header>
   );

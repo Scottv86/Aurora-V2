@@ -75,8 +75,11 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { MenuSection, MenuItem } from '../../types/menu';
 import { AIAssistant } from '../AI/AIAssistant';
+import { ChatDrawer } from '../AI/ChatDrawer';
 import { AnimatePresence, motion } from 'motion/react';
 import { Breadcrumbs } from '../Navigation/Breadcrumbs';
+import { AppLauncher } from '../Navigation/AppLauncher';
+import { NotificationsDrawer } from '../Navigation/NotificationsDrawer';
 
 const SortableSidebarItem = ({ 
   item, 
@@ -388,6 +391,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     updateMenuConfig, 
     setMenuConfig,
     isAIAssistantOpen,
+    isChatOpen,
+    isAppLauncherOpen,
+    isNotificationsOpen,
     tenant
   } = usePlatform();
   
@@ -958,7 +964,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         <main className={cn(
           "flex-1 h-[calc(100vh-4rem)] flex flex-col overflow-y-auto transition-all duration-300",
           isSidebarOpen ? "ml-64" : "ml-16",
-          isAIAssistantOpen && !isSettingsMode && !isAdminPath && "mr-96"
+          (isAIAssistantOpen || isChatOpen || isAppLauncherOpen || isNotificationsOpen) && "mr-96"
         )}>
           <div className={cn(
             "mx-auto flex flex-col min-h-full",
@@ -972,8 +978,11 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             {children}
           </div>
         </main>
-        <AnimatePresence>
-          {isAIAssistantOpen && !isSettingsMode && !isAdminPath && <AIAssistant />}
+        <AnimatePresence mode="wait">
+          {isAIAssistantOpen && <AIAssistant key="ai-assistant" />}
+          {isChatOpen && <ChatDrawer key="chat-drawer" />}
+          {isAppLauncherOpen && <AppLauncher key="app-launcher" />}
+          {isNotificationsOpen && <NotificationsDrawer key="notifications-drawer" />}
         </AnimatePresence>
       </div>
     </div>

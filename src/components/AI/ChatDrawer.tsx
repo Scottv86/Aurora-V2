@@ -6,11 +6,10 @@ import {
   Image as ImageIcon, 
   Type, 
   Mic,
-  Bot,
-  User as UserIcon,
-  Sparkles
+  MessageSquare,
+  User as UserIcon
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 
@@ -19,33 +18,29 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  context?: {
-    type: string;
-    title: string;
-    snippet: string;
-  };
 }
 
-export const AIAssistant = () => {
-  const { isAIAssistantOpen, setIsAIAssistantOpen } = usePlatform();
+export const ChatDrawer = () => {
+  const { isChatOpen, setIsChatOpen } = usePlatform();
   const [input, setInput] = useState('');
   const [messages] = useState<Message[]>([
     {
       id: '1',
-      role: 'user',
-      content: 'Nina, how are all our special projects progressing?',
+      role: 'assistant',
+      content: 'Welcome to the Team Chat! How can I help you today?',
       timestamp: new Date(Date.now() - 3600000)
     },
     {
       id: '2',
+      role: 'user',
+      content: 'Hey, I just wanted to check on the status of the latest module updates.',
+      timestamp: new Date(Date.now() - 3500000)
+    },
+    {
+      id: '3',
       role: 'assistant',
-      content: 'AI-Staff and Aurora your AI response, summarizes your activities, actions and response to concepts and connections.',
-      timestamp: new Date(Date.now() - 3500000),
-      context: {
-        type: 'Project',
-        title: 'Alpha (id: 123)',
-        snippet: 'Notes from Oct 10... reference to composite data across global regions.'
-      }
+      content: 'The module updates are being finalized and will be ready for review by EOD.',
+      timestamp: new Date(Date.now() - 3400000)
     }
   ]);
 
@@ -60,19 +55,19 @@ export const AIAssistant = () => {
       {/* Header */}
       <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/30 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center border border-indigo-500/20">
-            <Bot size={18} className="text-indigo-600 dark:text-indigo-400" />
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center border border-emerald-500/20">
+            <MessageSquare size={18} className="text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">AI Staff Assistant</h3>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Team Chat</h3>
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Nina Online</span>
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+              <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">3 Members Active</span>
             </div>
           </div>
         </div>
         <button 
-          onClick={() => setIsAIAssistantOpen(false)}
+          onClick={() => setIsChatOpen(false)}
           className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all"
         >
           <X size={18} />
@@ -93,9 +88,9 @@ export const AIAssistant = () => {
               "w-8 h-8 rounded-full flex items-center justify-center shrink-0 border",
               msg.role === 'user' 
                 ? "bg-indigo-500 border-indigo-400 text-white" 
-                : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400"
+                : "bg-emerald-500/10 dark:bg-emerald-500/20 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
             )}>
-              {msg.role === 'user' ? <UserIcon size={14} /> : <Bot size={14} />}
+              {msg.role === 'user' ? <UserIcon size={14} /> : <MessageSquare size={14} />}
             </div>
 
             <div className={cn(
@@ -110,21 +105,9 @@ export const AIAssistant = () => {
               )}>
                 {msg.content}
               </div>
-
-              {msg.context && (
-                <div className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                    <Sparkles size={10} className="text-indigo-500" />
-                    Context found in {msg.context.type}:
-                  </div>
-                  <div className="text-xs font-bold text-zinc-900 dark:text-white">
-                    {msg.context.title}
-                  </div>
-                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-2">
-                    {msg.context.snippet}
-                  </div>
-                </div>
-              )}
+              <span className="text-[10px] text-zinc-400 px-1">
+                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
             </div>
           </div>
         ))}
@@ -136,21 +119,21 @@ export const AIAssistant = () => {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a conversation..."
-            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 resize-none min-h-[100px] transition-all"
+            placeholder="Send a message..."
+            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 resize-none min-h-[100px] transition-all"
           />
           
           <div className="absolute bottom-3 left-4 flex items-center gap-3 text-zinc-400">
-            <button className="hover:text-indigo-500 transition-colors"><Smile size={18} /></button>
-            <button className="hover:text-indigo-500 transition-colors"><ImageIcon size={18} /></button>
-            <button className="hover:text-indigo-500 transition-colors"><Type size={18} /></button>
+            <button className="hover:text-emerald-500 transition-colors"><Smile size={18} /></button>
+            <button className="hover:text-emerald-500 transition-colors"><ImageIcon size={18} /></button>
+            <button className="hover:text-emerald-500 transition-colors"><Type size={18} /></button>
           </div>
 
           <div className="absolute bottom-3 right-3 flex items-center gap-2">
-            <button className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors">
+            <button className="p-2 text-zinc-400 hover:text-emerald-500 transition-colors">
               <Mic size={18} />
             </button>
-            <button className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20">
+            <button className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20">
               <Send size={18} />
             </button>
           </div>

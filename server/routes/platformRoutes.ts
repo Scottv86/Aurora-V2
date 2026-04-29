@@ -25,6 +25,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         memberships: {
           include: {
             tenant: true,
+            position: true,
             permissionGroups: {
               include: {
                 permissionGroup: true
@@ -62,6 +63,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         role: user.isSuperAdmin ? 'SUPERADMIN' : (primaryMembership?.roleId || 'USER'),
         licenceType: primaryMembership?.licenceType || (user.isSuperAdmin ? 'Developer' : 'Standard'),
         avatarUrl: primaryMembership?.avatarUrl,
+        position: primaryMembership?.position?.title,
         capabilities: user.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : capabilities
       },
       tenant: tenant ? {

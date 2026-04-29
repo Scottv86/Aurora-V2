@@ -158,6 +158,7 @@ export interface User {
   isSuperAdmin?: boolean;
   tenantId?: string;
   avatarUrl?: string;
+  position?: string;
   capabilities?: string[];
 }
 

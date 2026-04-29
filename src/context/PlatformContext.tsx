@@ -26,6 +26,12 @@ interface PlatformContextType {
   updateTenant: (updates: Partial<Tenant>) => Promise<void>;
   isAIAssistantOpen: boolean;
   setIsAIAssistantOpen: (open: boolean) => void;
+  isChatOpen: boolean;
+  setIsChatOpen: (open: boolean) => void;
+  isAppLauncherOpen: boolean;
+  setIsAppLauncherOpen: (open: boolean) => void;
+  isNotificationsOpen: boolean;
+  setIsNotificationsOpen: (open: boolean) => void;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -44,6 +50,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const refreshModules = async () => {
     if (!supabaseUser || !tenant?.id) return;
@@ -293,7 +302,13 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       refreshBilling,
       updateTenant,
       isAIAssistantOpen,
-      setIsAIAssistantOpen
+      setIsAIAssistantOpen,
+      isChatOpen,
+      setIsChatOpen,
+      isAppLauncherOpen,
+      setIsAppLauncherOpen,
+      isNotificationsOpen,
+      setIsNotificationsOpen
     }}>
       {children}
     </PlatformContext.Provider>
