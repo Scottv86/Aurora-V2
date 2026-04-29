@@ -1,4 +1,4 @@
-import { ReactNode, useState, useMemo, useEffect } from 'react';
+import { ReactNode, useState, useMemo, useEffect, useRef } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -16,7 +16,39 @@ import {
   Edit2,
   X,
   Plus,
-  Trash2
+  Trash2,
+  Search,
+  Settings2,
+  ChevronDown,
+  LayoutDashboard,
+  Building,
+  UserCircle,
+  CreditCard,
+  BarChart2,
+  Layers,
+  Plug,
+  Zap,
+  ClipboardList,
+  FileText,
+  ListTodo,
+  Terminal,
+  Database,
+  Lock,
+  History,
+  MessageSquare,
+  BarChart,
+  BookOpen,
+  Key,
+  TestTube,
+  RotateCcw,
+  Palette,
+  Globe,
+  LayoutGrid,
+  Code2,
+  Wrench,
+  ArrowRightLeft,
+  Banknote,
+  Tag
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -208,6 +240,86 @@ const SortableSection = ({
   );
 };
 
+const SidebarAccordion = ({ 
+  label, 
+  icon: Icon, 
+  items, 
+  isOpen, 
+  onToggle, 
+  collapsed,
+  isActive
+}: { 
+  label: string, 
+  icon: any, 
+  items: any[], 
+  isOpen: boolean, 
+  onToggle: () => void,
+  collapsed: boolean,
+  isActive: (to: string) => boolean
+}) => {
+  return (
+    <div className="mb-1">
+      <button
+        onClick={onToggle}
+        className={cn(
+          "w-full flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 group",
+          collapsed ? "justify-center" : "justify-between",
+          isOpen && !collapsed ? "bg-zinc-100 dark:bg-white/5" : "hover:bg-zinc-50 dark:hover:bg-white/5"
+        )}
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Icon size={16} className={cn(
+            "shrink-0 transition-colors",
+            isOpen ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200"
+          )} />
+          {!collapsed && (
+            <span className={cn(
+              "text-sm font-medium transition-colors text-left leading-tight truncate",
+              isOpen ? "text-zinc-900 dark:text-white" : "text-zinc-500 group-hover:text-zinc-700 dark:group-hover:text-zinc-400"
+            )}>
+              {label}
+            </span>
+          )}
+        </div>
+        {!collapsed && (
+          <ChevronDown 
+            size={12} 
+            className={cn(
+              "text-zinc-400 transition-transform duration-300",
+              isOpen ? "rotate-180" : "rotate-0"
+            )} 
+          />
+        )}
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen && !collapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="pt-1 pb-2 pl-4 space-y-0.5 border-l border-zinc-100 dark:border-white/5 ml-5 mt-1">
+              {items.map((item) => (
+                <SidebarItem
+                  key={item.to}
+                  icon={item.icon}
+                  label={item.label}
+                  to={item.to}
+                  active={isActive(item.to)}
+                  collapsed={false}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const AuroraBackground = () => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20">
     <motion.div 
@@ -284,12 +396,189 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const pathnames = location.pathname.split('/').filter(x => x);
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isEditMode, setIsEditMode] = useState(false);
+  const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+
+  const toggleAccordion = (label: string) => {
+    setOpenAccordions(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+
+  const isActive = (path: string) => location.pathname === path;
+
+  const SETTINGS_NAV_GROUPS = [
+    {
+      category: 'General',
+      icon: Settings2,
+      items: [
+        { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
+        { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
+        { label: 'Billing & Plan', icon: CreditCard, to: '/workspace/settings/billing' },
+        { label: 'Model Usage', icon: BarChart2, to: '/workspace/settings/usage' },
+      ]
+    },
+    {
+      category: 'Look & Feel',
+      icon: Palette,
+      items: [
+        { label: 'Appearance', icon: Palette, to: '/workspace/settings/appearance' },
+      ]
+    },
+    {
+      category: 'Apps & Websites',
+      icon: Globe,
+      items: [
+        { label: 'Sites', icon: Globe, to: '/workspace/settings/sites' },
+      ]
+    },
+    {
+      category: 'People & Teams',
+      icon: LucideIcons.Users,
+      items: [
+        { label: 'Workforce', icon: UserCircle, to: '/workspace/settings/workforce' },
+      ]
+    },
+    {
+      category: 'Billing & Payments',
+      icon: Banknote,
+      items: [
+        { label: 'Finance', icon: Banknote, to: '/workspace/settings/finance' },
+        { label: 'Fees & Products', icon: Tag, to: '/workspace/settings/fees-products' },
+      ]
+    },
+    {
+      category: 'Modules & Apps',
+      icon: LucideIcons.Layout,
+      items: [
+        { label: 'Modules', icon: Layers, to: '/workspace/settings/modules' },
+        { label: 'Platform Modules', icon: Cpu, to: '/workspace/settings/platform-modules' },
+        { label: 'Apps', icon: LayoutGrid, to: '/workspace/settings/apps' },
+      ]
+    },
+    {
+      category: 'Automations & Sync',
+      icon: Zap,
+      items: [
+        { label: 'Automations', icon: Zap, to: '/workspace/settings/automations' },
+        { label: 'Connectors', icon: Plug, to: '/workspace/settings/connectors' },
+      ]
+    },
+    {
+      category: 'Forms & Templates',
+      icon: ClipboardList,
+      items: [
+        { label: 'Intake', icon: ClipboardList, to: '/workspace/settings/intake' },
+        { label: 'Templates', icon: FileText, to: '/workspace/settings/templates' },
+      ]
+    },
+    {
+      category: 'Data & Logic',
+      icon: Terminal,
+      items: [
+        { label: 'Logic', icon: Terminal, to: '/workspace/settings/logic' },
+        { label: 'Database', icon: Database, to: '/workspace/settings/database' },
+        { label: 'Records', icon: Database, to: '/workspace/settings/records' },
+        { label: 'Lists', icon: ListTodo, to: '/workspace/settings/lists' },
+        { label: 'Migration Tools', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
+      ]
+    },
+    {
+      category: 'Security & Activity',
+      icon: LucideIcons.Shield,
+      items: [
+        { label: 'Security', icon: Lock, to: '/workspace/settings/security' },
+        { label: 'Audit Log', icon: History, to: '/workspace/settings/audit' },
+        { label: 'Message Logs', icon: MessageSquare, to: '/workspace/settings/messaging' },
+      ]
+    },
+    {
+      category: 'Reporting',
+      icon: BarChart,
+      items: [
+        { label: 'Reports', icon: BarChart, to: '/workspace/settings/reports' },
+      ]
+    },
+    {
+      category: 'Knowledge',
+      icon: BookOpen,
+      items: [
+        { label: 'Knowledge Base', icon: BookOpen, to: '/workspace/settings/knowledge' },
+      ]
+    },
+    {
+      category: 'Development',
+      icon: Code2,
+      items: [
+        { label: 'Developer API', icon: Key, to: '/workspace/settings/api' },
+        { label: 'Testing', icon: TestTube, to: '/workspace/settings/testing' },
+        { label: 'Releases', icon: CloudUpload, to: '/workspace/settings/deploy' },
+      ]
+    },
+    {
+      category: 'Maintenance',
+      icon: Wrench,
+      items: [
+        { label: 'Factory Reset', icon: RotateCcw, to: '/workspace/settings/reset' },
+      ]
+    }
+  ];
+
+  const filteredSettingsGroups = useMemo(() => {
+    if (!settingsSearchQuery) return SETTINGS_NAV_GROUPS;
+    const query = settingsSearchQuery.toLowerCase();
+    
+    return SETTINGS_NAV_GROUPS.map(group => {
+      const filteredItems = group.items.filter(item => 
+        item.label.toLowerCase().includes(query)
+      );
+      if (filteredItems.length > 0) {
+        return { ...group, items: filteredItems };
+      }
+      return null;
+    }).filter(Boolean) as typeof SETTINGS_NAV_GROUPS;
+  }, [settingsSearchQuery, SETTINGS_NAV_GROUPS]);
 
   const isAdminPath = location.pathname.startsWith('/admin');
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
-  const isDeepSettings = (location.pathname.startsWith('/workspace/settings/') && location.pathname !== '/workspace/settings') || 
-                         (location.pathname.startsWith('/dashboard/settings/') && location.pathname !== '/dashboard/settings');
   const isNewBuilder = location.pathname === '/workspace/settings/builder/new';
+
+  const lastPathname = useRef(location.pathname);
+
+  useEffect(() => {
+    if (isSettingsMode) {
+      const newOpen = new Set(openAccordions);
+      let changed = false;
+
+      // Expand matches for search - this should always happen while searching
+      if (settingsSearchQuery) {
+        filteredSettingsGroups.forEach(group => {
+          if (!newOpen.has(group.category)) {
+            newOpen.add(group.category);
+            changed = true;
+          }
+        });
+      }
+
+      // Auto-expand on navigation ONLY if the path actually changed
+      if (location.pathname !== lastPathname.current) {
+        SETTINGS_NAV_GROUPS.forEach(group => {
+          if (group.items.some(item => isActive(item.to))) {
+            if (!newOpen.has(group.category)) {
+              newOpen.add(group.category);
+              changed = true;
+            }
+          }
+        });
+        lastPathname.current = location.pathname;
+      }
+
+      if (changed) setOpenAccordions(newOpen);
+    }
+  }, [location.pathname, isSettingsMode, settingsSearchQuery, filteredSettingsGroups]);
 
   // Automatically collapse sidebar ONLY when entering the module builder for a new module
   // and expand it when leaving that specific page
@@ -376,8 +665,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   if (!user) {
     return <Login />;
   }
-
-  const isActive = (path: string) => location.pathname === path;
 
   const handleDragEnd = (event: DragEndEvent, sectionId: string) => {
     const { active, over } = event;
@@ -533,8 +820,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                             sensors={sensors}
                             onDragEnd={handleDragEnd}
                             onToggleVisibility={toggleItemVisibility}
-                            onRename={renameSection}
                             onDelete={deleteSection}
+                            onRename={renameSection}
                           />
                         ))}
                       </div>
@@ -553,237 +840,59 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                 </div>
               )}
 
-              {!isAdminPath && isSettingsMode && (
-                <div>
-                  <nav className={cn("mb-6", isSidebarOpen ? "px-2" : "px-0")}>
-                    <button
-                      onClick={() => navigate(isDeepSettings ? '/workspace/settings' : '/workspace')}
-                      className={cn(
-                        "w-full flex items-center transition-all duration-300 group relative",
-                        isSidebarOpen 
-                          ? "premium-pill h-9 gap-2 px-4" 
-                          : "justify-center h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400"
-                      )}
-                    >
-                      <ArrowLeft size={16} className={cn("shrink-0", isSidebarOpen ? "text-zinc-400 group-hover:text-white" : "")} />
-                      {isSidebarOpen && (
-                        <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 truncate">
-                          {isDeepSettings ? 'Back to Settings' : 'Back to Workspace'}
-                        </span>
-                      )}
-                    </button>
-                  </nav>
-                  <div className="space-y-1">
-                    {isDeveloper && (
-                      <>
-                        <SidebarItem 
-                          icon={LucideIcons.Building} 
-                          label="Organisation" 
-                          to="/workspace/settings" 
-                          active={location.pathname === '/workspace/settings'} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.UserCircle} 
-                          label="Workforce" 
-                          to="/workspace/settings/workforce" 
-                          active={isActive('/workspace/settings/workforce')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.CreditCard} 
-                          label="Billing & Plan" 
-                          to="/workspace/settings/billing" 
-                          active={isActive('/workspace/settings/billing')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.BarChart2} 
-                          label="Model usage" 
-                          to="/workspace/settings/usage" 
-                          active={isActive('/workspace/settings/usage')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Layers} 
-                          label="Modules" 
-                          to="/workspace/settings/modules" 
-                          active={isActive('/workspace/settings/modules')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Cpu} 
-                          label="Platform modules" 
-                          to="/workspace/settings/platform-modules" 
-                          active={location.pathname.startsWith('/workspace/settings/platform-modules')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.LayoutGrid} 
-                          label="Apps" 
-                          to="/workspace/settings/apps" 
-                          active={isActive('/workspace/settings/apps')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.MessageSquare} 
-                          label="Messaging" 
-                          to="/workspace/settings/messaging" 
-                          active={isActive('/workspace/settings/messaging')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Database} 
-                          label="Database" 
-                          to="/workspace/settings/database" 
-                          active={isActive('/workspace/settings/database')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.ListTodo} 
-                          label="Lists" 
-                          to="/workspace/settings/lists" 
-                          active={isActive('/workspace/settings/lists')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Palette} 
-                          label="Appearance" 
-                          to="/workspace/settings/appearance" 
-                          active={isActive('/workspace/settings/appearance')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.FileText} 
-                          label="Templates" 
-                          to="/workspace/settings/templates" 
-                          active={isActive('/workspace/settings/templates')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Zap} 
-                          label="Automations" 
-                          to="/workspace/settings/automations" 
-                          active={isActive('/workspace/settings/automations')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Terminal} 
-                          label="Logic" 
-                          to="/workspace/settings/logic" 
-                          active={isActive('/workspace/settings/logic')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Lock} 
-                          label="Security" 
-                          to="/workspace/settings/security" 
-                          active={isActive('/workspace/settings/security')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.History} 
-                          label="Audit" 
-                          to="/workspace/settings/audit" 
-                          active={isActive('/workspace/settings/audit')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Globe} 
-                          label="Sites" 
-                          to="/workspace/settings/sites" 
-                          active={isActive('/workspace/settings/sites')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.BarChart3} 
-                          label="Reports" 
-                          to="/workspace/settings/reports" 
-                          active={isActive('/workspace/settings/reports')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.BookOpen} 
-                          label="Knowledge base" 
-                          to="/workspace/settings/knowledge" 
-                          active={isActive('/workspace/settings/knowledge')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.TestTube} 
-                          label="Testing" 
-                          to="/workspace/settings/testing" 
-                          active={isActive('/workspace/settings/testing')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.CloudUpload} 
-                          label="Deployments" 
-                          to="/workspace/settings/deploy" 
-                          active={isActive('/workspace/settings/deploy')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Key} 
-                          label="API" 
-                          to="/workspace/settings/api" 
-                          active={isActive('/workspace/settings/api')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Database} 
-                          label="Records" 
-                          to="/workspace/settings/records" 
-                          active={isActive('/workspace/settings/records')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Tag} 
-                          label="Fees & Products" 
-                          to="/workspace/settings/fees-products" 
-                          active={isActive('/workspace/settings/fees-products')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Banknote} 
-                          label="Finance" 
-                          to="/workspace/settings/finance" 
-                          active={isActive('/workspace/settings/finance')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.ClipboardPlus} 
-                          label="Intake" 
-                          to="/workspace/settings/intake" 
-                          active={isActive('/workspace/settings/intake')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.RotateCcw} 
-                          label="Factory reset" 
-                          to="/workspace/settings/reset" 
-                          active={isActive('/workspace/settings/reset')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.ArrowRightLeft} 
-                          label="Migration tools" 
-                          to="/workspace/settings/migration" 
-                          active={isActive('/workspace/settings/migration')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                        <SidebarItem 
-                          icon={LucideIcons.Share2} 
-                          label="Data sources" 
-                          to="/workspace/settings/data-sources" 
-                          active={isActive('/workspace/settings/data-sources')} 
-                          collapsed={!isSidebarOpen} 
-                        />
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+                  {!isAdminPath && isSettingsMode && (
+                    <div className="flex flex-col h-full">
+                      <nav className={cn("mb-6", isSidebarOpen ? "px-2" : "px-0")}>
+                        <button
+                          onClick={() => navigate('/workspace')}
+                          className={cn(
+                            "w-full flex items-center transition-all duration-300 group relative mb-4",
+                            isSidebarOpen 
+                              ? "premium-pill h-9 gap-2 px-4" 
+                              : "justify-center h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400"
+                          )}
+                        >
+                          <ArrowLeft size={16} className={cn("shrink-0", isSidebarOpen ? "text-zinc-400 group-hover:text-white" : "")} />
+                          {isSidebarOpen && (
+                            <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 truncate">
+                              Back to Workspace
+                            </span>
+                          )}
+                        </button>
+
+                        {isSidebarOpen && (
+                          <div className="relative group/search px-2">
+                            <div className="absolute inset-0 bg-indigo-500/5 blur-lg rounded-xl opacity-0 group-hover/search:opacity-100 transition-opacity" />
+                            <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-100/50 dark:bg-white/5 border border-zinc-200/50 dark:border-white/5 focus-within:border-indigo-500/30 transition-all">
+                              <Search size={14} className="text-zinc-400 shrink-0" />
+                              <input 
+                                type="text"
+                                placeholder="Search settings..."
+                                className="w-full bg-transparent border-none outline-none text-[11px] text-zinc-600 dark:text-zinc-300 placeholder:text-zinc-400"
+                                value={settingsSearchQuery}
+                                onChange={(e) => setSettingsSearchQuery(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </nav>
+                      
+                      <div className={cn("flex-1 space-y-1 overflow-y-auto custom-scrollbar", isSidebarOpen ? "px-2" : "px-0")}>
+                        {filteredSettingsGroups.map((group) => (
+                          <SidebarAccordion
+                            key={group.category}
+                            label={group.category}
+                            icon={group.icon}
+                            items={group.items}
+                            collapsed={!isSidebarOpen}
+                            isActive={isActive}
+                            isOpen={openAccordions.has(group.category)}
+                            onToggle={() => toggleAccordion(group.category)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
             </div>
 
             <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1 mt-auto">

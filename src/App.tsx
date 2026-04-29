@@ -50,6 +50,7 @@ import { RecordDetailView } from './pages/Record/RecordDetailView';
 import { SitesPage } from './pages/Settings/SitesPage';
 import { UsagePage } from './pages/Settings/UsagePage';
 import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
+import { SettingsOverview } from './pages/Settings/SettingsOverview';
 
 const SettingsLayout = () => {
   const location = useLocation();
@@ -135,7 +136,8 @@ const App = () => {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<OrganizationPage />} />
+                <Route index element={<SettingsOverview />} />
+                <Route path="organization" element={<OrganizationPage />} />
                 <Route path="billing" element={<BillingPage />} />
                 <Route path="usage" element={<UsagePage />} />
                 <Route path="security" element={<ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." />} />
@@ -173,7 +175,7 @@ const App = () => {
                 <Route path="intake" element={<ComingSoon title="Intake" description="Design and manage intake forms, onboarding flows, and data capture processes." />} />
                 <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
                 <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
-                <Route path="data-sources" element={<ComingSoon title="Data Sources" description="Connect and manage external data providers, storage systems, and third-party integrations." />} />
+                <Route path="connectors" element={<ComingSoon title="Connectors" description="Manage system integrations and data connectors." />} />
                 
                 {/* Workforce Management (Integrated under Settings) */}
                 <Route path="workforce" element={<WorkforcePage />} />
