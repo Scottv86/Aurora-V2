@@ -101,4 +101,61 @@ Ensure all fields follow the 12-column grid rules and do not overlap.
   }
 });
 
+const FORGE_PROMPT = `
+You are the "Nexus Forge", an AI that builds API Connectors for the Aurora platform.
+Your task is to generate a connector configuration based on a user's description.
+
+A Connector consists of:
+1. Metadata: Name, Icon (from Lucide-react name, e.g., "Globe"), Category.
+2. IO Schema: 
+   - Inputs: Array of { name: string, type: string, label: string, placeholder: string, required: boolean }.
+   - Outputs: Array of { name: string, type: string, label: string }.
+3. Edge Function Logic: A Deno-compatible Javascript function that handles the API request. 
+   - It receives 'params' (inputs) and 'secrets' (API keys/tokens).
+   - Use standard fetch for API calls.
+   - It must return a JSON response.
+
+Return ONLY a valid JSON object:
+{
+  "name": string,
+  "icon": string,
+  "category": string,
+  "ioSchema": { "inputs": [...], "outputs": [...] },
+  "edgeFunctionLogic": string
+}
+`;
+
+router.post('/forge', async (req, res) => {
+  try {
+    const { prompt: userPrompt } = req.body;
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Gemini API key is not configured." });
+    }
+
+    const prompt = `
+${FORGE_PROMPT}
+
+User Request: ${userPrompt}
+
+Generate the connector configuration.
+`;
+
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
+    
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    const parsedData = JSON.parse(jsonString);
+    res.json(parsedData);
+
+  } catch (error: any) {
+    console.error("Forge Error:", error);
+    res.status(500).json({ error: "Failed to forge connector." });
+  }
+});
+
 export default router;

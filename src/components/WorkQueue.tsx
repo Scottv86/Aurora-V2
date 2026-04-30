@@ -19,6 +19,7 @@ import { usePlatform } from '../hooks/usePlatform';
 import { useData } from '../hooks/useData';
 import { DocumentList } from './DocumentList';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
+import { Skeleton } from './UI/Skeleton';
 
 export const WorkQueue = () => {
   const { tenant, isLoading: platformLoading } = usePlatform();
@@ -67,8 +68,45 @@ export const WorkQueue = () => {
 
   if (loading) {
     return (
-      <div className="h-96 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+      <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-10 space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton width={120} height={32} variant="rounded" />
+            <Skeleton width={300} height={20} variant="text" />
+          </div>
+          <div className="flex gap-3">
+            <Skeleton width={256} height={40} variant="rounded" />
+            <Skeleton width={40} height={40} variant="rounded" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="p-4 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Skeleton width={40} height={40} variant="rounded" />
+                  <div className="space-y-2">
+                    <Skeleton width={80} height={12} variant="text" />
+                    <Skeleton width={200} height={16} variant="text" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="space-y-1">
+                    <Skeleton width={40} height={10} variant="text" />
+                    <Skeleton width={60} height={14} variant="text" />
+                  </div>
+                  <div className="space-y-1">
+                    <Skeleton width={40} height={10} variant="text" />
+                    <Skeleton width={60} height={14} variant="text" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-6">
+            <Skeleton height={400} variant="rounded" className="rounded-3xl" />
+          </div>
+        </div>
       </div>
     );
   }

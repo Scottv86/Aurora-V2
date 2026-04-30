@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { AuroraSpinner } from '../UI/Primitives';
 
 type AuthMode = 'signin' | 'signup' | 'reset';
 
@@ -38,7 +39,7 @@ export const Login = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-zinc-950">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" />
+        <AuroraSpinner size="md" className="text-indigo-500" />
       </div>
     );
   }
@@ -161,7 +162,7 @@ export const Login = () => {
               className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
             >
               {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <AuroraSpinner />
               ) : mode === 'reset' ? (
                 <>
                   <RotateCcw size={15} />

@@ -16,6 +16,8 @@ import peopleOrgRoutes from './routes/peopleOrgRoutes';
 import taxonomyRoutes from './routes/taxonomyRoutes';
 import tenantRoutes from './routes/tenantRoutes';
 import architectRoutes from './routes/architectRoutes';
+import connectorRoutes from './routes/connectorRoutes';
+import nexusProxyRoutes from './routes/nexusProxyRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -78,6 +80,8 @@ app.use('/api/people-organisations', authenticate, requireTenantAccess, peopleOr
 app.use('/api/taxonomies', authenticate, requireTenantAccess, taxonomyRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/architect', authenticate, requireTenantAccess, architectRoutes);
+app.use('/api/connectors', authenticate, requireTenantAccess, connectorRoutes);
+app.use('/api/nexus-proxy', authenticate, requireTenantAccess, nexusProxyRoutes);
 
 
 // Public API Routes (Portal submissions)

@@ -319,6 +319,43 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     );
   }
 
+  if (type === 'connector') {
+    const isGoogleMaps = field.connectorId === 'google-maps-lookup';
+    
+    return (
+      <div className="space-y-2">
+        <div className="relative group">
+          {isGoogleMaps && <MapPin size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
+          <input 
+            type="text"
+            placeholder={placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            className={cn(inputClasses, isGoogleMaps && "pl-10")}
+          />
+          {isGoogleMaps && (
+            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+              <div className="px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-500 uppercase tracking-widest">Nexus</div>
+            </div>
+          )}
+        </div>
+        {isGoogleMaps && value && value.length > 3 && (
+          <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Nexus Suggestions</p>
+            <button 
+              onClick={() => onChange(`${value}, Mock City, MC 12345`)}
+              className="w-full text-left p-2 hover:bg-white dark:hover:bg-zinc-950 rounded-lg text-xs transition-colors flex items-center gap-2 group"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+              <span className="flex-1 truncate">{value}, Mock City, MC 12345</span>
+              <ArrowRight size={12} className="text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // Default Fallback
   return (
     <input 

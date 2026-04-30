@@ -24,6 +24,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { MODULES } from '../../constants/modules';
 import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField, ModuleLayout, ModuleColumn } from '../../types/platform';
@@ -223,8 +224,31 @@ export const ModuleView = () => {
   };
 
   if (loading || platformLoading) return (
-    <div className="h-64 flex items-center justify-center">
-      <Loader2 className="animate-spin text-indigo-500" size={32} />
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton width={180} height={32} variant="rounded" />
+          <Skeleton width={350} height={20} variant="text" />
+        </div>
+        <div className="flex gap-4">
+          <Skeleton width={100} height={40} variant="rounded" />
+          <Skeleton width={120} height={40} variant="rounded" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} height={120} variant="rounded" className="rounded-2xl" />
+        ))}
+      </div>
+
+      <div className="space-y-4 pt-6">
+        <div className="flex items-center gap-4">
+          <Skeleton width={200} height={40} variant="rounded" />
+          <Skeleton width={40} height={40} variant="rounded" />
+        </div>
+        <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
+      </div>
     </div>
   );
 

@@ -80,6 +80,9 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Breadcrumbs } from '../Navigation/Breadcrumbs';
 import { AppLauncher } from '../Navigation/AppLauncher';
 import { NotificationsDrawer } from '../Navigation/NotificationsDrawer';
+import { PageLoader } from '../UI/PageLoader';
+import { TransitionBar } from '../UI/TransitionBar';
+
 
 const SortableSidebarItem = ({ 
   item, 
@@ -657,15 +660,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   }, [menuConfig, enabledModules]);
 
   if (authLoading || platformLoading) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center relative overflow-hidden">
-        <AuroraBackground />
-        <div className="relative z-10 p-8 rounded-[2.5rem] bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] animate-pulse">Initializing Aurora</p>
-        </div>
-      </div>
-    );
+    return <PageLoader label="Initializing Aurora" />;
   }
 
   if (!user) {
@@ -755,6 +750,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 relative overflow-hidden">
+      <TransitionBar />
       <AuroraBackground />
       <AnimatePresence>
         {isSettingsMode && (

@@ -88,7 +88,8 @@ import {
   ArrowRight,
   Check,
   Command,
-  Info
+  Info,
+  ChevronRight
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow } from '../types/platform';
@@ -117,7 +118,7 @@ import { cn } from '../lib/utils';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
-import { DATA_API_URL } from '../config';
+import { DATA_API_URL, API_BASE_URL } from '../config';
 import { ModuleType } from '../types/platform';
 import { MODULES } from '../constants/modules';
 import { FieldGroup } from './Builder/FieldGroup';
@@ -126,6 +127,8 @@ import { IconPicker } from './Common/IconPicker';
 import { ConditionModal } from './Builder/ConditionModal';
 import { CalculatorModal } from './Builder/CalculatorModal';
 import { FieldInput } from './FieldInput';
+import { NexusSelectionModal } from './Builder/NexusSelectionModal';
+import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 
 
 // --- Types ---
@@ -134,7 +137,7 @@ export type FieldType =
   | 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select'
   | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
   | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber';
+  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector';
 
 export interface VisibilityRule {
   id: string;
@@ -180,6 +183,8 @@ export interface Field {
   autonumberSuffix?: string;
   autonumberStart?: number;
   autonumberDigits?: number;
+  // Connector settings
+  connectorId?: string;
   // View settings
   showInTable?: boolean;
   inlineEdit?: boolean;
@@ -286,6 +291,7 @@ export const FIELD_CATEGORIES = [
       { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 12 },
       { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
       { id: 'autonumber', label: 'Auto-increment', icon: Hash, defaultSpan: 6 },
+      { id: 'connector', label: 'Connector', icon: Zap, defaultSpan: 12 },
       { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 12 },
     ]
   },
@@ -615,6 +621,10 @@ const BlockThumbnail = ({ type }: { type: string }) => {
       ) : type === 'automation' ? (
         <div className="h-full flex items-center justify-center">
           <Sparkles size={16} className="text-indigo-400 animate-pulse" />
+        </div>
+      ) : type === 'connector' ? (
+        <div className="h-full flex items-center justify-center">
+          <Zap size={16} className="text-indigo-400" />
         </div>
       ) : (
         <div className="space-y-1.5">
@@ -1027,6 +1037,149 @@ export const ModuleEditor = () => {
   } | null>(null);
 
   const [relatedModulesMap, setRelatedModulesMap] = useState<Record<string, Field[]>>({});
+  const [activeConnectors, setActiveConnectors] = useState<any[]>([]);
+  const [connectorRegistry, setConnectorRegistry] = useState<any[]>([]);
+  const [showConnectorModal, setShowConnectorModal] = useState(false);
+
+  // Fetch Active Connectors & Registry
+  useEffect(() => {
+    if (!tenant?.id) return;
+    fetchConnectors();
+
+    // Broadcast Channel for Connector Sync
+    const channel = new BroadcastChannel('nexus_connectors');
+    channel.onmessage = (event) => {
+      if (event.data === 'refresh') {
+        fetchConnectors();
+      }
+    };
+    return () => channel.close();
+  }, [tenant?.id, session?.access_token]);
+
+  const fetchConnectors = async () => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${API_BASE_URL}/api/connectors`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setConnectorRegistry(data.registry || []);
+        setActiveConnectors(data.active.filter((c: any) => c.isActive));
+      }
+    } catch (err) {
+      console.error("Failed to fetch connectors:", err);
+    }
+  };
+
+  const handleCreateCustomConnector = async (connector: any) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${API_BASE_URL}/api/connectors/custom`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify(connector)
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        fetchConnectors();
+        new BroadcastChannel('nexus_connectors').postMessage('refresh');
+        toast.success("Custom connector forged successfully");
+        return data;
+      }
+    } catch (err) {
+      console.error("Failed to create custom connector:", err);
+      toast.error("Failed to create custom connector");
+    }
+  };
+
+  const handleForgeConnector = async (prompt: string) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${API_BASE_URL}/api/architect/forge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ prompt })
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error("Failed to forge connector:", err);
+      toast.error("Shadow Architect failed to forge connector");
+    }
+  };
+
+  const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
+  const [configConnector, setConfigConnector] = useState<any>(null);
+
+  const handleSaveConfig = async (secrets: any) => {
+    if (!configConnector || !tenant?.id) return;
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/connectors/${configConnector.connectorId}/config`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant.id,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ secrets })
+      });
+      if (res.ok) {
+        toast.success("Configuration vaulted successfully");
+      }
+    } catch (err) {
+      console.error("Config save failed:", err);
+      toast.error("Failed to vault secrets");
+    }
+  };
+
+  const handleActivateConnector = async (connectorId: string) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${API_BASE_URL}/api/connectors/${connectorId}/activate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Refresh active connectors
+        const activeRes = await fetch(`${API_BASE_URL}/api/connectors`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          }
+        });
+        if (activeRes.ok) {
+          const activeData = await activeRes.json();
+          setActiveConnectors(activeData.active.filter((ac: any) => ac.isActive));
+        }
+        toast.success("Connector activated successfully");
+        return data;
+      }
+    } catch (err) {
+      console.error("Failed to activate connector:", err);
+      toast.error("Failed to activate connector");
+    }
+  };
 
   // Fetch Related Module Schemas for Lookups
   useEffect(() => {
@@ -1933,7 +2086,7 @@ export const ModuleEditor = () => {
         {/* Canvas / Preview */}
         <main className={cn(
           "flex-1 relative flex flex-col overflow-hidden",
-          activeTab === 'builder' ? "bg-zinc-900" : "bg-zinc-50 dark:bg-zinc-950"
+          activeTab === 'builder' ? "bg-zinc-100 dark:bg-zinc-900" : "bg-zinc-50 dark:bg-zinc-950"
         )}>
           {/* Main Tab Content Area */}
           <div 
@@ -2699,6 +2852,40 @@ export const ModuleEditor = () => {
                                               )}
                                             </div>
                                           ))}
+                                        </div>
+                                      </div>
+                                    ) : block.type === 'connector' ? (
+                                      <div className="p-6 bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-200 dark:border-white/10 shadow-xl dark:shadow-2xl relative overflow-hidden group/connector">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-700" />
+                                        <div className="space-y-4 relative z-10">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                              <div className="w-10 h-10 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-500 border border-indigo-500/20">
+                                                <Zap size={20} />
+                                              </div>
+                                              <div>
+                                                <h4 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight uppercase">{block.label || 'Nexus Connector'}</h4>
+                                                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest">Active Integration Block</p>
+                                              </div>
+                                            </div>
+                                            <div className="px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-full">
+                                              <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Connected</span>
+                                            </div>
+                                          </div>
+                                          <div className="h-px bg-zinc-100 dark:bg-white/5 w-full" />
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div className="p-3 bg-zinc-50 dark:bg-white/5 rounded-2xl border border-zinc-100 dark:border-white/5">
+                                               <span className="block text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Status</span>
+                                               <div className="flex items-center gap-2">
+                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                                 <span className="text-[10px] font-black text-zinc-600 dark:text-zinc-300 uppercase">Live</span>
+                                               </div>
+                                            </div>
+                                            <div className="p-3 bg-zinc-50 dark:bg-white/5 rounded-2xl border border-zinc-100 dark:border-white/5">
+                                               <span className="block text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Latency</span>
+                                               <span className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase">24ms</span>
+                                            </div>
+                                          </div>
                                         </div>
                                       </div>
                                     ) : (
@@ -5763,6 +5950,37 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
+                      {selectedField.type === 'connector' && (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Connector</label>
+                             <button 
+                               onClick={() => setShowConnectorModal(true)}
+                               className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white flex items-center justify-between hover:border-indigo-500 transition-all group shadow-sm"
+                             >
+                               <span className={cn(selectedField.connectorId ? "text-zinc-900 dark:text-white font-medium" : "text-zinc-400 font-medium")}>
+                                 {activeConnectors.find(c => c.connectorId === selectedField.connectorId)?.displayName || 'Select Connector...'}
+                               </span>
+                               <ChevronRight size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                             </button>
+                           </div>
+                          {selectedField.connectorId && (
+                            <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500">
+                                  <Zap size={14} />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">Handshake Verified</p>
+                                  <p className="text-[9px] text-zinc-500">Ready to snap into layout</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <p className="text-[9px] text-zinc-600 italic px-1">Connect this block to an active Nexus integration.</p>
+                        </div>
+                      )}
+
                       <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <VisibilityRuleEditor 
                           rule={selectedField.visibilityRule}
@@ -6052,6 +6270,37 @@ export const ModuleEditor = () => {
           }}
         />
       </div>
+
+      <NexusSelectionModal 
+        isOpen={showConnectorModal}
+        onClose={() => setShowConnectorModal(false)}
+        activeConnectors={activeConnectors}
+        registry={connectorRegistry}
+        onSelect={(conn) => {
+          if (selectedField) {
+            updateField(selectedField.id, { 
+              connectorId: conn.connectorId,
+              label: conn.displayName
+            });
+            
+            const fullConnector = connectorRegistry.find(c => c.id === conn.connectorId);
+            if (fullConnector) {
+              setConfigConnector({ ...fullConnector, connectorId: conn.connectorId });
+              setConfigDrawerOpen(true);
+            }
+          }
+        }}
+        onActivate={handleActivateConnector}
+        onCreateCustom={handleCreateCustomConnector}
+        onForge={handleForgeConnector}
+      />
+
+      <ConnectorConfigDrawer 
+        isOpen={configDrawerOpen}
+        onClose={() => setConfigDrawerOpen(false)}
+        connector={configConnector}
+        onSave={handleSaveConfig}
+      />
     </div>
   );
 };

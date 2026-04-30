@@ -13,11 +13,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 import { PageWrapper, itemVariants } from './Common/PageWrapper';
+import { Skeleton } from './UI/Skeleton';
 
 export const Dashboard = () => {
   const { tenant, isLoading } = usePlatform();
   const { user, session, isSuperAdmin, loading } = useAuth();
   const navigate = useNavigate();
+  const [loadingStats, setLoadingStats] = useState(true);
 
   // Forced Redirect Guard: SuperAdmins belong in the Admin Portal by default
   useEffect(() => {
@@ -54,6 +56,8 @@ export const Dashboard = () => {
         }
       } catch (err) {
         console.error('Failed to fetch records', err);
+      } finally {
+        setLoadingStats(false);
       }
     };
 
@@ -124,20 +128,26 @@ export const Dashboard = () => {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-[150px] pointer-events-none" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-        {stats.map((stat, i) => (
-          <motion.div 
-            key={i}
-            variants={itemVariants}
-            className="p-6 bg-white/5 dark:bg-white/[0.03] backdrop-blur-xl border border-white/10 dark:border-white/5 rounded-3xl group shadow-2xl shadow-black/20 will-change-[transform,opacity] relative overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform relative z-10", stat.bg, stat.color)}>
-              {stat.icon}
-            </div>
-            <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 relative z-10">{stat.label}</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 relative z-10">{stat.value}</p>
-          </motion.div>
-        ))}
+        {loadingStats ? (
+          [1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} height={140} variant="rounded" className="rounded-3xl" />
+          ))
+        ) : (
+          stats.map((stat, i) => (
+            <motion.div 
+              key={i}
+              variants={itemVariants}
+              className="p-6 bg-white/5 dark:bg-white/[0.03] backdrop-blur-xl border border-white/10 dark:border-white/5 rounded-3xl group shadow-2xl shadow-black/20 will-change-[transform,opacity] relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-white/[0.05] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform relative z-10", stat.bg, stat.color)}>
+                {stat.icon}
+              </div>
+              <p className="text-sm font-medium text-zinc-400 dark:text-zinc-500 relative z-10">{stat.label}</p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1 relative z-10">{stat.value}</p>
+            </motion.div>
+          ))
+        )}
       </div>
 
       <motion.div 
@@ -155,7 +165,12 @@ export const Dashboard = () => {
             </Link>
           </div>
           <div className="space-y-4">
-            {[
+          {loadingStats ? (
+            [1, 2, 3].map((i) => (
+              <Skeleton key={i} height={80} variant="rounded" className="rounded-xl" />
+            ))
+          ) : (
+            [
               { name: 'Customer Onboarding', status: 'Running', health: 'Healthy', items: 42 },
               { name: 'Invoice Approval', status: 'Running', health: 'Healthy', items: 128 },
               { name: 'Support Triage', status: 'Paused', health: 'Warning', items: 15 },
@@ -181,7 +196,8 @@ export const Dashboard = () => {
                   </div>
                 </div>
               </div>
-            ))}
+            ))
+          )}
         </div>
       </motion.div>
     </PageWrapper>

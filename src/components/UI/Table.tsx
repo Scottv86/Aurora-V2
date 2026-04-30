@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { cn, Button } from './Primitives';
+import { cn, Button, AuroraSpinner } from './Primitives';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Skeleton } from './Skeleton';
 
 interface Column<T> {
   header: string;
@@ -63,11 +64,11 @@ export function Table<T extends { id: string | number }>({
           </thead>
           <tbody className="divide-y divide-white/5 dark:divide-zinc-800">
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="animate-pulse">
+              Array.from({ length: pageSize }).map((_, i) => (
+                <tr key={i}>
                   {columns.map((_, j) => (
                     <td key={j} className="px-6 py-4">
-                      <div className="h-4 w-full rounded bg-white/10 dark:bg-zinc-800/50" />
+                      <Skeleton variant="text" className="w-full opacity-50" />
                     </td>
                   ))}
                 </tr>

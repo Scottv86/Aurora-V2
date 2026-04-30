@@ -23,7 +23,8 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
-import { Button, Input, Select, Badge, cn } from '../../components/UI/Primitives';
+import { Button, Input, Select, Badge, cn, AuroraSpinner } from '../../components/UI/Primitives';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { Tabs, Modal } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { RelationshipGraph } from '../../components/Platform/RelationshipGraph';
@@ -190,10 +191,35 @@ export const PeopleOrgDetail = () => {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-          <p className="text-sm text-zinc-500 animate-pulse font-medium">Loading Record...</p>
+      <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+        <div className="flex items-center gap-4">
+          <Skeleton width={40} height={40} variant="rounded" />
+          <Skeleton width={300} height={20} variant="text" />
+        </div>
+        
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <Skeleton width={80} height={80} variant="rounded" className="rounded-3xl" />
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Skeleton width={200} height={32} variant="rounded" />
+                <Skeleton width={80} height={20} variant="rounded" />
+              </div>
+              <div className="flex gap-4">
+                <Skeleton width={100} height={12} variant="text" />
+                <Skeleton width={100} height={12} variant="text" />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Skeleton width={120} height={40} variant="rounded" />
+            <Skeleton width={140} height={40} variant="rounded" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-12">
+          <Skeleton height={400} variant="rounded" className="rounded-2xl" />
+          <Skeleton height={400} variant="rounded" className="rounded-2xl" />
         </div>
       </div>
     );
@@ -269,7 +295,7 @@ export const PeopleOrgDetail = () => {
             Delete
           </Button>
           <Button onClick={handleSave} disabled={isSaving} className="gap-2 px-6 font-bold shadow-xl shadow-indigo-500/20">
-            {isSaving ? <div className="h-4 w-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Save size={16} />}
+            {isSaving ? <AuroraSpinner /> : <Save size={16} />}
             Save Changes
           </Button>
         </div>

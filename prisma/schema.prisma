@@ -38,6 +38,7 @@ model Tenant {
   partyRelationships PartyRelationship[]
   taxonomies         Taxonomy[]
   globalLists        GlobalList[]
+  connectors         TenantConnector[]
 
   @@map("tenants")
 }
@@ -588,4 +589,52 @@ model GlobalListItem {
   list        GlobalList @relation(fields: [listId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
   @@map("global_list_items")
+}
+
+model NexusConnector {
+  id              String   @id @default(cuid())
+  name            String
+  icon            String
+  category        String
+  edgeFunctionUrl String?  @map("edge_function_url")
+  ioSchema        Json     @map("io_schema")
+  isCustom        Boolean  @default(false) @map("is_custom")
+  tenantId        String?  @map("tenant_id")
+  config          Json?    @map("config")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  tenants         TenantConnector[]
+
+  @@map("nexus_connectors")
+}
+
+model TenantConnector {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  connectorId     String   @map("connector_id")
+  isActive        Boolean  @default(false) @map("is_active")
+  displayName     String   @map("display_name")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  connector       NexusConnector @relation(fields: [connectorId], references: [id])
+  secrets         TenantConnectorSecret[]
+
+  @@unique([tenantId, connectorId])
+  @@map("tenant_connectors")
+}
+
+model TenantConnectorSecret {
+  id                String   @id @default(cuid())
+  tenantConnectorId String   @map("tenant_connector_id")
+  secretKey         String   @map("secret_key")
+  secretValue       String   @map("secret_value")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenantConnector   TenantConnector @relation(fields: [tenantConnectorId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantConnectorId, secretKey])
+  @@map("tenant_connector_secrets")
 }
