@@ -27,6 +27,7 @@ router.get('/', async (req: TenantRequest, res) => {
     const active = await db.tenantConnector.findMany({
       where: { tenantId },
       include: {
+        connector: true, // Include registry details (ioSchema, etc.)
         secrets: {
           select: {
             secretKey: true,

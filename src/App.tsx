@@ -177,6 +177,7 @@ const App = () => {
                 <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
                 <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
                 <Route path="connectors" element={<ConnectorsPage />} />
+                <Route path="connectors/:id" element={<ConnectorsPage />} />
                 
                 {/* Workforce Management (Integrated under Settings) */}
                 <Route path="workforce" element={<WorkforcePage />} />

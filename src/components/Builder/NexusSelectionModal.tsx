@@ -11,13 +11,13 @@ interface NexusSelectionModalProps {
   onClose: () => void;
   activeConnectors: any[];
   registry: any[];
-  onSelect: (connector: any) => void;
+  onSelect: (connector: any, strategy: 'auto' | 'manual') => void;
   onActivate: (connectorId: string) => Promise<any>;
   onCreateCustom: (connector: any) => Promise<any>;
   onForge: (prompt: string) => Promise<any>;
 }
 
-type ViewMode = 'selection' | 'library' | 'ai' | 'manual';
+type ViewMode = 'selection' | 'library' | 'ai' | 'manual' | 'strategy';
 
 export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   isOpen,
@@ -32,6 +32,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   const [view, setView] = useState<ViewMode>('selection');
   const [search, setSearch] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingConnector, setPendingConnector] = useState<any>(null);
 
   const filteredRegistry = registry.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase())
@@ -44,8 +45,8 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
       if (forged) {
         const created = await onCreateCustom(forged);
         if (created) {
-          onSelect(created.activation);
-          onClose();
+          setPendingConnector(created.activation);
+          setView('strategy');
         }
       }
     } catch (err) {
@@ -60,8 +61,8 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
     try {
       const created = await onCreateCustom(connector);
       if (created) {
-        onSelect(created.activation);
-        onClose();
+        setPendingConnector(created.activation);
+        setView('strategy');
       }
     } catch (err) {
       console.error("Manual save failed:", err);
@@ -107,10 +108,12 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                   <h2 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
                     {view === 'selection' ? 'Connect Integration' : 
                      view === 'library' ? 'Connector Library' : 
-                     view === 'ai' ? 'AI Forge' : 'Manual Builder'}
+                     view === 'ai' ? 'AI Forge' : 
+                     view === 'strategy' ? 'Provisioning Strategy' : 'Manual Builder'}
                   </h2>
                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                    {view === 'selection' ? 'Select your path to integration' : 'Define your custom API capability'}
+                    {view === 'selection' ? 'Select your path to integration' : 
+                     view === 'strategy' ? 'How should we handle the API data?' : 'Define your custom API capability'}
                   </p>
                 </div>
               </div>
@@ -205,10 +208,15 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                          <button
                            key={conn.id}
                            onClick={async () => {
-                             const activated = await onActivate(conn.id);
-                             if (activated) {
-                               onSelect(activated);
-                               onClose();
+                             setIsProcessing(true);
+                             try {
+                               const activated = await onActivate(conn.id);
+                               if (activated) {
+                                 setPendingConnector(activated);
+                                 setView('strategy');
+                               }
+                             } finally {
+                               setIsProcessing(false);
                              }
                            }}
                            className="flex items-start gap-4 p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] hover:border-indigo-500/50 hover:shadow-xl transition-all text-left group"
@@ -240,7 +248,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                   >
                     <AIForgeView onGenerate={handleForge} isGenerating={isProcessing} />
                   </motion.div>
-                ) : (
+                ) : view === 'manual' ? (
                   <motion.div 
                     key="manual"
                     initial={{ opacity: 0, x: 20 }}
@@ -249,6 +257,75 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                     className="h-full"
                   >
                     <ManualBuilderView onSave={handleManualSave} isSaving={isProcessing} />
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="strategy"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="h-full flex items-center justify-center p-12 gap-8"
+                  >
+                    <button 
+                      onClick={() => {
+                        onSelect(pendingConnector, 'auto');
+                        onClose();
+                      }}
+                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-indigo-600 rounded-[2.5rem] hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20"
+                    >
+                      <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
+                        <Wand2 size={32} />
+                      </div>
+                      <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2">Auto-Provision</h3>
+                      <p className="text-xs text-indigo-100 text-center leading-relaxed">
+                        The Architect will automatically create and map all module fields for this connector.
+                      </p>
+                      <div className="mt-8 px-6 py-2 bg-white/10 rounded-full text-[9px] font-black uppercase tracking-widest text-white">
+                        Recommended for Speed
+                      </div>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        onSelect(pendingConnector, 'manual');
+                        onClose();
+                      }}
+                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"
+                    >
+                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
+                        <ArrowRight size={32} />
+                      </div>
+                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-2">Manual Map</h3>
+                      <p className="text-xs text-zinc-500 text-center leading-relaxed">
+                        Define your own field mappings. Select existing fields or create new ones one-by-one.
+                      </p>
+                      <div className="mt-8 px-6 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
+                        Full Control
+                      </div>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Processing Overlay */}
+              <AnimatePresence>
+                {isProcessing && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-[100] bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-6"
+                  >
+                    <div className="relative">
+                      <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                         <Zap size={24} className="text-indigo-500 animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                       <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-widest">Activating Connector</h3>
+                       <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1 animate-pulse">Establishing Nexus Handshake...</p>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -16,7 +16,11 @@ import {
   GitFork,
   ArrowRight,
   Plus,
-  X
+  X,
+  Zap,
+  RefreshCw,
+  Search,
+  CheckCircle2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -218,6 +222,48 @@ export const RecordDetailView = () => {
       toast.error(error.message || "Failed to update status");
     }
   };
+  
+  const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
+
+  const handleSyncConnector = async (field: any) => {
+    if (!tenant?.id || !moduleId || !recordId || !field.connectorId) return;
+    
+    setSyncingConnectors(prev => ({ ...prev, [field.id]: true }));
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      
+      // We pass the moduleId and recordId so the proxy knows how to map the response back to this record
+      const res = await fetch(`${DATA_API_URL}/nexus/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          connectorId: field.connectorId,
+          moduleId: moduleId,
+          recordId: recordId,
+          // You could also pass specific field values as inputs here if the connector requires them
+        })
+      });
+
+      if (!res.ok) throw new Error("Sync failed");
+      
+      const data = await res.json();
+      
+      // Update local record state with the reshaped data
+      setRecord(prev => ({ ...prev, ...data }));
+      setEditData(prev => ({ ...prev, ...data }));
+      
+      toast.success("Data synced successfully via " + (field.label || 'Connector'));
+    } catch (err) {
+      console.error("Sync Error:", err);
+      toast.error("Failed to sync data from external source");
+    } finally {
+      setSyncingConnectors(prev => ({ ...prev, [field.id]: false }));
+    }
+  };
 
   const handleDeleteEntry = async () => {
     if (!tenant?.id || !moduleId || !recordId) return;
@@ -403,6 +449,39 @@ export const RecordDetailView = () => {
                                         </p>
                                       </div>
                                     )})}
+                                  </div>
+                                </div>
+                              ) : field.type === 'connector' ? (
+                                <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
+                                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
+                                  <div className="flex items-center justify-between relative z-10">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-12 h-12 bg-white dark:bg-zinc-900 rounded-2xl flex items-center justify-center text-indigo-500 shadow-xl shadow-indigo-500/10 border border-indigo-500/20">
+                                        <Zap size={24} />
+                                      </div>
+                                      <div>
+                                        <h5 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{field.label}</h5>
+                                        <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Nexus Connector Active</p>
+                                      </div>
+                                    </div>
+                                    <button 
+                                      onClick={() => handleSyncConnector(field)}
+                                      disabled={syncingConnectors[field.id]}
+                                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                                    >
+                                      {syncingConnectors[field.id] ? (
+                                        <RefreshCw size={14} className="animate-spin" />
+                                      ) : (
+                                        <RefreshCw size={14} />
+                                      )}
+                                      {syncingConnectors[field.id] ? 'Syncing...' : 'Sync Data'}
+                                    </button>
+                                  </div>
+                                  
+                                  {/* Sync Status Badge */}
+                                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/50 dark:bg-black/20 rounded-lg border border-zinc-100 dark:border-white/5 w-fit">
+                                    <CheckCircle2 size={12} className="text-emerald-500" />
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Reshaping Engine Engaged</span>
                                   </div>
                                 </div>
                               ) : (

@@ -34,7 +34,8 @@ const PATH_MAP: Record<string, string> = {
   finance: 'Finance',
   intake: 'Intake',
   reset: 'Factory Reset',
-  migration: 'Migration Tools'
+  migration: 'Migration Tools',
+  connectors: 'Connectors'
 };
 
 export const Breadcrumbs = () => {
@@ -51,7 +52,7 @@ export const Breadcrumbs = () => {
       if (mod) return mod.name;
     }
     
-    return PATH_MAP[segment] || segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ');
+    return PATH_MAP[segment] || segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
   if (pathnames.length === 0) return null;
@@ -63,14 +64,15 @@ export const Breadcrumbs = () => {
         const isLast = index === pathnames.length - 1;
         
         const isMode = (index === 0 && (segment === 'workspace' || segment === 'admin')) || 
-                       (segment === 'settings' && pathnames[index-1] === 'workspace');
+                       (segment === 'settings' && pathnames[index-1] === 'workspace') ||
+                       (index < pathnames.length - 1);
         
         const label = getLabel(segment, index);
 
         return (
           <div key={to} className="flex items-center gap-1.5 shrink-0">
             {index > 0 && (
-              <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-800" />
+              <ChevronRight size={12} className="text-indigo-600 dark:text-indigo-400" />
             )}
             {isLast ? (
               <span className={cn(

@@ -8,6 +8,7 @@ import {
 import { cn } from '../lib/utils';
 import { RichTextEditor } from './UI/RichTextEditor';
 import { SignaturePad } from './UI/SignaturePad';
+import { DynamicIcon } from './UI/DynamicIcon';
 
 interface FieldInputProps {
   field: any;
@@ -325,7 +326,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     return (
       <div className="space-y-2">
         <div className="relative group">
-          {isGoogleMaps && <MapPin size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
+          {isGoogleMaps && <DynamicIcon name="GoogleMaps" size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
           <input 
             type="text"
             placeholder={placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}

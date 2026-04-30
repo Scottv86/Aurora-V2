@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { connectorId, payload, test, tenantId } = await req.json()
+    const { connectorId, payload, test, tenantId, moduleId } = await req.json()
 
     if (!tenantId) {
       return new Response(JSON.stringify({ error: 'Missing tenantId' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
@@ -54,36 +54,57 @@ serve(async (req) => {
 
     console.log(`[NexusProxy] Handling call for connector: ${connectorId} (Tenant: ${tenantId})`)
 
-    // 3. Execute Handshake (Google Maps Example)
+    // 3. Execute Handshake
+    let rawData: any = {};
     if (connectorId === 'google-maps-lookup') {
-      const apiKey = secretMap['api_key']
-      if (!apiKey) {
-        return new Response(JSON.stringify({ error: 'Missing Google Maps API Key' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-      }
-
       const address = payload?.address || 'Unknown'
-      
-      // In a real production scenario, we would now call the actual Google Maps API
-      // const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`)
-      // const data = await res.json()
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            formatted_address: `${address}, Mock City, MC 12345`,
-            lat: -37.8368,
-            lng: 144.928,
-            _proxy_status: "Handshake verified with vaulted secret."
+      rawData = {
+        formatted_address: `${address}, Mock City, MC 12345`,
+        lat: -37.8368,
+        lng: 144.928
+      }
+    } else {
+      // Default mock data for other connectors
+      rawData = { status: "Success", timestamp: new Date().toISOString() };
+    }
+
+    // 4. Fetch Mappings if moduleId is provided
+    if (moduleId) {
+      const { data: moduleData } = await supabaseAdmin
+        .from('modules')
+        .select('config')
+        .eq('id', moduleId)
+        .eq('tenant_id', tenantId)
+        .single()
+
+      if (moduleData && moduleData.config?.connectorMappings?.[connectorId]) {
+        const mappings = moduleData.config.connectorMappings[connectorId];
+        const reshapedData: Record<string, any> = {};
+        
+        Object.entries(mappings).forEach(([sourceKey, targetFieldId]) => {
+          if (targetFieldId && rawData[sourceKey] !== undefined) {
+            reshapedData[targetFieldId as string] = rawData[sourceKey];
           }
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            reshaped: true,
+            data: reshapedData,
+            _original: rawData
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     return new Response(
-      JSON.stringify({ error: 'Unsupported connector' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        success: true,
+        data: rawData
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {

@@ -18,7 +18,7 @@ async function main() {
     create: {
       id: 'google-maps-lookup',
       name: 'Google Maps Address Lookup',
-      icon: 'MapPin',
+      icon: 'GoogleMaps',
       category: 'Location',
       edgeFunctionUrl: 'https://zoqnvkgioetjgdykuwdp.supabase.co/functions/v1/nexus-proxy',
       ioSchema: {

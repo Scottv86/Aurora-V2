@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Save, 
   Eye, 
@@ -58,6 +58,7 @@ import {
   PenTool,
   MapPin,
   Code,
+  Wand2,
   QrCode,
   Brush,
   MessageSquare,
@@ -129,6 +130,165 @@ import { CalculatorModal } from './Builder/CalculatorModal';
 import { FieldInput } from './FieldInput';
 import { NexusSelectionModal } from './Builder/NexusSelectionModal';
 import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
+import { ConnectorMappingDrawer } from './Builder/ConnectorMappingDrawer';
+import { DynamicIcon } from './UI/DynamicIcon';
+
+
+
+// --- Connection Visualizer Component ---
+const ConnectionLine = ({ hoveredMapping, containerRef }: { 
+  hoveredMapping: { connectorId: string, sourceOutput: string, targetFieldId: string } | null, 
+  containerRef: React.RefObject<HTMLDivElement> 
+}) => {
+  const [path, setPath] = useState<string>("");
+
+  useEffect(() => {
+    if (!hoveredMapping || !containerRef.current) {
+      setPath("");
+      return;
+    }
+
+    const updatePath = () => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const sourceId = `output-${hoveredMapping.connectorId}-${hoveredMapping.sourceOutput}`;
+      const targetId = `canvas-field-${hoveredMapping.targetFieldId}`;
+
+      const sourceEl = document.getElementById(sourceId);
+      const targetEl = document.getElementById(targetId);
+
+      if (!sourceEl || !targetEl) return;
+
+      const sourceRect = sourceEl.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+
+      // Calculate relative coordinates
+      // Source point (Right edge of the mapping row)
+      const x1 = sourceRect.right - containerRect.left;
+      const y1 = sourceRect.top + (sourceRect.height / 2) - containerRect.top;
+
+      // Target point (Left edge of the field container)
+      const x2 = targetRect.left - containerRect.left;
+      const y2 = targetRect.top + (targetRect.height / 2) - containerRect.top;
+
+      // Control points for a smooth Bezier curve
+      const dx = Math.abs(x2 - x1);
+      const cx1 = x1 + (dx * 0.4);
+      const cy1 = y1;
+      const cx2 = x2 - (dx * 0.4);
+      const cy2 = y2;
+
+      setPath(`M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`);
+    };
+
+    updatePath();
+    
+    // Update on scroll or resize within the container
+    const scrollContainer = containerRef.current.parentElement;
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', updatePath);
+    }
+    window.addEventListener('resize', updatePath);
+    
+    // Animation frame for smooth tracking during drags/transitions
+    let rafId: number;
+    const animate = () => {
+      updatePath();
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+
+    return () => {
+      if (scrollContainer) scrollContainer.removeEventListener('scroll', updatePath);
+      window.removeEventListener('resize', updatePath);
+      cancelAnimationFrame(rafId);
+    };
+  }, [hoveredMapping, containerRef]);
+
+  if (!path) return null;
+
+  return (
+    <svg 
+      className="absolute inset-0 pointer-events-none z-[100]" 
+      style={{ width: '100%', height: '100%', overflow: 'visible' }}
+    >
+      <defs>
+        <linearGradient id="line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#818cf8" stopOpacity="1" />
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      
+      {/* Background Shadow Line */}
+      <motion.path
+        d={path}
+        stroke="rgba(99, 102, 241, 0.1)"
+        strokeWidth="12"
+        fill="transparent"
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        exit={{ opacity: 0 }}
+      />
+      
+      {/* Main Connection Path */}
+      <motion.path
+        d={path}
+        stroke="url(#line-gradient)"
+        strokeWidth="4"
+        fill="transparent"
+        strokeLinecap="round"
+        filter="url(#glow)"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      />
+      
+      {/* Animated Dash Overlay */}
+      <motion.path
+        d={path}
+        stroke="white"
+        strokeWidth="2"
+        strokeDasharray="8, 16"
+        fill="transparent"
+        strokeLinecap="round"
+        initial={{ strokeDashoffset: 0, opacity: 0 }}
+        animate={{ strokeDashoffset: -100, opacity: 0.4 }}
+        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+      />
+      
+      {/* Source Point Dot */}
+      <motion.circle
+        cx={path.split(' ')[1]}
+        cy={path.split(' ')[2]}
+        r="4"
+        fill="#6366f1"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+      />
+      
+      {/* Target Point Dot */}
+      <motion.circle
+        cx={path.split(', ').pop()?.split(' ')[0]}
+        cy={path.split(', ').pop()?.split(' ')[1]}
+        r="6"
+        fill="#818cf8"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        style={{ filter: 'drop-shadow(0 0 8px #818cf8)' }}
+      />
+    </svg>
+  );
+};
 
 
 // --- Types ---
@@ -189,6 +349,7 @@ export interface Field {
   showInTable?: boolean;
   inlineEdit?: boolean;
   columnWidth?: number;
+  isCollapsed?: boolean;
 }
 
 export interface Tab {
@@ -951,6 +1112,7 @@ export const ModuleEditor = () => {
     { id: 'default-tab', label: 'General' }
   ]);
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
+  const [connectorMappings, setConnectorMappings] = useState<Record<string, Record<string, string>>>({});
   const [isEditingTab, setIsEditingTab] = useState<string | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -963,6 +1125,8 @@ export const ModuleEditor = () => {
   const [isArchitectThinking, setIsArchitectThinking] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string, height?: number } | null>(null);
+  const [hoveredMapping, setHoveredMapping] = useState<{ connectorId: string, sourceOutput: string, targetFieldId: string } | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
 
   const [workflow, setWorkflow] = useState<Workflow | undefined>({
     id: `wf-${Date.now()}`,
@@ -1124,6 +1288,7 @@ export const ModuleEditor = () => {
   };
 
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
+
   const [configConnector, setConfigConnector] = useState<any>(null);
 
   const handleSaveConfig = async (secrets: any) => {
@@ -1433,6 +1598,7 @@ export const ModuleEditor = () => {
           }
         }
         if (data.tabs) setTabs(data.tabs);
+        if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
         if (data.workflows && data.workflows.length > 0) setWorkflow(data.workflows[0]);
         if (data.forms) {
           const normalizedForms = data.forms.map((f: any) => {
@@ -1481,6 +1647,7 @@ export const ModuleEditor = () => {
         layout,
         tabs,
         forms,
+        connectorMappings,
         workflows: workflow ? [workflow] : []
       };
 
@@ -1546,6 +1713,7 @@ export const ModuleEditor = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
   const [showGridlines, setShowGridlines] = useState(true);
+  const [showSystemFields, setShowSystemFields] = useState(true);
 
   // Handle tab visibility auto-switch in Preview
   useEffect(() => {
@@ -1995,6 +2163,19 @@ export const ModuleEditor = () => {
           </button>
 
           <button 
+            onClick={() => setShowSystemFields(!showSystemFields)}
+            className={cn(
+              "p-1.5 rounded-lg border transition-all",
+              showSystemFields 
+                ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-500 shadow-inner" 
+                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title={showSystemFields ? "Hide System Fields" : "Show System Fields"}
+          >
+            <Zap size={14} />
+          </button>
+
+          <button 
             onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest",
@@ -2202,6 +2383,7 @@ export const ModuleEditor = () => {
 
                 {/* Grid Canvas */}
                 <div 
+                  ref={canvasContainerRef}
                   className={cn(
                     "mx-auto transition-all duration-500 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm dark:shadow-2xl overflow-hidden relative grid-canvas-container",
                     viewportSize === 'desktop' ? "w-full" :
@@ -2212,6 +2394,9 @@ export const ModuleEditor = () => {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDropOnCanvas}
                 >
+                  {/* Connection Visualizer Layer */}
+                  <ConnectionLine hoveredMapping={hoveredMapping} containerRef={canvasContainerRef} />
+
                   {/* Grid Lines Overlay (Builder Mode Only) */}
                   {showGridlines && (
                     <div className="absolute inset-0 pointer-events-none grid grid-cols-12 gap-4 px-8 py-8 opacity-[0.03] dark:opacity-[0.05]">
@@ -2269,10 +2454,14 @@ export const ModuleEditor = () => {
 
                           const renderFieldBlocks = (fields: Field[], parentId?: string): React.ReactNode => {
                             const isNested = !!parentId;
-                            const filtered = fields.filter(block => {
-                              if (isNested) return true;
-                              return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
-                            });
+                             const filtered = fields.filter(block => {
+                               // System fields filter (connectors, etc)
+                               const type = block.type?.toLowerCase();
+                               if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
+
+                               if (isNested) return true;
+                               return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
+                             });
                             
                             const items = [...filtered];
                             if (dragOverInfo && dragOverInfo.active && dragOverInfo.parentId === parentId) {
@@ -2333,12 +2522,14 @@ export const ModuleEditor = () => {
                                       setSelectedIds([block.id]);
                                     }
                                   }}
+                                  id={`canvas-field-${block.id}`}
                                   className={cn(
                                     "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2",
                                     selectedIds.includes(block.id) 
                                       ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10" 
                                       : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700",
-                                    activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing"
+                                    activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
+                                    hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
                                   )}
                                 >
                                   {/* Selection UI */}
@@ -2356,10 +2547,35 @@ export const ModuleEditor = () => {
                                         </label>
                                       </div>
                                       <div className="flex items-center gap-2">
+                                        {(() => {
+                                          const mappingEntry = Object.entries(connectorMappings).find(([_, m]) => Object.values(m).includes(block.id));
+                                          if (mappingEntry) {
+                                            const [connId] = mappingEntry;
+                                            const connector = connectorRegistry.find(c => c.id === connId);
+                                            return (
+                                              <div 
+                                                className={cn(
+                                                  "flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all duration-500",
+                                                  hoveredMapping?.targetFieldId === block.id 
+                                                    ? "bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-500/30 scale-110" 
+                                                    : "bg-indigo-500/10 border-indigo-500/20 shadow-sm shadow-indigo-500/5"
+                                                )}
+                                                title={`Mapped to ${connector?.label || 'Nexus Connector'}`}
+                                              >
+                                                <Zap size={10} className={cn(hoveredMapping?.targetFieldId === block.id ? "text-white animate-pulse" : "text-indigo-500")} />
+                                                <span className={cn(
+                                                  "text-[8px] font-black uppercase tracking-tighter",
+                                                  hoveredMapping?.targetFieldId === block.id ? "text-white" : "text-indigo-500"
+                                                )}>Mapped</span>
+                                              </div>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
                                         {block.visibilityRule && (
-                                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-indigo-500/10 rounded-full border border-indigo-500/20 shadow-sm shadow-indigo-500/10" title="Conditional Logic Applied">
-                                            <BrainCircuit size={10} className="text-indigo-500" />
-                                            <span className="text-[8px] font-black text-indigo-500 uppercase tracking-tighter">Logic</span>
+                                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-white/5 rounded-full border border-zinc-200 dark:border-white/10 shadow-sm" title="Conditional Logic Applied">
+                                            <BrainCircuit size={10} className="text-zinc-500" />
+                                            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">Logic</span>
                                           </div>
                                         )}
                                         <GripVertical size={12} className="text-zinc-300 group-hover/field:text-zinc-500" />
@@ -2435,7 +2651,205 @@ export const ModuleEditor = () => {
                                         </div>
                                         <p className="text-[9px] text-zinc-400 mt-2 italic px-1">Value generated on record creation</p>
                                       </div>
-                                    ) : block.type === 'button' ? (
+                                    ) : block.type === 'connector' ? (
+                                      <div className="pt-2">
+                                        <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-[2.5rem] flex flex-col gap-6 group/connector transition-all hover:bg-indigo-500-[0.07] relative overflow-hidden shadow-sm">
+                                          {/* Background Glow */}
+                                          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
+                                          
+                                          <div className="flex items-center justify-between relative z-10">
+                                            <div className="flex items-center gap-4">
+                                              {(() => {
+                                                const conn = activeConnectors.find(c => c.connectorId === block.connectorId) || 
+                                                             connectorRegistry.find(c => c.id === block.connectorId);
+                                                const iconName = block.icon || conn?.icon || conn?.connector?.icon || 'Zap';
+                                                return (
+                                                  <button 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      updateField(block.id, { isCollapsed: !block.isCollapsed });
+                                                    }}
+                                                    className="w-14 h-14 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-indigo-500 shadow-xl shadow-indigo-500/10 hover:scale-110 transition-transform duration-500 group-hover/connector:rotate-12"
+                                                  >
+                                                    {block.isCollapsed ? <ChevronDown size={24} /> : <DynamicIcon name={iconName} size={28} />}
+                                                  </button>
+                                                );
+                                              })()}
+                                              <div className="text-left">
+                                                <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">{block.label || 'Nexus Connector'}</h4>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                  <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", block.connectorId ? "bg-emerald-500" : "bg-rose-500")} />
+                                                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                                                    {!block.connectorId ? 'Needs Configuration' : block.isCollapsed ? 'Collapsed' : 'Capability Active'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                            
+                                            <div className="flex gap-2">
+                                              {!block.connectorId && (
+                                                <div className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 rounded-xl mr-2">
+                                                  <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest">Setup Needed</span>
+                                                </div>
+                                              )}
+                                              {!block.isCollapsed && block.connectorId && (
+                                                <>
+                                                  <button 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setSelectedId(block.id);
+                                                      setRightSidebarTab('inspector');
+                                                    }}
+                                                    className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
+                                                    title="Configure Mapping"
+                                                  >
+                                                    <ArrowLeftRight size={16} />
+                                                  </button>
+                                                  <button 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const conn = activeConnectors.find(c => c.connectorId === block.connectorId) || connectorRegistry.find(c => c.id === block.connectorId);
+                                                      if (conn) {
+                                                        setConfigConnector(conn);
+                                                        setConfigDrawerOpen(true);
+                                                      }
+                                                    }}
+                                                    className="w-10 h-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all"
+                                                    title="Secrets & Config"
+                                                  >
+                                                    <Settings2 size={16} />
+                                                  </button>
+                                                </>
+                                              )}
+                                              <button 
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  updateField(block.id, { isCollapsed: !block.isCollapsed });
+                                                }}
+                                                className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 hover:text-indigo-500 transition-all"
+                                              >
+                                                {block.isCollapsed ? <Maximize2 size={16} /> : <ChevronUp size={16} />}
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          <AnimatePresence>
+                                            {!block.isCollapsed && (
+                                              <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.3, ease: "easeInOut" }}
+                                                className="overflow-hidden"
+                                              >
+                                                <div className="space-y-6 pt-4">
+                                                  {!block.connectorId ? (
+                                                    <div className="py-10 flex flex-col items-center justify-center gap-6 border-2 border-dashed border-rose-500/20 rounded-[2.5rem] bg-rose-500/[0.02] transition-all hover:bg-rose-500/[0.05]">
+                                                      <div className="relative">
+                                                        <div className="absolute inset-0 bg-rose-500/20 blur-2xl rounded-full" />
+                                                        <div className="w-20 h-20 bg-white dark:bg-zinc-900 rounded-[2rem] flex items-center justify-center text-rose-500 shadow-2xl relative z-10 border border-rose-500/20">
+                                                          <Zap size={40} className="animate-pulse" />
+                                                        </div>
+                                                      </div>
+                                                      <div className="text-center space-y-2">
+                                                        <h5 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">Integration Setup Required</h5>
+                                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest max-w-[200px] leading-relaxed">Choose a Nexus capability to activate this block's logic and data streams.</p>
+                                                      </div>
+                                                      <button 
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setSelectedId(block.id);
+                                                          setShowConnectorModal(true);
+                                                        }}
+                                                        className="px-8 py-3 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-rose-500/20 hover:bg-rose-500 hover:scale-105 active:scale-95 transition-all"
+                                                      >
+                                                        Configure Capability
+                                                      </button>
+                                                    </div>
+                                                  ) : (
+                                                    <>
+                                                      <div className="h-px bg-zinc-100 dark:bg-white/5 w-full" />
+                                                      <div className="space-y-3 relative z-10">
+                                                        <div className="flex items-center justify-between px-1 border-t border-indigo-500/10 pt-4 mt-2">
+                                                          <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Active Data Streams</p>
+                                                          <p className="text-[9px] font-bold text-indigo-500 uppercase">{Object.keys(connectorMappings[block.connectorId] || {}).length} Mapped</p>
+                                                        </div>
+                                                        
+                                                        <div className="grid grid-cols-1 gap-2">
+                                                          {(() => {
+                                                            const registryEntry = activeConnectors.find(c => c.connectorId === block.connectorId) || connectorRegistry.find(c => c.id === block.connectorId);
+                                                            const outputs = registryEntry?.ioSchema?.outputs || registryEntry?.connector?.ioSchema?.outputs || [];
+                                                            const mappings = connectorMappings[block.connectorId] || {};
+                                                            const activeMappings = outputs.filter((o: any) => mappings[o.name]);
+                                                            
+                                                            if (activeMappings.length === 0) {
+                                                              return (
+                                                                <div className="py-4 text-center border border-dashed border-indigo-500/20 rounded-2xl">
+                                                                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest italic">No Data Links Established</p>
+                                                                </div>
+                                                              );
+                                                            }
+
+                                                            return activeMappings.map((output: any) => {
+                                                              const targetId = mappings[output.name];
+                                                              const targetField = layout.find(f => f.id === targetId);
+                                                              
+                                                              return (
+                                                                <motion.div 
+                                                                  key={output.name}
+                                                                  id={`output-${block.connectorId}-${output.name}`}
+                                                                  onHoverStart={() => setHoveredMapping({ 
+                                                                    connectorId: block.connectorId, 
+                                                                    sourceOutput: output.name, 
+                                                                    targetFieldId: targetId 
+                                                                  })}
+                                                                  onHoverEnd={() => setHoveredMapping(null)}
+                                                                  className={cn(
+                                                                    "flex items-center justify-between p-3 bg-white/50 dark:bg-zinc-900/50 border rounded-2xl group/mapping transition-all cursor-help",
+                                                                    hoveredMapping?.sourceOutput === output.name 
+                                                                      ? "border-indigo-500 bg-white dark:bg-zinc-900 shadow-lg shadow-indigo-500/10" 
+                                                                      : "border-zinc-200/50 dark:border-white/5"
+                                                                  )}
+                                                                >
+                                                                  <div className="flex items-center gap-2">
+                                                                    <div className={cn(
+                                                                      "w-6 h-6 rounded-lg flex items-center justify-center transition-colors",
+                                                                      hoveredMapping?.sourceOutput === output.name ? "bg-indigo-600 text-white" : "bg-indigo-500/10 text-indigo-500"
+                                                                    )}>
+                                                                      <DynamicIcon name={registryEntry?.icon || registryEntry?.connector?.icon || 'Zap'} size={12} className={cn(hoveredMapping?.sourceOutput === output.name && "animate-pulse")} />
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">{output.label || output.name}</span>
+                                                                  </div>
+                                                                  <div className="flex items-center gap-2">
+                                                                    <ArrowRight size={10} className={cn("transition-transform", hoveredMapping?.sourceOutput === output.name ? "translate-x-1 text-indigo-500" : "text-zinc-300")} />
+                                                                    <div className={cn(
+                                                                      "px-2 py-1 rounded-lg border transition-all",
+                                                                      hoveredMapping?.sourceOutput === output.name ? "bg-indigo-600 border-indigo-600" : "bg-indigo-500/10 border-indigo-500/10"
+                                                                    )}>
+                                                                      <span className={cn(
+                                                                        "text-[9px] font-black uppercase tracking-tight",
+                                                                        hoveredMapping?.sourceOutput === output.name ? "text-white" : "text-indigo-600 dark:text-indigo-400"
+                                                                      )}>
+                                                                        {targetField?.label || 'Target Field'}
+                                                                      </span>
+                                                                    </div>
+                                                                  </div>
+                                                                </motion.div>
+                                                              );
+                                                            });
+                                                          })()}
+                                                        </div>
+                                                      </div>
+                                                    </>
+                                                    )
+                                                  }
+                                                </div>
+                                              </motion.div>
+                                            )}
+                                          </AnimatePresence>
+                                        </div>
+                                      </div>
+                              ) : block.type === 'button' ? (
                                       <div className="pt-2">
                                         <div className="h-11 w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl flex items-center justify-center font-bold text-xs uppercase tracking-widest shadow-lg shadow-indigo-500/20 transition-all">
                                           {block.label}
@@ -2852,40 +3266,6 @@ export const ModuleEditor = () => {
                                               )}
                                             </div>
                                           ))}
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'connector' ? (
-                                      <div className="p-6 bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-200 dark:border-white/10 shadow-xl dark:shadow-2xl relative overflow-hidden group/connector">
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-700" />
-                                        <div className="space-y-4 relative z-10">
-                                          <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                              <div className="w-10 h-10 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-500 border border-indigo-500/20">
-                                                <Zap size={20} />
-                                              </div>
-                                              <div>
-                                                <h4 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight uppercase">{block.label || 'Nexus Connector'}</h4>
-                                                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest">Active Integration Block</p>
-                                              </div>
-                                            </div>
-                                            <div className="px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-full">
-                                              <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Connected</span>
-                                            </div>
-                                          </div>
-                                          <div className="h-px bg-zinc-100 dark:bg-white/5 w-full" />
-                                          <div className="grid grid-cols-2 gap-3">
-                                            <div className="p-3 bg-zinc-50 dark:bg-white/5 rounded-2xl border border-zinc-100 dark:border-white/5">
-                                               <span className="block text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Status</span>
-                                               <div className="flex items-center gap-2">
-                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                                 <span className="text-[10px] font-black text-zinc-600 dark:text-zinc-300 uppercase">Live</span>
-                                               </div>
-                                            </div>
-                                            <div className="p-3 bg-zinc-50 dark:bg-white/5 rounded-2xl border border-zinc-100 dark:border-white/5">
-                                               <span className="block text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase mb-1">Latency</span>
-                                               <span className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase">24ms</span>
-                                            </div>
-                                          </div>
                                         </div>
                                       </div>
                                     ) : (
@@ -3391,7 +3771,6 @@ export const ModuleEditor = () => {
                           ))}
                         </div>
                       )}
-
                       <div className={cn(
                         "grid gap-8 transition-all duration-500",
                         "grid-cols-1",
@@ -3399,6 +3778,10 @@ export const ModuleEditor = () => {
                       )}>
                         {layout
                           .filter(block => (block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id)) && evaluateVisibilityRule(block.visibilityRule, moduleState))
+                          .filter(block => {
+                            const type = block.type?.toLowerCase();
+                            return showSystemFields || (type !== 'connector' && type !== 'automation' && type !== 'nexus_connector');
+                          })
                           .map((block) => (
                           <div 
                             key={block.id} 
@@ -4609,7 +4992,9 @@ export const ModuleEditor = () => {
                            <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-2">Module Fields</h3>
                            <div className="space-y-2">
                               {layout.map(field => {
-                                 const isAdded = selectedForm.isMultistep ? (selectedForm.steps || []).some((s: any) => s.fields.some((f: any) => f.id === field.id)) : (selectedForm.fields || []).some((f: any) => f.id === field.id);
+                                 const isAdded = selectedForm.isMultistep 
+                                    ? (selectedForm.steps || []).some((s: any) => (s.fields || []).some((f: any) => f.id === field.id)) 
+                                    : (selectedForm.fields || []).some((f: any) => f.id === field.id);
                                  return (
                                    <button 
                                      key={field.id}
@@ -5531,6 +5916,50 @@ export const ModuleEditor = () => {
 
                       </div>
 
+                      {/* Data Population Mapping */}
+                      {(() => {
+                        const mappingEntry = Object.entries(connectorMappings).find(([_, m]) => Object.values(m).includes(selectedField.id));
+                        if (mappingEntry) {
+                          const [connId, mappings] = mappingEntry;
+                          const connector = connectorRegistry.find(c => c.id === connId);
+                          const outputName = Object.entries(mappings).find(([_, targetId]) => targetId === selectedField.id)?.[0];
+                          
+                          return (
+                            <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                              <div className="flex items-center gap-2 mb-4">
+                                <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                <h4 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Data Population</h4>
+                              </div>
+                              
+                              <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Source Connector</span>
+                                  <div className="flex items-center gap-2 px-2 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                                    <Zap size={10} className="text-indigo-500" />
+                                    <span className="text-[10px] font-bold text-zinc-900 dark:text-white">{connector?.label || 'Nexus Connector'}</span>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Mapped Output</span>
+                                  <div className="flex items-center gap-2 px-2 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                                    <BrainCircuit size={10} className="text-emerald-500" />
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">{outputName}</span>
+                                  </div>
+                                </div>
+
+                                <div className="pt-2">
+                                  <p className="text-[9px] text-zinc-500 leading-relaxed italic">
+                                    This field's value is automatically populated by the {connector?.label || 'connector'} during data entry.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
                       {/* Grid Position Controls */}
                       <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Grid Layout</h4>
@@ -5965,16 +6394,25 @@ export const ModuleEditor = () => {
                              </button>
                            </div>
                           {selectedField.connectorId && (
-                            <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl space-y-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500">
-                                  <Zap size={14} />
-                                </div>
-                                <div>
-                                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">Handshake Verified</p>
-                                  <p className="text-[9px] text-zinc-500">Ready to snap into layout</p>
+                            <div className="space-y-3">
+                              <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500">
+                                    {(() => {
+                                      const conn = activeConnectors.find(c => c.connectorId === selectedField.connectorId) || 
+                                                   connectorRegistry.find(c => c.id === selectedField.connectorId);
+                                      const iconName = selectedField.icon || conn?.icon || conn?.connector?.icon || 'Zap';
+                                      return <DynamicIcon name={iconName} size={14} />;
+                                    })()}
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">Handshake Verified</p>
+                                    <p className="text-[9px] text-zinc-500">Ready to snap into layout</p>
+                                  </div>
                                 </div>
                               </div>
+
+
                             </div>
                           )}
                           <p className="text-[9px] text-zinc-600 italic px-1">Connect this block to an active Nexus integration.</p>
@@ -5994,6 +6432,109 @@ export const ModuleEditor = () => {
                         />
                       </div>
                     </div>
+
+                      {selectedField.type === 'connector' && (
+                        <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                          <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                              <h4 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Data Mapping</h4>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const conn = activeConnectors.find(c => c.connectorId === selectedField.connectorId) || 
+                                             connectorRegistry.find(c => c.id === selectedField.connectorId);
+                                if (conn) {
+                                  const outputs = (conn.ioSchema?.outputs) || (conn.connector?.ioSchema?.outputs) || [];
+                                  const fields = layout.filter(f => f.type !== 'connector' && f.type !== 'automation');
+                                  const newMappings = { ...(connectorMappings[selectedField.connectorId] || {}) };
+                                  let count = 0;
+                                  outputs.forEach((output: any) => {
+                                    if (newMappings[output.name]) return;
+                                    const match = fields.find(f => 
+                                      f.id === output.name || 
+                                      f.label.toLowerCase() === (output.label || output.name).toLowerCase()
+                                    );
+                                    if (match) {
+                                      newMappings[output.name] = match.id;
+                                      count++;
+                                    }
+                                  });
+                                  setConnectorMappings(prev => ({ ...prev, [selectedField.connectorId]: newMappings }));
+                                  if (count > 0) toast.success(`Auto-mapped ${count} fields`);
+                                  else toast.info("No matching fields found for auto-mapping");
+                                }
+                              }}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all shadow-sm"
+                            >
+                              <Wand2 size={10} />
+                              Auto-Map
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            {(() => {
+                              const conn = activeConnectors.find(c => c.connectorId === selectedField.connectorId) || 
+                                           connectorRegistry.find(c => c.id === selectedField.connectorId);
+                              const outputs = (conn?.ioSchema?.outputs) || (conn?.connector?.ioSchema?.outputs) || [];
+                              const targetFields = layout.filter(f => f.type !== 'connector' && f.type !== 'automation');
+                              const mappings = connectorMappings[selectedField.connectorId] || {};
+
+                              if (outputs.length === 0) {
+                                return (
+                                  <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-900/50 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                                    <Zap size={20} className="mx-auto mb-3 text-zinc-300" />
+                                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">No API Outputs Defined</p>
+                                  </div>
+                                );
+                              }
+
+                              return outputs.map((output: any) => {
+                                const currentTarget = mappings[output.name];
+                                const isDuplicate = Object.values(mappings).filter(v => v === currentTarget && v !== '').length > 1;
+
+                                return (
+                                  <div key={output.name} className="group p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3 hover:border-indigo-500/30 transition-all shadow-sm">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                                          <Zap size={12} className="text-indigo-500" />
+                                        </div>
+                                        <div>
+                                          <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">{output.label || output.name}</span>
+                                          <span className="block text-[8px] font-mono text-zinc-500">{output.name}</span>
+                                        </div>
+                                      </div>
+                                      {isDuplicate && (
+                                        <div className="w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px] font-bold shadow-lg animate-pulse">!</div>
+                                      )}
+                                    </div>
+                                    
+                                    <select 
+                                      value={currentTarget || ''}
+                                      onChange={(e) => {
+                                        const newMappings = { ...mappings, [output.name]: e.target.value };
+                                        setConnectorMappings(prev => ({ ...prev, [selectedField.connectorId]: newMappings }));
+                                      }}
+                                      className={cn(
+                                        "w-full bg-zinc-50 dark:bg-zinc-800/50 border rounded-xl px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all appearance-none",
+                                        isDuplicate ? "border-amber-500/50 text-amber-600" : "border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
+                                      )}
+                                    >
+                                      <option value="">Unmapped</option>
+                                      {targetFields.map(f => (
+                                        <option key={f.id} value={f.id}>
+                                          {f.label} {Object.values(mappings).some(v => v === f.id && v !== currentTarget) ? ' (Already Used)' : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      )}
 
                     <div className="pt-12">
                       <button 
@@ -6276,19 +6817,119 @@ export const ModuleEditor = () => {
         onClose={() => setShowConnectorModal(false)}
         activeConnectors={activeConnectors}
         registry={connectorRegistry}
-        onSelect={(conn) => {
+        onSelect={async (conn, strategy) => {
           if (selectedField) {
+            const fullConnector = activeConnectors.find(c => c.connectorId === conn.connectorId) || 
+                                connectorRegistry.find(c => c.id === conn.connectorId);
+
             updateField(selectedField.id, { 
               connectorId: conn.connectorId,
-              label: conn.displayName
+              label: conn.displayName,
+              icon: conn.icon || fullConnector?.icon
             });
             
-            const fullConnector = connectorRegistry.find(c => c.id === conn.connectorId);
             if (fullConnector) {
-              setConfigConnector({ ...fullConnector, connectorId: conn.connectorId });
-              setConfigDrawerOpen(true);
+              const outputs = (fullConnector.ioSchema?.outputs) || (fullConnector.connector?.ioSchema?.outputs) || [];
+              
+              if (strategy === 'auto') {
+                toast.info(`Auto-provisioning ${outputs.length} fields...`);
+                
+                const newMappings: Record<string, string> = { ...(connectorMappings[conn.connectorId] || {}) };
+                
+                // CRITICAL: Apply the connector update to our local layout copy immediately
+                // to avoid it being overwritten by the batch update.
+                const currentLayout = layout.map(f => f.id === selectedField.id ? {
+                  ...f,
+                  connectorId: conn.connectorId,
+                  label: conn.displayName
+                } : f);
+                
+                let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
+                let isLeft = true;
+                
+                for (const output of outputs) {
+                  if (newMappings[output.name]) continue;
+
+                  // Generate a unique ID for the new field
+                  const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+                  
+                  // Create new field object for the layout
+                  const newField: any = {
+                    id: fieldId,
+                    label: output.label || output.name,
+                    type: output.type === 'number' ? 'number' : 
+                          output.type === 'boolean' ? 'checkbox' : 'text',
+                    required: false,
+                    colSpan: 6,
+                    startCol: isLeft ? 1 : 7,
+                    rowIndex: nextRow,
+                    tabId: currentTabId // Place on current active tab
+                  };
+
+                  currentLayout.push(newField);
+                  newMappings[output.name] = fieldId;
+                  
+                  // Toggle side and advance row if needed
+                  if (isLeft) {
+                    isLeft = false;
+                  } else {
+                    isLeft = true;
+                    nextRow++;
+                  }
+                }
+
+                // 1. Update local states so UI reflects changes immediately
+                setLayout(currentLayout);
+                setConnectorMappings(prev => ({ ...prev, [conn.connectorId]: newMappings }));
+
+                // 2. Persist the entire updated module in one go
+                const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+                const isNew = id === 'new' || MODULES.some(m => m.id === id);
+                
+                const payload = {
+                  ...moduleSettings,
+                  id: isNew && id !== 'new' ? id : undefined,
+                  enabled: moduleSettings.status === 'ACTIVE',
+                  layout: currentLayout,
+                  tabs,
+                  forms,
+                  connectorMappings: {
+                    ...(connectorMappings || {}),
+                    [conn.connectorId]: newMappings
+                  },
+                  workflows: workflow ? [workflow] : []
+                };
+
+                try {
+                  const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
+                  const res = await fetch(url, {
+                    method: isNew ? 'POST' : 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-tenant-id': tenant?.id || '',
+                      'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                  });
+
+                  if (res.ok) {
+                    toast.success(`Successfully provisioned ${outputs.length} fields`);
+                    refreshModules();
+                  } else {
+                    throw new Error('Failed to save auto-provisioned fields');
+                  }
+                } catch (err) {
+                  console.error("Failed to save mappings:", err);
+                  toast.error("Failed to persist auto-provisioned fields");
+                }
+              } else {
+                // Manual Strategy: Select the block and open inspector
+                setSelectedId(selectedField.id);
+                setRightSidebarTab('inspector');
+              }
             }
           }
+          setShowConnectorModal(false);
         }}
         onActivate={handleActivateConnector}
         onCreateCustom={handleCreateCustomConnector}
@@ -6301,6 +6942,7 @@ export const ModuleEditor = () => {
         connector={configConnector}
         onSave={handleSaveConfig}
       />
+
     </div>
   );
 };

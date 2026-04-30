@@ -355,5 +355,52 @@ router.delete('/modules/:id', async (req: TenantRequest, res) => {
   }
 });
 
+// ADD FIELD to module
+router.put('/modules/:id/fields', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { field } = req.body;
+
+    const module = await db.module.findUnique({ where: { id } });
+    if (!module) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const config = module.config as any;
+    const layout = config.layout || [];
+    
+    // Simple push to layout for now
+    // In a real grid system, we would find the next available row/col
+    const newField = {
+      ...field,
+      colSpan: field.colSpan || 6,
+      startCol: field.startCol || 1,
+      rowIndex: field.rowIndex || (layout.length > 0 ? Math.max(...layout.map((f: any) => f.rowIndex || 0)) + 1 : 0)
+    };
+
+    const updatedConfig = {
+      ...config,
+      layout: [...layout, newField]
+    };
+
+    await db.module.update({
+      where: { id },
+      data: { config: updatedConfig }
+    });
+
+    // Simulate underlying DB column addition (e.g., if using direct SQL tables)
+    // await db.$executeRawUnsafe(`ALTER TABLE "tenant_data_${tenantId}_${id}" ADD COLUMN IF NOT EXISTS "${field.id}" TEXT;`);
+
+    emitTenantUpdate(tenantId, 'module_updated', { ...updatedConfig, id: module.id });
+
+    res.json({ success: true, field: newField });
+  } catch (err: any) {
+    console.error('[DataAPI] Add field error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 
