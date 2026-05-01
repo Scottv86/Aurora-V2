@@ -93,11 +93,15 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 
     // 4. Inject Session Data
     const tenantIds = user.memberships.map(m => m.tenantId);
+    const membership = user.memberships[0];
+    const name = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : '';
+
     console.log(`[Auth API] Session sync: user=${user.email} admin=${user.isSuperAdmin} tenants=[${tenantIds.join(',')}]`);
 
     req.user = {
       uid: user.id,
       email: user.email,
+      name: name || user.email,
       isSuperAdmin: user.isSuperAdmin,
       tenantIds: tenantIds,
       roleId: user.memberships[0]?.roleId

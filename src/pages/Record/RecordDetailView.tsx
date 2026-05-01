@@ -40,6 +40,7 @@ interface WorkflowState {
     nodeId: string;
     timestamp: string;
     action?: string;
+    triggeredBy?: string;
   }[];
 }
 
@@ -659,9 +660,15 @@ export const RecordDetailView = () => {
                           <p className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
                             {node?.name || 'Unknown Node'}
                           </p>
-                          <p className="text-[10px] text-zinc-500 font-medium">
-                            {new Date(h.timestamp).toLocaleString()}
-                          </p>
+                          <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-medium">
+                            <span>{new Date(h.timestamp).toLocaleString()}</span>
+                            {h.triggeredBy && (
+                              <>
+                                <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                                <span className="text-indigo-500/80">{h.triggeredBy}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );

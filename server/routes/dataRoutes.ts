@@ -263,7 +263,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
               {
                 nodeId: targetNode.id,
                 timestamp: new Date().toISOString(),
-                action: 'Transitioned'
+                action: 'Transitioned',
+                triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
               }
             ]
           };
