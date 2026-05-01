@@ -10,7 +10,6 @@ import {
   LogOut,
   Settings as SettingsIcon,
   ChevronDown,
-  CreditCard,
   MessageSquare,
   LayoutGrid,
   Monitor

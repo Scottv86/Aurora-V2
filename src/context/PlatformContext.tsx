@@ -32,6 +32,8 @@ interface PlatformContextType {
   setIsAppLauncherOpen: (open: boolean) => void;
   isNotificationsOpen: boolean;
   setIsNotificationsOpen: (open: boolean) => void;
+  breadcrumbOverrides: Record<string, string>;
+  setBreadcrumbOverride: (id: string, label: string) => void;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -53,6 +55,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
+
+  const setBreadcrumbOverride = useCallback((id: string, label: string) => {
+    setBreadcrumbOverrides(prev => ({ ...prev, [id]: label }));
+  }, []);
 
   const refreshModules = async () => {
     if (!supabaseUser || !tenant?.id) return;
@@ -308,7 +315,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       isAppLauncherOpen,
       setIsAppLauncherOpen,
       isNotificationsOpen,
-      setIsNotificationsOpen
+      setIsNotificationsOpen,
+      breadcrumbOverrides,
+      setBreadcrumbOverride
     }}>
       {children}
     </PlatformContext.Provider>

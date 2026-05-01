@@ -274,7 +274,8 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
     }
   }, [getNodes, setNodes]);
 
-  const handleSave = () => {
+  // Sync changes back to parent
+  React.useEffect(() => {
     const updatedWorkflow: Workflow = {
       id: workflow?.id || `wf-${Date.now()}`,
       name: workflow?.name || 'New Workflow',
@@ -284,15 +285,57 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         type: n.data.type as WorkflowNodeType,
         position: n.position
       })),
-      edges: edges.map(e => ({
+      edges: edges.map(e => {
+        const edgeLabel = typeof e.label === 'string' ? e.label : (e.label as any)?.props?.children || '';
+        return {
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          label: edgeLabel,
+          condition: edgeLabel
+        };
+      })
+    };
+    
+    // Avoid circular updates by comparing serialized content
+    const currentSerialized = JSON.stringify(updatedWorkflow);
+    const previousSerialized = JSON.stringify(workflow);
+    
+    if (currentSerialized !== previousSerialized) {
+      onChange(updatedWorkflow);
+    }
+  }, [nodes, edges, onChange, workflow]);
+
+  // Re-initialize when switching workflows
+  React.useEffect(() => {
+    if (workflow) {
+      const newNodes = workflow.nodes.map(n => ({
+        id: n.id,
+        type: n.type === 'ZONE' ? 'workflowZone' : 'workflowNode',
+        data: { 
+          label: n.name, 
+          type: n.type,
+          onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
+        },
+        position: n.position || { x: 0, y: 0 },
+        ...(n.type === 'ZONE' ? { width: 600, height: 400 } : {})
+      }));
+      
+      const newEdges = workflow.edges.map(e => ({
         id: e.id,
         source: e.source,
         target: e.target,
-        condition: e.label as string
-      }))
-    };
-    onChange(updatedWorkflow);
-  };
+        label: e.label || e.condition,
+        type: 'workflowEdge',
+        animated: true,
+        className: "stroke-zinc-400 dark:stroke-zinc-600"
+      }));
+
+      // Only update if the workflow ID has changed, signifying a new module load
+      setNodes(newNodes);
+      setEdges(newEdges);
+    }
+  }, [workflow?.id]);
 
   return (
     <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 flex flex-col relative overflow-hidden">

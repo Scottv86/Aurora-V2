@@ -74,21 +74,18 @@ export interface ModuleField {
   helperText?: string;
   calculationLogic?: string;
   targetModuleId?: string;
-  fields?: ModuleField[]; // For nested structures if needed in the future
+  fields?: ModuleField[]; // For nested structures like fieldGroup or repeatableGroup
+  
+  // Layout metadata (Modern Grid)
   colSpan?: number; // 1-12
   startCol?: number; // 1-12
-}
-
-export interface ModuleColumn {
-  id: string;
-  fields: ModuleField[];
-}
-
-export interface ModuleLayout {
-  id: string;
-  columnCount: number;
+  rowIndex?: number; // 0-indexed
   tabId?: string;
-  columns: ModuleColumn[];
+  visibilityRule?: {
+    fieldId: string;
+    operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
+    value: any;
+  };
 }
 
 export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';
@@ -98,15 +95,22 @@ export interface Module {
   name: string;
   type: ModuleType;
   description: string;
-  icon: string;
+  icon: any; // Can be a string (Lucide icon name) or a component
   category: string;
   enabled: boolean;
   isCustom?: boolean;
-  layout: ModuleLayout[];
+  layout: ModuleField[];
+  fields?: ModuleField[]; // Deprecated: use layout instead
   tabs?: { id: string; label: string }[];
   workflow?: Workflow;
   workflows?: Workflow[];
+
+  // Record Key Configuration
+  recordKeyPrefix?: string;
+  recordKeySuffix?: string;
+  nextKeyNumber?: number;
 }
+
 
 export type WorkflowNodeType = 'STATUS' | 'DECISION' | 'ACTION' | 'DELAY' | 'START' | 'END' | 'ZONE';
 

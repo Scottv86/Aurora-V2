@@ -64,20 +64,27 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
           "absolute inset-1 rounded-[1.5rem] transition-all duration-500",
           "bg-zinc-950/40 dark:bg-zinc-950/60 backdrop-blur-2xl border border-white/10 dark:border-zinc-800/50",
           "shadow-[0_8px_32px_rgba(0,0,0,0.3)]",
-          selected ? "ring-2 ring-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]" : "hover:border-white/20"
+          selected ? "ring-2 ring-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]" : "hover:border-white/20",
+          data.isActive && "ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] border-emerald-500/50"
         )}
       >
         {/* Accent Glow */}
         <div 
           className="absolute inset-0 rounded-[1.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
           style={{ 
-            background: `radial-gradient(circle at 0% 0%, ${accentHex}15 0%, transparent 50%)`,
+            background: `radial-gradient(circle at 0% 0%, ${data.isActive ? '#10b981' : accentHex}15 0%, transparent 50%)`,
           }}
         />
         <div 
           className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full opacity-50"
-          style={{ backgroundColor: accentHex }}
+          style={{ backgroundColor: data.isActive ? '#10b981' : accentHex }}
         />
+        
+        {data.isActive && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-emerald-500 text-white text-[7px] font-black uppercase tracking-widest rounded-full shadow-lg z-50">
+            Current Position
+          </div>
+        )}
       </div>
 
       {/* Handles */}
@@ -99,26 +106,12 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
         className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
         style={{ left: '-2px' }}
       />
-      <Handle 
-        type="source" 
-        position={Position.Left} 
-        id="left-source"
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg opacity-0" 
-        style={{ left: '-2px' }}
-      />
 
-      <Handle 
-        type="target" 
-        position={Position.Right} 
-        id="right-target"
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
-        style={{ right: '-2px' }}
-      />
       <Handle 
         type="source" 
         position={Position.Right} 
         id="right-source"
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg opacity-0" 
+        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
         style={{ right: '-2px' }}
       />
 
@@ -128,20 +121,22 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
         "text-white"
       )}>
         {/* Floating Actions */}
-        <div className={cn(
-          "absolute -top-1 -right-1 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100",
-          "z-50"
-        )}>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              data.onDelete(id);
-            }}
-            className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-rose-500 shadow-xl"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
+        {!data.readOnly && (
+          <div className={cn(
+            "absolute -top-1 -right-1 flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100",
+            "z-50"
+          )}>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onDelete(id);
+              }}
+              className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-rose-500 shadow-xl"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
 
         <div className={cn(
           "w-10 h-10 rounded-xl shrink-0 flex items-center justify-center transition-transform duration-500 group-hover:scale-110",

@@ -104,7 +104,7 @@ export const NavigationArchitect = ({ items, onChange, layout }: Props) => {
             strategy={layout === 'top' ? horizontalListSortingStrategy : verticalListSortingStrategy}
           >
             <div className={`p-2 ${layout === 'top' ? 'flex flex-row flex-wrap items-start gap-2' : 'space-y-1'}`}>
-              {items.map((item) => (
+              {(items || []).map((item) => (
                 <SortableItem 
                   key={item.id} 
                   item={item} 

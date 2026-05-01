@@ -108,3 +108,25 @@ export const flattenFields = (fields: any[]): any[] => {
   return result;
 };
 
+export const generateDefaultLayout = (fields: any[]): any[] => {
+  let rowIndex = 0;
+  let isLeft = true;
+  
+  return fields.map((f) => {
+    const layoutField = {
+      ...f,
+      id: f.id || `f_${Math.random().toString(36).substr(2, 6)}`,
+      label: f.label || f.name,
+      colSpan: 6,
+      startCol: isLeft ? 1 : 7,
+      rowIndex: rowIndex
+    };
+    
+    if (!isLeft) rowIndex++;
+    isLeft = !isLeft;
+    
+    return layoutField;
+  });
+};
+
+

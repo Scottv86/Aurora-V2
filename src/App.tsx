@@ -117,7 +117,7 @@ const App = () => {
                 <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
                 
                 {/* Dynamic Module Routes */}
-                <Route path="modules/:id" element={<ModuleView />} />
+                <Route path="modules/:moduleId" element={<ModuleView />} />
                 <Route path="modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
                 
                 {/* Platform Operations */}

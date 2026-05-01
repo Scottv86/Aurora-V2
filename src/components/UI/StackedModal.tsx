@@ -114,7 +114,7 @@ const RecordModal = ({
         setRecord(entry.localData);
         setModuleData({
           name: entry.title || "Record Detail",
-          layout: [{ id: 'row1', columnCount: 1, columns: [{ id: 'col1', fields: entry.localSchema }] }]
+          layout: (entry.localSchema || []).map((f, i) => ({ ...f, rowIndex: i, startCol: 1, colSpan: 12 }))
         });
         setLoading(false);
         return;
@@ -211,12 +211,23 @@ const RecordModal = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
                {/* Left: Fields */}
                <div className="lg:col-span-8 space-y-12">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-12 gap-8">
                     {moduleData?.layout ? (
-                      moduleData.layout.map((row: any) => (
-                        row.columns.map((col: any) => (
-                          col.fields.map((field: any) => (
-                            <div key={field.id} className={cn("space-y-2", (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6")}>
+                      (moduleData.layout || [])
+                        .sort((a: any, b: any) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
+                        .map((field: any) => {
+                          if (!isFieldVisible(field, record)) return null;
+                          
+                          return (
+                            <div 
+                              key={field.id} 
+                              className={cn("space-y-2", (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6")}
+                              style={{
+                                gridColumn: `span ${field.colSpan || 12}`,
+                                gridColumnStart: field.startCol || 'auto',
+                                gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                              }}
+                            >
                                {field.type === 'sub_module' ? (
                                  <RecursiveCollectionBlock 
                                    parentRecordId={entry.recordId!}
@@ -230,17 +241,24 @@ const RecordModal = ({
                                     onChange={(newVal) => setRecord({ ...record, [field.id]: newVal })}
                                  />
                                ) : (
-                                 <>
+                                 <div className="space-y-1.5">
                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</label>
-                                   <div className="text-base text-zinc-900 dark:text-white font-medium">
-                                      {record?.[field.id] || '-'}
-                                   </div>
-                                 </>
+                                   {entry.type === 'edit' ? (
+                                     <FieldInput 
+                                       field={field}
+                                       value={record?.[field.id] || ''}
+                                       onChange={(val) => setRecord({ ...record, [field.id]: val })}
+                                     />
+                                   ) : (
+                                     <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem]">
+                                        {record?.[field.id] || '-'}
+                                     </div>
+                                   )}
+                                 </div>
                                )}
                             </div>
-                          ))
-                        ))
-                      ))
+                          );
+                        })
                     ) : (
                       <p className="text-zinc-500 italic">No layout defined for this module.</p>
                     )}

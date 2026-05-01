@@ -71,22 +71,20 @@ import {
   Zap,
   Lock,
   ShieldCheck,
-  Menu,
   FileCode,
   Rocket,
   Globe,
   Webhook,
   ClipboardList,
   History,
-  Terminal,
-  AlertTriangle,
-  XCircle,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
   MousePointerClick,
   Filter,
   TableProperties,
   ArrowRight,
+  ArrowLeft,
   Check,
   Command,
   Info,
@@ -102,13 +100,11 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  DragOverlay,
 } from '@dnd-kit/core';
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
   rectSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
@@ -118,10 +114,14 @@ import { CommandPalette } from './CommandPalette';
 import { cn } from '../lib/utils';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
+import { useGlobalLists } from '../hooks/useGlobalList';
+import { useTeams } from '../hooks/useTeams';
+import { usePositions } from '../hooks/usePositions';
+import { usePermissionGroups } from '../hooks/usePermissionGroups';
 import { toast } from 'sonner';
 import { DATA_API_URL, API_BASE_URL } from '../config';
 import { ModuleType } from '../types/platform';
-import { MODULES } from '../constants/modules';
+import { MODULES, MODULE_CATEGORIES } from '../constants/modules';
 import { FieldGroup } from './Builder/FieldGroup';
 import { useGridEngine } from '../hooks/useGridEngine';
 import { IconPicker } from './Common/IconPicker';
@@ -130,7 +130,6 @@ import { CalculatorModal } from './Builder/CalculatorModal';
 import { FieldInput } from './FieldInput';
 import { NexusSelectionModal } from './Builder/NexusSelectionModal';
 import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
-import { ConnectorMappingDrawer } from './Builder/ConnectorMappingDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
 
 
@@ -294,10 +293,10 @@ const ConnectionLine = ({ hoveredMapping, containerRef }: {
 // --- Types ---
 
 export type FieldType = 
-  | 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select'
+  | 'text' | 'longText' | 'textarea' | 'number' | 'checkbox' | 'boolean' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select' | 'file'
   | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
   | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector';
+  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module';
 
 export interface VisibilityRule {
   id: string;
@@ -312,6 +311,13 @@ export interface VisibilityRule {
   name?: string;
 }
 
+export interface UserFilter {
+  id: string;
+  field: 'roleId' | 'teamId' | 'positionId' | 'status' | 'isSynthetic' | 'isContractor';
+  operator: 'equals' | 'not_equals';
+  value: string;
+}
+
 export interface Field {
   id: string;
   type: FieldType;
@@ -322,9 +328,12 @@ export interface Field {
   // Specific settings
   currencySymbol?: string;
   options?: string[];
+  optionsSource?: 'manual' | 'global_list';
+  globalListId?: string;
   calculationLogic?: string;
   calculationTriggers?: string[];
   targetModuleId?: string;
+  lookupSource?: 'module_records' | 'global_list' | 'tenant_users' | 'connector';
   // For nested fields (fieldGroup, repeatableGroup)
   fields?: Field[];
   visibilityRule?: VisibilityRule;
@@ -338,6 +347,7 @@ export interface Field {
   variant?: string;
   action?: string;
   iconName?: string;
+  icon?: any;
   // Auto-number settings
   autonumberPrefix?: string;
   autonumberSuffix?: string;
@@ -350,6 +360,7 @@ export interface Field {
   inlineEdit?: boolean;
   columnWidth?: number;
   isCollapsed?: boolean;
+  userFilters?: UserFilter[];
 }
 
 export interface Tab {
@@ -849,9 +860,9 @@ const evaluateVisibilityRule = (rule: any | undefined, data: any): boolean => {
     if (!rule.rules || rule.rules.length === 0) return true;
     
     if (rule.logicalOperator === 'OR') {
-      return rule.rules.some(r => evaluateVisibilityRule(r, data));
+      return (rule.rules || []).some((r: VisibilityRule) => evaluateVisibilityRule(r, data));
     } else {
-      return rule.rules.every(r => evaluateVisibilityRule(r, data));
+      return (rule.rules || []).every((r: VisibilityRule) => evaluateVisibilityRule(r, data));
     }
   }
 
@@ -926,7 +937,6 @@ const generateMockData = (fields: Field[], count: number = 5) => {
   const firstNames = ['James', 'Mary', 'Robert', 'Patricia', 'John', 'Jennifer', 'Michael', 'Linda'];
   const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis'];
   const statuses = ['Active', 'Pending', 'Archived', 'Draft', 'Review'];
-  const categories = ['Internal', 'External', 'Partner', 'Tier 1', 'Tier 2'];
 
   for (let i = 0; i < count; i++) {
     const record: any = { id: `mock-${i}`, createdAt: new Date(Date.now() - Math.random() * 1000000000).toISOString() };
@@ -948,7 +958,7 @@ const generateMockData = (fields: Field[], count: number = 5) => {
           break;
         case 'select':
           if (f.options && f.options.length > 0) {
-            record[f.id] = f.options[Math.floor(Math.random() * f.options.length)].value;
+            record[f.id] = f.options[Math.floor(Math.random() * f.options.length)];
           } else {
             record[f.id] = statuses[Math.floor(Math.random() * statuses.length)];
           }
@@ -956,6 +966,8 @@ const generateMockData = (fields: Field[], count: number = 5) => {
         case 'date':
           record[f.id] = new Date(Date.now() - Math.random() * 1000000000).toISOString().split('T')[0];
           break;
+        case 'checkbox':
+        case 'toggle':
         case 'boolean':
           record[f.id] = Math.random() > 0.5;
           break;
@@ -1044,7 +1056,10 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout }: any) =
         </div>
       ) : (
         <div className="space-y-2 opacity-80 group-hover:opacity-100 transition-opacity">
-           <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">{fObj.labelOverride || field?.label}</label>
+           <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">
+             {fObj.labelOverride || field?.label}
+             {(fObj.required || field?.required) && <span className="text-rose-500 ml-1">*</span>}
+           </label>
            <div className="h-11 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 flex items-center text-xs text-zinc-400 italic">
              {fObj.placeholderOverride || `Enter ${field?.label.toLowerCase()}...`}
            </div>
@@ -1093,6 +1108,10 @@ export const ModuleEditor = () => {
   const navigate = useNavigate();
   const { tenant, modules, refreshModules } = usePlatform();
   const { session } = useAuth();
+  const { lists: globalLists } = useGlobalLists();
+  const { teams } = useTeams();
+  const { positions } = usePositions();
+  const { groups: permissionGroups } = usePermissionGroups();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -1103,6 +1122,9 @@ export const ModuleEditor = () => {
     iconName: 'Box',
     type: 'RECORD' as ModuleType,
     status: 'ACTIVE' as const,
+    recordKeyPrefix: '',
+    recordKeySuffix: '',
+    nextKeyNumber: 1,
   });
   
   const [layout, setLayout] = useState<Layout>([]);
@@ -1551,6 +1573,9 @@ export const ModuleEditor = () => {
                 iconName: 'Box', // Defaulting to Box for standard modules as the icon is a component
                 type: (standardModule.type as ModuleType) || 'RECORD',
                 status: 'ACTIVE',
+                recordKeyPrefix: (standardModule as any).recordKeyPrefix || '',
+                recordKeySuffix: (standardModule as any).recordKeySuffix || '',
+                nextKeyNumber: (standardModule as any).nextKeyNumber || 1,
               });
               setIsLoading(false);
               return;
@@ -1569,38 +1594,22 @@ export const ModuleEditor = () => {
           iconName: data.iconName || 'Box',
           type: data.type || 'RECORD',
           status: data.status || 'ACTIVE',
+          recordKeyPrefix: data.recordKeyPrefix || '',
+          recordKeySuffix: data.recordKeySuffix || '',
+          nextKeyNumber: data.nextKeyNumber || 1,
         });
 
         if (data.layout) {
-          // Migration logic for old Row/Column format
-          if (Array.isArray(data.layout) && data.layout.length > 0 && 'columns' in data.layout[0]) {
-            console.log("[ModuleEditor] Migrating legacy row/column layout to grid system");
-            const migratedFields: Field[] = [];
-            data.layout.forEach((row: any) => {
-              row.columns.forEach((col: any, colIdx: number) => {
-                const colSpan = Math.floor(12 / (row.columnCount || 1));
-                const startCol = (colIdx * colSpan) + 1;
-                if (Array.isArray(col.fields)) {
-                  col.fields.forEach((field: any) => {
-                    migratedFields.push({
-                      ...field,
-                      colSpan,
-                      startCol,
-                      tabId: row.tabId || tabs[0]?.id || 'default-tab'
-                    });
-                  });
-                }
-              });
-            });
-            setLayout(migratedFields);
-          } else {
-            setLayout(data.layout);
-          }
+          setLayout(data.layout);
         }
         if (data.tabs) setTabs(data.tabs);
         if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
-        if (data.workflows && data.workflows.length > 0) setWorkflow(data.workflows[0]);
-        if (data.forms) {
+        if (data.workflows && data.workflows.length > 0) {
+          setWorkflow(data.workflows[0]);
+        } else if (data.workflow) {
+          setWorkflow(data.workflow);
+        }
+        if (data.forms && Array.isArray(data.forms)) {
           const normalizedForms = data.forms.map((f: any) => {
             if (!f.steps || f.steps.length === 0) {
               return {
@@ -1811,11 +1820,6 @@ export const ModuleEditor = () => {
       return (a.startCol || 1) - (b.startCol || 1);
     });
 
-    // 2. Compaction: Push items up if there's space
-    // For now, let's at least ensure there are no completely empty row indices
-    let lastRow = -1;
-    let currentRowOffset = 0;
-    
     const rows = [...new Set(sorted.map(f => f.rowIndex || 0))].sort((a, b) => a - b);
     const rowMap = new Map();
     rows.forEach((r, i) => rowMap.set(r, i));
@@ -1827,14 +1831,10 @@ export const ModuleEditor = () => {
   };
 
   const compactLayout = (fields: Field[]) => {
-    // Advanced compaction: Try to fill gaps in previous rows
-    // This is a placeholder for a more complex grid packing algorithm
     return normalizeLayout(fields);
   };
 
   const generateId = () => Math.random().toString(36).substring(2, 11);
-
-  // Removed createRow as we are moving to a flat grid system
 
   const createField = (type: FieldType): Field => ({
     id: `field-${generateId()}`,
@@ -1898,18 +1898,15 @@ export const ModuleEditor = () => {
     
     // Determine span and height from activeDragItem
     let span = 12;
-    let isGroupDrag = false;
 
     if (activeDragItem) {
       if (activeDragItem.type === 'field') {
         const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === activeDragItem.fieldType);
         if (fieldDef?.defaultSpan) span = fieldDef.defaultSpan;
-        isGroupDrag = activeDragItem.fieldType === 'group' || activeDragItem.fieldType === 'fieldGroup' || activeDragItem.fieldType === 'repeatableGroup';
       } else if (activeDragItem.type === 'move') {
         const field = layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || '');
         if (field) {
           span = field.colSpan || 12;
-          isGroupDrag = field.type === 'group' || field.type === 'fieldGroup' || field.type === 'repeatableGroup';
         }
       }
     }
@@ -2034,6 +2031,18 @@ export const ModuleEditor = () => {
 
   const updateFields = (fieldIds: string[], updates: Partial<Field>) => {
     fieldIds.forEach(id => updateField(id, updates));
+    
+    // Sync with forms if required status changed
+    if (updates.required !== undefined) {
+      setForms(prev => prev.map(form => ({
+        ...form,
+        fields: form.fields.map((f: any) => fieldIds.includes(f.id) ? { ...f, required: updates.required } : f),
+        steps: form.steps?.map((step: any) => ({
+          ...step,
+          fields: step.fields.map((f: any) => fieldIds.includes(f.id) ? { ...f, required: updates.required } : f)
+        }))
+      })));
+    }
   };
 
   const updateField = (fieldId: string, updates: Partial<Field>) => {
@@ -2070,6 +2079,18 @@ export const ModuleEditor = () => {
 
       return nextLayout;
     });
+
+    // Sync with forms if required status changed
+    if (updates.required !== undefined) {
+      setForms(prev => prev.map(form => ({
+        ...form,
+        fields: form.fields.map((f: any) => f.id === fieldId ? { ...f, required: updates.required } : f),
+        steps: form.steps?.map((step: any) => ({
+          ...step,
+          fields: step.fields.map((f: any) => f.id === fieldId ? { ...f, required: updates.required } : f)
+        }))
+      })));
+    }
   };
 
   const selectedField = selectedId ? findFieldRecursive(layout, selectedId) : null;
@@ -2412,44 +2433,69 @@ export const ModuleEditor = () => {
                       "p-8 min-h-[600px] relative z-10 grid gap-4 items-start content-start transition-all duration-300",
                       "grid-cols-1", // Mobile first
                       viewportSize !== 'mobile' && "md:grid-cols-12", // Desktop/Tablet grid
-                      isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
+                      (isArchitectThinking || isLoading) && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
                     )}
                   >
-                    {/* Architect Thinking Overlay */}
+                    {/* Architect Thinking / Loading Overlay */}
                     <AnimatePresence>
-                      {isArchitectThinking && (
+                      {(isArchitectThinking || isLoading) && (
                         <motion.div 
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none"
+                          className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/20 backdrop-blur-2xl"
                         >
-                          <div className="flex flex-col items-center gap-4">
+                          <motion.div 
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="flex flex-col items-center gap-8 p-12 rounded-[3.5rem] bg-white/5 dark:bg-black/40 border border-white/10 backdrop-blur-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] relative overflow-hidden"
+                          >
+                            {/* Inner Glow */}
+                            <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/20 blur-[80px] rounded-full" />
+                            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full" />
+
                             <div className="relative">
                               <motion.div 
-                                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                                transition={{ repeat: Infinity, duration: 2 }}
-                                className="w-24 h-24 bg-indigo-500/20 rounded-full blur-2xl"
+                                animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.6, 0.3] }}
+                                transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                                className="w-32 h-32 bg-indigo-500/40 rounded-full blur-[40px] absolute -inset-4"
                               />
-                              <BrainCircuit size={48} className="text-indigo-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                              <div className="w-20 h-20 bg-zinc-900/80 rounded-[2rem] flex items-center justify-center border border-white/10 relative z-10 shadow-2xl">
+                                <BrainCircuit size={40} className="text-indigo-500" />
+                              </div>
                             </div>
-                            <div className="px-6 py-2 bg-zinc-900 text-white rounded-full text-[10px] font-bold uppercase tracking-widest shadow-2xl border border-white/10">
-                              Architect is Thinking...
+
+                            <div className="flex flex-col items-center gap-4 relative z-10">
+                              <div className="flex flex-col items-center gap-1">
+                                <h3 className="text-lg font-black text-white uppercase tracking-[0.2em] text-center">
+                                  {isLoading ? 'Decrypting Module' : 'Architect Active'}
+                                </h3>
+                                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest opacity-80">
+                                  {isLoading ? 'Synchronizing Schema Core' : 'Optimizing Design Grid'}
+                                </p>
+                              </div>
+                              
+                              <div className="w-48 h-1 bg-white/5 rounded-full overflow-hidden mt-2">
+                                <motion.div 
+                                  animate={{ 
+                                    x: ['-100%', '100%'],
+                                  }}
+                                  transition={{ 
+                                    repeat: Infinity, 
+                                    duration: 1.5, 
+                                    ease: "linear" 
+                                  }}
+                                  className="w-1/2 h-full bg-gradient-to-r from-transparent via-indigo-500 to-transparent"
+                                />
+                              </div>
                             </div>
-                          </div>
+                          </motion.div>
                         </motion.div>
                       )}
                     </AnimatePresence>
                     <AnimatePresence mode="popLayout">
                       {(() => {
-                        const currentFields = layout
-                          .filter(block => block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id))
-                          .sort((a, b) => {
-                            if ((a.rowIndex || 0) !== (b.rowIndex || 0)) return (a.rowIndex || 0) - (b.rowIndex || 0);
-                            return (a.startCol || 1) - (b.startCol || 1);
-                          });
-                        
-                        const items = [...currentFields];
+
 
 
                           const renderFieldBlocks = (fields: Field[], parentId?: string): React.ReactNode => {
@@ -2492,7 +2538,7 @@ export const ModuleEditor = () => {
                                     selectedId={selectedId}
                                     onSelect={setSelectedId}
                                     onUpdate={updateField}
-                                    onDelete={deleteBlock}
+                                    onDelete={(id) => deleteBlocks([id])}
                                     onDrop={handleDropOnCanvas}
                                     renderNested={renderFieldBlocks}
                                     viewportSize={viewportSize}
@@ -3227,8 +3273,8 @@ export const ModuleEditor = () => {
                                           </div>
                                         </div>
                                         <div className="flex flex-col gap-3">
-                                          <button className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><ArrowLeftRight size={14} className="-rotate-90" /></button>
-                                          <button className="w-8 h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400"><ArrowLeftRight size={14} className="rotate-90" /></button>
+                                          <button className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><ChevronRight size={14} /></button>
+                                          <button className="w-8 h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400"><ChevronLeft size={14} /></button>
                                         </div>
                                         <div className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
                                           <div className="h-10 bg-indigo-500/5 border-b border-indigo-500/10 flex items-center px-4">
@@ -4119,8 +4165,9 @@ export const ModuleEditor = () => {
                                     const val = moduleState[fObj.id];
                                     const fieldDef = layout.find(f => f.id === fObj.id);
                                     
-                                    // Check required
-                                    if (fObj.required && (!val || (Array.isArray(val) && val.length === 0))) {
+                                    // Check required (from form field OR layout definition)
+                                    const isRequired = fObj.required || fieldDef?.required;
+                                    if (isRequired && (!val || (Array.isArray(val) && val.length === 0))) {
                                       errors[fObj.id] = `${fieldDef?.label || fObj.id} is required.`;
                                     }
                                     
@@ -4240,9 +4287,9 @@ export const ModuleEditor = () => {
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
-                                {field.visibilityRule && <Eye size={12} className="text-indigo-500" title="Has Visibility Rules" />}
-                                {field.calculationLogic && <Calculator size={12} className="text-emerald-500" title="Calculated Field" />}
-                                {field.options && <ListPlus size={12} className="text-amber-500" title={`Has ${field.options.length} options`} />}
+                                {field.visibilityRule && <div title="Has Visibility Rules"><Eye size={12} className="text-indigo-500" /></div>}
+                                {field.calculationLogic && <div title="Calculated Field"><Calculator size={12} className="text-emerald-500" /></div>}
+                                {field.options && <div title={`Has ${field.options.length} options`}><ListPlus size={12} className="text-amber-500" /></div>}
                               </div>
                             </td>
                           </tr>
@@ -4296,16 +4343,57 @@ export const ModuleEditor = () => {
                         
                         <div className="space-y-2">
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Category</label>
-                          <input 
-                            type="text" 
-                            value={moduleSettings.category}
-                            onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
-                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                            placeholder="e.g. Operations"
-                          />
+                          <div className="relative">
+                            <select 
+                              value={moduleSettings.category}
+                              onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                            >
+                              {MODULE_CATEGORIES.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
                     </section>
+
+                    {/* Record Key Section */}
+                    <section className="space-y-6">
+                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
+                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Record Key Configuration</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Key Prefix</label>
+                          <input 
+                            type="text" 
+                            value={moduleSettings.recordKeyPrefix || ''}
+                            onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeyPrefix: e.target.value.toUpperCase() }))}
+                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            placeholder="e.g. TKT"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Key Suffix</label>
+                          <input 
+                            type="text" 
+                            value={moduleSettings.recordKeySuffix || ''}
+                            onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeySuffix: e.target.value.toUpperCase() }))}
+                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            placeholder="e.g. A"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 px-1">
+                        Records will be generated as: <span className="text-indigo-500 font-bold">{moduleSettings.recordKeyPrefix || 'PREFIX'}-1001{moduleSettings.recordKeySuffix || ''}</span>
+                      </p>
+                    </section>
+
 
                     {/* Classification Section */}
                     <section className="space-y-6">
@@ -5008,7 +5096,7 @@ export const ModuleEditor = () => {
                                            return { ...f, fields: f.fields.filter((fo: any) => fo.id !== field.id) };
                                          }));
                                        } else {
-                                         const newFieldObj = { id: field.id, labelOverride: field.label, width: 'full' };
+                                         const newFieldObj = { id: field.id, labelOverride: field.label, width: 'full', required: field.required || false };
                                          setForms(prev => prev.map(f => {
                                            if (f.id !== selectedFormId) return f;
                                            if (f.isMultistep) {
@@ -5380,9 +5468,14 @@ export const ModuleEditor = () => {
                                         type="text" 
                                         value={fObj.labelOverride || ''}
                                         onChange={(e) => {
-                                          const newFields = [...selectedForm.fields];
-                                          newFields[fObjIdx] = { ...fObj, labelOverride: e.target.value };
-                                          setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                          const updates = { labelOverride: e.target.value };
+                                          setForms(prev => prev.map(f => {
+                                            if (f.id !== selectedFormId) return f;
+                                            if (f.isMultistep) {
+                                              return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                            }
+                                            return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                          }));
                                         }}
                                         placeholder={isVisual ? 'Enter text...' : field?.label}
                                         className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
@@ -5395,9 +5488,14 @@ export const ModuleEditor = () => {
                                         type="text" 
                                         value={fObj.placeholderOverride || ''}
                                         onChange={(e) => {
-                                          const newFields = [...selectedForm.fields];
-                                          newFields[fObjIdx] = { ...fObj, placeholderOverride: e.target.value };
-                                          setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                          const updates = { placeholderOverride: e.target.value };
+                                          setForms(prev => prev.map(f => {
+                                            if (f.id !== selectedFormId) return f;
+                                            if (f.isMultistep) {
+                                              return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                            }
+                                            return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                          }));
                                         }}
                                         className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                                       />
@@ -5410,9 +5508,14 @@ export const ModuleEditor = () => {
                                             <button 
                                               key={w}
                                               onClick={() => {
-                                                const newFields = [...selectedForm.fields];
-                                                newFields[fObjIdx] = { ...fObj, width: w };
-                                                setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                                const updates = { width: w };
+                                                setForms(prev => prev.map(f => {
+                                                  if (f.id !== selectedFormId) return f;
+                                                  if (f.isMultistep) {
+                                                    return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                  }
+                                                  return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                                }));
                                               }}
                                               className={cn(
                                                 "py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
@@ -5430,28 +5533,43 @@ export const ModuleEditor = () => {
                                     {!isVisual && (
                                       <div className="grid grid-cols-2 gap-4 py-6 border-y border-zinc-100 dark:border-zinc-800">
                                         <div className="flex items-center justify-between">
-                                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Required</span>
+                                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                                            Required
+                                            {field?.required && <Lock size={10} className="text-indigo-500" />}
+                                          </span>
                                           <div 
                                             onClick={() => {
-                                              const newFields = [...selectedForm.fields];
-                                              newFields[fObjIdx] = { ...fObj, required: !fObj.required };
-                                              setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                              if (field?.required) return;
+                                              const updates = { required: !fObj.required };
+                                              setForms(prev => prev.map(f => {
+                                                if (f.id !== selectedFormId) return f;
+                                                if (f.isMultistep) {
+                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                }
+                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                              }));
                                             }}
                                             className={cn(
-                                              "h-5 w-9 rounded-full relative cursor-pointer transition-colors",
-                                              fObj.required ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                              "h-5 w-9 rounded-full relative transition-all",
+                                              field?.required ? "bg-indigo-600/50 cursor-not-allowed" : "cursor-pointer",
+                                              (fObj.required || field?.required) ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
                                             )}
                                           >
-                                            <div className={cn("absolute top-1 h-3 w-3 rounded-full bg-white shadow-sm transition-all", fObj.required ? "right-1" : "left-1")} />
+                                            <div className={cn("absolute top-1 h-3 w-3 rounded-full bg-white shadow-sm transition-all", (fObj.required || field?.required) ? "right-1" : "left-1")} />
                                           </div>
                                         </div>
                                         <div className="flex items-center justify-between">
                                           <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Read Only</span>
                                           <div 
                                             onClick={() => {
-                                              const newFields = [...selectedForm.fields];
-                                              newFields[fObjIdx] = { ...fObj, readOnly: !fObj.readOnly };
-                                              setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                              const updates = { readOnly: !fObj.readOnly };
+                                              setForms(prev => prev.map(f => {
+                                                if (f.id !== selectedFormId) return f;
+                                                if (f.isMultistep) {
+                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                }
+                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                              }));
                                             }}
                                             className={cn(
                                               "h-5 w-9 rounded-full relative cursor-pointer transition-colors",
@@ -5481,9 +5599,14 @@ export const ModuleEditor = () => {
                                           <select 
                                             value={fObj.height || 'md'}
                                             onChange={(e) => {
-                                              const newFields = [...selectedForm.fields];
-                                              newFields[fObjIdx] = { ...fObj, height: e.target.value };
-                                              setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                              const updates = { height: e.target.value };
+                                              setForms(prev => prev.map(f => {
+                                                if (f.id !== selectedFormId) return f;
+                                                if (f.isMultistep) {
+                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                }
+                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                              }));
                                             }}
                                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
                                           >
@@ -5508,14 +5631,19 @@ export const ModuleEditor = () => {
                                           <select 
                                             value={fObj.visibility?.fieldId || ''}
                                             onChange={(e) => {
-                                              const newFields = [...selectedForm.fields];
-                                              newFields[fObjIdx] = { ...fObj, visibility: { ...fObj.visibility, fieldId: e.target.value } };
-                                              setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                              const updates = { visibility: { ...fObj.visibility, fieldId: e.target.value } };
+                                              setForms(prev => prev.map(f => {
+                                                if (f.id !== selectedFormId) return f;
+                                                if (f.isMultistep) {
+                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                }
+                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                              }));
                                             }}
                                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
                                           >
                                             <option value="">Always Visible</option>
-                                            {selectedForm.fields
+                                            {fields
                                               .filter((f: any) => f.id !== selectedFieldInFormId && !f.id.startsWith('visual-'))
                                               .map((f: any) => {
                                                 const label = layout.find(l => l.id === f.id)?.label || f.id;
@@ -5531,9 +5659,14 @@ export const ModuleEditor = () => {
                                               <select 
                                                 value={fObj.visibility?.operator || 'eq'}
                                                 onChange={(e) => {
-                                                  const newFields = [...selectedForm.fields];
-                                                  newFields[fObjIdx] = { ...fObj, visibility: { ...fObj.visibility, operator: e.target.value } };
-                                                  setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                                  const updates = { visibility: { ...fObj.visibility, operator: e.target.value } };
+                                                  setForms(prev => prev.map(f => {
+                                                    if (f.id !== selectedFormId) return f;
+                                                    if (f.isMultistep) {
+                                                      return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                    }
+                                                    return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                                  }));
                                                 }}
                                                 className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
                                               >
@@ -5548,9 +5681,14 @@ export const ModuleEditor = () => {
                                                 type="text"
                                                 value={fObj.visibility?.value || ''}
                                                 onChange={(e) => {
-                                                  const newFields = [...selectedForm.fields];
-                                                  newFields[fObjIdx] = { ...fObj, visibility: { ...fObj.visibility, value: e.target.value } };
-                                                  setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                                  const updates = { visibility: { ...fObj.visibility, value: e.target.value } };
+                                                  setForms(prev => prev.map(f => {
+                                                    if (f.id !== selectedFormId) return f;
+                                                    if (f.isMultistep) {
+                                                      return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                    }
+                                                    return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                                  }));
                                                 }}
                                                 placeholder="Value..."
                                                 className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
@@ -5575,9 +5713,14 @@ export const ModuleEditor = () => {
                                               type="text"
                                               value={fObj.validation?.pattern || ''}
                                               onChange={(e) => {
-                                                const newFields = [...selectedForm.fields];
-                                                newFields[fObjIdx] = { ...fObj, validation: { ...fObj.validation, pattern: e.target.value } };
-                                                setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                                const updates = { validation: { ...fObj.validation, pattern: e.target.value } };
+                                                setForms(prev => prev.map(f => {
+                                                  if (f.id !== selectedFormId) return f;
+                                                  if (f.isMultistep) {
+                                                    return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                  }
+                                                  return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                                }));
                                               }}
                                               placeholder="e.g. ^[0-9]{5}$"
                                               className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white font-mono focus:outline-none"
@@ -5589,9 +5732,14 @@ export const ModuleEditor = () => {
                                               type="text"
                                               value={fObj.validation?.errorMessage || ''}
                                               onChange={(e) => {
-                                                const newFields = [...selectedForm.fields];
-                                                newFields[fObjIdx] = { ...fObj, validation: { ...fObj.validation, errorMessage: e.target.value } };
-                                                setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                                const updates = { validation: { ...fObj.validation, errorMessage: e.target.value } };
+                                                setForms(prev => prev.map(f => {
+                                                  if (f.id !== selectedFormId) return f;
+                                                  if (f.isMultistep) {
+                                                    return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
+                                                  }
+                                                  return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
+                                                }));
                                               }}
                                               placeholder="Invalid input..."
                                               className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
@@ -5602,8 +5750,13 @@ export const ModuleEditor = () => {
                                     )}
                                    <button 
                                      onClick={() => {
-                                       const newFields = selectedForm.fields.filter((_: any, i: number) => i !== fObjIdx);
-                                       setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, fields: newFields } : f));
+                                       setForms(prev => prev.map(f => {
+                                         if (f.id !== selectedFormId) return f;
+                                         if (f.isMultistep) {
+                                           return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => fo.id !== selectedFieldInFormId) })) };
+                                         }
+                                         return { ...f, fields: f.fields.filter((fo: any) => fo.id !== selectedFieldInFormId) };
+                                       }));
                                        setSelectedFieldInFormId(null);
                                      }}
                                      className="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
@@ -5914,6 +6067,35 @@ export const ModuleEditor = () => {
                         />
                       </div>
 
+                      <div className="pt-2">
+                        <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                              selectedField.required ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                            )}>
+                              <CheckSquare size={14} />
+                            </div>
+                            <div>
+                              <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Required Field</span>
+                              <span className="block text-[9px] text-zinc-500">{selectedField.required ? 'Mandatory for submission' : 'Optional field'}</span>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => updateField(selectedField.id, { required: !selectedField.required })}
+                            className={cn(
+                              "w-10 h-5 rounded-full relative transition-colors duration-300",
+                              selectedField.required ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                            )}
+                          >
+                            <motion.div 
+                              animate={{ x: selectedField.required ? 22 : 2 }}
+                              className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
+                            />
+                          </button>
+                        </label>
+                      </div>
+
                       </div>
 
                       {/* Data Population Mapping */}
@@ -6072,42 +6254,83 @@ export const ModuleEditor = () => {
                       )}
 
                       {(selectedField.type === 'select' || selectedField.type === 'radio' || selectedField.type === 'checkboxGroup' || selectedField.type === 'buttonGroup' || selectedField.type === 'duallist' || selectedField.type === 'stepper' || selectedField.type === 'timeline') && (
-                        <div className="space-y-4">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Option List</label>
+                        <div className="space-y-6">
                           <div className="space-y-2">
-                            {(selectedField.options || []).map((opt, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <input 
-                                  type="text" 
-                                  value={opt}
-                                  onChange={(e) => {
-                                    const newOpts = [...(selectedField.options || [])];
-                                    newOpts[idx] = e.target.value;
-                                    updateField(selectedField.id, { options: newOpts });
-                                  }}
-                                  className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                                />
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Data Source</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {['manual', 'global_list'].map((src) => (
+                                <button 
+                                  key={src}
+                                  onClick={() => updateField(selectedField.id, { optionsSource: src as any })}
+                                  className={cn(
+                                    "py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
+                                    (selectedField.optionsSource === src || (!selectedField.optionsSource && src === 'manual'))
+                                      ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                      : "bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
+                                  )}
+                                >
+                                  {src.replace('_', ' ')}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {selectedField.optionsSource === 'global_list' ? (
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Select Global List</label>
+                              <select 
+                                value={selectedField.globalListId || ''}
+                                onChange={(e) => updateField(selectedField.id, { globalListId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Choose a list...</option>
+                                {globalLists.map((list: any) => (
+                                  <option key={list.id} value={list.id}>{list.name}</option>
+                                ))}
+                              </select>
+                              <p className="text-[9px] text-zinc-500 italic px-1">
+                                Options will be populated from the first column of the selected list.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Option List</label>
+                              <div className="space-y-2">
+                                {(selectedField.options || []).map((opt, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <input 
+                                      type="text" 
+                                      value={opt}
+                                      onChange={(e) => {
+                                        const newOpts = [...(selectedField.options || [])];
+                                        newOpts[idx] = e.target.value;
+                                        updateField(selectedField.id, { options: newOpts });
+                                      }}
+                                      className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        const newOpts = (selectedField.options || []).filter((_, i) => i !== idx);
+                                        updateField(selectedField.id, { options: newOpts });
+                                      }}
+                                      className="p-2 text-zinc-600 hover:text-rose-500 transition-colors"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                ))}
                                 <button 
                                   onClick={() => {
-                                    const newOpts = (selectedField.options || []).filter((_, i) => i !== idx);
+                                    const newOpts = [...(selectedField.options || []), `Option ${(selectedField.options?.length || 0) + 1}`];
                                     updateField(selectedField.id, { options: newOpts });
                                   }}
-                                  className="p-2 text-zinc-600 hover:text-rose-500 transition-colors"
+                                  className="w-full py-2 border border-dashed border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all uppercase tracking-widest"
                                 >
-                                  <Trash2 size={14} />
+                                  Add Option
                                 </button>
                               </div>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const newOpts = [...(selectedField.options || []), `Option ${(selectedField.options?.length || 0) + 1}`];
-                                updateField(selectedField.id, { options: newOpts });
-                              }}
-                              className="w-full py-2 border border-dashed border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all uppercase tracking-widest"
-                            >
-                              Add Option
-                            </button>
-                          </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -6345,18 +6568,243 @@ export const ModuleEditor = () => {
                       )}
 
                       {selectedField.type === 'lookup' && (
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Module</label>
-                          <select 
-                            value={selectedField.targetModuleId || ''}
-                            onChange={(e) => updateField(selectedField.id, { targetModuleId: e.target.value })}
-                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
-                          >
-                            <option value="">Select Module...</option>
-                            {modules.map(m => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                          </select>
+                        <div className="space-y-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Lookup Source</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { id: 'module_records', label: 'Modules' },
+                                { id: 'global_list', label: 'Lists' },
+                                { id: 'tenant_users', label: 'Users' },
+                                { id: 'connector', label: 'Connector' }
+                              ].map((src) => (
+                                <button 
+                                  key={src.id}
+                                  onClick={() => updateField(selectedField.id, { lookupSource: src.id as any })}
+                                  className={cn(
+                                    "py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
+                                    (selectedField.lookupSource === src.id || (!selectedField.lookupSource && src.id === 'module_records'))
+                                      ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                      : "bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
+                                  )}
+                                >
+                                  {src.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {(selectedField.lookupSource === 'module_records' || !selectedField.lookupSource) && (
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Module</label>
+                              <select 
+                                value={selectedField.targetModuleId || ''}
+                                onChange={(e) => updateField(selectedField.id, { targetModuleId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Select Module...</option>
+                                {modules.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {selectedField.lookupSource === 'global_list' && (
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Global List</label>
+                              <select 
+                                value={selectedField.globalListId || ''}
+                                onChange={(e) => updateField(selectedField.id, { globalListId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Select Global List...</option>
+                                {globalLists.map((list: any) => (
+                                  <option key={list.id} value={list.id}>{list.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {selectedField.lookupSource === 'connector' && (
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Source Connector</label>
+                              <select 
+                                value={selectedField.connectorId || ''}
+                                onChange={(e) => updateField(selectedField.id, { connectorId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Select Connector...</option>
+                                {activeConnectors.map((c: any) => (
+                                  <option key={c.connectorId} value={c.connectorId}>{c.displayName || c.name || c.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {selectedField.lookupSource === 'tenant_users' && (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between px-1">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">User Filtering Rules</label>
+                                <button 
+                                  onClick={() => {
+                                    const newFilters = [...(selectedField.userFilters || []), { id: Math.random().toString(36).substr(2, 9), field: 'roleId', operator: 'equals', value: '' }];
+                                    updateField(selectedField.id, { userFilters: newFilters });
+                                  }}
+                                  className="flex items-center gap-1 text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
+                                >
+                                  <Plus size={10} />
+                                  Add Rule
+                                </button>
+                              </div>
+
+                              {(selectedField.userFilters || []).length === 0 ? (
+                                <div className="p-4 bg-indigo-500/5 border border-dashed border-indigo-500/20 rounded-2xl">
+                                  <p className="text-[9px] text-zinc-500 leading-relaxed italic text-center">
+                                    No filters applied. All active members will be returned.
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {(selectedField.userFilters || []).map((filter: UserFilter) => (
+                                    <div key={filter.id} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-2 relative group">
+                                      <button 
+                                        onClick={() => {
+                                          const newFilters = selectedField.userFilters?.filter((f: UserFilter) => f.id !== filter.id);
+                                          updateField(selectedField.id, { userFilters: newFilters });
+                                        }}
+                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center text-zinc-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition-all"
+                                      >
+                                        <X size={10} />
+                                      </button>
+
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <select 
+                                          value={filter.field}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => 
+                                              f.id === filter.id ? { ...f, field: e.target.value as any, value: '' } : f
+                                            );
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="roleId">Role</option>
+                                          <option value="teamId">Team</option>
+                                          <option value="positionId">Position</option>
+                                          <option value="status">Status</option>
+                                          <option value="isSynthetic">Member Type</option>
+                                          <option value="isContractor">Contractor Status</option>
+                                        </select>
+
+                                        <select 
+                                          value={filter.operator}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => 
+                                              f.id === filter.id ? { ...f, operator: e.target.value as any } : f
+                                            );
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="equals">Is</option>
+                                          <option value="not_equals">Is Not</option>
+                                        </select>
+                                      </div>
+
+                                      {filter.field === 'roleId' && (
+                                        <select 
+                                          value={filter.value}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="">Select Role...</option>
+                                          {permissionGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                        </select>
+                                      )}
+
+                                      {filter.field === 'teamId' && (
+                                        <select 
+                                          value={filter.value}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="">Select Team...</option>
+                                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                        </select>
+                                      )}
+
+                                      {filter.field === 'positionId' && (
+                                        <select 
+                                          value={filter.value}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="">Select Position...</option>
+                                          {positions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                                        </select>
+                                      )}
+
+                                      {filter.field === 'status' && (
+                                        <select 
+                                          value={filter.value}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="">Select Status...</option>
+                                          <option value="Active">Active</option>
+                                          <option value="Pending">Pending</option>
+                                          <option value="Inactive">Inactive</option>
+                                        </select>
+                                      )}
+
+                                      {filter.field === 'isSynthetic' && (
+                                        <select 
+                                          value={filter.value}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="">Select Type...</option>
+                                          <option value="false">Human</option>
+                                          <option value="true">AI Agent</option>
+                                        </select>
+                                      )}
+
+                                      {filter.field === 'isContractor' && (
+                                        <select 
+                                          value={filter.value}
+                                          onChange={(e) => {
+                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
+                                            updateField(selectedField.id, { userFilters: newFilters });
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                                        >
+                                          <option value="">Select Status...</option>
+                                          <option value="false">Full-time Employee</option>
+                                          <option value="true">Contractor</option>
+                                        </select>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -6890,9 +7338,9 @@ export const ModuleEditor = () => {
                   ...moduleSettings,
                   id: isNew && id !== 'new' ? id : undefined,
                   enabled: moduleSettings.status === 'ACTIVE',
-                  layout: currentLayout,
-                  tabs,
-                  forms,
+                  layout: currentLayout || [],
+                  tabs: tabs || [],
+                  forms: forms || [],
                   connectorMappings: {
                     ...(connectorMappings || {}),
                     [conn.connectorId]: newMappings

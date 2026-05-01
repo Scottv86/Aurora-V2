@@ -40,6 +40,7 @@ const CATEGORIES = [
   { id: 'Platform', label: 'Platform', icon: Database },
   { id: 'HR & People & Organisations', label: 'Workforce', icon: Briefcase },
   { id: 'Risk & Compliance', label: 'Risk', icon: ShieldCheck },
+  { id: 'Registry', label: 'Registry', icon: LucideIcons.Book },
   { id: 'Custom', label: 'Custom', icon: LucideIcons.Cpu }
 ];
 
@@ -185,6 +186,7 @@ export const ModuleCatalog = () => {
           },
           body: JSON.stringify({
             ...mod,
+            enabled: true,
             status: 'ACTIVE'
           })
         });
@@ -200,6 +202,7 @@ export const ModuleCatalog = () => {
           },
           body: JSON.stringify({
             ...mod,
+            enabled: true,
             status: 'ACTIVE'
           })
         });
@@ -232,6 +235,7 @@ export const ModuleCatalog = () => {
         },
         body: JSON.stringify({
           ...mod,
+          enabled: false,
           status: 'INACTIVE'
         })
       });

@@ -151,7 +151,7 @@ export const WorkQueue = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
-          {cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length > 0 ? cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).map((c, i) => (
+          {cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length > 0 ? cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).map((c) => (
             <div
               key={c.id}
               onClick={() => setSelectedCase(c)}

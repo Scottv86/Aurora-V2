@@ -98,7 +98,7 @@ router.get('/records', async (req: TenantRequest, res) => {
     }
     
     // Format records for frontend consumption (Hydrate top-level with 'data' payload)
-    const formatted = records.map((r: any) => ({
+    const formatted = (records as any[]).map((r: any) => ({
       id: r.id,
       moduleId: r.moduleId,
       status: r.status,
@@ -106,7 +106,8 @@ router.get('/records', async (req: TenantRequest, res) => {
       path: r.path,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
-      ...(r.data as any)
+      ...(r.data as any),
+      workflowState: r.workflowState
     }));
     
     res.json(formatted);
@@ -124,8 +125,7 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
-    // Hydrate record with data payload
-    const formatted = {
+    res.json({
       id: record.id,
       moduleId: record.moduleId,
       status: record.status,
@@ -133,9 +133,9 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
-      ...(record.data as any)
-    };
-    res.json(formatted);
+      ...(record.data as any),
+      workflowState: record.workflowState
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -148,18 +148,60 @@ router.post('/records', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const { moduleId, associations, path, ...data } = req.body;
 
+    // Handle Record Key Generation
+    const module = await db.module.findUnique({ where: { id: moduleId } });
+    let finalData = { ...data };
+    
+    if (module && (module.config as any).recordKeyPrefix) {
+      const config = module.config as any;
+      const nextNum = config.nextKeyNumber || 1;
+      const prefix = config.recordKeyPrefix || '';
+      const suffix = config.recordKeySuffix || '';
+      const recordKey = `${prefix}-${nextNum}${suffix}`;
+      
+      finalData._record_key = recordKey;
+      
+      // Update module counter
+      await db.module.update({
+        where: { id: moduleId },
+        data: {
+          config: {
+            ...config,
+            nextKeyNumber: nextNum + 1
+          }
+        }
+      });
+    }
+
+    // Initialize workflow state if module has one
+    let workflowState = null;
+    const config = module?.config as any;
+    const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+    
+    if (workflow && workflow.nodes && workflow.nodes.length > 0) {
+      const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
+      workflowState = {
+        currentNodeId: startNode.id,
+        history: [{
+          nodeId: startNode.id,
+          timestamp: new Date().toISOString(),
+          action: 'Initialized'
+        }]
+      };
+    }
+
     const record = await db.record.create({
       data: {
         tenantId, // still required by schema, but RLS will verify it matches app.current_tenant_id
         moduleId,
-        data: data as any,
+        data: finalData as any,
         associations: associations || [],
         path: path || null,
-        status: data.status || 'New'
+        status: (data as any).status || (workflowState ? (workflow.nodes.find((n: any) => n.id === workflowState.currentNodeId)?.name) : 'New'),
+        workflowState: workflowState as any
       }
     });
 
-    // Websocket emit for realtime sync
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
@@ -168,7 +210,8 @@ router.post('/records', async (req: TenantRequest, res) => {
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
-      ...(record.data as any)
+      ...(record.data as any),
+      workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_added', formatted);
 
@@ -184,7 +227,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { moduleId, status, associations, path, ...data } = req.body;
+    const { moduleId, status, transitionTo, associations, path, ...data } = req.body;
 
     // Fetch existing (RLS will ensure we can't see records from other tenants)
     const existing = await db.record.findUnique({ where: { id } });
@@ -197,17 +240,43 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       ...data
     };
 
+    const updatePayload: any = {
+      data: updatedData,
+      status: status || existing.status,
+      associations: associations !== undefined ? associations : existing.associations,
+      path: path !== undefined ? path : existing.path
+    };
+
+    if (transitionTo) {
+      const module = await db.module.findUnique({ where: { id: moduleId || existing.moduleId } });
+      const config = module?.config as any;
+      const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+      
+      if (workflow) {
+        const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
+        if (targetNode) {
+          const currentWorkflowState = (existing.workflowState as any) || { history: [] };
+          updatePayload.workflowState = {
+            currentNodeId: targetNode.id,
+            history: [
+              ...currentWorkflowState.history,
+              {
+                nodeId: targetNode.id,
+                timestamp: new Date().toISOString(),
+                action: 'Transitioned'
+              }
+            ]
+          };
+          updatePayload.status = targetNode.name;
+        }
+      }
+    }
+
     const record = await db.record.update({
       where: { id },
-      data: {
-        data: updatedData,
-        status: status || existing.status,
-        associations: associations !== undefined ? associations : existing.associations,
-        path: path !== undefined ? path : existing.path
-      }
+      data: updatePayload
     });
 
-    // Websocket emit
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
@@ -216,7 +285,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
-      ...(record.data as any)
+      ...(record.data as any),
+      workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
 
@@ -252,7 +322,8 @@ router.post('/modules', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { name, category, iconName, type, enabled, ...config } = req.body;
+    const { name, category, iconName, type, enabled: enabledBody, status, ...config } = req.body;
+    const enabled = enabledBody !== undefined ? enabledBody : (status === 'ACTIVE');
     console.log(`[DataAPI] Creating module: "${name}" for tenant: ${tenantId}`);
 
     // Find first workspace for this tenant (Prisma client is already scoped to tenant via RLS)
@@ -305,7 +376,8 @@ router.put('/modules/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, category, iconName, type, enabled, ...config } = req.body;
+    const { name, category, iconName, type, enabled: enabledBody, status, ...config } = req.body;
+    const enabled = enabledBody !== undefined ? enabledBody : (status !== undefined ? status === 'ACTIVE' : undefined);
 
     const module = await db.module.update({
       where: { id },

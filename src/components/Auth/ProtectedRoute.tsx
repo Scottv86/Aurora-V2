@@ -10,8 +10,8 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth();
-  const { isDeveloper, isLoading: platformLoading } = usePlatform();
+  const { user, loading, isSuperAdmin } = useAuth();
+  const { isLoading: platformLoading } = usePlatform();
   const location = useLocation();
 
   if (loading || platformLoading) {

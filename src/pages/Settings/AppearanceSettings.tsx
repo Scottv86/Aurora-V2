@@ -66,9 +66,13 @@ export const AppearanceSettings = () => {
   // Initialize from tenant config if available
   useEffect(() => {
     if (tenant?.menuConfig) {
-      // Logic to parse layout style from config or keep default
-      // For now, we'll assume menuConfig is just the items array
-      setMenuItems(tenant.menuConfig as MenuItem[]);
+      if (Array.isArray(tenant.menuConfig)) {
+        setMenuItems(tenant.menuConfig as MenuItem[]);
+      } else if ((tenant.menuConfig as any).sections) {
+        // Flatten sections for the legacy architect
+        const allItems = (tenant.menuConfig as any).sections.flatMap((s: any) => s.items || []);
+        setMenuItems(allItems);
+      }
     }
     if (tenant?.branding?.layout_style) {
       setLayoutStyle(tenant.branding.layout_style as LayoutStyle);

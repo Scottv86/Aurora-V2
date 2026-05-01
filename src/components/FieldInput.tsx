@@ -1,4 +1,5 @@
 import React from 'react';
+import { useGlobalList } from '../hooks/useGlobalList';
 import { 
   Check, AlertCircle, Info, AlertTriangle, XCircle, 
   Smile, User, Calendar, Clock, MapPin, 
@@ -29,7 +30,21 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   readonly = false,
   error = false
 }) => {
-  const { type, label, placeholder, options, min, max, variant, helperText } = field;
+  const { type, label, placeholder, options, min, max, variant, helperText, optionsSource, globalListId } = field;
+
+  // Global List logic
+  const { list: gList, items: gItems, loading: gLoading } = useGlobalList(optionsSource === 'global_list' ? globalListId : null);
+
+  const resolvedOptions = React.useMemo(() => {
+    if (optionsSource === 'global_list') {
+      if (gLoading) return ['Loading options...'];
+      if (!gList || !gItems) return [];
+      const displayColId = gList.columns[0]?.id;
+      if (!displayColId) return [];
+      return gItems.map(item => String(item.data[displayColId] || '')).filter(Boolean);
+    }
+    return options || [];
+  }, [optionsSource, options, gList, gItems, gLoading]);
 
   const inputClasses = cn(
     "w-full bg-white dark:bg-zinc-950 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
@@ -91,7 +106,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   // Data Input Components
   if (type === 'select') {
     return (
-      <div className="relative">
+      <div className="relative w-full">
         <select 
           value={value || ''}
           disabled={readonly}
@@ -99,7 +114,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           className={inputClasses}
         >
           <option value="">Select...</option>
-          {options?.map((opt: string, j: number) => (
+          {resolvedOptions?.map((opt: string, j: number) => (
             <option key={j} value={opt}>{opt}</option>
           ))}
         </select>
@@ -110,8 +125,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'radio') {
     return (
-      <div className="space-y-2.5">
-        {options?.map((opt: string, i: number) => (
+      <div className="space-y-2.5 w-full">
+        {resolvedOptions?.map((opt: string, i: number) => (
           <label key={i} className="flex items-center gap-3 cursor-pointer group">
             <div className={cn(
               "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
@@ -135,8 +150,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'checkboxGroup') {
     const currentValues = Array.isArray(value) ? value : [];
     return (
-      <div className="space-y-2.5">
-        {options?.map((opt: string, i: number) => (
+      <div className="space-y-2.5 w-full">
+        {resolvedOptions?.map((opt: string, i: number) => (
           <label key={i} className="flex items-center gap-3 cursor-pointer group">
             <div className={cn(
               "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
@@ -268,7 +283,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} className={inputClasses} />;
   if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} className={inputClasses} />;
   if (type === 'number' || type === 'currency') return (
-    <div className="relative">
+    <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
       <input 
         type="number" 
@@ -297,15 +312,73 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     );
   }
 
-  if (type === 'lookup' && field.targetModuleId) {
+  if (type === 'lookup') {
+    const { lookupSource, targetModuleId, connectorId } = field;
+
+    if (lookupSource === 'global_list') {
+      return (
+        <select 
+          value={value || ''}
+          disabled={readonly}
+          onChange={(e) => onChange(e.target.value)}
+          className={inputClasses}
+        >
+          <option value="">Select Option...</option>
+          {resolvedOptions?.map((opt: string, j: number) => (
+            <option key={j} value={opt}>{opt}</option>
+          ))}
+        </select>
+      );
+    }
+
+    if (lookupSource === 'tenant_users') {
+      return (
+        <select 
+          value={value || ''}
+          disabled={readonly}
+          onChange={(e) => onChange(e.target.value)}
+          className={inputClasses}
+        >
+          <option value="">Select User...</option>
+          {usersData.map((u: any) => (
+            <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
+          ))}
+        </select>
+      );
+    }
+
+    if (lookupSource === 'connector') {
+      const isGoogleMaps = connectorId === 'google-maps-lookup';
+      return (
+        <div className="relative group w-full">
+          {isGoogleMaps && <DynamicIcon name="GoogleMaps" size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
+          <input 
+            type="text"
+            placeholder={placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            className={cn(inputClasses, isGoogleMaps && "pl-10")}
+          />
+          <div className="absolute right-4 top-1/2 -translate-y-1/2">
+            <div className="px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1">
+              <Zap size={8} />
+              Connector
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default: Module Records
     return (
       <select 
         value={value || ''}
+        disabled={readonly}
         onChange={(e) => onChange(e.target.value)}
         className={inputClasses}
       >
         <option value="">Select Record...</option>
-        {lookupData[field.targetModuleId]?.map((r: any) => (
+        {targetModuleId && lookupData[targetModuleId]?.map((r: any) => (
           <option key={r.id} value={r.id}>{r.name || r.title || r.id}</option>
         ))}
       </select>
@@ -324,7 +397,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     const isGoogleMaps = field.connectorId === 'google-maps-lookup';
     
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 w-full">
         <div className="relative group">
           {isGoogleMaps && <DynamicIcon name="GoogleMaps" size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
           <input 
@@ -361,7 +434,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   return (
     <input 
       type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : 'text'}
-      placeholder={placeholder || `Enter ${label.toLowerCase()}...`}
+      placeholder={placeholder || `Enter ${(label || 'value').toLowerCase()}...`}
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
       className={inputClasses}

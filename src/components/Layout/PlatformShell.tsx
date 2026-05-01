@@ -388,7 +388,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const { 
     user: platformUser, 
     isLoading: platformLoading, 
-    isDeveloper, 
     modules, 
     menuConfig, 
     updateMenuConfig, 
@@ -396,8 +395,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     isAIAssistantOpen,
     isChatOpen,
     isAppLauncherOpen,
-    isNotificationsOpen,
-    tenant
+    isNotificationsOpen
   } = usePlatform();
   
   const location = useLocation();
@@ -616,11 +614,11 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     if (!menuConfig) return null;
 
     // Inject active modules that are missing from the configuration
-    const sections = menuConfig.sections.map(section => {
+    const sections = (menuConfig.sections || []).map(section => {
       if (section.id === 'modules') {
         // Only include items that are in enabledModules (in case some were deactivated but not yet removed from saved config)
         const activeModuleIds = new Set(enabledModules.map(m => `module:${m.id}`));
-        const currentItems = section.items
+        const currentItems = (section.items || [])
           .filter(i => activeModuleIds.has(i.id))
           .map(item => {
             const mod = enabledModules.find(m => `module:${m.id}` === item.id);
@@ -669,7 +667,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const handleDragEnd = (event: DragEndEvent, sectionId: string) => {
     const { active, over } = event;
-    if (!over || active.id === over.id || !menuConfig) return;
+    if (!menuConfig?.sections) return;
 
     // Handle Item Reordering
     const sectionIndex = menuConfig.sections.findIndex(s => s.id === sectionId);
