@@ -19,6 +19,8 @@ interface FieldInputProps {
   lookupData?: Record<string, any[]>;
   readonly?: boolean;
   error?: boolean;
+  onBlur?: () => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
 }
 
 export const FieldInput: React.FC<FieldInputProps> = ({ 
@@ -28,7 +30,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   usersData = [], 
   lookupData = {},
   readonly = false,
-  error = false
+  error = false,
+  onBlur,
+  onKeyDown
 }) => {
   const { type, label, placeholder, options, min, max, variant, helperText, optionsSource, globalListId } = field;
 
@@ -47,10 +51,10 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }, [optionsSource, options, gList, gItems, gLoading]);
 
   const inputClasses = cn(
-    "w-full bg-white dark:bg-zinc-950 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
+    "w-full bg-zinc-50/50 dark:bg-zinc-900/50 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
-      : "border-zinc-200 dark:border-zinc-800 focus:border-indigo-500",
+      : "border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-950",
     readonly && "opacity-50 cursor-not-allowed bg-zinc-50 dark:bg-zinc-900"
   );
 
@@ -111,7 +115,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           value={value || ''}
           disabled={readonly}
           onChange={(e) => onChange(e.target.value)}
-          className={inputClasses}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          className={cn(inputClasses, "appearance-none")}
         >
           <option value="">Select...</option>
           {resolvedOptions?.map((opt: string, j: number) => (
@@ -280,8 +286,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} className={inputClasses} />;
-  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} className={inputClasses} />;
+  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className={inputClasses} />;
+  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className={inputClasses} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
@@ -289,12 +295,14 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         type="number" 
         value={value || ''} 
         onChange={(e) => onChange(e.target.value)} 
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
         className={cn(inputClasses, type === 'currency' ? "pl-8 pr-4" : "px-4")} 
       />
     </div>
   );
 
-  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} className={inputClasses} />;
+  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className={inputClasses} />;
 
   // User & Lookup
   if (type === 'user') {
@@ -302,7 +310,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <select 
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
-        className={inputClasses}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        className={cn(inputClasses, "appearance-none")}
       >
         <option value="">Select User...</option>
         {usersData.map((u: any) => (
@@ -321,7 +331,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           value={value || ''}
           disabled={readonly}
           onChange={(e) => onChange(e.target.value)}
-          className={inputClasses}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          className={cn(inputClasses, "appearance-none")}
         >
           <option value="">Select Option...</option>
           {resolvedOptions?.map((opt: string, j: number) => (
@@ -337,7 +349,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           value={value || ''}
           disabled={readonly}
           onChange={(e) => onChange(e.target.value)}
-          className={inputClasses}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          className={cn(inputClasses, "appearance-none")}
         >
           <option value="">Select User...</option>
           {usersData.map((u: any) => (
@@ -357,6 +371,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             placeholder={placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+            onKeyDown={onKeyDown}
             className={cn(inputClasses, isGoogleMaps && "pl-10")}
           />
           <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -375,7 +391,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         value={value || ''}
         disabled={readonly}
         onChange={(e) => onChange(e.target.value)}
-        className={inputClasses}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        className={cn(inputClasses, "appearance-none")}
       >
         <option value="">Select Record...</option>
         {targetModuleId && lookupData[targetModuleId]?.map((r: any) => (
@@ -437,6 +455,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       placeholder={placeholder || `Enter ${(label || 'value').toLowerCase()}...`}
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
       className={inputClasses}
     />
   );

@@ -33,6 +33,7 @@ import { generateAISummary, evaluateCalculations } from '../../services/aiServic
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField } from '../../types/platform';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
+import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 
 interface WorkflowState {
   currentNodeId: string;
@@ -69,7 +70,8 @@ export const RecordDetailView = () => {
   }, [moduleData]);
 
   const [loading, setLoading] = useState(true);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
+  const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,10 +103,16 @@ export const RecordDetailView = () => {
       return;
     }
 
+    // Guard: Don't re-fetch if we already have this specific record and module loaded
+    if (record?.id === recordId && moduleData?.id === moduleId) {
+      setLoading(false);
+      return;
+    }
+
     const fetchModAndRecord = async () => {
       setLoading(true);
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         
         const prebuilt = MODULES.find(m => m.id === moduleId);
         if (prebuilt) {
@@ -135,6 +143,38 @@ export const RecordDetailView = () => {
           if (recordId && recData._record_key) {
             setBreadcrumbOverride(recordId, recData._record_key);
           }
+
+          // Trigger AI summary update once on load if field exists
+          const currentModData = prebuilt || (await (await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id! }
+          })).json());
+          
+          const flatFields = flattenFields(currentModData?.layout || []) as ModuleField[];
+          const aiField = flatFields.find(f => f.type === 'ai_summary');
+          
+          if (aiField) {
+            (async () => {
+              try {
+                const summary = await generateAISummary(recData, flatFields);
+                const aiRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'x-tenant-id': tenant.id!
+                  },
+                  body: JSON.stringify({ moduleId, ...recData, [aiField.id]: summary })
+                });
+                if (aiRes.ok) {
+                  const updated = await aiRes.json();
+                  setRecord(updated);
+                  setEditData(updated);
+                }
+              } catch (e) {
+                console.error("Load-time AI Summary failed:", e);
+              }
+            })();
+          }
         } else if (recRes.status === 404) {
           toast.error("Record not found");
         } else {
@@ -149,25 +189,20 @@ export const RecordDetailView = () => {
     };
 
     fetchModAndRecord();
-  }, [tenant?.id, moduleId, recordId, platformLoading, session]);
+  }, [tenant?.id, moduleId, recordId, platformLoading, session?.access_token]);
 
-  const handleUpdateEntry = async () => {
+  const handleUpdateEntry = async (dataToSave?: any) => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
     
+    const fieldIdBeingSaved = activeFieldId;
+    setSavingFieldId(fieldIdBeingSaved);
     setIsSubmitting(true);
     try {
-      let finalData = evaluateCalculations(editData, allFields);
+      let finalData = evaluateCalculations(dataToSave || editData, allFields);
       
-      const hasAISummary = allFields.some(f => f.type === 'ai_summary');
-      if (hasAISummary) {
-        toast.info("Updating AI Summary...");
-        const aiSummaryField = allFields.find(f => f.type === 'ai_summary');
-        if (aiSummaryField) {
-          finalData[aiSummaryField.id] = await generateAISummary(finalData, allFields);
-        }
-      }
-
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      
+      // Perform main save first
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
         headers: {
@@ -189,16 +224,19 @@ export const RecordDetailView = () => {
       const updatedRecord = await res.json();
       setRecord(updatedRecord);
       setEditData(updatedRecord);
+
       if (recordId && updatedRecord._record_key) {
         setBreadcrumbOverride(recordId, updatedRecord._record_key);
       }
-      setShowEditModal(false);
+      setActiveFieldId(null);
       toast.success("Record updated successfully");
     } catch (error: any) {
       console.error("Update Error:", error);
       toast.error(error.message || "Failed to update record");
     } finally {
       setIsSubmitting(false);
+      setSavingFieldId(null);
+      setActiveFieldId(null);
     }
   };
 
@@ -378,19 +416,10 @@ export const RecordDetailView = () => {
         <div className="flex gap-4">
           <button 
             onClick={() => setShowDeleteModal(true)}
-            className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 rounded-xl transition-all"
+            className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 rounded-xl transition-all flex items-center gap-2 font-bold text-xs uppercase tracking-widest"
           >
-            <Trash2 size={20} />
-          </button>
-          <button 
-            onClick={() => {
-              setEditData(record);
-              setShowEditModal(true);
-            }}
-            className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center gap-2"
-          >
-            <Edit2 size={16} />
-            <span>Edit Record</span>
+            <Trash2 size={16} />
+            <span>Delete Record</span>
           </button>
         </div>
       </div>
@@ -419,7 +448,7 @@ export const RecordDetailView = () => {
 
             <div className="p-8">
               {moduleData?.layout ? (
-                <div className="grid grid-cols-12 gap-x-10 gap-y-8">
+                <div className="grid grid-cols-12 gap-x-10 gap-y-8 w-full">
                   {(moduleData.layout || [])
                     .filter((field: ModuleField) => {
                       if (!moduleData.tabs || moduleData.tabs.length === 0) return true;
@@ -434,13 +463,25 @@ export const RecordDetailView = () => {
                       return (
                         <div 
                           key={field.id} 
-                          className="space-y-1.5"
+                          className={cn(
+                            "group/field transition-all relative min-w-0",
+                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup'].includes(field.type) && "cursor-pointer"
+                          )}
                           style={{
-                            gridColumn: `span ${field.colSpan || 12}`,
-                            gridColumnStart: field.startCol || 'auto',
+                            gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                             gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
                           }}
+                          onClick={() => {
+                            if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup'].includes(field.type)) {
+                              setEditData(record);
+                              setActiveFieldId(field.id);
+                            }
+                          }}
                         >
+                          <div className={cn(
+                            "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border border-transparent",
+                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup'].includes(field.type) && "hover:bg-indigo-500/5 hover:border-indigo-500/10"
+                          )}>
                           {field.type === 'heading' ? (
                             <h4 className={cn(
                               "font-bold text-zinc-900 dark:text-white mt-4",
@@ -469,15 +510,59 @@ export const RecordDetailView = () => {
                                 {(field.fields || []).map((nestedField: any) => {
                                   if (!isFieldVisible(nestedField, record[field.id] || {})) return null;
                                   return (
-                                  <div key={nestedField.id} className="space-y-1">
-                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{nestedField.label}</label>
-                                    <p className="text-zinc-900 dark:text-zinc-100 font-medium">
-                                      {record[field.id]?.[nestedField.id] || '-'}
-                                    </p>
+                                  <div 
+                                    key={nestedField.id} 
+                                    className={cn(
+                                      "space-y-1 rounded-xl transition-all",
+                                      !activeFieldId && "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2"
+                                    )}
+                                    onClick={(e) => {
+                                      if (!activeFieldId) {
+                                        e.stopPropagation();
+                                        setEditData(record);
+                                        setActiveFieldId(nestedField.id);
+                                      }
+                                    }}
+                                  >
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                      {nestedField.label}
+                                      {savingFieldId === nestedField.id && <Loader2 size={8} className="animate-spin text-indigo-500" />}
+                                    </label>
+                                    {activeFieldId === nestedField.id ? (
+                                      <FieldInput 
+                                        field={nestedField}
+                                        value={editData[field.id]?.[nestedField.id]}
+                                        onChange={(val) => setEditData({
+                                          ...editData, 
+                                          [field.id]: {
+                                            ...(editData[field.id] || {}),
+                                            [nestedField.id]: val
+                                          }
+                                        })}
+                                        onBlur={() => handleUpdateEntry()}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleUpdateEntry();
+                                          if (e.key === 'Escape') setActiveFieldId(null);
+                                        }}
+                                        readonly={savingFieldId === nestedField.id}
+                                        usersData={usersData}
+                                        lookupData={lookupData}
+                                      />
+                                    ) : (
+                                      <p className="text-zinc-900 dark:text-zinc-100 font-medium">
+                                        {record[field.id]?.[nestedField.id] || '-'}
+                                      </p>
+                                    )}
                                   </div>
                                 )})}
                               </div>
                             </div>
+                          ) : field.type === 'repeatableGroup' ? (
+                            <RepeatableGroupBlock 
+                               field={field}
+                               value={record?.[field.id] || []}
+                               onChange={(newVal) => handleUpdateEntry({ ...record, [field.id]: newVal })}
+                            />
                           ) : field.type === 'connector' ? (
                             <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
                               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
@@ -492,7 +577,10 @@ export const RecordDetailView = () => {
                                   </div>
                                 </div>
                                 <button 
-                                  onClick={() => handleSyncConnector(field)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSyncConnector(field);
+                                  }}
                                   disabled={syncingConnectors[field.id]}
                                   className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                                 >
@@ -513,16 +601,38 @@ export const RecordDetailView = () => {
                             <div className="space-y-1">
                               <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                 {field.label}
-                              </label>
-                              <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
-                                {['rich_text', 'long_text'].includes(field.type) ? (
-                                  <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-zinc-600 dark:prose-p:text-zinc-400" dangerouslySetInnerHTML={{ __html: record[field.id] || '-' }} />
+                                {savingFieldId === field.id ? (
+                                  <Loader2 size={8} className="animate-spin text-indigo-500" />
                                 ) : (
-                                  record[field.id] || '-'
+                                  !activeFieldId && <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
                                 )}
-                              </div>
+                              </label>
+                              {activeFieldId === field.id ? (
+                                <FieldInput 
+                                  field={field}
+                                  value={editData[field.id]}
+                                  onChange={(val) => setEditData({...editData, [field.id]: val})}
+                                  onBlur={() => handleUpdateEntry()}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleUpdateEntry();
+                                    if (e.key === 'Escape') setActiveFieldId(null);
+                                  }}
+                                  readonly={savingFieldId === field.id}
+                                  usersData={usersData}
+                                  lookupData={lookupData}
+                                />
+                              ) : (
+                                <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
+                                  {['rich_text', 'long_text'].includes(field.type) ? (
+                                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-zinc-600 dark:prose-p:text-zinc-400" dangerouslySetInnerHTML={{ __html: record[field.id] || '-' }} />
+                                  ) : (
+                                    record[field.id] || '-'
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
+                          </div>
                         </div>
                       );
                     })}
@@ -636,7 +746,7 @@ export const RecordDetailView = () => {
 
             <div className="space-y-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">Execution Audit</h3>
+                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">History</h3>
                 <History size={12} className="text-zinc-600" />
               </div>
               <div className="space-y-6 relative before:absolute before:inset-0 before:left-3 before:w-px before:bg-zinc-200 dark:before:bg-zinc-800 py-2">
@@ -680,93 +790,7 @@ export const RecordDetailView = () => {
         </div>
       </div>
 
-      <AnimatePresence>
-        {showEditModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowEditModal(false)}
-              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl overflow-hidden"
-            >
-              <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
-                  <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                    <Edit2 size={20} />
-                  </div>
-                  Edit {moduleData.name} Record
-                </h2>
-                <button onClick={() => setShowEditModal(false)} className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white"><X size={20} /></button>
-              </div>
-              <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                {moduleData?.tabs && moduleData.tabs.length > 0 && (
-                  <div className="flex gap-2 mb-8 p-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-2xl overflow-x-auto no-scrollbar">
-                    {(moduleData.tabs || []).map((tab: any) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={cn(
-                          "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
-                          activeTabId === tab.id ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl" : "text-zinc-500"
-                        )}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="grid grid-cols-12 gap-x-6 gap-y-4">
-                  {(moduleData.layout || [])
-                    .filter((f: ModuleField) => {
-                      if (!moduleData?.tabs || moduleData.tabs.length === 0) return true;
-                      return (f.tabId || moduleData.tabs[0]?.id) === activeTabId;
-                    })
-                    .sort((a, b) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
-                    .map((field: ModuleField) => {
-                      if (!isFieldVisible(field, editData)) return null;
-                      return (
-                        <div 
-                          key={field.id} 
-                          className="space-y-1.5"
-                          style={{
-                            gridColumn: `span ${field.colSpan || 12}`,
-                            gridColumnStart: field.startCol || 'auto',
-                            gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
-                          }}
-                        >
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                            {field.label}
-                            {field.required && <span className="text-rose-500">*</span>}
-                          </label>
-                          <FieldInput 
-                            field={field}
-                            value={editData[field.id]}
-                            onChange={(val) => setEditData({...editData, [field.id]: val})}
-                            usersData={usersData}
-                            lookupData={lookupData}
-                          />
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-              <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
-                <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl font-bold">Cancel</button>
-                <button onClick={handleUpdateEntry} disabled={isSubmitting} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold disabled:opacity-50">
-                  {isSubmitting ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+
 
       <AnimatePresence>
         {showDeleteModal && (

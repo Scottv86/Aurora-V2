@@ -88,6 +88,8 @@ import {
   Check,
   Command,
   Info,
+  LayoutGrid,
+  Columns,
   ChevronRight
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
@@ -1713,7 +1715,7 @@ export const ModuleEditor = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleSave]);
   
-  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('builder');
+  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'views' | 'preview'>('builder');
   const [experienceSubTab, setExperienceSubTab] = useState<'master' | 'detail' | 'filters' | 'actions'>('master');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
   const [previewSelectedId, setPreviewSelectedId] = useState<string | null>(null);
@@ -2106,7 +2108,7 @@ export const ModuleEditor = () => {
       <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {(['details', 'schema', 'builder', 'workflow', 'rules', 'experience', 'security', 'localization', 'map', 'assets', 'forms', 'deployment'] as const).map((tab) => (
+            {(['details', 'schema', 'builder', 'workflow', 'rules', 'views', 'experience', 'security', 'localization', 'map', 'assets', 'forms', 'deployment'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -5901,6 +5903,62 @@ export const ModuleEditor = () => {
                  </div>
                )}
             </div>
+            ) : activeTab === 'views' ? (
+              <div className="flex-1 overflow-y-auto p-12 bg-white dark:bg-zinc-950 custom-scrollbar">
+                <div className="max-w-6xl mx-auto space-y-12">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Interface Views</h2>
+                      <p className="text-zinc-500 text-sm">Configure how records are presented and interacted with across the workspace.</p>
+                    </div>
+                    <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+                      <Plus size={14} />
+                      Create New View
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                      { title: 'Master Workspace', desc: 'The default grid view for all module records.', icon: LayoutGrid, count: 1, type: 'System' },
+                      { title: 'Kanban Board', desc: 'Track records through workflow stages visually.', icon: Columns, count: 0, type: 'Board' },
+                      { title: 'Calendar View', desc: 'Manage time-sensitive records on a schedule.', icon: Calendar, count: 0, type: 'Schedule' }
+                    ].map((view, i) => (
+                      <div key={i} className="group p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6 hover:border-indigo-500/50 transition-all">
+                        <div className="w-12 h-12 bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                          <view.icon size={24} />
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-bold text-zinc-900 dark:text-white">{view.title}</h4>
+                            <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-md border border-indigo-500/20">{view.type}</span>
+                          </div>
+                          <p className="text-xs text-zinc-500 leading-relaxed">{view.desc}</p>
+                        </div>
+                        <div className="pt-4 flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800">
+                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{view.count} Active</span>
+                          <button className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-400">Configure</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-zinc-900 rounded-[2.5rem] p-10 relative overflow-hidden border border-zinc-800 shadow-2xl">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 blur-[100px] -mr-32 -mt-32" />
+                    <div className="relative z-10 flex items-center gap-10">
+                      <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
+                        <Monitor size={32} />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <h3 className="text-xl font-bold text-white tracking-tight">External Portals</h3>
+                        <p className="text-zinc-400 text-sm max-w-xl">Create dedicated viewing environments for external clients or partners to interact with specific record subsets.</p>
+                      </div>
+                      <button className="px-8 py-4 bg-white text-zinc-900 rounded-2xl font-bold text-[10px] uppercase tracking-widest hover:bg-zinc-100 transition-all shadow-xl">
+                        Explore Portals
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : null}
           </div>
         </main>

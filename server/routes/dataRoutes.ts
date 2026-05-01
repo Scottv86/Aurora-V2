@@ -63,41 +63,45 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
 router.get('/records', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
-    const { moduleId, associationId } = req.query;
+    const { moduleId, associationId, page = '1', limit = '100' } = req.query;
+    const p = parseInt(page as string);
+    const l = parseInt(limit as string);
+    const skip = (p - 1) * l;
 
     const whereClause: any = {};
     if (moduleId) {
       whereClause.moduleId = moduleId as string;
     }
     
-    if (associationId) {
-      whereClause.associations = {
-        path: '$[*].record_id',
-        array_contains: associationId as string
-      };
-      // Note: Prisma's path operator for JSONB depends on the DB provider.
-      // For Postgres, we might need a raw query or use the 'path' feature if supported.
-      // Alternatively, we can use 'array_contains' if it's a simple array.
-      // But associations is an array of objects [{record_id, ...}]
-    }
-
-    // Actually, Prisma doesn't support @> for array of objects easily without raw SQL.
-    // Let's use raw SQL for associationId if provided.
+    // Total count for pagination
+    let total;
     let records;
+
     if (associationId) {
+      // For associations, we still use raw query but with LIMIT/OFFSET
+      const countRes: any[] = await db.$queryRaw`
+        SELECT COUNT(*)::int as count FROM records 
+        WHERE associations @> ${JSON.stringify([{ record_id: associationId }])}::jsonb
+      `;
+      total = countRes[0].count;
+
       records = await db.$queryRaw`
         SELECT * FROM records 
         WHERE associations @> ${JSON.stringify([{ record_id: associationId }])}::jsonb
         ORDER BY created_at DESC
+        LIMIT ${l} OFFSET ${skip}
       `;
     } else {
+      total = await db.record.count({ where: whereClause });
       records = await db.record.findMany({
         where: whereClause,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: l
       });
     }
     
-    // Format records for frontend consumption (Hydrate top-level with 'data' payload)
+    // Format records for frontend consumption
     const formatted = (records as any[]).map((r: any) => ({
       id: r.id,
       moduleId: r.moduleId,
@@ -110,7 +114,13 @@ router.get('/records', async (req: TenantRequest, res) => {
       workflowState: r.workflowState
     }));
     
-    res.json(formatted);
+    res.json({
+      records: formatted,
+      total,
+      page: p,
+      limit: l,
+      totalPages: Math.ceil(total / l)
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

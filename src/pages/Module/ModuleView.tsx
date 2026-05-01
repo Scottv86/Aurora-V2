@@ -39,10 +39,13 @@ export const ModuleView = () => {
   const [loading, setLoading] = useState(true);
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [editingRecord, setEditingRecord] = useState<Record<string, any> | null>(null);
   const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const Icon = useMemo(() => {
     if (!moduleData) return LucideIcons.Layers;
@@ -76,6 +79,12 @@ export const ModuleView = () => {
       return;
     }
 
+    // Guard: Don't re-fetch if we already have this module loaded
+    if (moduleData?.id === moduleId && records.length > 0) {
+      setLoading(false);
+      return;
+    }
+
     const fetchModAndRecords = async () => {
       setLoading(true);
       try {
@@ -97,8 +106,8 @@ export const ModuleView = () => {
           }
         }
         
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-        const recordsRes = await fetch(`${DATA_API_URL}/records?moduleId=${moduleId}`, {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const recordsRes = await fetch(`${DATA_API_URL}/records?moduleId=${moduleId}&page=${page}&limit=${pageSize}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'x-tenant-id': tenant.id
@@ -106,8 +115,10 @@ export const ModuleView = () => {
         });
 
         if (recordsRes.ok) {
-          const recordsData = await recordsRes.json();
-          setRecords(recordsData);
+          const result = await recordsRes.json();
+          setRecords(result.records);
+          setTotalRecords(result.total);
+          setTotalPages(result.totalPages);
         }
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -118,7 +129,7 @@ export const ModuleView = () => {
     };
 
     fetchModAndRecords();
-  }, [tenant?.id, moduleId, platformLoading, session]);
+  }, [tenant?.id, moduleId, platformLoading, session?.access_token, page, pageSize]);
 
   const handleCreateEntry = async () => {
     if (!tenant?.id || !moduleId || !moduleData) return;
@@ -136,11 +147,10 @@ export const ModuleView = () => {
         }
       }
 
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-      const isEditing = !!editingRecord;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       
-      const res = await fetch(`${DATA_API_URL}/records${isEditing ? `/${editingRecord.id}` : ''}`, {
-        method: isEditing ? 'PUT' : 'POST',
+      const res = await fetch(`${DATA_API_URL}/records`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -159,16 +169,10 @@ export const ModuleView = () => {
 
       const savedRecord = await res.json();
       
-      if (isEditing) {
-        setRecords(prev => prev.map(r => r.id === savedRecord.id ? savedRecord : r));
-        toast.success("Record updated successfully");
-      } else {
-        setRecords(prev => [savedRecord, ...prev]);
-        toast.success("Record created successfully");
-      }
+      setRecords(prev => [savedRecord, ...prev]);
+      toast.success("Record created successfully");
       
       setShowNewEntryModal(false);
-      setEditingRecord(null);
       setNewEntryData({});
     } catch (error: any) {
       console.error("Save Error:", error);
@@ -326,21 +330,6 @@ export const ModuleView = () => {
                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={() => {
-                            setEditingRecord(record);
-                            setNewEntryData(record);
-                            if (moduleData.tabs && moduleData.tabs.length > 0) {
-                              setActiveTabId(moduleData.tabs[0].id);
-                            } else {
-                              setActiveTabId(null);
-                            }
-                            setShowNewEntryModal(true);
-                          }}
-                          className="p-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button 
                           onClick={() => setRecordToDelete(record.id)}
                           className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all"
                         >
@@ -352,6 +341,53 @@ export const ModuleView = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination UI */}
+          <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-950/30 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              Showing <span className="text-zinc-900 dark:text-white">{totalRecords > 0 ? (page - 1) * pageSize + 1 : 0}</span> to <span className="text-zinc-900 dark:text-white">{Math.min(page * pageSize, totalRecords)}</span> of <span className="text-zinc-900 dark:text-white">{totalRecords}</span> records
+            </p>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-1">
+                {totalPages > 0 && [...Array(totalPages)].map((_, i) => {
+                  const pNum = i + 1;
+                  // Only show first 3, last 3, and current +- 1 if many pages
+                  if (totalPages > 7 && pNum > 2 && pNum < totalPages - 1 && Math.abs(pNum - page) > 1) {
+                    if (pNum === 3 || pNum === totalPages - 2) return <span key={pNum} className="text-zinc-400 px-1">...</span>;
+                    return null;
+                  }
+                  return (
+                    <button
+                      key={pNum}
+                      onClick={() => setPage(pNum)}
+                      className={cn(
+                        "w-8 h-8 rounded-lg text-[10px] font-bold transition-all",
+                        page === pNum 
+                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
+                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {pNum}
+                    </button>
+                  );
+                })}
+              </div>
+              <button 
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || totalPages === 0}
+                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -405,9 +441,9 @@ export const ModuleView = () => {
               <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
                 <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
                   <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                    {editingRecord ? <Edit2 size={20} /> : <Plus size={20} />}
+                    <Plus size={20} />
                   </div>
-                  {editingRecord ? 'Edit' : 'New'} {moduleData?.name || 'Record'} Entry
+                  New {moduleData?.name || 'Record'} Entry
                 </h2>
                 <button 
                   onClick={() => {
@@ -571,7 +607,7 @@ export const ModuleView = () => {
                   className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
-                  {isSubmitting ? 'Saving...' : editingRecord ? 'Save Changes' : 'Create Entry'}
+                  {isSubmitting ? 'Saving...' : 'Create Entry'}
                 </button>
               </div>
             </motion.div>
