@@ -51,7 +51,8 @@ export const Dashboard = () => {
           }
         });
         if (res.ok) {
-          const allCases = await res.json();
+          const json = await res.json();
+          const allCases = json.records || json;
           updateStats(allCases);
         }
       } catch (err) {

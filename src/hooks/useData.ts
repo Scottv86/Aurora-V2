@@ -29,7 +29,11 @@ export const useData = (collectionName: 'records' | 'modules') => {
       });
       if (!res.ok) throw new Error('Failed to fetch data');
       const json = await res.json();
-      setData(json);
+      if (collectionName === 'records' && json.records) {
+        setData(json.records);
+      } else {
+        setData(json);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
