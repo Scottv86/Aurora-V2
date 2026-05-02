@@ -24,14 +24,14 @@ export interface Position {
 
 const API_BASE_URL = 'http://localhost:3001/api/positions';
 
-export const usePositions = () => {
+export const usePositions = (enabled: boolean = true) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [positions, setPositions] = useState<Position[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   const fetchPositions = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !enabled) return;
     setLoading(true);
     try {
       const res = await fetch(API_BASE_URL, {

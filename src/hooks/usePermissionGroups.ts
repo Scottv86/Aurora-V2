@@ -12,14 +12,14 @@ export interface PermissionGroup {
   parentGroupId?: string | null;
 }
 
-export const usePermissionGroups = () => {
+export const usePermissionGroups = (enabled: boolean = true) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [groups, setGroups] = useState<PermissionGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   const fetchGroups = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !enabled) return;
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/permissions/groups`, {

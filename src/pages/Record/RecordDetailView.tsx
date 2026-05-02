@@ -15,12 +15,10 @@ import {
   AlertCircle, 
   GitFork,
   ArrowRight,
-  Plus,
   X,
   Zap,
   RefreshCw,
   CheckCircle2,
-  GitCommit
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -74,7 +72,6 @@ export const RecordDetailView = () => {
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
@@ -89,6 +86,18 @@ export const RecordDetailView = () => {
 
   const allFields = useMemo(() => {
     return flattenFields(moduleData?.layout || []) as ModuleField[];
+  }, [moduleData]);
+
+  const fieldToGroupMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (moduleData?.layout || []).forEach((f: any) => {
+      if (f.type === 'fieldGroup' && f.fields) {
+        f.fields.forEach((nf: any) => {
+          map[nf.id] = f.id;
+        });
+      }
+    });
+    return map;
   }, [moduleData]);
 
   const activeWorkflow = useMemo(() => {
@@ -191,12 +200,58 @@ export const RecordDetailView = () => {
     fetchModAndRecord();
   }, [tenant?.id, moduleId, recordId, platformLoading, session?.access_token]);
 
+  const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
+    let updatedData = { ...editData };
+    
+    const groupId = fieldToGroupMap[fieldId];
+    if (groupId) {
+      updatedData[groupId] = { ...(editData[groupId] || {}), [fieldId]: val };
+    } else {
+      updatedData[fieldId] = val;
+    }
+    
+    // Execute Lookup Output Mappings
+    const field = allFields.find(f => f.id === fieldId);
+    if (field?.type === 'lookup' && field.lookupOutputMappings?.length && metadata) {
+      field.lookupOutputMappings.forEach(mapping => {
+        if (mapping.sourceFieldId && mapping.targetFieldId) {
+          const sourceValue = metadata[mapping.sourceFieldId];
+          if (sourceValue !== undefined) {
+            const targetFieldId = mapping.targetFieldId;
+            const targetGroupId = fieldToGroupMap[targetFieldId];
+            
+            if (targetGroupId) {
+              updatedData[targetGroupId] = { 
+                ...(updatedData[targetGroupId] || {}), 
+                [targetFieldId]: sourceValue 
+              };
+            } else {
+              updatedData[targetFieldId] = sourceValue;
+            }
+          }
+        }
+      });
+    }
+    
+    setEditData(updatedData);
+    
+    // For lookups, we trigger an immediate save because mapping changes multiple fields
+    // and we want to ensure they are all persisted together.
+    if (field?.type === 'lookup') {
+      handleUpdateEntry(updatedData);
+    }
+    
+    return updatedData;
+  };
+
   const handleUpdateEntry = async (dataToSave?: any) => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
     
+    // Guard to prevent concurrent saves which can cause race conditions and state reverts
+    if (savingFieldId && !dataToSave) return;
+    
     const fieldIdBeingSaved = activeFieldId;
-    setSavingFieldId(fieldIdBeingSaved);
-    setIsSubmitting(true);
+    setSavingFieldId(fieldIdBeingSaved || 'global');
     try {
       let finalData = evaluateCalculations(dataToSave || editData, allFields);
       
@@ -234,7 +289,6 @@ export const RecordDetailView = () => {
       console.error("Update Error:", error);
       toast.error(error.message || "Failed to update record");
     } finally {
-      setIsSubmitting(false);
       setSavingFieldId(null);
       setActiveFieldId(null);
     }
@@ -426,7 +480,7 @@ export const RecordDetailView = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] overflow-hidden shadow-sm">
+          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
             {moduleData?.tabs && moduleData.tabs.length > 0 && (
               <div className="flex gap-2 p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar">
                 {(moduleData.tabs || []).map((tab: any) => (
@@ -532,14 +586,12 @@ export const RecordDetailView = () => {
                                       <FieldInput 
                                         field={nestedField}
                                         value={editData[field.id]?.[nestedField.id]}
-                                        onChange={(val) => setEditData({
-                                          ...editData, 
-                                          [field.id]: {
-                                            ...(editData[field.id] || {}),
-                                            [nestedField.id]: val
+                                        onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+                                        onBlur={() => {
+                                          if (nestedField.type !== 'lookup') {
+                                            handleUpdateEntry();
                                           }
-                                        })}
-                                        onBlur={() => handleUpdateEntry()}
+                                        }}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter') handleUpdateEntry();
                                           if (e.key === 'Escape') setActiveFieldId(null);
@@ -611,7 +663,7 @@ export const RecordDetailView = () => {
                                 <FieldInput 
                                   field={field}
                                   value={editData[field.id]}
-                                  onChange={(val) => setEditData({...editData, [field.id]: val})}
+                                  onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                   onBlur={() => handleUpdateEntry()}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleUpdateEntry();

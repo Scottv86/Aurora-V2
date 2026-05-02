@@ -52,14 +52,14 @@ export interface TenantMember {
 
 const API_BASE_URL = 'http://localhost:3001/api/members';
 
-export const useUsers = () => {
+export const useUsers = (enabled: boolean = true) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [members, setMembers] = useState<TenantMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   const fetchMembers = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !enabled) return;
     setLoading(true);
     try {
       const res = await fetch(API_BASE_URL, {

@@ -84,7 +84,6 @@ import {
   Filter,
   TableProperties,
   ArrowRight,
-  ArrowLeft,
   Check,
   Command,
   Info,
@@ -124,6 +123,7 @@ import { toast } from 'sonner';
 import { DATA_API_URL, API_BASE_URL } from '../config';
 import { ModuleType } from '../types/platform';
 import { MODULES, MODULE_CATEGORIES } from '../constants/modules';
+import { PLATFORM_MODULES } from '../constants/platformModules';
 import { FieldGroup } from './Builder/FieldGroup';
 import { useGridEngine } from '../hooks/useGridEngine';
 import { IconPicker } from './Common/IconPicker';
@@ -135,6 +135,146 @@ import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
 
 
+
+// --- Filter Builder Component ---
+const FilterBuilder = ({ field, updateField, modules, globalLists, teams, positions, permissionGroups }: any) => {
+  const { lookupSource, platformEntity, targetModuleId, targetPlatformModuleId, lookupFilters = [], userFilters } = field;
+  
+  // Backward compatibility migration
+  const activeFilters = lookupFilters.length > 0 ? lookupFilters : (userFilters || []);
+
+  // Determine available fields for filtering
+  let availableFields: { id: string, label: string, type?: string, options?: any[] }[] = [];
+  
+  if ((lookupSource === 'module_records' || !lookupSource) && targetModuleId) {
+    const targetMod = modules.find((m: any) => m.id === targetModuleId);
+    if (targetMod) {
+      availableFields = (targetMod.layout || []).map((f: any) => ({ id: f.id, label: f.label, type: f.type, options: f.options }));
+    }
+  } else if (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) {
+    const targetMod = PLATFORM_MODULES.find((m: any) => m.id === targetPlatformModuleId);
+    if (targetMod) {
+      availableFields = targetMod.availableFields;
+    }
+  } else if (lookupSource === 'tenant_users' || (lookupSource === 'platform' && platformEntity === 'users')) {
+    availableFields = [
+      { id: 'roleId', label: 'Role', type: 'select', options: (permissionGroups || []).map((g: any) => ({ value: g.id, label: g.name })) },
+      { id: 'teamId', label: 'Team', type: 'select', options: (teams || []).map((t: any) => ({ value: t.id, label: t.name })) },
+      { id: 'positionId', label: 'Position', type: 'select', options: (positions || []).map((p: any) => ({ value: p.id, label: p.title })) },
+      { id: 'status', label: 'Status', type: 'select', options: [{ value: 'Active', label: 'Active' }, { value: 'Pending', label: 'Pending' }, { value: 'Inactive', label: 'Inactive' }] },
+      { id: 'isSynthetic', label: 'Member Type', type: 'select', options: [{ value: 'false', label: 'Human' }, { value: 'true', label: 'AI Agent' }] },
+      { id: 'isContractor', label: 'Contractor Status', type: 'select', options: [{ value: 'false', label: 'Full-time Employee' }, { value: 'true', label: 'Contractor' }] }
+    ];
+  } else if (lookupSource === 'global_list' && field.globalListId) {
+     availableFields = [{ id: 'value', label: 'List Value', type: 'text' }];
+  }
+
+  const addFilter = () => {
+    const newFilters = [...activeFilters, { id: Math.random().toString(36).substr(2, 9), field: availableFields[0]?.id || '', operator: 'equals', value: '' }];
+    updateField(field.id, { lookupFilters: newFilters, userFilters: undefined });
+  };
+
+  const removeFilter = (id: string) => {
+    const newFilters = activeFilters.filter((f: any) => f.id !== id);
+    updateField(field.id, { lookupFilters: newFilters, userFilters: undefined });
+  };
+
+  const updateFilter = (id: string, updates: any) => {
+    const newFilters = activeFilters.map((f: any) => f.id === id ? { ...f, ...updates } : f);
+    updateField(field.id, { lookupFilters: newFilters, userFilters: undefined });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-1">
+        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Lookup Filters</label>
+        <button 
+          onClick={addFilter}
+          className="flex items-center gap-1 text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
+        >
+          <Plus size={10} />
+          Add Rule
+        </button>
+      </div>
+
+      {activeFilters.length === 0 ? (
+        <div className="p-4 bg-indigo-500/5 border border-dashed border-indigo-500/20 rounded-2xl">
+          <p className="text-[9px] text-zinc-500 leading-relaxed italic text-center">
+            No filters applied. All records will be returned.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {activeFilters.map((filter: any) => {
+            const fieldDef = availableFields.find(f => f.id === filter.field);
+            return (
+              <div key={filter.id} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-2 relative group">
+                <button 
+                  onClick={() => removeFilter(filter.id)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center text-zinc-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <X size={10} />
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select 
+                    value={filter.field}
+                    onChange={(e) => updateFilter(filter.id, { field: e.target.value, value: '' })}
+                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                  >
+                    <option value="">Select Field...</option>
+                    {availableFields.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+
+                  <select 
+                    value={filter.operator}
+                    onChange={(e) => updateFilter(filter.id, { operator: e.target.value })}
+                    className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                  >
+                    <option value="equals">Is</option>
+                    <option value="not_equals">Is Not</option>
+                    <option value="contains">Contains</option>
+                    <option value="greater_than">Greater Than</option>
+                    <option value="less_than">Less Than</option>
+                    <option value="is_empty">Is Empty</option>
+                    <option value="not_empty">Is Not Empty</option>
+                  </select>
+                </div>
+
+                {!['is_empty', 'not_empty'].includes(filter.operator) && (
+                  <>
+                    {fieldDef?.type === 'select' || fieldDef?.options ? (
+                      <select 
+                        value={filter.value}
+                        onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                      >
+                        <option value="">Select Value...</option>
+                        {fieldDef.options?.map((opt: any) => (
+                          typeof opt === 'string' 
+                            ? <option key={opt} value={opt}>{opt}</option>
+                            : <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type={fieldDef?.type === 'number' ? 'number' : 'text'}
+                        value={filter.value}
+                        onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                        placeholder="Enter value..."
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // --- Connection Visualizer Component ---
 const ConnectionLine = ({ hoveredMapping, containerRef }: { 
@@ -335,7 +475,10 @@ export interface Field {
   calculationLogic?: string;
   calculationTriggers?: string[];
   targetModuleId?: string;
-  lookupSource?: 'module_records' | 'global_list' | 'tenant_users' | 'connector';
+  targetPlatformModuleId?: string;
+  lookupSource?: 'module_records' | 'global_list' | 'tenant_users' | 'platform' | 'connector';
+  platformEntity?: 'users' | 'teams' | 'roles' | 'security_groups' | 'modules' | 'records';
+  lookupFilters?: LookupFilter[];
   // For nested fields (fieldGroup, repeatableGroup)
   fields?: Field[];
   visibilityRule?: VisibilityRule;
@@ -362,7 +505,6 @@ export interface Field {
   inlineEdit?: boolean;
   columnWidth?: number;
   isCollapsed?: boolean;
-  userFilters?: UserFilter[];
 }
 
 export interface Tab {
@@ -6633,15 +6775,17 @@ export const ModuleEditor = () => {
                               {[
                                 { id: 'module_records', label: 'Modules' },
                                 { id: 'global_list', label: 'Lists' },
-                                { id: 'tenant_users', label: 'Users' },
+                                { id: 'platform', label: 'Platform' },
                                 { id: 'connector', label: 'Connector' }
                               ].map((src) => (
                                 <button 
                                   key={src.id}
-                                  onClick={() => updateField(selectedField.id, { lookupSource: src.id as any })}
+                                  onClick={() => updateField(selectedField.id, { lookupSource: src.id as any, platformEntity: src.id === 'platform' ? 'users' : undefined })}
                                   className={cn(
                                     "py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
-                                    (selectedField.lookupSource === src.id || (!selectedField.lookupSource && src.id === 'module_records'))
+                                    (selectedField.lookupSource === src.id || 
+                                     (selectedField.lookupSource === 'tenant_users' && src.id === 'platform') || 
+                                     (!selectedField.lookupSource && src.id === 'module_records'))
                                       ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                                       : "bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
                                   )}
@@ -6700,169 +6844,173 @@ export const ModuleEditor = () => {
                             </div>
                           )}
 
-                          {selectedField.lookupSource === 'tenant_users' && (
+                          {(selectedField.lookupSource === 'platform' || selectedField.lookupSource === 'tenant_users') && (
                             <div className="space-y-4">
-                              <div className="flex items-center justify-between px-1">
-                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">User Filtering Rules</label>
-                                <button 
-                                  onClick={() => {
-                                    const newFilters = [...(selectedField.userFilters || []), { id: Math.random().toString(36).substr(2, 9), field: 'roleId', operator: 'equals', value: '' }];
-                                    updateField(selectedField.id, { userFilters: newFilters });
-                                  }}
-                                  className="flex items-center gap-1 text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Platform Entity</label>
+                                <select 
+                                  value={selectedField.platformEntity || 'users'}
+                                  onChange={(e) => updateField(selectedField.id, { platformEntity: e.target.value as any })}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
                                 >
-                                  <Plus size={10} />
-                                  Add Rule
-                                </button>
+                                  <option value="users">Users</option>
+                                  <option value="teams">Teams</option>
+                                  <option value="roles">Roles</option>
+                                  <option value="security_groups">Security Groups</option>
+                                  <option value="modules">Platform Module Records</option>
+                                  <option value="records">System Records</option>
+                                </select>
                               </div>
 
-                              {(selectedField.userFilters || []).length === 0 ? (
-                                <div className="p-4 bg-indigo-500/5 border border-dashed border-indigo-500/20 rounded-2xl">
-                                  <p className="text-[9px] text-zinc-500 leading-relaxed italic text-center">
-                                    No filters applied. All active members will be returned.
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-3">
-                                  {(selectedField.userFilters || []).map((filter: UserFilter) => (
-                                    <div key={filter.id} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-2 relative group">
-                                      <button 
-                                        onClick={() => {
-                                          const newFilters = selectedField.userFilters?.filter((f: UserFilter) => f.id !== filter.id);
-                                          updateField(selectedField.id, { userFilters: newFilters });
-                                        }}
-                                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full flex items-center justify-center text-zinc-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition-all"
-                                      >
-                                        <X size={10} />
-                                      </button>
-
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <select 
-                                          value={filter.field}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => 
-                                              f.id === filter.id ? { ...f, field: e.target.value as any, value: '' } : f
-                                            );
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="roleId">Role</option>
-                                          <option value="teamId">Team</option>
-                                          <option value="positionId">Position</option>
-                                          <option value="status">Status</option>
-                                          <option value="isSynthetic">Member Type</option>
-                                          <option value="isContractor">Contractor Status</option>
-                                        </select>
-
-                                        <select 
-                                          value={filter.operator}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => 
-                                              f.id === filter.id ? { ...f, operator: e.target.value as any } : f
-                                            );
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="equals">Is</option>
-                                          <option value="not_equals">Is Not</option>
-                                        </select>
-                                      </div>
-
-                                      {filter.field === 'roleId' && (
-                                        <select 
-                                          value={filter.value}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="">Select Role...</option>
-                                          {permissionGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                        </select>
-                                      )}
-
-                                      {filter.field === 'teamId' && (
-                                        <select 
-                                          value={filter.value}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="">Select Team...</option>
-                                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                        </select>
-                                      )}
-
-                                      {filter.field === 'positionId' && (
-                                        <select 
-                                          value={filter.value}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="">Select Position...</option>
-                                          {positions.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                                        </select>
-                                      )}
-
-                                      {filter.field === 'status' && (
-                                        <select 
-                                          value={filter.value}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="">Select Status...</option>
-                                          <option value="Active">Active</option>
-                                          <option value="Pending">Pending</option>
-                                          <option value="Inactive">Inactive</option>
-                                        </select>
-                                      )}
-
-                                      {filter.field === 'isSynthetic' && (
-                                        <select 
-                                          value={filter.value}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="">Select Type...</option>
-                                          <option value="false">Human</option>
-                                          <option value="true">AI Agent</option>
-                                        </select>
-                                      )}
-
-                                      {filter.field === 'isContractor' && (
-                                        <select 
-                                          value={filter.value}
-                                          onChange={(e) => {
-                                            const newFilters = selectedField.userFilters?.map((f: UserFilter) => f.id === filter.id ? { ...f, value: e.target.value } : f);
-                                            updateField(selectedField.id, { userFilters: newFilters });
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] text-zinc-900 dark:text-white focus:outline-none"
-                                        >
-                                          <option value="">Select Status...</option>
-                                          <option value="false">Full-time Employee</option>
-                                          <option value="true">Contractor</option>
-                                        </select>
-                                      )}
-                                    </div>
-                                  ))}
+                              {selectedField.platformEntity === 'modules' && (
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Platform Module</label>
+                                  <select 
+                                    value={selectedField.targetPlatformModuleId || ''}
+                                    onChange={(e) => updateField(selectedField.id, { targetPlatformModuleId: e.target.value })}
+                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                  >
+                                    <option value="">Select Platform Module...</option>
+                                    {PLATFORM_MODULES.map(m => (
+                                      <option key={m.id} value={m.id}>{m.name}</option>
+                                    ))}
+                                  </select>
                                 </div>
                               )}
                             </div>
                           )}
+
+                          {/* Universal Filter Section */}
+                          {selectedField.lookupSource && (
+                            <FilterBuilder 
+                              field={selectedField}
+                              updateField={updateField}
+                              modules={modules}
+                              globalLists={globalLists}
+                              teams={teams}
+                              positions={positions}
+                              permissionGroups={permissionGroups}
+                            />
+                          )}
+
+                          {/* Lookup Enhancements: Display & Mapping */}
+                          {(selectedField.targetModuleId || selectedField.targetPlatformModuleId) && (
+                            <div className="space-y-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 px-1">
+                                  <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
+                                    <Eye size={12} />
+                                  </div>
+                                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Display Configuration</label>
+                                </div>
+                                <select 
+                                  value={selectedField.lookupDisplayField || ''}
+                                  onChange={(e) => updateField(selectedField.id, { lookupDisplayField: e.target.value })}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                >
+                                  <option value="">Default (Name/Subject)</option>
+                                  {(() => {
+                                    let targetFields: any[] = [];
+                                    if (selectedField.lookupSource === 'module_records' && selectedField.targetModuleId) {
+                                      const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
+                                      if (targetMod) targetFields = (targetMod.layout || []).filter((f: any) => f.label && f.id);
+                                    } else if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
+                                      const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
+                                      if (platformMod) targetFields = platformMod.availableFields;
+                                    }
+                                    return targetFields.map(f => (
+                                      <option key={f.id} value={f.id}>{f.label}</option>
+                                    ));
+                                  })()}
+                                </select>
+                              </div>
+
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between px-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
+                                      <ArrowLeftRight size={12} />
+                                    </div>
+                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Field Mapping</label>
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      const currentMappings = selectedField.lookupOutputMappings || [];
+                                      updateField(selectedField.id, { 
+                                        lookupOutputMappings: [...currentMappings, { id: Math.random().toString(36).substr(2, 9), sourceFieldId: '', targetFieldId: '' }] 
+                                      });
+                                    }}
+                                    className="text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 flex items-center gap-1"
+                                  >
+                                    <Plus size={10} /> Add Mapping
+                                  </button>
+                                </div>
+
+                                <div className="space-y-2">
+                                  {(selectedField.lookupOutputMappings || []).map((mapping: any, idx: number) => (
+                                    <div key={mapping.id} className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 rounded-xl group/mapping">
+                                      <div className="flex-1 space-y-1">
+                                        <select 
+                                          value={mapping.sourceFieldId}
+                                          onChange={(e) => {
+                                            const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                                            newMappings[idx] = { ...newMappings[idx], sourceFieldId: e.target.value };
+                                            updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                          }}
+                                          className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
+                                        >
+                                          <option value="">Source Field...</option>
+                                          {(() => {
+                                            let targetFields: any[] = [];
+                                            if (selectedField.lookupSource === 'module_records' && selectedField.targetModuleId) {
+                                              const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
+                                              if (targetMod) targetFields = (targetMod.layout || []).filter((f: any) => f.label && f.id);
+                                            } else if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
+                                              const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
+                                              if (platformMod) targetFields = platformMod.availableFields;
+                                            }
+                                            return targetFields.map(f => (
+                                              <option key={f.id} value={f.id}>{f.label}</option>
+                                            ));
+                                          })()}
+                                        </select>
+                                        <div className="flex items-center gap-1 text-[8px] text-zinc-400 font-black uppercase tracking-widest px-1">
+                                          <ArrowRight size={8} /> Target
+                                        </div>
+                                        <select 
+                                          value={mapping.targetFieldId}
+                                          onChange={(e) => {
+                                            const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                                            newMappings[idx] = { ...newMappings[idx], targetFieldId: e.target.value };
+                                            updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                          }}
+                                          className="w-full bg-transparent text-[10px] font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none"
+                                        >
+                                          <option value="">Select Target...</option>
+                                          {layout
+                                            .filter((f: any) => f.id !== selectedField.id && f.label)
+                                            .map((f: any) => (
+                                              <option key={f.id} value={f.id}>{f.label}</option>
+                                            ))
+                                          }
+                                        </select>
+                                      </div>
+                                      <button 
+                                        onClick={() => {
+                                          const newMappings = (selectedField.lookupOutputMappings || []).filter((m: any) => m.id !== mapping.id);
+                                          updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                        }}
+                                        className="p-1 text-zinc-400 hover:text-rose-500 opacity-0 group-hover/mapping:opacity-100 transition-all"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                         </div>
                       )}
 

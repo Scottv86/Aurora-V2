@@ -61,7 +61,7 @@ export type FieldType =
   | 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select'
   | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
   | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup';
+  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'connector';
 
 export interface ModuleField {
   id: string;
@@ -74,7 +74,15 @@ export interface ModuleField {
   helperText?: string;
   calculationLogic?: string;
   targetModuleId?: string;
+  targetPlatformModuleId?: string;
+  lookupSource?: 'module_records' | 'global_list' | 'tenant_users' | 'platform' | 'connector';
+  platformEntity?: 'users' | 'teams' | 'roles' | 'security_groups' | 'modules' | 'records';
+  lookupFilters?: LookupFilter[];
   fields?: ModuleField[]; // For nested structures like fieldGroup or repeatableGroup
+  
+  // Lookup enhancements
+  lookupDisplayField?: string;
+  lookupOutputMappings?: { sourceFieldId: string; targetFieldId: string }[];
   
   // Layout metadata (Modern Grid)
   colSpan?: number; // 1-12
@@ -89,6 +97,13 @@ export interface ModuleField {
 }
 
 export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';
+
+export interface LookupFilter {
+  id: string;
+  field: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
+  value: any;
+}
 
 export interface Module {
   id: string;

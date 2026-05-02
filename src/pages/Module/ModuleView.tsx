@@ -7,12 +7,10 @@ import {
 } from 'motion/react';
 import { 
   Plus, 
-  Trash2, 
-  Edit2, 
+  Trash2,
   Search,
   Filter,
-  X,
-  Database
+  X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,7 +31,7 @@ export const ModuleView = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { tenant, isLoading: platformLoading } = usePlatform();
-  const { pushModal } = useModalStack();
+  useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +41,8 @@ export const ModuleView = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize] = useState(25);
+  const [editingRecord, setEditingRecord] = useState<any | null>(null);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -71,6 +70,18 @@ export const ModuleView = () => {
       !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup'].includes(f.type)
     );
   }, [allFields]);
+
+  const fieldToGroupMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (moduleData?.layout || []).forEach((f: any) => {
+      if (f.type === 'fieldGroup' && f.fields) {
+        f.fields.forEach((nf: any) => {
+          map[nf.id] = f.id;
+        });
+      }
+    });
+    return map;
+  }, [moduleData]);
 
   useEffect(() => {
     if (platformLoading) return;
@@ -182,6 +193,44 @@ export const ModuleView = () => {
     }
   };
 
+  const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
+    setNewEntryData(prev => {
+      let updatedData = { ...prev };
+      
+      const groupId = fieldToGroupMap[fieldId];
+      if (groupId) {
+        updatedData[groupId] = { ...(prev[groupId] || {}), [fieldId]: val };
+      } else {
+        updatedData[fieldId] = val;
+      }
+      
+      // Execute Lookup Output Mappings
+      const field = allFields.find(f => f.id === fieldId);
+      if (field?.type === 'lookup' && field.lookupOutputMappings?.length && metadata) {
+        field.lookupOutputMappings.forEach(mapping => {
+          if (mapping.sourceFieldId && mapping.targetFieldId) {
+            const sourceValue = metadata[mapping.sourceFieldId];
+            if (sourceValue !== undefined) {
+              const targetFieldId = mapping.targetFieldId;
+              const targetGroupId = fieldToGroupMap[targetFieldId];
+              
+              if (targetGroupId) {
+                updatedData[targetGroupId] = { 
+                  ...(updatedData[targetGroupId] || {}), 
+                  [targetFieldId]: sourceValue 
+                };
+              } else {
+                updatedData[targetFieldId] = sourceValue;
+              }
+            }
+          }
+        });
+      }
+      
+      return updatedData;
+    });
+  };
+
   const handleDeleteEntry = async (recordId: string) => {
     if (!tenant?.id || !moduleId) return;
 
@@ -273,7 +322,7 @@ export const ModuleView = () => {
 
 
       {records.length > 0 ? (
-        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
           <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1 max-w-md">
               <div className="relative flex-1">
@@ -436,7 +485,7 @@ export const ModuleView = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col"
             >
               <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
                 <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
@@ -545,16 +594,7 @@ export const ModuleView = () => {
                                       <FieldInput 
                                         field={nestedField}
                                         value={newEntryData[field.id]?.[nestedField.id]}
-                                        onChange={(val) => {
-                                          const currentGroupData = newEntryData[field.id] || {};
-                                          setNewEntryData({
-                                            ...newEntryData,
-                                            [field.id]: {
-                                              ...currentGroupData,
-                                              [nestedField.id]: val
-                                            }
-                                          });
-                                        }}
+                                        onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                         usersData={[]}
                                         lookupData={{}}
                                       />
@@ -571,7 +611,7 @@ export const ModuleView = () => {
                                 <FieldInput 
                                   field={field}
                                   value={newEntryData[field.id]}
-                                  onChange={(val) => setNewEntryData({...newEntryData, [field.id]: val})}
+                                  onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                   usersData={[]}
                                   lookupData={{}}
                                 />

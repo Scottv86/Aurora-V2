@@ -14,14 +14,14 @@ export interface Team {
 
 const API_BASE_URL = 'http://localhost:3001/api/teams';
 
-export const useTeams = () => {
+export const useTeams = (enabled: boolean = true) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   const fetchTeams = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !enabled) return;
     setLoading(true);
     try {
       const res = await fetch(API_BASE_URL, {

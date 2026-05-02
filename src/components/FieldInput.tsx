@@ -4,17 +4,184 @@ import {
   Check, AlertCircle, Info, AlertTriangle, XCircle, 
   Smile, User, Calendar, Clock, MapPin, 
   ChevronRight, ArrowRight, Star, Plus, Trash2,
-  ChevronDown
+  ChevronDown, Search, Zap
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { RichTextEditor } from './UI/RichTextEditor';
 import { SignaturePad } from './UI/SignaturePad';
 import { DynamicIcon } from './UI/DynamicIcon';
+import { usePlatformLookup } from '../hooks/usePlatformLookup';
+
+const SearchableLookup = ({ 
+  value, 
+  onChange, 
+  results, 
+  loading, 
+  placeholder, 
+  inputClasses,
+  readonly,
+  platformEntity,
+  onBlur,
+  onKeyDown
+}: any) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [openUp, setOpenUp] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 280);
+    }
+  }, [isOpen]);
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [localName, setLocalName] = React.useState('');
+
+  const selectedItem = React.useMemo(() => results.find((r: any) => r.id === value), [results, value]);
+  
+  // Sync local name with selected item when not focused
+  React.useEffect(() => {
+    if (!isOpen) {
+      setLocalName(selectedItem?.name || '');
+    }
+  }, [selectedItem, isOpen]);
+
+  const filteredResults = React.useMemo(() => {
+    if (!search) return results;
+    return results.filter((r: any) => (r.name || '').toLowerCase().includes(search.toLowerCase()));
+  }, [results, search]);
+
+  React.useEffect(() => {
+    setActiveIndex(0);
+  }, [search]);
+
+  const handleLocalKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        setIsOpen(true);
+      }
+      if (onKeyDown) onKeyDown(e);
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setActiveIndex(prev => (filteredResults.length > 0 ? (prev + 1) % filteredResults.length : 0));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setActiveIndex(prev => (filteredResults.length > 0 ? (prev - 1 + filteredResults.length) % filteredResults.length : 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        const item = filteredResults[activeIndex];
+        if (item) {
+          setLocalName(item.name);
+          onChange(item.id, item);
+          setIsOpen(false);
+          setSearch('');
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsOpen(false);
+        break;
+    }
+
+    if (onKeyDown) onKeyDown(e);
+  };
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div className="relative group">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={14} />
+        <input 
+          type="text"
+          placeholder={loading ? 'Loading...' : placeholder || `Search ${platformEntity || 'records'}...`}
+          value={isOpen ? search : localName}
+          onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => {
+            if (readonly) return;
+            setIsOpen(true);
+            setSearch('');
+          }}
+          readOnly={readonly}
+          onBlur={onBlur}
+          onKeyDown={handleLocalKeyDown}
+          className={cn(inputClasses, "pl-11 pr-10 cursor-text")}
+        />
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {loading && <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />}
+          <ChevronDown className={cn("text-zinc-400 transition-transform", isOpen && "rotate-180")} size={14} />
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && !readonly && (
+          <motion.div 
+            initial={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
+            className={cn(
+              "absolute z-[100] left-0 right-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-64 flex flex-col",
+              openUp ? "bottom-full mb-2" : "top-full mt-2"
+            )}
+          >
+            <div className="overflow-y-auto p-2 space-y-1 custom-scrollbar">
+              {filteredResults.length === 0 ? (
+                <div className="p-4 text-center">
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">No results found</p>
+                </div>
+              ) : (
+                filteredResults.map((item: any, idx: number) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setLocalName(item.name);
+                      onChange(item.id, item);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    className={cn(
+                      "w-full text-left px-4 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between group",
+                      (value === item.id || activeIndex === idx)
+                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
+                        : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    )}
+                  >
+                    <span className="truncate">{item.name}</span>
+                    {value === item.id && <Check size={14} />}
+                    {(value !== item.id && activeIndex === idx) && <ArrowRight size={12} className="translate-x-0 transition-all text-white/50" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 interface FieldInputProps {
   field: any;
   value: any;
-  onChange: (value: any) => void;
+  onChange: (value: any, metadata?: any) => void;
   usersData?: any[];
   lookupData?: Record<string, any[]>;
   readonly?: boolean;
@@ -34,7 +201,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   onBlur,
   onKeyDown
 }) => {
-  const { type, label, placeholder, options, min, max, variant, helperText, optionsSource, globalListId } = field;
+  const { type, label, placeholder, options, min, max, variant, helperText, optionsSource, globalListId, lookupSource, platformEntity } = field;
+
+  // Universal Lookup logic is now handled in LookupInput sub-component
 
   // Global List logic
   const { list: gList, items: gItems, loading: gLoading } = useGlobalList(optionsSource === 'global_list' ? globalListId : null);
@@ -323,83 +492,16 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'lookup') {
-    const { lookupSource, targetModuleId, connectorId } = field;
-
-    if (lookupSource === 'global_list') {
-      return (
-        <select 
-          value={value || ''}
-          disabled={readonly}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          onKeyDown={onKeyDown}
-          className={cn(inputClasses, "appearance-none")}
-        >
-          <option value="">Select Option...</option>
-          {resolvedOptions?.map((opt: string, j: number) => (
-            <option key={j} value={opt}>{opt}</option>
-          ))}
-        </select>
-      );
-    }
-
-    if (lookupSource === 'tenant_users') {
-      return (
-        <select 
-          value={value || ''}
-          disabled={readonly}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          onKeyDown={onKeyDown}
-          className={cn(inputClasses, "appearance-none")}
-        >
-          <option value="">Select User...</option>
-          {usersData.map((u: any) => (
-            <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
-          ))}
-        </select>
-      );
-    }
-
-    if (lookupSource === 'connector') {
-      const isGoogleMaps = connectorId === 'google-maps-lookup';
-      return (
-        <div className="relative group w-full">
-          {isGoogleMaps && <DynamicIcon name="GoogleMaps" size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
-          <input 
-            type="text"
-            placeholder={placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
-            onBlur={onBlur}
-            onKeyDown={onKeyDown}
-            className={cn(inputClasses, isGoogleMaps && "pl-10")}
-          />
-          <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1">
-              <Zap size={8} />
-              Connector
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Default: Module Records
     return (
-      <select 
-        value={value || ''}
-        disabled={readonly}
-        onChange={(e) => onChange(e.target.value)}
+      <LookupInput 
+        field={field}
+        value={value}
+        onChange={onChange}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        className={cn(inputClasses, "appearance-none")}
-      >
-        <option value="">Select Record...</option>
-        {targetModuleId && lookupData[targetModuleId]?.map((r: any) => (
-          <option key={r.id} value={r.id}>{r.name || r.title || r.id}</option>
-        ))}
-      </select>
+        readonly={readonly}
+        inputClasses={inputClasses}
+      />
     );
   }
 
@@ -458,6 +560,50 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       onBlur={onBlur}
       onKeyDown={onKeyDown}
       className={inputClasses}
+    />
+  );
+};
+
+const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inputClasses }: any) => {
+  const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
+  const { lookupSource, connectorId, platformEntity } = field;
+
+  if (lookupSource === 'connector') {
+    const isGoogleMaps = connectorId === 'google-maps-lookup';
+    return (
+      <div className="relative group w-full">
+        {isGoogleMaps && <DynamicIcon name="GoogleMaps" size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
+        <input 
+          type="text"
+          placeholder={field.placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          className={cn(inputClasses, isGoogleMaps && "pl-10")}
+        />
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          <div className="px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1">
+            <Zap size={8} />
+            Connector
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <SearchableLookup
+      value={value}
+      onChange={onChange}
+      results={lookupResults || []}
+      loading={lookupLoading}
+      placeholder={field.placeholder || `Select ${field.label || 'option'}...`}
+      inputClasses={inputClasses}
+      readonly={readonly}
+      platformEntity={platformEntity}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
     />
   );
 };
