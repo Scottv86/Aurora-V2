@@ -158,29 +158,65 @@ router.post('/records', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const { moduleId, associations, path, ...data } = req.body;
 
-    // Handle Record Key Generation
+    // Handle Record Key and Autonumber Generation
     const module = await db.module.findUnique({ where: { id: moduleId } });
     let finalData = { ...data };
     
-    if (module && (module.config as any).recordKeyPrefix) {
+    if (module) {
       const config = module.config as any;
-      const nextNum = config.nextKeyNumber || 1;
-      const prefix = config.recordKeyPrefix || '';
-      const suffix = config.recordKeySuffix || '';
-      const recordKey = `${prefix}-${nextNum}${suffix}`;
-      
-      finalData._record_key = recordKey;
-      
-      // Update module counter
-      await db.module.update({
-        where: { id: moduleId },
-        data: {
-          config: {
-            ...config,
-            nextKeyNumber: nextNum + 1
-          }
+      let configChanged = false;
+      let updatedConfig = { ...config };
+
+      // 1. Handle legacy _record_key generation
+      if (config.recordKeyPrefix) {
+        const nextNum = config.nextKeyNumber || 1;
+        const prefix = config.recordKeyPrefix || '';
+        const suffix = config.recordKeySuffix || '';
+        const recordKey = `${prefix}-${nextNum}${suffix}`;
+        
+        finalData._record_key = recordKey;
+        updatedConfig.nextKeyNumber = nextNum + 1;
+        configChanged = true;
+      }
+
+      // 2. Handle specific 'autonumber' fields in layout
+      const layout = config.layout || [];
+      const flattenFields = (fields: any[]): any[] => {
+        const result: any[] = [];
+        fields.forEach(f => {
+          result.push(f);
+          if (f.fields) result.push(...flattenFields(f.fields));
+        });
+        return result;
+      };
+
+      const allFields = flattenFields(layout);
+      const autonumberFields = allFields.filter((f: any) => f.type === 'autonumber');
+
+      autonumberFields.forEach((field: any) => {
+        // Only generate if not already provided (e.g. by a migration or manual override)
+        if (!finalData[field.id]) {
+          const fieldKey = `_autonumber_${field.id}`;
+          const currentNum = updatedConfig[fieldKey] !== undefined ? updatedConfig[fieldKey] : (field.autonumberStart || 1);
+          
+          const prefix = field.autonumberPrefix || '';
+          const suffix = field.autonumberSuffix || '';
+          const digits = field.autonumberDigits || 0;
+          
+          const formattedNum = currentNum.toString().padStart(digits, '0');
+          finalData[field.id] = `${prefix}${formattedNum}${suffix}`;
+          
+          updatedConfig[fieldKey] = currentNum + 1;
+          configChanged = true;
         }
       });
+
+      if (configChanged) {
+        await db.module.update({
+          where: { id: moduleId },
+          data: { config: updatedConfig }
+        });
+      }
     }
 
     // Initialize workflow state if module has one

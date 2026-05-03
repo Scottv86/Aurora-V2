@@ -286,7 +286,7 @@ export const generateExpression = async (prompt: string, fields: any[], function
 
       USER REQUEST: "${prompt}"
 
-      AVAILABLE FIELDS (Always wrap in curly braces, e.g., {Price}):
+      AVAILABLE FIELDS (Always wrap in curly braces, e.g., {Price}. Special system fields: {Record Key}):
       ${fieldsString}
 
       AVAILABLE FUNCTIONS:
@@ -328,7 +328,7 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
       CURRENT EXPRESSION: "${expression}"
       ERRORS: ${errorsString}
 
-      AVAILABLE FIELDS:
+      AVAILABLE FIELDS (Special system fields: {Record Key}):
       ${fieldsString}
 
       AVAILABLE FUNCTIONS:
@@ -351,33 +351,83 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
 
 /**
  * Safely evaluates calculation fields locally.
+ * Supported syntax: {Field Label} or {{field_id}}
  */
 export const evaluateCalculations = (data: Record<string, any>, fields: ModuleField[]): Record<string, any> => {
-  const newData = { ...data };
+  let newData = { ...data };
   
-  fields.forEach(field => {
-    if (field.type === 'calculation' && field.calculationLogic) {
-      try {
-        let logic = field.calculationLogic;
-        
-        // Replace {{field_id}} with actual values
-        fields.forEach(f => {
-          const value = data[f.id] || 0;
-          // Use regex to replace all occurrences
-          const regex = new RegExp(`\\{\\{${f.id}\\}\\}`, 'g');
-          logic = logic.replace(regex, typeof value === 'number' ? value.toString() : `"${value}"`);
-        });
-        
-        // Evaluate the logic safely using Function
-        // eslint-disable-next-line no-new-func
-        const result = new Function(`return ${logic}`)();
-        newData[field.id] = result;
-      } catch (error) {
-        console.error(`Error evaluating calculation for field ${field.id}:`, error);
-        newData[field.id] = "Error";
+  // Perform up to 3 passes to handle calculations that depend on other calculations
+  let passes = 3;
+  let hasChanges = true;
+
+  while (passes > 0 && hasChanges) {
+    hasChanges = false;
+    const previousData = { ...newData };
+
+    fields.forEach(field => {
+      if (field.type === 'calculation' && field.calculationLogic) {
+        try {
+          let logic = field.calculationLogic;
+          
+          // Replace both {{field_id}} and {Field Label} with actual values
+          fields.forEach(f => {
+            let value = previousData[f.id];
+            
+            // Handle nested fields in groups
+            if (value === undefined || value === null) {
+              for (const key in previousData) {
+                if (typeof previousData[key] === 'object' && previousData[key] !== null) {
+                  if (previousData[key][f.id] !== undefined) {
+                    value = previousData[key][f.id];
+                    break;
+                  }
+                }
+              }
+            }
+            
+            // Default values based on field type
+            if (value === undefined || value === null || value === '') {
+              const numericTypes = ['number', 'currency', 'calculation'];
+              value = numericTypes.includes(f.type) ? 0 : "";
+            }
+
+            // Escaped label for regex - make case-insensitive to be more robust
+            const escapedLabel = f.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const labelRegex = new RegExp(`\\{${escapedLabel}\\}`, 'gi');
+            const idRegex = new RegExp(`\\{\\{${f.id}\\}\\}`, 'g');
+            
+            const safeReplacement = typeof value === 'number' ? value.toString() : `"${value.toString().replace(/"/g, '\\"')}"`;
+            
+            logic = logic.replace(idRegex, safeReplacement).replace(labelRegex, safeReplacement);
+          });
+
+          // Handle system fields like Record Key
+          const recordKey = previousData._record_key || "";
+          logic = logic.replace(/\{Record Key\}/gi, `"${recordKey.replace(/"/g, '\\"')}"`);
+          logic = logic.replace(/\{\{_record_key\}\}/g, `"${recordKey.replace(/"/g, '\\"')}"`);
+          
+          // Evaluate the logic safely using Function
+          // eslint-disable-next-line no-new-func
+          const result = new Function(`return ${logic}`)();
+          
+          const finalResult = (result === undefined || result === null) ? "" : result;
+          
+          if (newData[field.id] !== finalResult) {
+            newData[field.id] = finalResult;
+            hasChanges = true;
+          }
+        } catch (error) {
+          // If we fail on early passes, we might succeed on later ones once dependencies resolve
+          if (passes === 1) {
+            console.error(`Error evaluating calculation for field ${field.id}:`, error);
+            newData[field.id] = "Error";
+          }
+        }
       }
-    }
-  });
+    });
+    
+    passes--;
+  }
   
   return newData;
 };

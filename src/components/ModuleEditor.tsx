@@ -649,12 +649,19 @@ const BlockThumbnail = ({ type }: { type: string }) => {
           </div>
           <div className="h-1.5 w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
         </div>
-      ) : (type === 'select' || type === 'dropdown') ? (
+      ) : (type === 'select' || type === 'dropdown' || type === 'lookup' || type === 'user') ? (
         <div className="space-y-1.5">
           <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
           <div className="h-5 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md flex items-center justify-between px-2">
             <div className="h-1 w-1/2 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
-            <ListFilter size={10} className="text-zinc-400" />
+            <ChevronDown size={10} className="text-zinc-400" />
+          </div>
+        </div>
+      ) : type === 'autonumber' ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/4 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-5 w-full bg-zinc-100 dark:bg-zinc-800/50 border border-indigo-500/10 rounded-md flex items-center px-2">
+            <div className="h-1.5 w-12 bg-indigo-500/20 rounded-full" />
           </div>
         </div>
       ) : type === 'date' ? (
@@ -1204,8 +1211,15 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout }: any) =
              {fObj.labelOverride || field?.label}
              {(fObj.required || field?.required) && <span className="text-rose-500 ml-1">*</span>}
            </label>
-           <div className="h-11 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 flex items-center text-xs text-zinc-400 italic">
-             {fObj.placeholderOverride || `Enter ${field?.label.toLowerCase()}...`}
+           <div className="h-11 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 flex items-center justify-between text-xs text-zinc-400 italic">
+             <span>
+               {fObj.placeholderOverride || (['select', 'lookup', 'user'].includes(field?.type || '') 
+                 ? `Select ${field?.label?.toLowerCase() || 'option'}...` 
+                 : `Enter ${field?.label?.toLowerCase() || 'value'}...`)}
+             </span>
+             {['select', 'lookup', 'user'].includes(field?.type || '') && (
+               <ChevronDown size={14} className="text-zinc-400" />
+             )}
            </div>
         </div>
       )}
@@ -1269,6 +1283,7 @@ export const ModuleEditor = () => {
     recordKeyPrefix: '',
     recordKeySuffix: '',
     nextKeyNumber: 1,
+    titleFieldId: '',
   });
   
   const [layout, setLayout] = useState<Layout>([]);
@@ -1720,6 +1735,7 @@ export const ModuleEditor = () => {
                 recordKeyPrefix: (standardModule as any).recordKeyPrefix || '',
                 recordKeySuffix: (standardModule as any).recordKeySuffix || '',
                 nextKeyNumber: (standardModule as any).nextKeyNumber || 1,
+                titleFieldId: (standardModule as any).config?.titleFieldId || '',
               });
               setIsLoading(false);
               return;
@@ -1741,6 +1757,7 @@ export const ModuleEditor = () => {
           recordKeyPrefix: data.recordKeyPrefix || '',
           recordKeySuffix: data.recordKeySuffix || '',
           nextKeyNumber: data.nextKeyNumber || 1,
+          titleFieldId: data.config?.titleFieldId || '',
         });
 
         if (data.layout) {
@@ -1795,6 +1812,9 @@ export const ModuleEditor = () => {
       
       const payload = {
         ...moduleSettings,
+        config: {
+          titleFieldId: moduleSettings.titleFieldId
+        },
         id: isNew && id !== 'new' ? id : undefined, // Pass templateId if standard module
         enabled: moduleSettings.status === 'ACTIVE',
         layout,
@@ -1984,7 +2004,9 @@ export const ModuleEditor = () => {
     id: `field-${generateId()}`,
     type,
     label: `New ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}`,
-    placeholder: `Enter ${type.replace('_', ' ')}...`,
+    placeholder: ['select', 'lookup', 'user'].includes(type) 
+      ? `Select ${type.replace('_', ' ')}...`
+      : `Enter ${type.replace('_', ' ')}...`,
     helperText: '',
     required: false,
     currencySymbol: '$',
@@ -2392,7 +2414,7 @@ export const ModuleEditor = () => {
             <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 custom-scrollbar">
               {FIELD_CATEGORIES.map((category) => {
                 const filteredFields = category.fields.filter(f => 
-                  f.label.toLowerCase().includes(sidebarSearch.toLowerCase())
+                  f.label?.toLowerCase().includes(sidebarSearch.toLowerCase())
                 );
                 
                 if (filteredFields.length === 0) return null;
@@ -2457,6 +2479,52 @@ export const ModuleEditor = () => {
               )}
               
               <div className="w-full space-y-4 relative px-4">
+                {/* Page Header / Title Configuration Block */}
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedId('page-header');
+                  }}
+                  className={cn(
+                    "group relative p-8 bg-white dark:bg-zinc-900 border-2 rounded-[2.5rem] transition-all cursor-pointer overflow-hidden",
+                    selectedId === 'page-header' 
+                      ? "border-indigo-500 shadow-2xl shadow-indigo-500/10" 
+                      : "border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30"
+                  )}
+                >
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
+                  <div className="flex items-center gap-6 relative z-10">
+                    <div className={cn(
+                      "w-16 h-16 rounded-[2rem] flex items-center justify-center transition-colors shadow-lg",
+                      selectedId === 'page-header' ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500"
+                    )}>
+                      <Layout size={32} />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">
+                          {moduleSettings.titleFieldId 
+                            ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Page Title') 
+                            : 'Page Title'}
+                        </h2>
+                        {!moduleSettings.titleFieldId && (
+                          <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded text-[9px] font-black uppercase tracking-widest">Default ID</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-500 font-medium opacity-60">
+                        {moduleSettings.titleFieldId 
+                          ? `Currently mapped to ${layout.find(f => f.id === moduleSettings.titleFieldId)?.label}` 
+                          : 'Click to configure which field serves as the primary record title'}
+                      </p>
+                    </div>
+                    {selectedId === 'page-header' && (
+                      <div className="w-8 h-8 bg-indigo-500/10 text-indigo-500 rounded-full flex items-center justify-center animate-pulse">
+                        <Settings2 size={16} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Tab Management */}
                 <div className="flex items-center gap-2 mb-8 overflow-x-auto pt-2 pb-2 px-2 scrollbar-hide">
                   <Reorder.Group 
@@ -3458,9 +3526,21 @@ export const ModuleEditor = () => {
                                           ))}
                                         </div>
                                       </div>
+                                    ) : block.type === 'calculation' ? (
+                                      <div className="h-10 bg-indigo-500/5 border border-indigo-500/10 rounded-xl flex items-center px-4 shadow-sm">
+                                        <Calculator size={12} className="text-indigo-500 mr-2 shrink-0" />
+                                        <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 truncate flex-1">
+                                          {block.calculationLogic || 'No formula defined'}
+                                        </span>
+                                      </div>
+                                    ) : (block.type === 'select' || block.type === 'lookup' || block.type === 'user') ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Select ${block.label?.toLowerCase() || 'option'}...`}</span>
+                                        <ChevronDown size={14} className="text-zinc-400 dark:text-zinc-600" />
+                                      </div>
                                     ) : (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 shadow-sm dark:shadow-none">
-                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Enter ${block.label.toLowerCase()}...`}</span>
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Enter ${block.label?.toLowerCase() || 'value'}...`}</span>
                                       </div>
                                     )}
                                   </div>
@@ -6220,6 +6300,72 @@ export const ModuleEditor = () => {
                         </div>
                       </div>
                     </motion.div>
+                  ) : selectedId === 'page-header' ? (
+                    <motion.div 
+                      key="page-header-inspector"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="p-6 space-y-8"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                          <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                            Page Title Settings
+                          </h3>
+                        </div>
+                        <button 
+                          onClick={() => setSelectedId(null)}
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed italic">
+                            Select which field should be used as the primary header for records in this module.
+                          </p>
+                        </div>
+
+                        <div className="space-y-4">
+                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Source Field</label>
+                          <select 
+                            value={moduleSettings.titleFieldId || ''}
+                            onChange={(e) => setModuleSettings(prev => ({ ...prev, titleFieldId: e.target.value }))}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                          >
+                            <option value="">Default (Record ID/Key)</option>
+                            {layout
+                              .filter(f => !['tab', 'section', 'button', 'spacer', 'heading'].includes(f.type))
+                              .map(field => (
+                                <option key={field.id} value={field.id}>
+                                  {field.label} ({field.type})
+                                </option>
+                              ))}
+                          </select>
+                          <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed">
+                            If the selected field is empty for a specific record, the system will fallback to the Record ID.
+                          </p>
+                        </div>
+
+                        <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                          <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3">
+                            <div className="w-8 h-8 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                              <Sparkles size={14} className="text-amber-600" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-bold text-amber-900 dark:text-amber-100 uppercase tracking-tight">Pro Tip</p>
+                              <p className="text-[9px] text-amber-700/70 dark:text-amber-500/70 leading-relaxed font-medium">
+                                Choose fields like "Full Name", "Project Title", or "Serial Number" for the best user experience.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
                   ) : selectedField ? (
                     <motion.div 
                       key={selectedField.id}
@@ -6717,7 +6863,7 @@ export const ModuleEditor = () => {
                               </div>
                               <div className="flex-1">
                                 <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Active Formula</p>
-                                <p className="text-[9px] text-zinc-500 truncate font-mono">{selectedField.calculationLogic || 'No logic defined'}</p>
+                                <p className="text-[9px] text-zinc-500 font-mono whitespace-pre-wrap break-all">{selectedField.calculationLogic || 'No logic defined'}</p>
                               </div>
                             </div>
                             <button 
@@ -7542,6 +7688,9 @@ export const ModuleEditor = () => {
                 
                 const payload = {
                   ...moduleSettings,
+                  config: {
+                    titleFieldId: moduleSettings.titleFieldId
+                  },
                   id: isNew && id !== 'new' ? id : undefined,
                   enabled: moduleSettings.status === 'ACTIVE',
                   layout: currentLayout || [],

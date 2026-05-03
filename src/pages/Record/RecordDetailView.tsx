@@ -19,6 +19,7 @@ import {
   Zap,
   RefreshCw,
   CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -124,8 +125,10 @@ export const RecordDetailView = () => {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         
         const prebuilt = MODULES.find(m => m.id === moduleId);
+        let currentModule = moduleData;
         if (prebuilt) {
-          setModuleData(prebuilt as any);
+          currentModule = prebuilt as any;
+          setModuleData(currentModule);
         } else {
           const modRes = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
             headers: {
@@ -134,7 +137,8 @@ export const RecordDetailView = () => {
             }
           });
           if (modRes.ok) {
-            setModuleData(await modRes.json());
+            currentModule = await modRes.json();
+            setModuleData(currentModule);
           }
         }
         
@@ -148,23 +152,25 @@ export const RecordDetailView = () => {
         if (recRes.ok) {
           const recData = await recRes.json();
           setRecord(recData);
-          setEditData(recData);
+          
+          // CRITICAL: Compute flat fields from the actual module we just fetched
+          // to avoid using stale allFields memo during this effect execution.
+          const currentFlatFields = flattenFields(currentModule?.layout || []) as ModuleField[];
+          
+          const withCalculations = evaluateCalculations(recData, currentFlatFields);
+          setEditData(withCalculations);
+          
           if (recordId && recData._record_key) {
             setBreadcrumbOverride(recordId, recData._record_key);
           }
 
           // Trigger AI summary update once on load if field exists
-          const currentModData = prebuilt || (await (await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id! }
-          })).json());
-          
-          const flatFields = flattenFields(currentModData?.layout || []) as ModuleField[];
-          const aiField = flatFields.find(f => f.type === 'ai_summary');
+          const aiField = currentFlatFields.find(f => f.type === 'ai_summary');
           
           if (aiField) {
             (async () => {
               try {
-                const summary = await generateAISummary(recData, flatFields);
+                const summary = await generateAISummary(withCalculations, currentFlatFields);
                 const aiRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
                   method: 'PUT',
                   headers: {
@@ -233,7 +239,8 @@ export const RecordDetailView = () => {
       });
     }
     
-    setEditData(updatedData);
+    const withCalculations = evaluateCalculations(updatedData, allFields);
+    setEditData(withCalculations);
     
     // For lookups, we trigger an immediate save because mapping changes multiple fields
     // and we want to ensure they are all persisted together.
@@ -457,7 +464,7 @@ export const RecordDetailView = () => {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                {record._record_key || record.name || record.title || record.id || 'Record Details'}
+                {(moduleData.config?.titleFieldId && (editData[moduleData.config.titleFieldId] || record[moduleData.config.titleFieldId])) || ((moduleData as any).titleFieldId && (editData[(moduleData as any).titleFieldId] || record[(moduleData as any).titleFieldId])) || editData._record_key || record._record_key || editData.name || record.name || editData.title || record.title || record.id || 'Record Details'}
               </h1>
             </div>
             <p className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
@@ -519,14 +526,14 @@ export const RecordDetailView = () => {
                           key={field.id} 
                           className={cn(
                             "group/field transition-all relative min-w-0",
-                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup'].includes(field.type) && "cursor-pointer"
+                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) && "cursor-pointer"
                           )}
                           style={{
                             gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                             gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
                           }}
                           onClick={() => {
-                            if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup'].includes(field.type)) {
+                            if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type)) {
                               setEditData(record);
                               setActiveFieldId(field.id);
                             }
@@ -534,7 +541,7 @@ export const RecordDetailView = () => {
                         >
                           <div className={cn(
                             "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border border-transparent",
-                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup'].includes(field.type) && "hover:bg-indigo-500/5 hover:border-indigo-500/10"
+                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) && "hover:bg-indigo-500/5 hover:border-indigo-500/10"
                           )}>
                           {field.type === 'heading' ? (
                             <h4 className={cn(
@@ -568,10 +575,10 @@ export const RecordDetailView = () => {
                                     key={nestedField.id} 
                                     className={cn(
                                       "space-y-1 rounded-xl transition-all",
-                                      !activeFieldId && "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2"
+                                      !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2"
                                     )}
                                     onClick={(e) => {
-                                      if (!activeFieldId) {
+                                      if (!activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
                                         e.stopPropagation();
                                         setEditData(record);
                                         setActiveFieldId(nestedField.id);
@@ -656,7 +663,13 @@ export const RecordDetailView = () => {
                                 {savingFieldId === field.id ? (
                                   <Loader2 size={8} className="animate-spin text-indigo-500" />
                                 ) : (
-                                  !activeFieldId && <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                                  !activeFieldId && (
+                                    ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
+                                      <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                                    ) : (
+                                      <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                                    )
+                                  )
                                 )}
                               </label>
                               {activeFieldId === field.id ? (
@@ -674,13 +687,13 @@ export const RecordDetailView = () => {
                                   lookupData={lookupData}
                                 />
                               ) : (
-                                <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
-                                  {['rich_text', 'long_text'].includes(field.type) ? (
-                                    <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-zinc-600 dark:prose-p:text-zinc-400" dangerouslySetInnerHTML={{ __html: record[field.id] || '-' }} />
-                                  ) : (
-                                    record[field.id] || '-'
-                                  )}
-                                </div>
+                                  <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
+                                    {['rich_text', 'long_text'].includes(field.type) ? (
+                                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-zinc-600 dark:prose-p:text-zinc-400" dangerouslySetInnerHTML={{ __html: (editData[field.id] ?? record[field.id] ?? '-') }} />
+                                    ) : (
+                                      (editData[field.id] ?? record[field.id] ?? '-')
+                                    )}
+                                  </div>
                               )}
                             </div>
                           )}

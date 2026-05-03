@@ -505,10 +505,14 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     );
   }
 
-  if (type === 'ai_summary' || type === 'calculation') {
+  if (type === 'ai_summary' || type === 'calculation' || type === 'autonumber') {
     return (
-      <div className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-500 italic">
-        {type === 'ai_summary' ? 'AI Summary will be generated after saving.' : 'Value will be calculated after saving.'}
+      <div className={cn(inputClasses, "bg-zinc-50 dark:bg-zinc-950/50 italic")}>
+        {value || (
+          type === 'ai_summary' ? 'AI Summary will be generated after saving.' : 
+          type === 'calculation' ? 'Value will be calculated after saving.' :
+          'Auto-number will be generated after saving.'
+        )}
       </div>
     );
   }

@@ -434,6 +434,10 @@ const TRIGGER_OPTIONS = [
 
 const DEFAULT_TRIGGERS = ['onLoad', 'onChange'];
 
+const SYSTEM_FIELDS: Field[] = [
+  { id: '_record_key', label: 'Record Key', type: 'text' }
+];
+
 const HelpTooltip = ({ text }: { text: string }) => (
   <div className="group relative inline-block">
     <HelpCircle size={12} className="text-zinc-300 hover:text-indigo-500 transition-colors cursor-help" />
@@ -958,7 +962,7 @@ export const CalculatorModal = ({
           }
         }
       } else {
-        matches = availableFields
+        matches = [...systemFields, ...availableFields]
           .filter(f => f.label.toLowerCase().includes(q))
           .map(f => ({ 
             label: f.label, 
@@ -978,7 +982,7 @@ export const CalculatorModal = ({
         }));
     } else {
       // Universal search
-      const vMatches = availableFields
+      const vMatches = [...systemFields, ...availableFields]
         .filter(f => f.label.toLowerCase().includes(q))
         .map(f => ({ 
           label: f.label, 
@@ -1152,8 +1156,8 @@ export const CalculatorModal = ({
       if (label === targetLabel) {
         errors.push({ message: `Circular Dependency: Field "{${label}}" cannot reference itself.`, line });
         brokenTokens.add(tag);
-      } else if (!checkPathExists(label, availableFields)) {
-        const allFields = [...availableFields, ...Object.values(relatedFields).flat()];
+      } else if (!checkPathExists(label, [...SYSTEM_FIELDS, ...availableFields])) {
+        const allFields = [...SYSTEM_FIELDS, ...availableFields, ...Object.values(relatedFields).filter(Boolean).flat()];
         let bestSuggestion = null;
         let minDistance = 999;
 
@@ -1171,6 +1175,7 @@ export const CalculatorModal = ({
         };
 
         allFields.forEach(f => {
+          if (!f?.label) return;
           const d = distance(label.toLowerCase(), f.label.toLowerCase());
           if (d < minDistance) {
             minDistance = d;
@@ -1288,7 +1293,7 @@ export const CalculatorModal = ({
           }
           return null;
         };
-        const field = getField(label, availableFields);
+        const field = getField(label, [...SYSTEM_FIELDS, ...availableFields]);
         const value = raw !== undefined ? raw : (field?.type === 'number' || field?.type === 'currency' ? '0' : '');
 
         // Handle comma-separated arrays
@@ -1311,7 +1316,7 @@ export const CalculatorModal = ({
 
         // Numbers vs Strings
         if (value === '') return '""';
-        return isNaN(Number(value)) ? `"${value}"` : value;
+        return isNaN(Number(value)) ? `"${value.toString().replace(/"/g, '\\"')}"` : value;
       });
 
       // 2. JS Equality & Logical Operators
@@ -1577,10 +1582,10 @@ export const CalculatorModal = ({
   const validation = getValidation();
   const sandbox = computeResult();
 
-  const filteredFields = availableFields.filter(f => {
+  const filteredFields = [...SYSTEM_FIELDS, ...availableFields].filter(f => {
     if (f.type === 'group' || f.type === 'fieldGroup') return false;
     
-    const matchesSearch = f.label.toLowerCase().includes(variableSearch.toLowerCase());
+    const matchesSearch = (f.label || "").toLowerCase().includes(variableSearch.toLowerCase());
     if (!matchesSearch) return false;
     
     if (variableTypeFilter === 'repeatable') return f.type === 'repeatableGroup';
