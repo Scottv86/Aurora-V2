@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2 } from 'lucide-react';
+import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2, Copy } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useGridEngine, GridItem, GridPos } from '../../hooks/useGridEngine';
 
@@ -18,6 +18,7 @@ export interface Field {
   fields?: Field[];
   tabId?: string;
   options?: string[];
+  parentId?: string;
 }
 
 interface FieldGroupProps {
@@ -30,6 +31,7 @@ interface FieldGroupProps {
   onDragStart: (e: React.DragEvent, data: any) => void;
   renderNested?: (fields: Field[], parentId: string) => React.ReactNode;
   viewportSize: 'desktop' | 'tablet' | 'mobile';
+  onClone: (id: string) => void;
 }
 
 export const FieldGroup: React.FC<FieldGroupProps> = ({
@@ -41,7 +43,8 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   onDrop,
   onDragStart,
   renderNested,
-  viewportSize
+  viewportSize,
+  onClone
 }) => {
   const isSelected = selectedId === block.id;
   const isRepeatable = block.type === 'repeatableGroup';
@@ -119,7 +122,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
       className={cn(
         "group/group relative p-6 rounded-[24px] cursor-pointer transition-all duration-300",
         "bg-white dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800",
-        isSelected ? "border-indigo-500 ring-4 ring-indigo-500/10 z-20 shadow-2xl" : "hover:border-zinc-300 dark:hover:border-zinc-700 z-10",
+        isSelected ? "border-indigo-500 ring-4 ring-indigo-500/10 z-30 shadow-2xl" : "hover:border-zinc-300 dark:hover:border-zinc-700 z-10 hover:z-40",
         isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30"
       )}
     >
@@ -165,11 +168,23 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
       </div>
 
+      <button 
+        onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
+        className={cn(
+          "absolute -top-4 right-10 w-8 h-8 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700",
+          "opacity-0",
+          !isContentHovered && "group-hover/group:opacity-100"
+        )}
+        title="Duplicate Group"
+      >
+        <Copy size={14} />
+      </button>
+
       {/* Top-Right Delete Button (Hover State) */}
       <button 
         onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
         className={cn(
-          "absolute -top-2 -right-2 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center transition-opacity shadow-lg z-30 hover:scale-110 active:scale-95",
+          "absolute -top-4 -right-4 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95",
           "opacity-0",
           !isContentHovered && "group-hover/group:opacity-100"
         )}
@@ -245,11 +260,11 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
             </button>
             <div className="w-px h-4 bg-zinc-700 dark:bg-zinc-200 mx-1" />
             <button 
-              onClick={(e) => { e.stopPropagation(); onUpdate(block.id, { label: block.label + ' (Copy)' }); }}
+              onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
               className="p-2 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"
               title="Duplicate"
             >
-              <Folder size={16} />
+              <Copy size={16} />
             </button>
             <button 
               onClick={(e) => { e.stopPropagation(); onSelect(block.id); }}

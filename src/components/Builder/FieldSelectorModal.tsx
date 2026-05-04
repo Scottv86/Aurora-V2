@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
   Search, 
+  Users,
   Type, 
   Hash, 
   Calendar, 
@@ -48,6 +49,7 @@ const getFieldIcon = (type: FieldType) => {
     case 'date': return Calendar;
     case 'checkbox': return CheckSquare;
     case 'lookup': return Database;
+    case 'user': return Users;
     case 'longText':
     case 'textarea': return AlignLeft;
     case 'currency': return DollarSign;

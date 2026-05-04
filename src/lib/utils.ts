@@ -44,12 +44,14 @@ const checkCondition = (condition: any, data: any): boolean => {
     if (!fieldId) {
       isMet = true;
     } else {
-      const actualValue = data?.[fieldId];
+      const actualFieldId = fieldId === '_record_key' ? (data?.key ? 'key' : 'id') : fieldId;
+      const actualValue = data?.[actualFieldId];
       let compareValue = value;
 
       // If comparing against another field, fetch its value from data
       if (valueType === 'field' && value) {
-        compareValue = data?.[value];
+        const compareFieldId = value === '_record_key' ? (data?.key ? 'key' : 'id') : value;
+        compareValue = data?.[compareFieldId];
       }
       
       const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);

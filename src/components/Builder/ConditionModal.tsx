@@ -18,7 +18,7 @@ import {
   MessageSquareQuote
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { VisibilityRule, Field } from '../ModuleEditor';
+import { VisibilityRule, Field, Tab } from '../ModuleEditor';
 import {
   DndContext,
   closestCenter,
@@ -47,6 +47,7 @@ interface ConditionModalProps {
   onSave: (rule: VisibilityRule | undefined) => void;
   initialRule?: VisibilityRule;
   availableFields: Field[];
+  tabs: Tab[];
   targetLabel: string;
 }
 
@@ -91,6 +92,7 @@ export const ConditionModal = ({
   onSave,
   initialRule,
   availableFields,
+  tabs,
   targetLabel
 }: ConditionModalProps) => {
   const [rule, setRule] = useState<VisibilityRule | undefined>(initialRule);
@@ -343,9 +345,34 @@ export const ConditionModal = ({
                       className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none pr-8"
                     >
                       <option value="">Select Field...</option>
-                      {availableFields.map(f => (
-                        <option key={f.id} value={f.id}>{f.label}</option>
-                      ))}
+                      <optgroup label="System Fields">
+                        <option value="_record_key">Record Key</option>
+                      </optgroup>
+                      {tabs.map(tab => {
+                        const tabFields = availableFields
+                          .filter(f => f.tabId === tab.id)
+                          .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
+                        
+                        if (tabFields.length === 0) return null;
+                        
+                        return (
+                          <optgroup key={tab.id} label={tab.label}>
+                            {tabFields.map(f => (
+                              <option key={f.id} value={f.id}>{f.label}</option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                      {availableFields.some(f => !f.tabId || !tabs.find(t => t.id === f.tabId)) && (
+                        <optgroup label="Other Fields">
+                          {availableFields
+                            .filter(f => !f.tabId || !tabs.find(t => t.id === f.tabId))
+                            .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0))
+                            .map(f => (
+                              <option key={f.id} value={f.id}>{f.label}</option>
+                            ))}
+                        </optgroup>
+                      )}
                     </select>
                     <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 rotate-90" />
                   </div>
@@ -390,9 +417,34 @@ export const ConditionModal = ({
                             className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none pr-8"
                           >
                             <option value="">Select Field...</option>
-                            {availableFields.filter(f => f.id !== r.fieldId).map(f => (
-                              <option key={f.id} value={f.id}>{f.label}</option>
-                            ))}
+                            <optgroup label="System Fields">
+                              <option value="_record_key">Record Key</option>
+                            </optgroup>
+                            {tabs.map(tab => {
+                              const tabFields = availableFields
+                                .filter(f => f.id !== r.fieldId && f.tabId === tab.id)
+                                .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
+                              
+                              if (tabFields.length === 0) return null;
+
+                              return (
+                                <optgroup key={tab.id} label={tab.label}>
+                                  {tabFields.map(f => (
+                                    <option key={f.id} value={f.id}>{f.label}</option>
+                                  ))}
+                                </optgroup>
+                              );
+                            })}
+                            {availableFields.some(f => f.id !== r.fieldId && (!f.tabId || !tabs.find(t => t.id === f.tabId))) && (
+                              <optgroup label="Other Fields">
+                                {availableFields
+                                  .filter(f => f.id !== r.fieldId && (!f.tabId || !tabs.find(t => t.id === f.tabId)))
+                                  .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0))
+                                  .map(f => (
+                                    <option key={f.id} value={f.id}>{f.label}</option>
+                                  ))}
+                              </optgroup>
+                            )}
                           </select>
                           <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 rotate-90" />
                         </div>

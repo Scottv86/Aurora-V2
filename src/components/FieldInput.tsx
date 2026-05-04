@@ -10,6 +10,7 @@ import { RichTextEditor } from './UI/RichTextEditor';
 import { SignaturePad } from './UI/SignaturePad';
 import { DynamicIcon } from './UI/DynamicIcon';
 import { usePlatformLookup } from '../hooks/usePlatformLookup';
+import { UserSelector } from './Common/UserSelector';
 
 const SearchableLookup = ({ 
   value, 
@@ -648,20 +649,12 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   // User & Lookup
   if (type === 'user') {
     return (
-      <select 
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        onKeyDown={onKeyDown}
-        autoFocus={!readonly}
-        disabled={readonly}
-        className={cn(inputClasses, "appearance-none")}
-      >
-        <option value="">Select User...</option>
-        {usersData.map((u: any) => (
-          <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
-        ))}
-      </select>
+      <UserSelector 
+        value={value}
+        onChange={(id) => onChange(id)}
+        placeholder={placeholder || "Select User..."}
+        readonly={readonly}
+      />
     );
   }
 

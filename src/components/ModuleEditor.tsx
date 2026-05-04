@@ -4,6 +4,7 @@ import {
   Eye, 
   EyeOff,
   Search, 
+  Users,
   Trash2, 
   Settings2,
   Settings,
@@ -92,7 +93,8 @@ import {
   Info,
   LayoutGrid,
   Columns,
-  ChevronRight
+  ChevronRight,
+  Copy
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow } from '../types/platform';
@@ -520,6 +522,7 @@ export interface Field {
   isCollapsed?: boolean;
   hidden?: boolean;
   optionLayout?: 'vertical' | 'horizontal';
+  parentId?: string;
 }
 
 export interface Tab {
@@ -621,6 +624,7 @@ export const FIELD_CATEGORIES = [
       { id: 'treeview', label: 'Tree View', icon: TreePalm, defaultSpan: 6 },
       { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 12 },
       { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
+      { id: 'user', label: 'User Selector', icon: Users, defaultSpan: 6 },
       { id: 'autonumber', label: 'Auto-increment', icon: Hash, defaultSpan: 6 },
       { id: 'connector', label: 'Connector', icon: Zap, defaultSpan: 12 },
       { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 12 },
@@ -1007,8 +1011,11 @@ const evaluateVisibilityRule = (rule: any | undefined, data: any): boolean => {
     if (!fieldId) {
       isConditionMet = true;
     } else {
-      const fieldValue = data[fieldId];
-      const compareValue = valueType === 'field' ? data[value || ''] : value;
+      const actualFieldId = fieldId === '_record_key' ? (data.key ? 'key' : 'id') : fieldId;
+      const fieldValue = data[actualFieldId];
+      const compareValue = valueType === 'field' 
+        ? data[value === '_record_key' ? (data.key ? 'key' : 'id') : (value || '')] 
+        : value;
 
       const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
 
@@ -2250,6 +2257,65 @@ export const ModuleEditor = () => {
       .map(f => f.fields ? { ...f, fields: removeFieldRecursive(f.fields, id) } : f);
   };
 
+  const cloneField = (id: string) => {
+    const original = findFieldRecursive(layout, id);
+    if (!original) return;
+
+    const deepClone = (field: Field, pId?: string): Field => {
+      const newId = generateId();
+      const clonedField = {
+        ...field,
+        id: newId,
+        parentId: pId
+      };
+      
+      if (field.id === id) {
+        clonedField.label = `${field.label} (Copy)`;
+      }
+
+      if (field.fields) {
+        clonedField.fields = field.fields.map(f => deepClone(f, newId));
+      }
+      
+      return clonedField;
+    };
+
+    const cloned = deepClone(original, original.parentId);
+    // Position it at the end of the same container/tab
+    cloned.rowIndex = 9999; 
+
+    setLayout(prev => {
+      // Find the container where the original field was
+      const performInsert = (fields: Field[], targetParentId?: string): Field[] => {
+        if (!targetParentId) {
+          // It's a top-level field in a tab
+          const sameTabFields = fields.filter(f => !f.parentId && f.tabId === original.tabId);
+          const otherFields = fields.filter(f => f.parentId || f.tabId !== original.tabId);
+          const nextSameTab = [...sameTabFields, cloned];
+          // We don't really need resolveCollisions here since it's at rowIndex 9999, 
+          // but normalizeLayout will handle it.
+          return [...otherFields, ...normalizeLayout(nextSameTab)];
+        }
+
+        return fields.map(f => {
+          if (f.id === targetParentId) {
+            const nestedFields = [...(f.fields || []), cloned];
+            return { ...f, fields: normalizeLayout(nestedFields) };
+          }
+          if (f.fields) {
+            return { ...f, fields: performInsert(f.fields, targetParentId) };
+          }
+          return f;
+        });
+      };
+
+      return performInsert([...prev], original.parentId);
+    });
+
+    setSelectedId(cloned.id);
+    toast.success('Field duplicated');
+  };
+
   const deleteBlocks = (ids: string[]) => {
     setLayout(prev => {
       let next = prev;
@@ -2849,6 +2915,7 @@ export const ModuleEditor = () => {
                                     onDragStart={handleDragStart}
                                     renderNested={renderFieldBlocks}
                                     viewportSize={viewportSize}
+                                    onClone={cloneField}
                                   />
                                 );
                               }
@@ -2879,9 +2946,9 @@ export const ModuleEditor = () => {
                                   className={cn(
                                     "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
                                     selectedIds.includes(block.id) 
-                                      ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10" 
-                                      : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700",
-                                    block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-60",
+                                      ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
+                                      : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700 hover:z-40",
+                                    block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
                                     activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
                                     hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
                                   )}
@@ -2946,18 +3013,7 @@ export const ModuleEditor = () => {
                                             <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
                                           </div>
                                         )}
-                                        {!block.hidden && (
-                                          <button 
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              updateField(block.id, { hidden: true });
-                                            }}
-                                            className="opacity-0 group-hover/field:opacity-100 p-1.5 bg-white dark:bg-zinc-800 rounded-lg text-zinc-300 hover:text-rose-500 hover:bg-rose-500/10 transition-all shadow-sm border border-zinc-100 dark:border-zinc-700"
-                                            title="Quick Hide Field"
-                                          >
-                                            <EyeOff size={12} />
-                                          </button>
-                                        )}
+
                                         <GripVertical size={12} className="text-zinc-300 group-hover/field:text-zinc-500" />
                                       </div>
                                     </div>
@@ -3734,6 +3790,17 @@ export const ModuleEditor = () => {
                                     </>
                                   )}
                                   </div>
+                                  {/* Quick Action Buttons (Overlapping Border) */}
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      cloneField(block.id);
+                                    }}
+                                    className="absolute -top-3.5 right-6 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
+                                    title="Duplicate Field"
+                                  >
+                                    <Copy size={12} />
+                                  </button>
 
                                   <button 
                                     onClick={(e) => {
@@ -3741,10 +3808,24 @@ export const ModuleEditor = () => {
                                       setLayout(prev => removeFieldRecursive(prev, block.id));
                                       if (selectedId === block.id) setSelectedId(null);
                                     }}
-                                    className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-20"
+                                    className="absolute -top-3.5 -right-3.5 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95"
+                                    title="Delete Field"
                                   >
                                     <Trash2 size={14} />
                                   </button>
+
+                                  {!block.hidden && (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateField(block.id, { hidden: true });
+                                      }}
+                                      className="absolute -top-3.5 right-15 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
+                                      title="Quick Hide Field"
+                                    >
+                                      <EyeOff size={12} />
+                                    </button>
+                                  )}
                                 </motion.div>
                               );
                             });
@@ -7944,6 +8025,7 @@ export const ModuleEditor = () => {
           }}
           initialRule={editingCondition?.rule}
           availableFields={layout.filter(f => f.id !== editingCondition?.targetId)}
+          tabs={tabs}
           targetLabel={
             editingCondition?.targetType === 'field' 
               ? (layout.find(f => f.id === editingCondition?.targetId)?.label || 'Field')
