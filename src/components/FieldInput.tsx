@@ -1,10 +1,8 @@
 import React from 'react';
-import { useGlobalList } from '../hooks/useGlobalList';
 import { 
-  Check, AlertCircle, Info, AlertTriangle, XCircle, 
-  Smile, User, Calendar, Clock, MapPin, 
-  ChevronRight, ArrowRight, Star, Plus, Trash2,
-  ChevronDown, Search, Zap
+  Check, Info, AlertTriangle, XCircle, 
+  Smile, ArrowRight, Star, Trash2,
+  ChevronDown, Search, Zap, ArrowRightLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -122,7 +120,7 @@ const SearchableLookup = ({
           readOnly={readonly}
           onBlur={onBlur}
           onKeyDown={handleLocalKeyDown}
-          className={cn(inputClasses, "pl-11 pr-10 cursor-text")}
+          className={cn(inputClasses, "pl-11 pr-10", readonly ? "cursor-pointer pointer-events-none" : "cursor-text")}
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
           {loading && <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />}
@@ -183,7 +181,6 @@ interface FieldInputProps {
   value: any;
   onChange: (value: any, metadata?: any) => void;
   usersData?: any[];
-  lookupData?: Record<string, any[]>;
   readonly?: boolean;
   error?: boolean;
   onBlur?: () => void;
@@ -195,41 +192,34 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   value, 
   onChange, 
   usersData = [], 
-  lookupData = {},
   readonly = false,
   error = false,
   onBlur,
   onKeyDown
 }) => {
-  const { type, label, placeholder, options, min, max, variant, helperText, optionsSource, globalListId, lookupSource, platformEntity } = field;
+  const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource } = field;
 
-  // Universal Lookup logic is now handled in LookupInput sub-component
-
-  // Global List logic
-  const { list: gList, items: gItems, loading: gLoading } = useGlobalList(optionsSource === 'global_list' ? globalListId : null);
+  const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
 
   const resolvedOptions = React.useMemo(() => {
-    if (optionsSource === 'global_list') {
-      if (gLoading) return ['Loading options...'];
-      if (!gList || !gItems) return [];
-      const displayColId = gList.columns[0]?.id;
-      if (!displayColId) return [];
-      return gItems.map(item => String(item.data[displayColId] || '')).filter(Boolean);
+    if (lookupSource || (optionsSource && optionsSource !== 'manual')) {
+      if (lookupLoading) return ['Loading options...'];
+      return lookupResults.map(r => r.name);
     }
     return options || [];
-  }, [optionsSource, options, gList, gItems, gLoading]);
+  }, [lookupSource, optionsSource, options, lookupResults, lookupLoading]);
 
   const inputClasses = cn(
     "w-full bg-zinc-50/50 dark:bg-zinc-900/50 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
       : "border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-950",
-    readonly && "opacity-50 cursor-not-allowed bg-zinc-50 dark:bg-zinc-900"
+    readonly && "cursor-pointer pointer-events-none bg-zinc-50 dark:bg-zinc-900"
   );
 
   // Layout & Content Components (No Value)
   if (type === 'heading') {
-    const Tag = (options?.[0] || 'h2') as keyof JSX.IntrinsicElements;
+    const Tag = (options?.[0] || 'h2') as React.ElementType;
     const size = options?.[0] === 'h1' ? 'text-2xl' : options?.[0] === 'h2' ? 'text-xl' : 'text-lg';
     return <Tag className={cn("font-bold text-zinc-900 dark:text-white tracking-tight", size)}>{label}</Tag>;
   }
@@ -286,6 +276,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           onKeyDown={onKeyDown}
+          autoFocus
           className={cn(inputClasses, "appearance-none")}
         >
           <option value="">Select...</option>
@@ -300,7 +291,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'radio') {
     return (
-      <div className="space-y-2.5 w-full">
+      <div className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} tabIndex={-1} onBlur={onBlur}>
         {resolvedOptions?.map((opt: string, i: number) => (
           <label key={i} className="flex items-center gap-3 cursor-pointer group">
             <div className={cn(
@@ -313,6 +304,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               type="radio" 
               className="hidden" 
               checked={value === opt} 
+              disabled={readonly}
               onChange={() => onChange(opt)} 
             />
             <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
@@ -322,32 +314,58 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     );
   }
 
-  if (type === 'checkboxGroup') {
+  if (type === 'checkboxGroup' || type === 'tag') {
     const currentValues = Array.isArray(value) ? value : [];
     return (
-      <div className="space-y-2.5 w-full">
-        {resolvedOptions?.map((opt: string, i: number) => (
-          <label key={i} className="flex items-center gap-3 cursor-pointer group">
-            <div className={cn(
-              "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
-              currentValues.includes(opt) ? "border-indigo-500 bg-indigo-500 text-white" : "border-zinc-200 dark:border-zinc-800"
+      <div className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} tabIndex={-1} onBlur={onBlur}>
+        {type === 'tag' && (
+          <div className="flex flex-wrap gap-2 p-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
+            {currentValues.length === 0 ? (
+              <span className="text-[10px] text-zinc-400 italic px-2 py-1">No tags selected</span>
+            ) : (
+              currentValues.map((v, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500 text-white rounded-lg text-[10px] font-bold animate-in zoom-in-95 duration-200">
+                  {v}
+                  {!readonly && (
+                    <button onClick={() => onChange(currentValues.filter(val => val !== v))} className="hover:text-white/80 transition-colors">
+                      <XCircle size={12} />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+        <div className={cn("grid gap-2", type === 'tag' ? "grid-cols-2 md:grid-cols-3" : "grid-cols-1")}>
+          {resolvedOptions?.map((opt: string, i: number) => (
+            <label key={i} className={cn(
+              "flex items-center gap-3 cursor-pointer group p-2 rounded-xl border-2 transition-all",
+              currentValues.includes(opt) 
+                ? "border-indigo-500 bg-indigo-500/5" 
+                : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
             )}>
-              {currentValues.includes(opt) && <Check size={12} strokeWidth={4} />}
-            </div>
-            <input 
-              type="checkbox" 
-              className="hidden" 
-              checked={currentValues.includes(opt)} 
-              onChange={(e) => {
-                const newValues = e.target.checked 
-                  ? [...currentValues, opt]
-                  : currentValues.filter(v => v !== opt);
-                onChange(newValues);
-              }} 
-            />
-            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
-          </label>
-        ))}
+              <div className={cn(
+                "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
+                currentValues.includes(opt) ? "border-indigo-500 bg-indigo-500 text-white" : "border-zinc-200 dark:border-zinc-800"
+              )}>
+                {currentValues.includes(opt) && <Check size={12} strokeWidth={4} />}
+              </div>
+              <input 
+                type="checkbox" 
+                className="hidden" 
+                checked={currentValues.includes(opt)} 
+                disabled={readonly}
+                onChange={(e) => {
+                  const newValues = e.target.checked 
+                    ? [...currentValues, opt]
+                    : currentValues.filter(v => v !== opt);
+                  onChange(newValues);
+                }} 
+              />
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
+            </label>
+          ))}
+        </div>
       </div>
     );
   }
@@ -356,9 +374,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     return (
       <button
         onClick={() => onChange(!value)}
+        disabled={readonly}
         className={cn(
           "w-11 h-6 rounded-full transition-all relative flex items-center px-1",
-          value ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+          value ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800",
+          readonly && "cursor-pointer pointer-events-none"
         )}
       >
         <div className={cn(
@@ -371,12 +391,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'slider') {
     return (
-      <div className="space-y-4">
+      <div className={cn("space-y-4", readonly && "pointer-events-none")}>
         <input 
           type="range" 
           min={min || 0} 
           max={max || 100} 
           value={value || 0}
+          disabled={readonly}
           onChange={(e) => onChange(parseInt(e.target.value))}
           className="w-full accent-indigo-600"
         />
@@ -399,10 +420,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'rating') {
     return (
-      <div className="flex gap-2">
+      <div className={cn("flex gap-2", readonly && "pointer-events-none")}>
         {[1, 2, 3, 4, 5].map(i => (
           <button 
             key={i} 
+            disabled={readonly}
             onClick={() => onChange(i)}
             className={cn(
               "p-2 rounded-xl transition-all",
@@ -418,16 +440,18 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'colorpicker') {
     return (
-      <div className="flex items-center gap-4">
+      <div className={cn("flex items-center gap-4", readonly && "pointer-events-none")}>
         <input 
           type="color" 
           value={value || '#6366f1'} 
+          disabled={readonly}
           onChange={(e) => onChange(e.target.value)}
           className="w-12 h-12 rounded-2xl border-none p-0 overflow-hidden cursor-pointer bg-transparent"
         />
         <input 
           type="text" 
           value={value || '#6366f1'} 
+          disabled={readonly}
           onChange={(e) => onChange(e.target.value)}
           className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs font-mono uppercase"
         />
@@ -454,9 +478,139 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     );
   }
 
+  if (type === 'datatable') {
+    return (
+      <div className="w-full border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800">
+              <tr>
+                <th className="px-4 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap">Source Record</th>
+                {lookupResults[0] && Object.keys(lookupResults[0]).filter(k => !['id', 'name', '_metadata', 'createdAt', 'updatedAt'].includes(k)).slice(0, 3).map(key => (
+                  <th key={key} className="px-4 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap">{key.replace(/([A-Z])/g, ' $1').trim()}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+              {lookupLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-5 h-5 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Fetching Table Data...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : lookupResults.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-[10px] font-bold text-zinc-400 uppercase tracking-widest">No data available</td>
+                </tr>
+              ) : (
+                lookupResults.slice(0, 5).map((row, idx) => (
+                  <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
+                    <td className="px-4 py-3 text-xs font-bold text-indigo-600 dark:text-indigo-400">{row.name}</td>
+                    {Object.entries(row).filter(([k]) => !['id', 'name', '_metadata', 'createdAt', 'updatedAt'].includes(k)).slice(0, 3).map(([, v], i) => (
+                      <td key={i} className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400 truncate max-w-[150px]">{String(v)}</td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {lookupResults.length > 5 && (
+          <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/20 border-t border-zinc-200 dark:border-zinc-800 flex justify-center">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">+{lookupResults.length - 5} more records</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === 'duallist') {
+    const currentValues = Array.isArray(value) ? value : [];
+    return (
+      <div className={cn("flex gap-4 h-64", readonly && "pointer-events-none")}>
+        {/* Available Source */}
+        <div className="flex-1 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-950 overflow-hidden">
+          <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Available</span>
+            <span className="text-[9px] font-bold text-zinc-500">{(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            {(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).map((opt: string, i: number) => (
+              <button 
+                key={i}
+                disabled={readonly}
+                onClick={() => onChange([...currentValues, opt])}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 flex items-center justify-between group transition-all"
+              >
+                {opt}
+                <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-center items-center gap-2">
+          <ArrowRightLeft size={16} className="text-zinc-300" />
+        </div>
+
+        {/* Selected Target */}
+        <div className="flex-1 flex flex-col border border-indigo-500/20 rounded-2xl bg-indigo-500/[0.02] overflow-hidden">
+          <div className="px-4 py-2 bg-indigo-500/5 border-b border-indigo-500/10 flex items-center justify-between">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Selected</span>
+            <span className="text-[9px] font-bold text-indigo-500">{currentValues.length}</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            {currentValues.map((v, i) => (
+              <button 
+                key={i}
+                disabled={readonly}
+                onClick={() => onChange(currentValues.filter(val => val !== v))}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center justify-between group animate-in slide-in-from-right-2 duration-200"
+              >
+                {v}
+                <Trash2 size={12} className="opacity-60 group-hover:opacity-100 transition-all" />
+              </button>
+            ))}
+            {currentValues.length === 0 && (
+              <div className="h-full flex items-center justify-center p-8 text-center">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest italic leading-relaxed opacity-50">Choose items from the left to add them here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'buttonGroup') {
+    return (
+      <div className={cn("flex flex-wrap gap-2", readonly && "pointer-events-none")}>
+        {resolvedOptions?.map((opt: string, i: number) => (
+          <button
+            key={i}
+            type="button"
+            disabled={readonly}
+            onClick={() => onChange(opt)}
+            className={cn(
+              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
+              value === opt 
+                ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
+                : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
+            )}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   // Standard Inputs
-  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className={inputClasses} />;
-  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className={inputClasses} />;
+  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus className={inputClasses} />;
+  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus className={inputClasses} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
@@ -466,12 +620,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         onChange={(e) => onChange(e.target.value)} 
         onBlur={onBlur}
         onKeyDown={onKeyDown}
+        autoFocus
         className={cn(inputClasses, type === 'currency' ? "pl-8 pr-4" : "px-4")} 
       />
     </div>
   );
 
-  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} className={inputClasses} />;
+  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus className={inputClasses} />;
 
   // User & Lookup
   if (type === 'user') {
@@ -481,6 +636,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
+        autoFocus
         className={cn(inputClasses, "appearance-none")}
       >
         <option value="">Select User...</option>
@@ -563,6 +719,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
       onKeyDown={onKeyDown}
+      autoFocus
       className={inputClasses}
     />
   );

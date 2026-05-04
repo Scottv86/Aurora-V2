@@ -53,7 +53,7 @@ import {
   Table,
   ListOrdered,
   GitCommit,
-  ArrowLeftRight,
+  ArrowRightLeft,
   TreePalm,
   PenTool,
   MapPin,
@@ -602,7 +602,7 @@ export const FIELD_CATEGORIES = [
     label: 'Data & Intelligence',
     fields: [
       { id: 'datatable', label: 'Data Table', icon: Table, defaultSpan: 12 },
-      { id: 'duallist', label: 'Dual List', icon: ArrowLeftRight, defaultSpan: 12 },
+      { id: 'duallist', label: 'Dual List', icon: ArrowRightLeft, defaultSpan: 12 },
       { id: 'treeview', label: 'Tree View', icon: TreePalm, defaultSpan: 6 },
       { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 12 },
       { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
@@ -2961,7 +2961,7 @@ export const ModuleEditor = () => {
                                                     className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
                                                     title="Configure Mapping"
                                                   >
-                                                    <ArrowLeftRight size={16} />
+                                                    <ArrowRightLeft size={16} />
                                                   </button>
                                                   <button 
                                                     onClick={(e) => {
@@ -3462,10 +3462,10 @@ export const ModuleEditor = () => {
                                         <div className="h-12 border-t border-zinc-100 dark:border-zinc-900 flex items-center px-6 justify-between bg-zinc-50/30">
                                           <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Showing 4 of 24 records</span>
                                           <div className="flex gap-2">
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowLeftRight size={10} className="text-zinc-400 rotate-90" /></div>
+                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 rotate-90" /></div>
                                             <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold">1</div>
                                             <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">2</div>
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowLeftRight size={10} className="text-zinc-400 -rotate-90" /></div>
+                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 -rotate-90" /></div>
                                           </div>
                                         </div>
                                       </div>
@@ -4006,7 +4006,7 @@ export const ModuleEditor = () => {
                             onClick={() => setPreviewView('table')}
                             className="p-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-500 rounded-xl hover:text-indigo-600 transition-all"
                           >
-                            <ArrowLeftRight size={16} className="rotate-180" />
+                            <ArrowRightLeft size={16} className="rotate-180" />
                           </button>
                           <div>
                             <h3 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">Record Details</h3>
@@ -4875,7 +4875,7 @@ export const ModuleEditor = () => {
                             </div>
                           </div>
                           <button className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors">
-                            <ArrowLeftRight size={14} />
+                            <ArrowRightLeft size={14} />
                           </button>
                         </div>
                       ))}
@@ -6599,46 +6599,147 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
-                      {(selectedField.type === 'select' || selectedField.type === 'radio' || selectedField.type === 'checkboxGroup' || selectedField.type === 'buttonGroup' || selectedField.type === 'duallist' || selectedField.type === 'stepper' || selectedField.type === 'timeline') && (
+                      {(['select', 'radio', 'checkboxGroup', 'buttonGroup', 'duallist', 'stepper', 'timeline', 'tag', 'datatable'].includes(selectedField.type)) && (
                         <div className="space-y-6">
                           <div className="space-y-2">
                             <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Data Source</label>
                             <div className="grid grid-cols-2 gap-2">
-                              {['manual', 'global_list'].map((src) => (
+                              {[
+                                { id: 'manual', label: 'Manual' },
+                                { id: 'module_records', label: 'Modules' },
+                                { id: 'global_list', label: 'Lists' },
+                                { id: 'platform', label: 'Platform' },
+                                { id: 'connector', label: 'Connector' }
+                              ].filter(src => {
+                                if (selectedField.type === 'datatable' && src.id === 'manual') return false;
+                                return true;
+                              }).map((src) => (
                                 <button 
-                                  key={src}
-                                  onClick={() => updateField(selectedField.id, { optionsSource: src as any })}
+                                  key={src.id}
+                                  onClick={() => {
+                                    if (src.id === 'manual') {
+                                      updateField(selectedField.id, { optionsSource: 'manual', lookupSource: undefined });
+                                    } else {
+                                      updateField(selectedField.id, { 
+                                        lookupSource: src.id as any, 
+                                        optionsSource: src.id as any, // Sync for legacy
+                                        platformEntity: src.id === 'platform' ? 'users' : undefined 
+                                      });
+                                    }
+                                  }}
                                   className={cn(
                                     "py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
-                                    (selectedField.optionsSource === src || (!selectedField.optionsSource && src === 'manual'))
+                                    ((selectedField.optionsSource === src.id || (!selectedField.optionsSource && src.id === 'manual')) && src.id === 'manual') ||
+                                    (selectedField.lookupSource === src.id || 
+                                     (selectedField.lookupSource === 'tenant_users' && src.id === 'platform'))
                                       ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                                       : "bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
                                   )}
                                 >
-                                  {src.replace('_', ' ')}
+                                  {src.label}
                                 </button>
                               ))}
                             </div>
                           </div>
 
-                          {selectedField.optionsSource === 'global_list' ? (
+                          {(selectedField.lookupSource === 'module_records') && (
                             <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Select Global List</label>
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Module</label>
+                              <select 
+                                value={selectedField.targetModuleId || ''}
+                                onChange={(e) => updateField(selectedField.id, { targetModuleId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Select Module...</option>
+                                {modules.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {selectedField.lookupSource === 'global_list' && (
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Global List</label>
                               <select 
                                 value={selectedField.globalListId || ''}
                                 onChange={(e) => updateField(selectedField.id, { globalListId: e.target.value })}
                                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
                               >
-                                <option value="">Choose a list...</option>
+                                <option value="">Select Global List...</option>
                                 {globalLists.map((list: any) => (
                                   <option key={list.id} value={list.id}>{list.name}</option>
                                 ))}
                               </select>
-                              <p className="text-[9px] text-zinc-500 italic px-1">
-                                Options will be populated from the first column of the selected list.
-                              </p>
                             </div>
-                          ) : (
+                          )}
+
+                          {selectedField.lookupSource === 'connector' && (
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Source Connector</label>
+                              <select 
+                                value={selectedField.connectorId || ''}
+                                onChange={(e) => updateField(selectedField.id, { connectorId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Select Connector...</option>
+                                {activeConnectors.map((c: any) => (
+                                  <option key={c.connectorId} value={c.connectorId}>{c.displayName || c.name || c.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {(selectedField.lookupSource === 'platform' || selectedField.lookupSource === 'tenant_users') && (
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Platform Entity</label>
+                                <select 
+                                  value={selectedField.platformEntity || 'users'}
+                                  onChange={(e) => updateField(selectedField.id, { platformEntity: e.target.value as any })}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                >
+                                  <option value="users">Users</option>
+                                  <option value="teams">Teams</option>
+                                  <option value="roles">Roles</option>
+                                  <option value="security_groups">Security Groups</option>
+                                  <option value="modules">Platform Module Records</option>
+                                  <option value="records">System Records</option>
+                                </select>
+                              </div>
+
+                              {selectedField.platformEntity === 'modules' && (
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Platform Module</label>
+                                  <select 
+                                    value={selectedField.targetPlatformModuleId || ''}
+                                    onChange={(e) => updateField(selectedField.id, { targetPlatformModuleId: e.target.value })}
+                                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                  >
+                                    <option value="">Select Platform Module...</option>
+                                    {PLATFORM_MODULES.map(m => (
+                                      <option key={m.id} value={m.id}>{m.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Universal Filter Section */}
+                          {selectedField.lookupSource && (
+                            <FilterBuilder 
+                              field={selectedField}
+                              updateField={updateField}
+                              modules={modules}
+                              globalLists={globalLists}
+                              teams={teams}
+                              positions={positions}
+                              permissionGroups={permissionGroups}
+                            />
+                          )}
+
+                          {(!selectedField.lookupSource || selectedField.optionsSource === 'manual') && selectedField.type !== 'datatable' && (
                             <div className="space-y-4">
                               <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Option List</label>
                               <div className="space-y-2">
@@ -7039,43 +7140,42 @@ export const ModuleEditor = () => {
                             />
                           )}
 
-                          {/* Lookup Enhancements: Display & Mapping */}
-                          {(selectedField.targetModuleId || selectedField.targetPlatformModuleId) && (
-                            <div className="space-y-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 px-1">
-                                  <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
-                                    <Eye size={12} />
-                                  </div>
-                                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Display Configuration</label>
+                          {/* Lookup Enhancements: Display */}
+                          {selectedField.lookupSource && (selectedField.targetModuleId || selectedField.targetPlatformModuleId) && (
+                            <div className="space-y-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                              <div className="flex items-center gap-2 px-1">
+                                <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
+                                  <Eye size={12} />
                                 </div>
-                                <select 
-                                  value={selectedField.lookupDisplayField || ''}
-                                  onChange={(e) => updateField(selectedField.id, { lookupDisplayField: e.target.value })}
-                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
-                                >
-                                  <option value="">Default (Name/Subject)</option>
-                                  {(() => {
-                                    let targetFields: any[] = [];
-                                    if (selectedField.lookupSource === 'module_records' && selectedField.targetModuleId) {
-                                      const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
-                                      if (targetMod) targetFields = (targetMod.layout || []).filter((f: any) => f.label && f.id);
-                                    } else if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
-                                      const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
-                                      if (platformMod) targetFields = platformMod.availableFields;
-                                    }
-                                    return targetFields.map(f => (
-                                      <option key={f.id} value={f.id}>{f.label}</option>
-                                    ));
-                                  })()}
-                                </select>
+                                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Display Field</label>
                               </div>
-
+                              <select 
+                                value={selectedField.lookupDisplayField || ''}
+                                onChange={(e) => updateField(selectedField.id, { lookupDisplayField: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                              >
+                                <option value="">Default (Name/Subject)</option>
+                                {(() => {
+                                  let targetFields: any[] = [];
+                                  if (selectedField.lookupSource === 'module_records' && selectedField.targetModuleId) {
+                                    const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
+                                    if (targetMod) targetFields = (targetMod.layout || []).filter((f: any) => f.label && f.id);
+                                  } else if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
+                                    const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
+                                    if (platformMod) targetFields = platformMod.availableFields;
+                                  }
+                                  return targetFields.map(f => (
+                                    <option key={f.id} value={f.id}>{f.label}</option>
+                                  ));
+                                })()}
+                              </select>
+                            </div>
+                          )}
                               <div className="space-y-4">
                                 <div className="flex items-center justify-between px-1">
                                   <div className="flex items-center gap-2">
                                     <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
-                                      <ArrowLeftRight size={12} />
+                                      <ArrowRightLeft size={12} />
                                     </div>
                                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Field Mapping</label>
                                   </div>
@@ -7157,9 +7257,6 @@ export const ModuleEditor = () => {
                             </div>
                           )}
 
-                        </div>
-                      )}
-
                       {selectedField.type === 'sub_module' && (
                         <div className="space-y-4">
                           <div className="space-y-2">
@@ -7231,7 +7328,7 @@ export const ModuleEditor = () => {
                           label="Conditional Visibility"
                         />
                       </div>
-                    </div>
+
 
                       {selectedField.type === 'connector' && (
                         <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
@@ -7335,6 +7432,7 @@ export const ModuleEditor = () => {
                           </div>
                         </div>
                       )}
+                    </div>
 
                     <div className="pt-12">
                       <button 

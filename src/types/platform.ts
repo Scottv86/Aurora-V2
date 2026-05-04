@@ -75,14 +75,17 @@ export interface ModuleField {
   calculationLogic?: string;
   targetModuleId?: string;
   targetPlatformModuleId?: string;
+  globalListId?: string;
+  connectorId?: string;
   lookupSource?: 'module_records' | 'global_list' | 'tenant_users' | 'platform' | 'connector';
   platformEntity?: 'users' | 'teams' | 'roles' | 'security_groups' | 'modules' | 'records';
   lookupFilters?: LookupFilter[];
+  optionsSource?: 'manual' | 'global_list' | 'platform' | 'module_records' | 'connector';
   fields?: ModuleField[]; // For nested structures like fieldGroup or repeatableGroup
   
   // Lookup enhancements
   lookupDisplayField?: string;
-  lookupOutputMappings?: { sourceFieldId: string; targetFieldId: string }[];
+  lookupOutputMappings?: { id: string; sourceFieldId: string; targetFieldId: string }[];
   
   // Layout metadata (Modern Grid)
   colSpan?: number; // 1-12
@@ -105,6 +108,11 @@ export interface LookupFilter {
   value: any;
 }
 
+export interface ModuleConfig {
+  titleFieldId?: string;
+  [key: string]: any;
+}
+
 export interface Module {
   id: string;
   name: string;
@@ -124,6 +132,8 @@ export interface Module {
   recordKeyPrefix?: string;
   recordKeySuffix?: string;
   nextKeyNumber?: number;
+
+  config?: ModuleConfig;
 }
 
 

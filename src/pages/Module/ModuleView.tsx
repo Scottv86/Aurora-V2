@@ -363,9 +363,23 @@ export const ModuleView = () => {
                     </td>
                     {displayFields.slice(0, 4).map((field: any, j: number) => (
                       <td key={j} className="px-6 py-4 text-sm text-zinc-600 dark:text-zinc-300">
-                        {field.type === 'checkbox' 
-                          ? (record[field.id] || record[field.name] ? 'Yes' : 'No') 
-                          : (record[field.id] || record[field.name] || '-')}
+                        {(() => {
+                          const val = record[field.id] || record[field.name];
+                          if (field.type === 'checkbox') return val ? 'Yes' : 'No';
+                          if (Array.isArray(val)) {
+                            if (val.length === 0) return '-';
+                            return (
+                              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                {val.map((v: string, k: number) => (
+                                  <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase">
+                                    {v}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return val || '-';
+                        })()}
                       </td>
                     ))}
                     <td className="px-6 py-4">

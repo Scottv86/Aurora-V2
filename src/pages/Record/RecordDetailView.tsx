@@ -79,6 +79,26 @@ export const RecordDetailView = () => {
   const [usersData] = useState<any[]>([]);
   const [lookupData] = useState<Record<string, any[]>>({});
 
+  // Global click-away handler
+  useEffect(() => {
+    if (!activeFieldId) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // If we're clicking something that should NOT trigger a save (like a modal or toast), skip
+      if (target.closest('.sonner-toast') || target.closest('[role="dialog"]')) return;
+      
+      const fieldContainer = document.querySelector(`[data-active-field="${activeFieldId}"]`);
+      if (fieldContainer && !fieldContainer.contains(target)) {
+        handleUpdateEntry();
+      }
+    };
+
+    // Use mousedown instead of click to fire before any other click handlers
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeFieldId, editData]);
+
   useEffect(() => {
     if (moduleData?.tabs && moduleData.tabs.length > 0 && !activeTabId) {
       setActiveTabId(moduleData.tabs[0].id);
@@ -100,6 +120,24 @@ export const RecordDetailView = () => {
     });
     return map;
   }, [moduleData]);
+
+  const recordTitle = useMemo(() => {
+    if (!moduleData || (!record && Object.keys(editData).length === 0)) return 'Record Details';
+    
+    const titleFieldId = moduleData.config?.titleFieldId || (moduleData as any).titleFieldId;
+    
+    if (titleFieldId) {
+      const val = editData[titleFieldId] ?? record?.[titleFieldId];
+      if (val) return val;
+    }
+
+    return (
+      editData._record_key || record?._record_key || 
+      editData.name || record?.name || 
+      editData.title || record?.title || 
+      record?.id || 'Record Details'
+    );
+  }, [moduleData, editData, record]);
 
   const activeWorkflow = useMemo(() => {
     if (!moduleData) return null;
@@ -242,22 +280,21 @@ export const RecordDetailView = () => {
     const withCalculations = evaluateCalculations(updatedData, allFields);
     setEditData(withCalculations);
     
-    // For lookups, we trigger an immediate save because mapping changes multiple fields
-    // and we want to ensure they are all persisted together.
-    if (field?.type === 'lookup') {
-      handleUpdateEntry(updatedData);
+    // For certain field types, we trigger an immediate save because they are discrete actions
+    if (['lookup', 'radio', 'toggle', 'rating', 'select', 'duallist', 'checkboxGroup', 'buttonGroup', 'progress', 'tag'].includes(field?.type)) {
+      handleUpdateEntry(updatedData, fieldId);
     }
     
     return updatedData;
   };
 
-  const handleUpdateEntry = async (dataToSave?: any) => {
+  const handleUpdateEntry = async (dataToSave?: any, specificFieldId?: string) => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
     
     // Guard to prevent concurrent saves which can cause race conditions and state reverts
     if (savingFieldId && !dataToSave) return;
     
-    const fieldIdBeingSaved = activeFieldId;
+    const fieldIdBeingSaved = specificFieldId || activeFieldId;
     setSavingFieldId(fieldIdBeingSaved || 'global');
     try {
       let finalData = evaluateCalculations(dataToSave || editData, allFields);
@@ -464,7 +501,7 @@ export const RecordDetailView = () => {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                {(moduleData.config?.titleFieldId && (editData[moduleData.config.titleFieldId] || record[moduleData.config.titleFieldId])) || ((moduleData as any).titleFieldId && (editData[(moduleData as any).titleFieldId] || record[(moduleData as any).titleFieldId])) || editData._record_key || record._record_key || editData.name || record.name || editData.title || record.title || record.id || 'Record Details'}
+                {recordTitle}
               </h1>
             </div>
             <p className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
@@ -524,16 +561,18 @@ export const RecordDetailView = () => {
                       return (
                         <div 
                           key={field.id} 
+                          data-field-id={field.id}
+                          data-active-field={activeFieldId === field.id ? field.id : undefined}
                           className={cn(
                             "group/field transition-all relative min-w-0",
-                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) && "cursor-pointer"
+                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "cursor-pointer"
                           )}
                           style={{
                             gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                             gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
                           }}
                           onClick={() => {
-                            if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type)) {
+                            if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
                               setEditData(record);
                               setActiveFieldId(field.id);
                             }
@@ -541,7 +580,7 @@ export const RecordDetailView = () => {
                         >
                           <div className={cn(
                             "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border border-transparent",
-                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) && "hover:bg-indigo-500/5 hover:border-indigo-500/10"
+                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "hover:bg-indigo-500/5 hover:border-indigo-500/10"
                           )}>
                           {field.type === 'heading' ? (
                             <h4 className={cn(
@@ -577,6 +616,8 @@ export const RecordDetailView = () => {
                                       "space-y-1 rounded-xl transition-all",
                                       !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2"
                                     )}
+                                    data-field-id={nestedField.id}
+                                    data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
                                     onClick={(e) => {
                                       if (!activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
                                         e.stopPropagation();
@@ -587,31 +628,19 @@ export const RecordDetailView = () => {
                                   >
                                     <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                       {nestedField.label}
-                                      {savingFieldId === nestedField.id && <Loader2 size={8} className="animate-spin text-indigo-500" />}
+                                      {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin text-indigo-500" />}
                                     </label>
-                                    {activeFieldId === nestedField.id ? (
-                                      <FieldInput 
-                                        field={nestedField}
-                                        value={editData[field.id]?.[nestedField.id]}
-                                        onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
-                                        onBlur={() => {
-                                          if (nestedField.type !== 'lookup') {
-                                            handleUpdateEntry();
-                                          }
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') handleUpdateEntry();
-                                          if (e.key === 'Escape') setActiveFieldId(null);
-                                        }}
-                                        readonly={savingFieldId === nestedField.id}
-                                        usersData={usersData}
-                                        lookupData={lookupData}
-                                      />
-                                    ) : (
-                                      <p className="text-zinc-900 dark:text-zinc-100 font-medium">
-                                        {record[field.id]?.[nestedField.id] || '-'}
-                                      </p>
-                                    )}
+                                    <FieldInput 
+                                      field={nestedField}
+                                      value={editData[field.id]?.[nestedField.id] ?? record[field.id]?.[nestedField.id]}
+                                      onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleUpdateEntry();
+                                        if (e.key === 'Escape') setActiveFieldId(null);
+                                      }}
+                                      readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
+                                      usersData={usersData}
+                                    />
                                   </div>
                                 )})}
                               </div>
@@ -661,40 +690,30 @@ export const RecordDetailView = () => {
                               <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                 {field.label}
                                 {savingFieldId === field.id ? (
-                                  <Loader2 size={8} className="animate-spin text-indigo-500" />
+                                  <Loader2 size={10} className="animate-spin text-indigo-500" />
                                 ) : (
                                   !activeFieldId && (
                                     ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
                                       <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
                                     ) : (
-                                      <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                                      !['datatable', 'duallist'].includes(field.type) && (
+                                        <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                                      )
                                     )
                                   )
                                 )}
                               </label>
-                              {activeFieldId === field.id ? (
-                                <FieldInput 
-                                  field={field}
-                                  value={editData[field.id]}
-                                  onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
-                                  onBlur={() => handleUpdateEntry()}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleUpdateEntry();
-                                    if (e.key === 'Escape') setActiveFieldId(null);
-                                  }}
-                                  readonly={savingFieldId === field.id}
-                                  usersData={usersData}
-                                  lookupData={lookupData}
-                                />
-                              ) : (
-                                  <div className="text-base text-zinc-900 dark:text-zinc-100 font-medium">
-                                    {['rich_text', 'long_text'].includes(field.type) ? (
-                                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-zinc-600 dark:prose-p:text-zinc-400" dangerouslySetInnerHTML={{ __html: (editData[field.id] ?? record[field.id] ?? '-') }} />
-                                    ) : (
-                                      (editData[field.id] ?? record[field.id] ?? '-')
-                                    )}
-                                  </div>
-                              )}
+                              <FieldInput 
+                                field={field}
+                                value={editData[field.id] ?? record[field.id]}
+                                onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleUpdateEntry();
+                                  if (e.key === 'Escape') setActiveFieldId(null);
+                                }}
+                                readonly={savingFieldId === field.id || (activeFieldId !== field.id && !['datatable', 'duallist'].includes(field.type))}
+                                usersData={usersData}
+                              />
                             </div>
                           )}
                           </div>

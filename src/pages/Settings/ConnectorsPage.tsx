@@ -17,7 +17,7 @@ import {
   AlertCircle,
   Plus,
   ArrowLeft,
-  ArrowLeftRight,
+  ArrowRightLeft,
   ChevronDown,
   Save
 } from 'lucide-react';
@@ -368,7 +368,7 @@ export const ConnectorsPage = () => {
               <div className="px-8 border-b border-zinc-200 dark:border-white/5 flex gap-8">
                 {[
                   { id: 'setup', label: 'Setup', icon: Settings2 },
-                  { id: 'mapping', label: 'Data Mapping', icon: ArrowLeftRight },
+                  { id: 'mapping', label: 'Data Mapping', icon: ArrowRightLeft },
                   { id: 'usage', label: 'Usage & Placements', icon: Layout },
                   { id: 'test', label: 'Test Plug', icon: Play },
                 ].map(tab => (
