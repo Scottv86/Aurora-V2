@@ -291,14 +291,19 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'radio') {
     return (
-      <div className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} tabIndex={-1} onBlur={onBlur}>
+      <div className={cn("grid gap-2 w-full outline-none", readonly && "pointer-events-none")} tabIndex={-1} onBlur={onBlur}>
         {resolvedOptions?.map((opt: string, i: number) => (
-          <label key={i} className="flex items-center gap-3 cursor-pointer group">
+          <label key={i} className={cn(
+            "flex items-center gap-3 cursor-pointer group p-2 rounded-xl border-2 transition-all",
+            value === opt 
+              ? "border-transparent bg-indigo-500/5" 
+              : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
+          )}>
             <div className={cn(
               "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-              value === opt ? "border-indigo-500" : "border-zinc-200 dark:border-zinc-800"
+              value === opt ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
             )}>
-              {value === opt && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />}
+              {value === opt && <div className="w-2 h-2 rounded-full bg-white" />}
             </div>
             <input 
               type="radio" 
@@ -341,7 +346,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             <label key={i} className={cn(
               "flex items-center gap-3 cursor-pointer group p-2 rounded-xl border-2 transition-all",
               currentValues.includes(opt) 
-                ? "border-indigo-500 bg-indigo-500/5" 
+                ? "border-transparent bg-indigo-500/5" 
                 : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
             )}>
               <div className={cn(

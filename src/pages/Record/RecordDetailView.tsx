@@ -29,7 +29,7 @@ import { MODULES } from '../../constants/modules';
 import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
-import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, calculateHeight } from '../../lib/utils';
 import { Module, ModuleField } from '../../types/platform';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
@@ -546,7 +546,10 @@ export const RecordDetailView = () => {
 
             <div className="p-8">
               {moduleData?.layout ? (
-                <div className="grid grid-cols-12 gap-x-10 gap-y-8 w-full">
+                <div 
+                  className="grid grid-cols-12 w-full"
+                  style={{ gap: '16px' }}
+                >
                   {(moduleData.layout || [])
                     .filter((field: ModuleField) => {
                       if (!moduleData.tabs || moduleData.tabs.length === 0) return true;
@@ -569,7 +572,7 @@ export const RecordDetailView = () => {
                           )}
                           style={{
                             gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
-                            gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                            gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                           }}
                           onClick={() => {
                             if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
@@ -579,9 +582,18 @@ export const RecordDetailView = () => {
                           }}
                         >
                           <div className={cn(
-                            "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border border-transparent",
-                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "hover:bg-indigo-500/5 hover:border-indigo-500/10"
+                            "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
+                            activeFieldId === field.id 
+                              ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
+                              : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) 
+                                ? "hover:bg-indigo-500/5 hover:border-indigo-500/10 border-transparent"
+                                : "border-transparent"
                           )}>
+                            {activeFieldId === field.id && (
+                              <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300">
+                                Editing
+                              </div>
+                            )}
                           {field.type === 'heading' ? (
                             <h4 className={cn(
                               "font-bold text-zinc-900 dark:text-white mt-4",
@@ -613,8 +625,12 @@ export const RecordDetailView = () => {
                                   <div 
                                     key={nestedField.id} 
                                     className={cn(
-                                      "space-y-1 rounded-xl transition-all",
-                                      !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2"
+                                      "space-y-1 rounded-xl transition-all relative border-2",
+                                      activeFieldId === nestedField.id
+                                        ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10 p-2 -m-2"
+                                        : !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) 
+                                          ? "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2 border-transparent"
+                                          : "border-transparent"
                                     )}
                                     data-field-id={nestedField.id}
                                     data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
@@ -626,6 +642,11 @@ export const RecordDetailView = () => {
                                       }
                                     }}
                                   >
+                                    {activeFieldId === nestedField.id && (
+                                      <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300">
+                                        Editing
+                                      </div>
+                                    )}
                                     <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                                       {nestedField.label}
                                       {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin text-indigo-500" />}
