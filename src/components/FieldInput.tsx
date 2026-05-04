@@ -197,7 +197,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   onBlur,
   onKeyDown
 }) => {
-  const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource } = field;
+  const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
 
   const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
 
@@ -210,11 +210,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }, [lookupSource, optionsSource, options, lookupResults, lookupLoading]);
 
   const inputClasses = cn(
-    "w-full bg-zinc-50/50 dark:bg-zinc-900/50 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
+    "w-full bg-zinc-50 dark:bg-zinc-950/50 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
       : "border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-950",
-    readonly && "cursor-pointer pointer-events-none bg-zinc-50 dark:bg-zinc-900"
+    readonly && "cursor-pointer pointer-events-none"
   );
 
   // Layout & Content Components (No Value)
@@ -276,7 +276,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          autoFocus
+          autoFocus={!readonly}
           className={cn(inputClasses, "appearance-none")}
         >
           <option value="">Select...</option>
@@ -291,12 +291,20 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'radio') {
     return (
-      <div className={cn("grid gap-2 w-full outline-none", readonly && "pointer-events-none")} tabIndex={-1} onBlur={onBlur}>
+      <div 
+        className={cn(
+          "w-full outline-none", 
+          optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1",
+          readonly && "pointer-events-none"
+        )} 
+        tabIndex={-1} 
+        onBlur={onBlur}
+      >
         {resolvedOptions?.map((opt: string, i: number) => (
           <label key={i} className={cn(
-            "flex items-center gap-3 cursor-pointer group p-2 rounded-xl border-2 transition-all",
+            "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
             value === opt 
-              ? "border-transparent bg-indigo-500/5" 
+              ? "border-transparent" 
               : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
           )}>
             <div className={cn(
@@ -341,12 +349,15 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             )}
           </div>
         )}
-        <div className={cn("grid gap-2", type === 'tag' ? "grid-cols-2 md:grid-cols-3" : "grid-cols-1")}>
+        <div className={cn(
+          type === 'tag' ? "grid gap-1 grid-cols-2 md:grid-cols-3" : 
+          optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1"
+        )}>
           {resolvedOptions?.map((opt: string, i: number) => (
             <label key={i} className={cn(
-              "flex items-center gap-3 cursor-pointer group p-2 rounded-xl border-2 transition-all",
+              "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
               currentValues.includes(opt) 
-                ? "border-transparent bg-indigo-500/5" 
+                ? "border-transparent" 
                 : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
             )}>
               <div className={cn(
@@ -614,8 +625,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus className={inputClasses} />;
-  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus className={inputClasses} />;
+  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
@@ -625,13 +636,14 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         onChange={(e) => onChange(e.target.value)} 
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        autoFocus
-        className={cn(inputClasses, type === 'currency' ? "pl-8 pr-4" : "px-4")} 
+        autoFocus={!readonly}
+        readOnly={readonly}
+        className={cn(inputClasses, "appearance-none", type === 'currency' ? "pl-8 pr-4" : "px-4")} 
       />
     </div>
   );
 
-  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus className={inputClasses} />;
+  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
 
   // User & Lookup
   if (type === 'user') {
@@ -641,7 +653,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        autoFocus
+        autoFocus={!readonly}
+        disabled={readonly}
         className={cn(inputClasses, "appearance-none")}
       >
         <option value="">Select User...</option>
@@ -668,7 +681,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'ai_summary' || type === 'calculation' || type === 'autonumber') {
     return (
-      <div className={cn(inputClasses, "bg-zinc-50 dark:bg-zinc-950/50 italic")}>
+      <div className={cn(inputClasses)}>
         {value || (
           type === 'ai_summary' ? 'AI Summary will be generated after saving.' : 
           type === 'calculation' ? 'Value will be calculated after saving.' :
@@ -724,7 +737,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       onChange={(e) => onChange(e.target.value)}
       onBlur={onBlur}
       onKeyDown={onKeyDown}
-      autoFocus
+      autoFocus={!readonly}
+      readOnly={readonly}
       className={inputClasses}
     />
   );
@@ -746,6 +760,7 @@ const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inpu
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           onKeyDown={onKeyDown}
+          readOnly={readonly}
           className={cn(inputClasses, isGoogleMaps && "pl-10")}
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2">

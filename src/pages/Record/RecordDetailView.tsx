@@ -20,6 +20,8 @@ import {
   RefreshCw,
   CheckCircle2,
   Lock,
+  Check,
+  HelpCircle,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,6 +32,7 @@ import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, calculateHeight } from '../../lib/utils';
+import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
@@ -256,32 +259,53 @@ export const RecordDetailView = () => {
     
     // Execute Lookup Output Mappings
     const field = allFields.find(f => f.id === fieldId);
-    if (field?.type === 'lookup' && field.lookupOutputMappings?.length && metadata) {
+    if (field?.type === 'lookup' && field.lookupOutputMappings?.length) {
+      // First, null out all target fields to clear any previously mapped values
       field.lookupOutputMappings.forEach(mapping => {
-        if (mapping.sourceFieldId && mapping.targetFieldId) {
-          const sourceValue = metadata[mapping.sourceFieldId];
-          if (sourceValue !== undefined) {
-            const targetFieldId = mapping.targetFieldId;
-            const targetGroupId = fieldToGroupMap[targetFieldId];
-            
-            if (targetGroupId) {
-              updatedData[targetGroupId] = { 
-                ...(updatedData[targetGroupId] || {}), 
-                [targetFieldId]: sourceValue 
-              };
-            } else {
-              updatedData[targetFieldId] = sourceValue;
-            }
+        if (mapping.targetFieldId) {
+          const targetFieldId = mapping.targetFieldId;
+          const targetGroupId = fieldToGroupMap[targetFieldId];
+          
+          if (targetGroupId) {
+            updatedData[targetGroupId] = { 
+              ...(updatedData[targetGroupId] || {}), 
+              [targetFieldId]: null 
+            };
+          } else {
+            updatedData[targetFieldId] = null;
           }
         }
       });
+
+      // Then, map the new values from metadata if available
+      if (metadata) {
+        field.lookupOutputMappings.forEach(mapping => {
+          if (mapping.sourceFieldId && mapping.targetFieldId) {
+            const sourceValue = metadata[mapping.sourceFieldId];
+            if (sourceValue !== undefined) {
+              const targetFieldId = mapping.targetFieldId;
+              const targetGroupId = fieldToGroupMap[targetFieldId];
+              
+              if (targetGroupId) {
+                updatedData[targetGroupId] = { 
+                  ...(updatedData[targetGroupId] || {}), 
+                  [targetFieldId]: sourceValue 
+                };
+              } else {
+                updatedData[targetFieldId] = sourceValue;
+              }
+            }
+          }
+        });
+      }
     }
     
     const withCalculations = evaluateCalculations(updatedData, allFields);
     setEditData(withCalculations);
     
     // For certain field types, we trigger an immediate save because they are discrete actions
-    if (['lookup', 'radio', 'toggle', 'rating', 'select', 'duallist', 'checkboxGroup', 'buttonGroup', 'progress', 'tag'].includes(field?.type)) {
+    // Note: multi-value fields (checkboxGroup, tag, duallist) are excluded to allow batch selection
+    if (['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress'].includes(field?.type)) {
       handleUpdateEntry(updatedData, fieldId);
     }
     
@@ -295,6 +319,43 @@ export const RecordDetailView = () => {
     if (savingFieldId && !dataToSave) return;
     
     const fieldIdBeingSaved = specificFieldId || activeFieldId;
+
+    // Check if the value has actually changed before proceeding with save
+    if (record && fieldIdBeingSaved) {
+      const data = dataToSave || editData;
+      const groupId = fieldToGroupMap[fieldIdBeingSaved];
+      
+      const newValue = groupId ? data[groupId]?.[fieldIdBeingSaved] : data[fieldIdBeingSaved];
+      const oldValue = groupId ? record[groupId]?.[fieldIdBeingSaved] : record[fieldIdBeingSaved];
+
+      // Deep compare using JSON.stringify for simplicity and reliability with arrays/objects
+      if (JSON.stringify(newValue) === JSON.stringify(oldValue)) {
+        setActiveFieldId(null);
+        return;
+      }
+    }
+
+    // Client-side validation for required fields
+    const data = dataToSave || editData;
+    const missingFields = allFields.filter(f => {
+      if (!f.required) return false;
+      const val = f.id.includes('.') ? // Handle potential nested fields if any (though usually handled by fieldGroup logic)
+        f.id.split('.').reduce((obj, key) => obj?.[key], data) :
+        data[f.id];
+      
+      // Also check fieldGroup nested fields
+      const groupId = fieldToGroupMap[f.id];
+      const actualVal = groupId ? data[groupId]?.[f.id] : val;
+
+      return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
+    });
+
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in required fields: ${missingFields.map(f => f.label).join(', ')}`);
+      setSavingFieldId(null);
+      return;
+    }
+
     setSavingFieldId(fieldIdBeingSaved || 'global');
     try {
       let finalData = evaluateCalculations(dataToSave || editData, allFields);
@@ -411,6 +472,12 @@ export const RecordDetailView = () => {
     }
   };
 
+  const handleCancelEdit = () => {
+    if (!record) return;
+    setEditData(record);
+    setActiveFieldId(null);
+  };
+
   const handleSyncConnector = async (field: any) => {
     if (!tenant?.id || !moduleId || !recordId || !field.connectorId) return;
     
@@ -506,6 +573,12 @@ export const RecordDetailView = () => {
             </div>
             <p className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
               <span className="font-medium">{moduleData.name}</span>
+              {(editData._record_key || record._record_key) && (
+                <>
+                  <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+                  <span className="font-medium">{editData._record_key || record._record_key}</span>
+                </>
+              )}
               <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
               <span>Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
             </p>
@@ -548,39 +621,51 @@ export const RecordDetailView = () => {
               {moduleData?.layout ? (
                 <div 
                   className="grid grid-cols-12 w-full"
-                  style={{ gap: '16px' }}
+                  style={{ gap: '24px 16px' }}
                 >
-                  {(moduleData.layout || [])
-                    .filter((field: ModuleField) => {
-                      if (!moduleData.tabs || moduleData.tabs.length === 0) return true;
-                      const firstTabId = moduleData.tabs[0]?.id;
-                      const fieldTabId = field.tabId || firstTabId;
-                      return fieldTabId === activeTabId;
-                    })
-                    .sort((a, b) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
-                    .map((field: ModuleField) => {
-                      if (!isFieldVisible(field, record)) return null;
-                      
-                      return (
-                        <div 
-                          key={field.id} 
-                          data-field-id={field.id}
-                          data-active-field={activeFieldId === field.id ? field.id : undefined}
-                          className={cn(
-                            "group/field transition-all relative min-w-0",
-                            !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "cursor-pointer"
-                          )}
-                          style={{
-                            gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
-                            gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
-                          }}
-                          onClick={() => {
-                            if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
-                              setEditData(record);
-                              setActiveFieldId(field.id);
-                            }
-                          }}
-                        >
+                  {(() => {
+                    const visibleFields = compactLayout(
+                      (moduleData.layout || [])
+                        .filter((field: ModuleField) => {
+                          if (!moduleData.tabs || moduleData.tabs.length === 0) return true;
+                          const firstTabId = moduleData.tabs[0]?.id;
+                          const fieldTabId = field.tabId || firstTabId;
+                          return fieldTabId === activeTabId && isFieldVisible(field, editData || record);
+                        })
+                    );
+
+                    return (
+                      <AnimatePresence mode="popLayout">
+                        {visibleFields.map((field: ModuleField) => (
+                          <motion.div 
+                            key={field.id} 
+                            layout
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ 
+                              type: "spring",
+                              stiffness: 300,
+                              damping: 30,
+                              layout: { duration: 0.3 }
+                            }}
+                            data-field-id={field.id}
+                            data-active-field={activeFieldId === field.id ? field.id : undefined}
+                            className={cn(
+                              "group/field transition-all relative min-w-0",
+                              !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "cursor-pointer"
+                            )}
+                            style={{
+                              gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                              gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
+                            }}
+                            onClick={() => {
+                              if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
+                                setEditData(record);
+                                setActiveFieldId(field.id);
+                              }
+                            }}
+                          >
                           <div className={cn(
                             "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
                             activeFieldId === field.id 
@@ -590,8 +675,27 @@ export const RecordDetailView = () => {
                                 : "border-transparent"
                           )}>
                             {activeFieldId === field.id && (
-                              <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300">
-                                Editing
+                              <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
+                                {savingFieldId === field.id && <Loader2 size={10} className="animate-spin" />}
+                                {savingFieldId === field.id ? 'Saving' : 'Editing'}
+                              </div>
+                            )}
+                            {activeFieldId === field.id && !savingFieldId && (
+                              <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
+                                  className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-500 transition-all hover:scale-110 active:scale-95"
+                                  title="Confirm Changes"
+                                >
+                                  <Check size={12} />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
+                                  className="p-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-full shadow-lg border border-zinc-800 transition-all hover:scale-110 active:scale-95"
+                                  title="Cancel Changes"
+                                >
+                                  <X size={12} />
+                                </button>
                               </div>
                             )}
                           {field.type === 'heading' ? (
@@ -643,17 +747,45 @@ export const RecordDetailView = () => {
                                     }}
                                   >
                                     {activeFieldId === nestedField.id && (
-                                      <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300">
-                                        Editing
+                                      <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
+                                        {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin" />}
+                                        {savingFieldId === nestedField.id ? 'Saving' : 'Editing'}
                                       </div>
                                     )}
-                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                                    {activeFieldId === nestedField.id && !savingFieldId && (
+                                      <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
+                                          className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-500 transition-all hover:scale-110 active:scale-95"
+                                          title="Confirm Changes"
+                                        >
+                                          <Check size={12} />
+                                        </button>
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
+                                          className="p-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-full shadow-lg border border-zinc-800 transition-all hover:scale-110 active:scale-95"
+                                          title="Cancel Changes"
+                                        >
+                                          <X size={12} />
+                                        </button>
+                                      </div>
+                                    )}
+                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
                                       {nestedField.label}
-                                      {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin text-indigo-500" />}
+                                      {nestedField.required && <span className="text-rose-500">*</span>}
+                                      {nestedField.tooltip && (
+                                        <div className="relative cursor-help">
+                                          <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                            {nestedField.tooltip}
+                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                          </div>
+                                        </div>
+                                      )}
                                     </label>
                                     <FieldInput 
                                       field={nestedField}
-                                      value={editData[field.id]?.[nestedField.id] ?? record[field.id]?.[nestedField.id]}
+                                      value={editData[field.id]?.[nestedField.id] ?? record[field.id]?.[nestedField.id] ?? nestedField.defaultValue}
                                       onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleUpdateEntry();
@@ -662,6 +794,9 @@ export const RecordDetailView = () => {
                                       readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
                                       usersData={usersData}
                                     />
+                                    {nestedField.helperText && (
+                                      <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{nestedField.helperText}</p>
+                                    )}
                                   </div>
                                 )})}
                               </div>
@@ -708,25 +843,31 @@ export const RecordDetailView = () => {
                             </div>
                           ) : (
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                              <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
                                 {field.label}
-                                {savingFieldId === field.id ? (
-                                  <Loader2 size={10} className="animate-spin text-indigo-500" />
-                                ) : (
-                                  !activeFieldId && (
-                                    ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
-                                      <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
-                                    ) : (
-                                      !['datatable', 'duallist'].includes(field.type) && (
-                                        <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
-                                      )
+                                {field.required && <span className="text-rose-500">*</span>}
+                                {field.tooltip && (
+                                  <div className="relative cursor-help">
+                                    <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                      {field.tooltip}
+                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                    </div>
+                                  </div>
+                                )}
+                                {!activeFieldId && (
+                                  ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
+                                    <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                                  ) : (
+                                    !['datatable', 'duallist'].includes(field.type) && (
+                                      <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
                                     )
                                   )
                                 )}
                               </label>
                               <FieldInput 
                                 field={field}
-                                value={editData[field.id] ?? record[field.id]}
+                                value={editData[field.id] ?? record[field.id] ?? field.defaultValue}
                                 onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleUpdateEntry();
@@ -735,12 +876,17 @@ export const RecordDetailView = () => {
                                 readonly={savingFieldId === field.id || (activeFieldId !== field.id && !['datatable', 'duallist'].includes(field.type))}
                                 usersData={usersData}
                               />
+                              {field.helperText && (
+                                <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>
+                              )}
                             </div>
                           )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        </motion.div>
+                      ))}
+                      </AnimatePresence>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="text-zinc-500 text-sm">

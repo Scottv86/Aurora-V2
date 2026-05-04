@@ -65,10 +65,11 @@ export const useGridEngine = (cols: number = 12) => {
     return result;
   }, [isOverlapping]);
 
-  const snapToGrid = useCallback((posX: number, posY: number, containerWidth: number, rowHeight: number): { x: number, y: number } => {
-    const colWidth = containerWidth / cols;
-    const x = Math.max(0, Math.min(cols - 1, Math.round(posX / colWidth)));
-    const y = Math.max(0, Math.round(posY / rowHeight));
+  const snapToGrid = useCallback((posX: number, posY: number, containerWidth: number, rowHeight: number, gap: number = 0, padding: number = 0): { x: number, y: number } => {
+    const usableWidth = containerWidth - (padding * 2);
+    const colWidth = (usableWidth + gap) / cols;
+    const x = Math.max(0, Math.min(cols - 1, Math.round((posX - padding) / colWidth)));
+    const y = Math.max(0, Math.round((posY - padding) / (rowHeight + gap)));
     return { x, y };
   }, [cols]);
 

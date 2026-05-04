@@ -635,6 +635,43 @@ export const ConditionModal = ({
                       </div>
                     </div>
 
+                    {/* Action Selector */}
+                    <div className="bg-zinc-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                          <Settings2 size={18} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Logic Action</p>
+                          <p className="text-xs font-bold text-zinc-900 dark:text-white">Determine the outcome when conditions are met</p>
+                        </div>
+                      </div>
+                      <div className="flex bg-white dark:bg-zinc-950 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                        <button
+                          onClick={() => setRule(prev => prev ? ({ ...prev, action: 'show' }) : undefined)}
+                          className={cn(
+                            "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                            (!rule?.action || rule?.action === 'show')
+                              ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20"
+                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                          )}
+                        >
+                          Show
+                        </button>
+                        <button
+                          onClick={() => setRule(prev => prev ? ({ ...prev, action: 'hide' }) : undefined)}
+                          className={cn(
+                            "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                            rule?.action === 'hide'
+                              ? "bg-rose-600 text-white shadow-xl shadow-rose-500/20"
+                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                          )}
+                        >
+                          Hide
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="space-y-6">
                       <AnimatePresence>
                         {showSummary && rule && (
@@ -652,7 +689,9 @@ export const ConditionModal = ({
                                 <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em]">Logic Summary</h4>
                               </div>
                               <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-3">This element will be visible if:</p>
+                                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-3">
+                                  This element will be <span className={cn("font-black", rule.action === 'hide' ? "text-rose-500" : "text-indigo-500")}>{rule.action === 'hide' ? 'HIDDEN' : 'VISIBLE'}</span> if:
+                                </p>
                                 {renderNaturalLanguageSummary(rule)}
                               </div>
                             </div>

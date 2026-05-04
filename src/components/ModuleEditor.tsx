@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Save, 
   Eye, 
+  EyeOff,
   Search, 
   Trash2, 
   Settings2,
@@ -48,6 +49,7 @@ import {
   MousePointer2,
   Box,
   Smile,
+  ExternalLink,
   CreditCard,
   FileJson,
   Table,
@@ -73,6 +75,7 @@ import {
   ShieldCheck,
   FileCode,
   Rocket,
+  HelpCircle,
   Globe,
   Webhook,
   ClipboardList,
@@ -112,7 +115,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CommandPalette } from './CommandPalette';
-import { cn } from '../lib/utils';
+import { cn, calculateHeight, flattenFields, isFieldVisible } from '../lib/utils';
+import { compactLayout } from '../lib/layoutEngine';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 import { useGlobalLists } from '../hooks/useGlobalList';
@@ -133,8 +137,15 @@ import { FieldInput } from './FieldInput';
 import { NexusSelectionModal } from './Builder/NexusSelectionModal';
 import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
+import { FieldSelectorModal } from './Builder/FieldSelectorModal';
 
-
+// --- Grid Constants ---
+const GRID_CONFIG = {
+  rowHeight: 120,
+  gap: 16,
+  padding: 32,
+  cols: 12
+};
 
 // --- Filter Builder Component ---
 const FilterBuilder = ({ field, updateField, modules, globalLists, teams, positions, permissionGroups }: any) => {
@@ -449,6 +460,7 @@ export interface VisibilityRule {
   valueType?: 'literal' | 'field';
   logicalOperator?: 'AND' | 'OR';
   rules?: VisibilityRule[];
+  action?: 'show' | 'hide';
   isCollapsed?: boolean;
   name?: string;
 }
@@ -485,6 +497,7 @@ export interface Field {
   colSpan?: number;
   startCol?: number;
   rowIndex?: number;
+  rowSpan?: number;
   tabId?: string;
   // Component specific
   min?: number;
@@ -505,6 +518,8 @@ export interface Field {
   inlineEdit?: boolean;
   columnWidth?: number;
   isCollapsed?: boolean;
+  hidden?: boolean;
+  optionLayout?: 'vertical' | 'horizontal';
 }
 
 export interface Tab {
@@ -977,47 +992,50 @@ const migrateVisibilityRule = (rule: any): VisibilityRule | undefined => {
 const evaluateVisibilityRule = (rule: any | undefined, data: any): boolean => {
   if (!rule) return true;
 
+  const action = rule.action || 'show';
+  let isConditionMet = false;
+
   // Handle Legacy Format (Form Fields)
   if (rule.fieldId && !rule.type) {
     const { fieldId, operator, value } = rule;
     const fieldValue = data[fieldId];
-    if (operator === 'neq') return String(fieldValue) !== String(value);
-    if (operator === 'contains') return String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase());
-    return String(fieldValue) === String(value);
-  }
-
-  if (rule.type === 'rule') {
+    if (operator === 'neq') isConditionMet = String(fieldValue) !== String(value);
+    else if (operator === 'contains') isConditionMet = String(fieldValue || '').toLowerCase().includes(String(value || '').toLowerCase());
+    else isConditionMet = String(fieldValue) === String(value);
+  } else if (rule.type === 'rule') {
     const { fieldId, operator, value, valueType } = rule;
-    if (!fieldId) return true;
-
-    const fieldValue = data[fieldId];
-    const compareValue = valueType === 'field' ? data[value || ''] : value;
-
-    const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
-
-    switch (operator) {
-      case 'equals': return String(fieldValue) === String(compareValue);
-      case 'not_equals': return String(fieldValue) !== String(compareValue);
-      case 'contains': return String(fieldValue || '').toLowerCase().includes(String(compareValue || '').toLowerCase());
-      case 'greater_than': return Number(fieldValue) > Number(compareValue);
-      case 'less_than': return Number(fieldValue) < Number(compareValue);
-      case 'is_empty': return isEmpty(fieldValue);
-      case 'not_empty': return !isEmpty(fieldValue);
-      default: return true;
-    }
-  }
-
-  if (rule.type === 'group') {
-    if (!rule.rules || rule.rules.length === 0) return true;
-    
-    if (rule.logicalOperator === 'OR') {
-      return (rule.rules || []).some((r: VisibilityRule) => evaluateVisibilityRule(r, data));
+    if (!fieldId) {
+      isConditionMet = true;
     } else {
-      return (rule.rules || []).every((r: VisibilityRule) => evaluateVisibilityRule(r, data));
+      const fieldValue = data[fieldId];
+      const compareValue = valueType === 'field' ? data[value || ''] : value;
+
+      const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
+
+      switch (operator) {
+        case 'equals': isConditionMet = String(fieldValue) === String(compareValue); break;
+        case 'not_equals': isConditionMet = String(fieldValue) !== String(compareValue); break;
+        case 'contains': isConditionMet = String(fieldValue || '').toLowerCase().includes(String(compareValue || '').toLowerCase()); break;
+        case 'greater_than': isConditionMet = Number(fieldValue) > Number(compareValue); break;
+        case 'less_than': isConditionMet = Number(fieldValue) < Number(compareValue); break;
+        case 'is_empty': isConditionMet = isEmpty(fieldValue); break;
+        case 'not_empty': isConditionMet = !isEmpty(fieldValue); break;
+        default: isConditionMet = true;
+      }
     }
+  } else if (rule.type === 'group') {
+    if (!rule.rules || rule.rules.length === 0) {
+      isConditionMet = true;
+    } else if (rule.logicalOperator === 'OR') {
+      isConditionMet = (rule.rules || []).some((r: VisibilityRule) => evaluateVisibilityRule(r, data));
+    } else {
+      isConditionMet = (rule.rules || []).every((r: VisibilityRule) => evaluateVisibilityRule(r, data));
+    }
+  } else {
+    isConditionMet = true;
   }
 
-  return true;
+  return action === 'hide' ? !isConditionMet : isConditionMet;
 };
 
 
@@ -1071,8 +1089,12 @@ const VisibilityRuleEditor = ({
           <BrainCircuit size={14} />
         </div>
         <div className="flex-1">
-          <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Active Logic Applied</p>
-          <p className="text-[9px] text-zinc-500">Complex visibility rules are active for this element.</p>
+          <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">
+            {rule.action === 'hide' ? 'Hide' : 'Show'} Logic Applied
+          </p>
+          <p className="text-[9px] text-zinc-500">
+            {rule.action === 'hide' ? 'This element is hidden when conditions are met.' : 'This element is visible when conditions are met.'}
+          </p>
         </div>
       </div>
     </div>
@@ -1297,6 +1319,9 @@ export const ModuleEditor = () => {
   const [isEditingTab, setIsEditingTab] = useState<string | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [activeMappingIdx, setActiveMappingIdx] = useState<number | null>(null);
+  const [activeMappingType, setActiveMappingType] = useState<'source' | 'target'>('target');
   const mockData = React.useMemo(() => generateMockData(layout, 10), [layout.length]);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'architect'>('inspector');
   const [architectMessages, setArchitectMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([
@@ -1367,7 +1392,7 @@ export const ModuleEditor = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
-  const { resolveCollisions } = useGridEngine(12);
+  const { resolveCollisions, snapToGrid } = useGridEngine(12);
 
   const [editingCondition, setEditingCondition] = useState<{
     targetId: string;
@@ -1381,7 +1406,7 @@ export const ModuleEditor = () => {
     triggers?: string[];
   } | null>(null);
 
-  const [relatedModulesMap, setRelatedModulesMap] = useState<Record<string, Field[]>>({});
+  const [relatedModulesMap, setRelatedModulesMap] = useState<Record<string, { layout: Field[], tabs: Tab[] }>>({});
   const [activeConnectors, setActiveConnectors] = useState<any[]>([]);
   const [connectorRegistry, setConnectorRegistry] = useState<any[]>([]);
   const [showConnectorModal, setShowConnectorModal] = useState(false);
@@ -1546,12 +1571,10 @@ export const ModuleEditor = () => {
         
         if (response.ok) {
           const data = await response.json();
-          if (data.layout) {
-            setRelatedModulesMap(prev => ({
-              ...prev,
-              [moduleId]: data.layout
-            }));
-          }
+          setRelatedModulesMap(prev => ({
+            ...prev,
+            [moduleId]: { layout: data.layout || [], tabs: data.tabs || [] }
+          }));
         }
       } catch (err) {
         console.error(`Failed to fetch related module schema for ${moduleId}:`, err);
@@ -1761,7 +1784,7 @@ export const ModuleEditor = () => {
         });
 
         if (data.layout) {
-          setLayout(data.layout);
+          setLayout(normalizeLayout(data.layout));
         }
         if (data.tabs) setTabs(data.tabs);
         if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
@@ -1926,19 +1949,10 @@ export const ModuleEditor = () => {
 
   // --- Helpers ---
   
-  const calculateHeight = (f: Field) => {
-    if (f.type === 'repeatableGroup' || f.type === 'fieldGroup' || f.type === 'group') return 2;
-    if (f.type === 'file' || f.type === 'textarea' || f.type === 'lookup') return 2;
-    return 1;
-  };
 
   const getFieldHeight = (type: string) => {
-    if (type === 'repeatableGroup' || type === 'fieldGroup' || type === 'group') return 240;
-    if (type === 'file') return 230;
-    if (type === 'textarea' || type === 'lookup') return 150;
-    if (type === 'spacer') return 80;
-    if (type === 'heading') return 90;
-    return 110;
+    const units = calculateHeight({ type } as any);
+    return (units * GRID_CONFIG.rowHeight) + ((units - 1) * GRID_CONFIG.gap);
   };
 
   const resolveCollisionsInArray = useCallback((triggerField: Field, fields: Field[]) => {
@@ -1978,20 +1992,52 @@ export const ModuleEditor = () => {
   const normalizeLayout = (currentLayout: Field[]) => {
     if (currentLayout.length === 0) return [];
     
-    // 1. Sort by row then col
-    const sorted = [...currentLayout].sort((a, b) => {
-      if ((a.rowIndex || 0) !== (b.rowIndex || 0)) return (a.rowIndex || 0) - (b.rowIndex || 0);
-      return (a.startCol || 1) - (b.startCol || 1);
+    // Group fields by tabId and parentId to normalize each context independently
+    const groups: Record<string, Field[]> = {};
+    currentLayout.forEach(f => {
+      const key = `${f.tabId || 'default'}-${f.parentId || 'root'}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(f);
     });
 
-    const rows = [...new Set(sorted.map(f => f.rowIndex || 0))].sort((a, b) => a - b);
-    const rowMap = new Map();
-    rows.forEach((r, i) => rowMap.set(r, i));
+    const resultLayout: Field[] = [];
 
-    return sorted.map(f => ({
-      ...f,
-      rowIndex: rowMap.get(f.rowIndex || 0) || 0
-    }));
+    Object.values(groups).forEach(groupFields => {
+      // 1. Sort by row then col
+      const sorted = [...groupFields].sort((a, b) => {
+        if ((a.rowIndex || 0) !== (b.rowIndex || 0)) return (a.rowIndex || 0) - (b.rowIndex || 0);
+        return (a.startCol || 1) - (b.startCol || 1);
+      });
+
+      const maxRow = sorted.length > 0 ? Math.max(...sorted.map(f => (f.rowIndex || 0) + calculateHeight(f))) : 0;
+      const occupiedRows = new Set<number>();
+      
+      sorted.forEach(f => {
+        const start = f.rowIndex || 0;
+        const height = calculateHeight(f);
+        for (let i = 0; i < height; i++) {
+          occupiedRows.add(start + i);
+        }
+      });
+
+      const rowShift = new Array(maxRow + 1).fill(0);
+      let currentShift = 0;
+      for (let i = 0; i <= maxRow; i++) {
+        if (!occupiedRows.has(i)) {
+          currentShift++;
+        }
+        rowShift[i] = currentShift;
+      }
+
+      const normalizedGroup = sorted.map(f => ({
+        ...f,
+        rowIndex: Math.max(0, (f.rowIndex || 0) - (f.rowIndex && f.rowIndex > 0 ? rowShift[f.rowIndex - 1] : 0))
+      }));
+
+      resultLayout.push(...normalizedGroup);
+    });
+
+    return resultLayout;
   };
 
   const compactLayout = (fields: Field[]) => {
@@ -2013,7 +2059,7 @@ export const ModuleEditor = () => {
     options: ['Option 1', 'Option 2'],
     calculationLogic: '',
     targetModuleId: '',
-    colSpan: type === 'heading' || type === 'divider' || type === 'spacer' || type === 'repeatableGroup' || type === 'fieldGroup' || type === 'group' ? 12 : 6,
+    colSpan: 6, // Uniform default for all field types
     startCol: 1,
     rowIndex: layout.length, // Add to end by default
     tabId: currentTabId,
@@ -2054,33 +2100,40 @@ export const ModuleEditor = () => {
     e.stopPropagation();
     
     const isNested = !!parentId;
-    const col = calculateGridCol(e, isNested);
-    
-    // Calculate insertion row based on Y
     const container = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - container.top - 16;
-    const rowHeight = 130; // Unified row height for better density
-    const rowIndex = Math.max(0, Math.floor(y / rowHeight)); 
+    
+    // Use snapToGrid for consistent coordinates
+    const { x, y } = snapToGrid(
+      e.clientX - container.left,
+      e.clientY - container.top,
+      container.width,
+      GRID_CONFIG.rowHeight,
+      GRID_CONFIG.gap,
+      isNested ? 16 : GRID_CONFIG.padding
+    );
+
+    const col = x + 1;
+    const rowIndex = y;
     
     // Determine span and height from activeDragItem
     let span = 12;
+    let fieldType = 'text';
 
     if (activeDragItem) {
       if (activeDragItem.type === 'field') {
         const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === activeDragItem.fieldType);
         if (fieldDef?.defaultSpan) span = fieldDef.defaultSpan;
+        fieldType = activeDragItem.fieldType || 'text';
       } else if (activeDragItem.type === 'move') {
         const field = layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || '');
         if (field) {
           span = field.colSpan || 12;
+          fieldType = field.type;
         }
       }
     }
 
     const constrainedSpan = Math.min(span, 13 - col);
-    const fieldType = activeDragItem.type === 'field' 
-      ? activeDragItem.fieldType 
-      : (layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || ''))?.type;
 
     setDragOverInfo({ 
       col, 
@@ -2088,7 +2141,7 @@ export const ModuleEditor = () => {
       index: rowIndex, 
       active: true, 
       parentId,
-      height: getFieldHeight(fieldType || 'text')
+      height: getFieldHeight(fieldType)
     });
   };
 
@@ -2106,12 +2159,20 @@ export const ModuleEditor = () => {
     
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/json'));
-      const dropCol = calculateGridCol(e, !!parentId);
-      
+      const isNested = !!parentId;
       const container = e.currentTarget.getBoundingClientRect();
-      const y = e.clientY - container.top - 16;
-      const rowHeight = 130; 
-      const dropRow = Math.max(0, Math.floor(y / rowHeight));
+      
+      const { x, y } = snapToGrid(
+        e.clientX - container.left,
+        e.clientY - container.top,
+        container.width,
+        GRID_CONFIG.rowHeight,
+        GRID_CONFIG.gap,
+        isNested ? 16 : GRID_CONFIG.padding
+      );
+
+      const dropCol = x + 1;
+      const dropRow = y;
 
       const fieldId = data.type === 'move' ? data.fieldId : null;
       if (fieldId && fieldId === parentId) return;
@@ -2135,8 +2196,13 @@ export const ModuleEditor = () => {
       // Helper to insert field into the tree
       const performInsert = (fields: Field[], targetId?: string): { fields: Field[], insertedField?: Field } => {
         if (!targetId) {
-          const resolved = resolveCollisionsInArray(updatedField, [...fields, updatedField]);
-          return { fields: normalizeLayout(resolved), insertedField: updatedField };
+          const sameTabFields = fields.filter(f => !f.parentId && f.tabId === currentTabId);
+          const otherFields = fields.filter(f => f.parentId || f.tabId !== currentTabId);
+          const resolved = resolveCollisionsInArray(updatedField, [...sameTabFields, updatedField]);
+          return { 
+            fields: [...otherFields, ...normalizeLayout(resolved)], 
+            insertedField: updatedField 
+          };
         }
         
         let insertedField: Field | undefined;
@@ -2391,6 +2457,17 @@ export const ModuleEditor = () => {
             <Save size={12} />
             <span>{isSaving ? 'Saving...' : 'Save'}</span>
           </button>
+
+          {id !== 'new' && (
+            <button 
+              onClick={() => window.open(`/workspace/modules/${id}`, '_blank')}
+              className="flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm uppercase tracking-widest"
+              title="View in Workspace"
+            >
+              <ExternalLink size={12} />
+              <span>Launch</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2639,15 +2716,20 @@ export const ModuleEditor = () => {
                     </div>
                   )}
 
-                  <div 
-                    id="main-grid-container"
-                    className={cn(
-                      "p-8 min-h-[600px] relative z-10 grid gap-4 items-start content-start transition-all duration-300",
-                      "grid-cols-1", // Mobile first
-                      viewportSize !== 'mobile' && "md:grid-cols-12", // Desktop/Tablet grid
-                      (isArchitectThinking || isLoading) && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
-                    )}
-                  >
+                    <div 
+                      id="main-grid-container"
+                      className={cn(
+                        "p-8 min-h-[600px] relative z-10 grid items-start content-start transition-all duration-300",
+                        "grid-cols-1", // Mobile first
+                        viewportSize !== 'mobile' && "md:grid-cols-12", // Desktop/Tablet grid
+                        (isArchitectThinking || isLoading) && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
+                      )}
+                      style={{ 
+                        gap: `${GRID_CONFIG.gap}px`,
+                        padding: `${GRID_CONFIG.padding}px`,
+                        gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+                      }}
+                    >
                     {/* Architect Thinking / Loading Overlay */}
                     <AnimatePresence>
                       {(isArchitectThinking || isLoading) && (
@@ -2717,22 +2799,34 @@ export const ModuleEditor = () => {
                                const type = block.type?.toLowerCase();
                                if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
 
+                               if (activeTab === 'preview' && !isFieldVisible(block, {})) return false;
+
                                if (isNested) return true;
                                return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
                              });
                             
-                            const items = [...filtered];
+                            let items = [...filtered];
+
+                            if (activeTab === 'preview') {
+                              items = compactLayout(items);
+                            }
                             if (dragOverInfo && dragOverInfo.active && dragOverInfo.parentId === parentId) {
                               const placeholder = (
                                 <div 
                                   key="placeholder"
-                                  className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse"
+                                  className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse flex items-center justify-center relative overflow-hidden"
                                   style={{ 
                                     gridColumn: `${dragOverInfo.col} / span ${dragOverInfo.span}`,
-                                    gridRow: `${dragOverInfo.index + 1} / span ${Math.ceil((dragOverInfo.height || 110) / 130)}`,
-                                    height: `${dragOverInfo.height || 110}px`
+                                    gridRow: `${dragOverInfo.index + 1} / span ${Math.round((dragOverInfo.height || 0) / GRID_CONFIG.rowHeight)}`,
+                                    height: `${dragOverInfo.height}px`
                                   }}
-                                />
+                                >
+                                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
+                                  <div className="relative flex flex-col items-center gap-1">
+                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+                                    <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Drop Zone</span>
+                                  </div>
+                                </div>
                               );
                               items.push(placeholder as any);
                             }
@@ -2752,6 +2846,7 @@ export const ModuleEditor = () => {
                                     onUpdate={updateField}
                                     onDelete={(id) => deleteBlocks([id])}
                                     onDrop={handleDropOnCanvas}
+                                    onDragStart={handleDragStart}
                                     renderNested={renderFieldBlocks}
                                     viewportSize={viewportSize}
                                   />
@@ -2770,7 +2865,7 @@ export const ModuleEditor = () => {
                                   exit={{ opacity: 0, scale: 0.9 }}
                                   style={{ 
                                     gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span 1`
+                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2782,10 +2877,11 @@ export const ModuleEditor = () => {
                                   }}
                                   id={`canvas-field-${block.id}`}
                                   className={cn(
-                                    "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2",
+                                    "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
                                     selectedIds.includes(block.id) 
                                       ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10" 
                                       : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700",
+                                    block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-60",
                                     activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
                                     hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
                                   )}
@@ -2796,12 +2892,13 @@ export const ModuleEditor = () => {
                                       Selected
                                     </div>
                                   )}
-                                  <div className="space-y-2">
+                                   <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1">
                                           {block.type.replace('_', ' ')}
                                           {block.required && <span className="text-rose-500">*</span>}
+                                          {block.tooltip && <HelpCircle size={10} className="text-zinc-400" />}
                                         </label>
                                       </div>
                                       <div className="flex items-center gap-2">
@@ -2831,10 +2928,35 @@ export const ModuleEditor = () => {
                                           return null;
                                         })()}
                                         {block.visibilityRule && (
-                                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-white/5 rounded-full border border-zinc-200 dark:border-white/10 shadow-sm" title="Conditional Logic Applied">
-                                            <BrainCircuit size={10} className="text-zinc-500" />
+                                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-white/5 rounded-full border border-zinc-200 dark:border-white/10 shadow-sm" title={block.visibilityRule.action === 'hide' ? "Conditional Hide Logic Applied" : "Conditional Show Logic Applied"}>
+                                            <BrainCircuit size={10} className={cn(block.visibilityRule.action === 'hide' ? "text-rose-500" : "text-indigo-500")} />
                                             <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">Logic</span>
                                           </div>
+                                        )}
+                                        {block.hidden && (
+                                          <div 
+                                            className="flex items-center gap-1.5 px-2 py-0.5 bg-rose-500/10 rounded-full border border-rose-500/20 shadow-sm cursor-pointer hover:bg-rose-500/20 transition-all" 
+                                            title="Hidden by Default (Click to show)"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updateField(block.id, { hidden: false });
+                                            }}
+                                          >
+                                            <EyeOff size={10} className="text-rose-500" />
+                                            <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
+                                          </div>
+                                        )}
+                                        {!block.hidden && (
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updateField(block.id, { hidden: true });
+                                            }}
+                                            className="opacity-0 group-hover/field:opacity-100 p-1.5 bg-white dark:bg-zinc-800 rounded-lg text-zinc-300 hover:text-rose-500 hover:bg-rose-500/10 transition-all shadow-sm border border-zinc-100 dark:border-zinc-700"
+                                            title="Quick Hide Field"
+                                          >
+                                            <EyeOff size={12} />
+                                          </button>
                                         )}
                                         <GripVertical size={12} className="text-zinc-300 group-hover/field:text-zinc-500" />
                                       </div>
@@ -3545,6 +3667,10 @@ export const ModuleEditor = () => {
                                     )}
                                   </div>
 
+                                  {block.helperText && !(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
+                                    <p className="text-[9px] text-zinc-500 italic mt-1 px-1">{block.helperText}</p>
+                                  )}
+
                                   {/* Fluid Resize Handles for Standard Fields */}
                                   {viewportSize !== 'mobile' && selectedId === block.id && (
                                     <>
@@ -4017,7 +4143,23 @@ export const ModuleEditor = () => {
                           <button className="px-6 py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
                             Cancel
                           </button>
-                          <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+                          <button 
+                            onClick={() => {
+                              const missingFields = layout
+                                .filter(f => (f.tabId === currentTabId || (!f.tabId && currentTabId === tabs[0]?.id)) && f.required)
+                                .filter(f => {
+                                  const val = moduleState[f.id];
+                                  return val === null || val === undefined || (typeof val === 'string' && val.trim() === '');
+                                });
+
+                              if (missingFields.length > 0) {
+                                toast.error(`Please fill in required fields: ${missingFields.map(f => f.label).join(', ')}`);
+                                return;
+                              }
+                              toast.success("Record saved successfully (Preview Mode)");
+                            }}
+                            className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20"
+                          >
                             Save Changes
                           </button>
                         </div>
@@ -4060,14 +4202,27 @@ export const ModuleEditor = () => {
                             }}
                             className="space-y-2.5"
                           >
-                            <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest px-1">
+                            <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest px-1 flex items-center gap-1.5 relative group/label">
                               {block.label}
+                              {block.required && <span className="text-rose-500">*</span>}
+                              {block.tooltip && (
+                                <div className="relative cursor-help">
+                                  <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                    {block.tooltip}
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                  </div>
+                                </div>
+                              )}
                             </label>
                             <FieldInput 
                               field={block}
-                              value={moduleState[block.id]}
+                              value={moduleState[block.id] ?? block.defaultValue}
                               onChange={(val) => setModuleState(prev => ({ ...prev, [block.id]: val }))}
                             />
+                            {block.helperText && (
+                              <p className="text-[10px] text-zinc-500 mt-1 font-medium px-1 italic">{block.helperText}</p>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -4082,9 +4237,17 @@ export const ModuleEditor = () => {
                         <button 
                           onClick={() => {
                             setPreviewView('create');
+                            const initialDefaults = {};
+                            flattenFields(layout).forEach((f: any) => {
+                              if (f.defaultValue !== undefined && f.defaultValue !== '') {
+                                (initialDefaults as any)[f.id] = f.defaultValue;
+                              }
+                            });
+                            setModuleState(initialDefaults);
+                            
                             const createForm = forms.find(f => f.usage === 'workspace_create');
                             if (createForm?.isMultistep) {
-                              const visibleSteps = createForm.steps.filter((s: any) => evaluateVisibilityRule(s.visibilityRule, moduleState));
+                              const visibleSteps = createForm.steps.filter((s: any) => evaluateVisibilityRule(s.visibilityRule, initialDefaults));
                               if (visibleSteps.length > 0) setPreviewStepId(visibleSteps[0].id);
                             }
                           }}
@@ -4281,8 +4444,17 @@ export const ModuleEditor = () => {
                                                </div>
                                              ) : (
                                                <>
-                                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">
+                                                 <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1 flex items-center gap-1.5 relative group/label">
                                                    {fObj.labelOverride || field?.label}
+                                                   {field?.tooltip && (
+                                                     <div className="relative cursor-help">
+                                                       <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                                         {field.tooltip}
+                                                         <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                                       </div>
+                                                     </div>
+                                                   )}
                                                  </label>
                                                  <FieldInput 
                                                    field={field!}
@@ -4304,6 +4476,9 @@ export const ModuleEditor = () => {
                                                    <p className="text-[10px] font-bold text-rose-500 mt-1 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
                                                      {formErrors[field!.id]}
                                                    </p>
+                                                 )}
+                                                 {field?.helperText && !formErrors[field.id] && (
+                                                   <p className="text-[10px] text-zinc-500 mt-1 font-medium px-1 italic">{field.helperText}</p>
                                                  )}
                                                </>
                                              )}
@@ -6413,6 +6588,38 @@ export const ModuleEditor = () => {
                         />
                       </div>
 
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Placeholder</label>
+                        <input 
+                          type="text" 
+                          value={selectedField.placeholder || ''}
+                          onChange={(e) => updateField(selectedField.id, { placeholder: e.target.value })}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                          placeholder="e.g. John Doe"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Tooltip / Popover</label>
+                        <textarea 
+                          value={selectedField.tooltip || ''}
+                          onChange={(e) => updateField(selectedField.id, { tooltip: e.target.value })}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all min-h-[80px]"
+                          placeholder="e.g. This name must match your government issued ID"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Default Value</label>
+                        <input 
+                          type="text" 
+                          value={selectedField.defaultValue || ''}
+                          onChange={(e) => updateField(selectedField.id, { defaultValue: e.target.value })}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                          placeholder="e.g. N/A"
+                        />
+                      </div>
+
                       <div className="pt-2">
                         <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
                           <div className="flex items-center gap-3">
@@ -6436,6 +6643,35 @@ export const ModuleEditor = () => {
                           >
                             <motion.div 
                               animate={{ x: selectedField.required ? 22 : 2 }}
+                              className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
+                            />
+                          </button>
+                        </label>
+                      </div>
+
+                      <div className="pt-2">
+                        <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                              selectedField.hidden ? "bg-rose-500/10 text-rose-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                            )}>
+                              <EyeOff size={14} />
+                            </div>
+                            <div>
+                              <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Hidden by Default</span>
+                              <span className="block text-[9px] text-zinc-500">{selectedField.hidden ? 'Field is hidden from users' : 'Field is visible to users'}</span>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => updateField(selectedField.id, { hidden: !selectedField.hidden })}
+                            className={cn(
+                              "w-10 h-5 rounded-full relative transition-colors duration-300",
+                              selectedField.hidden ? "bg-rose-600" : "bg-zinc-300 dark:bg-zinc-700"
+                            )}
+                          >
+                            <motion.div 
+                              animate={{ x: selectedField.hidden ? 22 : 2 }}
                               className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
                             />
                           </button>
@@ -6741,7 +6977,35 @@ export const ModuleEditor = () => {
 
                           {(!selectedField.lookupSource || selectedField.optionsSource === 'manual') && selectedField.type !== 'datatable' && (
                             <div className="space-y-4">
-                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Option List</label>
+                              <div className="flex items-center justify-between px-1">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Option List</label>
+                                {(selectedField.type === 'radio' || selectedField.type === 'checkboxGroup') && (
+                                  <div className="flex gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-900 rounded-lg">
+                                    <button 
+                                      onClick={() => updateField(selectedField.id, { optionLayout: 'vertical' })}
+                                      className={cn(
+                                        "px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+                                        (selectedField.optionLayout || 'vertical') === 'vertical' 
+                                          ? "bg-white dark:bg-zinc-800 text-indigo-500 shadow-sm" 
+                                          : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                                      )}
+                                    >
+                                      Vert
+                                    </button>
+                                    <button 
+                                      onClick={() => updateField(selectedField.id, { optionLayout: 'horizontal' })}
+                                      className={cn(
+                                        "px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+                                        selectedField.optionLayout === 'horizontal' 
+                                          ? "bg-white dark:bg-zinc-800 text-indigo-500 shadow-sm" 
+                                          : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                                      )}
+                                    >
+                                      Horiz
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                               <div className="space-y-2">
                                 {(selectedField.options || []).map((opt, idx) => (
                                   <div key={idx} className="flex items-center gap-2">
@@ -7196,50 +7460,74 @@ export const ModuleEditor = () => {
                                   {(selectedField.lookupOutputMappings || []).map((mapping: any, idx: number) => (
                                     <div key={mapping.id} className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 rounded-xl group/mapping">
                                       <div className="flex-1 space-y-1">
-                                        <select 
-                                          value={mapping.sourceFieldId}
-                                          onChange={(e) => {
-                                            const newMappings = [...(selectedField.lookupOutputMappings || [])];
-                                            newMappings[idx] = { ...newMappings[idx], sourceFieldId: e.target.value };
-                                            updateField(selectedField.id, { lookupOutputMappings: newMappings });
-                                          }}
-                                          className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
-                                        >
-                                          <option value="">Source Field...</option>
-                                          {(() => {
-                                            let targetFields: any[] = [];
-                                            if (selectedField.lookupSource === 'module_records' && selectedField.targetModuleId) {
-                                              const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
-                                              if (targetMod) targetFields = (targetMod.layout || []).filter((f: any) => f.label && f.id);
-                                            } else if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
-                                              const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
-                                              if (platformMod) targetFields = platformMod.availableFields;
-                                            }
-                                            return targetFields.map(f => (
-                                              <option key={f.id} value={f.id}>{f.label}</option>
-                                            ));
-                                          })()}
-                                        </select>
+                                        {selectedField.lookupSource === 'module_records' ? (
+                                          <button
+                                            onClick={() => {
+                                              setActiveMappingIdx(idx);
+                                              setActiveMappingType('source');
+                                              setShowMappingModal(true);
+                                            }}
+                                            className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 text-left flex items-center justify-between hover:text-indigo-500 transition-all group/src-btn"
+                                          >
+                                            <span className="truncate">
+                                              {(() => {
+                                                const relatedData = selectedField.targetModuleId ? relatedModulesMap[selectedField.targetModuleId] : null;
+                                                const allFields = relatedData ? flattenFields(relatedData.layout || []) : [];
+                                                const source = allFields.find(f => f.id === mapping.sourceFieldId);
+                                                if (source) return source.label;
+
+                                                // Fallback to platform modules list if not in related map yet
+                                                const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
+                                                const fallbackFields = targetMod ? flattenFields(targetMod.layout || []) : [];
+                                                const fallbackSource = fallbackFields.find(f => f.id === mapping.sourceFieldId);
+                                                return fallbackSource ? fallbackSource.label : 'Select Source...';
+                                              })()}
+                                            </span>
+                                            <Search size={10} className="text-zinc-400 group-hover/src-btn:text-indigo-500" />
+                                          </button>
+                                        ) : (
+                                          <select 
+                                            value={mapping.sourceFieldId}
+                                            onChange={(e) => {
+                                              const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                                              newMappings[idx] = { ...newMappings[idx], sourceFieldId: e.target.value };
+                                              updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                            }}
+                                            className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
+                                          >
+                                            <option value="">Source Field...</option>
+                                            {(() => {
+                                              let targetFields: any[] = [];
+                                              if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
+                                                const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
+                                                if (platformMod) targetFields = platformMod.availableFields;
+                                              }
+                                              return targetFields.map(f => (
+                                                <option key={f.id} value={f.id}>{f.label}</option>
+                                              ));
+                                            })()}
+                                          </select>
+                                        )}
                                         <div className="flex items-center gap-1 text-[8px] text-zinc-400 font-black uppercase tracking-widest px-1">
                                           <ArrowRight size={8} /> Target
                                         </div>
-                                        <select 
-                                          value={mapping.targetFieldId}
-                                          onChange={(e) => {
-                                            const newMappings = [...(selectedField.lookupOutputMappings || [])];
-                                            newMappings[idx] = { ...newMappings[idx], targetFieldId: e.target.value };
-                                            updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                        <button
+                                          onClick={() => {
+                                            setActiveMappingIdx(idx);
+                                            setActiveMappingType('target');
+                                            setShowMappingModal(true);
                                           }}
-                                          className="w-full bg-transparent text-[10px] font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none"
+                                          className="w-full bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 text-left flex items-center justify-between hover:border-indigo-500 transition-all group/btn"
                                         >
-                                          <option value="">Select Target...</option>
-                                          {layout
-                                            .filter((f: any) => f.id !== selectedField.id && f.label)
-                                            .map((f: any) => (
-                                              <option key={f.id} value={f.id}>{f.label}</option>
-                                            ))
-                                          }
-                                        </select>
+                                          <span className="truncate">
+                                            {(() => {
+                                              const allFields = flattenFields(layout);
+                                              const target = allFields.find(f => f.id === mapping.targetFieldId);
+                                              return target ? target.label : 'Select Target...';
+                                            })()}
+                                          </span>
+                                          <Search size={10} className="text-zinc-400 group-hover/btn:text-indigo-500" />
+                                        </button>
                                       </div>
                                       <button 
                                         onClick={() => {
@@ -7842,6 +8130,44 @@ export const ModuleEditor = () => {
         onClose={() => setConfigDrawerOpen(false)}
         connector={configConnector}
         onSave={handleSaveConfig}
+      />
+
+      <FieldSelectorModal 
+        isOpen={showMappingModal}
+        onClose={() => {
+          setShowMappingModal(false);
+          setActiveMappingIdx(null);
+        }}
+        fields={activeMappingType === 'target' 
+          ? flattenFields(layout) 
+          : (selectedField?.lookupSource === 'module_records' && selectedField?.targetModuleId)
+            ? flattenFields(relatedModulesMap[selectedField.targetModuleId]?.layout || [])
+            : []
+        }
+        tabs={activeMappingType === 'target'
+          ? tabs
+          : (selectedField?.lookupSource === 'module_records' && selectedField?.targetModuleId)
+            ? relatedModulesMap[selectedField.targetModuleId]?.tabs
+            : []
+        }
+        title={activeMappingType === 'target' ? "Select Target Field" : "Select Source Field"}
+        selectedFieldId={activeMappingIdx !== null 
+          ? (activeMappingType === 'target' 
+              ? selectedField?.lookupOutputMappings?.[activeMappingIdx]?.targetFieldId 
+              : selectedField?.lookupOutputMappings?.[activeMappingIdx]?.sourceFieldId)
+          : undefined}
+        excludeFieldIds={activeMappingType === 'target' && selectedField ? [selectedField.id] : []}
+        onSelect={(fieldId) => {
+          if (activeMappingIdx !== null && selectedField) {
+            const newMappings = [...(selectedField.lookupOutputMappings || [])];
+            if (activeMappingType === 'target') {
+              newMappings[activeMappingIdx] = { ...newMappings[activeMappingIdx], targetFieldId: fieldId };
+            } else {
+              newMappings[activeMappingIdx] = { ...newMappings[activeMappingIdx], sourceFieldId: fieldId };
+            }
+            updateField(selectedField.id, { lookupOutputMappings: newMappings });
+          }
+        }}
       />
 
     </div>

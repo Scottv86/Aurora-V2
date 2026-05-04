@@ -157,9 +157,46 @@ router.post('/records', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { moduleId, associations, path, ...data } = req.body;
-
-    // Handle Record Key and Autonumber Generation
+    
     const module = await db.module.findUnique({ where: { id: moduleId } });
+    if (!module) return res.status(404).json({ error: 'Module not found' });
+
+    // Validation for required fields
+    const config = module.config as any;
+    const layout = config.layout || [];
+    const flattenFields = (fields: any[]): any[] => {
+      const result: any[] = [];
+      fields.forEach(f => {
+        result.push(f);
+        if (f.fields) result.push(...flattenFields(f.fields));
+      });
+      return result;
+    };
+    const allFields = flattenFields(layout);
+    const requiredFields = allFields.filter((f: any) => f.required);
+
+    const missingFields = requiredFields.filter((f: any) => {
+      const val = data[f.id];
+      // Also check if it's nested in a group in the data (though data is usually flat unless it's a fieldGroup)
+      // Actually, based on RecordDetailView, data is flat unless in a fieldGroup.
+      // Let's check both for safety.
+      let actualVal = val;
+      if (actualVal === undefined || actualVal === null) {
+        // Find if this field belongs to a group
+        const group = layout.find((l: any) => l.type === 'fieldGroup' && l.fields?.some((nf: any) => nf.id === f.id));
+        if (group) {
+          actualVal = data[group.id]?.[f.id];
+        }
+      }
+      
+      return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
+    });
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({ 
+        error: `Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}` 
+      });
+    }
     let finalData = { ...data };
     
     if (module) {
@@ -180,17 +217,6 @@ router.post('/records', async (req: TenantRequest, res) => {
       }
 
       // 2. Handle specific 'autonumber' fields in layout
-      const layout = config.layout || [];
-      const flattenFields = (fields: any[]): any[] => {
-        const result: any[] = [];
-        fields.forEach(f => {
-          result.push(f);
-          if (f.fields) result.push(...flattenFields(f.fields));
-        });
-        return result;
-      };
-
-      const allFields = flattenFields(layout);
       const autonumberFields = allFields.filter((f: any) => f.type === 'autonumber');
 
       autonumberFields.forEach((field: any) => {
@@ -221,7 +247,6 @@ router.post('/records', async (req: TenantRequest, res) => {
 
     // Initialize workflow state if module has one
     let workflowState = null;
-    const config = module?.config as any;
     const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
     
     if (workflow && workflow.nodes && workflow.nodes.length > 0) {
@@ -285,6 +310,40 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       ...(existing.data as any),
       ...data
     };
+
+    // Validation for required fields
+    const module = await db.module.findUnique({ where: { id: moduleId || existing.moduleId } });
+    if (module) {
+      const config = module.config as any;
+      const layout = config.layout || [];
+      const flattenFields = (fields: any[]): any[] => {
+        const result: any[] = [];
+        fields.forEach(f => {
+          result.push(f);
+          if (f.fields) result.push(...flattenFields(f.fields));
+        });
+        return result;
+      };
+      const allFields = flattenFields(layout);
+      const requiredFields = allFields.filter((f: any) => f.required);
+
+      const missingFields = requiredFields.filter((f: any) => {
+        let actualVal = updatedData[f.id];
+        if (actualVal === undefined || actualVal === null) {
+          const group = layout.find((l: any) => l.type === 'fieldGroup' && l.fields?.some((nf: any) => nf.id === f.id));
+          if (group) {
+            actualVal = updatedData[group.id]?.[f.id];
+          }
+        }
+        return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
+      });
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({ 
+          error: `Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}` 
+        });
+      }
+    }
 
     const updatePayload: any = {
       data: updatedData,

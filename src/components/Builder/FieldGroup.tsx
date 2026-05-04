@@ -27,6 +27,7 @@ interface FieldGroupProps {
   onUpdate: (id: string, updates: Partial<Field>) => void;
   onDelete: (id: string) => void;
   onDrop: (e: React.DragEvent, parentId?: string) => void;
+  onDragStart: (e: React.DragEvent, data: any) => void;
   renderNested?: (fields: Field[], parentId: string) => React.ReactNode;
   viewportSize: 'desktop' | 'tablet' | 'mobile';
 }
@@ -38,6 +39,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   onUpdate,
   onDelete,
   onDrop,
+  onDragStart,
   renderNested,
   viewportSize
 }) => {
@@ -154,9 +156,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
           <button 
             draggable
             onDragStart={(e) => {
-              const data = { type: 'move', fieldId: block.id };
-              e.dataTransfer.setData('application/json', JSON.stringify(data));
-              e.dataTransfer.effectAllowed = 'move';
+              onDragStart(e, { type: 'move', fieldId: block.id });
             }}
             className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-400 hover:text-zinc-600 transition-colors cursor-grab active:cursor-grabbing"
           >
@@ -191,7 +191,10 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         )}
       >
         {block.fields && block.fields.length > 0 ? (
-          <div className="grid grid-cols-12 gap-4">
+          <div 
+            className="grid grid-cols-12 gap-4"
+            style={{ gridAutoRows: '120px' }}
+          >
             {renderNested && renderNested(block.fields, block.id)}
           </div>
         ) : (

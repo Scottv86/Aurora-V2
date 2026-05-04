@@ -72,6 +72,8 @@ export interface ModuleField {
   required: boolean;
   placeholder?: string;
   helperText?: string;
+  tooltip?: string;
+  defaultValue?: any;
   calculationLogic?: string;
   targetModuleId?: string;
   targetPlatformModuleId?: string;
@@ -96,7 +98,9 @@ export interface ModuleField {
     fieldId: string;
     operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
     value: any;
+    action?: 'show' | 'hide';
   };
+  hidden?: boolean;
 }
 
 export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';

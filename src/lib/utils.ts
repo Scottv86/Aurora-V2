@@ -17,6 +17,7 @@ export function stripUndefined(obj: any) {
 }
 
 export const isFieldVisible = (field: any, data: any) => {
+  if (field.hidden) return false;
   if (!field.visibilityRule) return true;
   return checkCondition(field.visibilityRule, data);
 };
@@ -24,48 +25,57 @@ export const isFieldVisible = (field: any, data: any) => {
 const checkCondition = (condition: any, data: any): boolean => {
   if (!condition) return true;
 
+  const action = condition.action || 'show';
+  let isMet = false;
+
   // Handle nested group
   if (condition.type === 'group') {
     const { logicalOperator, rules } = condition;
-    if (!rules || rules.length === 0) return true;
-    
-    if (logicalOperator === 'AND') {
-      return rules.every((r: any) => checkCondition(r, data));
+    if (!rules || rules.length === 0) {
+      isMet = true;
+    } else if (logicalOperator === 'AND') {
+      isMet = rules.every((r: any) => checkCondition(r, data));
     } else {
-      return rules.some((r: any) => checkCondition(r, data));
+      isMet = rules.some((r: any) => checkCondition(r, data));
+    }
+  } else {
+    // Handle single rule (new or old format)
+    const { fieldId, operator, value, valueType } = condition;
+    if (!fieldId) {
+      isMet = true;
+    } else {
+      const actualValue = data?.[fieldId];
+      let compareValue = value;
+
+      // If comparing against another field, fetch its value from data
+      if (valueType === 'field' && value) {
+        compareValue = data?.[value];
+      }
+      
+      const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
+
+      switch (operator) {
+        case 'equals':
+          isMet = String(actualValue) === String(compareValue); break;
+        case 'not_equals':
+          isMet = String(actualValue) !== String(compareValue); break;
+        case 'contains':
+          isMet = String(actualValue || '').toLowerCase().includes(String(compareValue || '').toLowerCase()); break;
+        case 'greater_than':
+          isMet = Number(actualValue) > Number(compareValue); break;
+        case 'less_than':
+          isMet = Number(actualValue) < Number(compareValue); break;
+        case 'is_empty':
+          isMet = isEmpty(actualValue); break;
+        case 'not_empty':
+          isMet = !isEmpty(actualValue); break;
+        default:
+          isMet = true;
+      }
     }
   }
 
-  // Handle single rule (new or old format)
-  const { fieldId, operator, value, valueType } = condition;
-  if (!fieldId) return true;
-  
-  const actualValue = data?.[fieldId];
-  let compareValue = value;
-
-  // If comparing against another field, fetch its value from data
-  if (valueType === 'field' && value) {
-    compareValue = data?.[value];
-  }
-  
-  switch (operator) {
-    case 'equals':
-      return String(actualValue) === String(compareValue);
-    case 'not_equals':
-      return String(actualValue) !== String(compareValue);
-    case 'contains':
-      return String(actualValue).toLowerCase().includes(String(compareValue || '').toLowerCase());
-    case 'greater_than':
-      return Number(actualValue) > Number(compareValue);
-    case 'less_than':
-      return Number(actualValue) < Number(compareValue);
-    case 'is_empty':
-      return !actualValue || String(actualValue).trim() === '';
-    case 'not_empty':
-      return !!actualValue && String(actualValue).trim() !== '';
-    default:
-      return true;
-  }
+  return action === 'hide' ? !isMet : isMet;
 };
 
 /**
@@ -130,3 +140,11 @@ export const generateDefaultLayout = (fields: any[]): any[] => {
 };
 
 
+export const calculateHeight = (field: any) => {
+  if (!field) return 1;
+  const type = field.type;
+  // Containers need a bit more space for their label and drop zone
+  if (type === 'repeatableGroup' || type === 'fieldGroup' || type === 'group') return 2;
+  // All other fields default to a single row unit (120px)
+  return 1;
+};

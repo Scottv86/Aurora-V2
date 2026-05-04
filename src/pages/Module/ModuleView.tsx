@@ -206,25 +206,45 @@ export const ModuleView = () => {
       
       // Execute Lookup Output Mappings
       const field = allFields.find(f => f.id === fieldId);
-      if (field?.type === 'lookup' && field.lookupOutputMappings?.length && metadata) {
+      if (field?.type === 'lookup' && field.lookupOutputMappings?.length) {
+        // First, null out all target fields to clear any previously mapped values
         field.lookupOutputMappings.forEach(mapping => {
-          if (mapping.sourceFieldId && mapping.targetFieldId) {
-            const sourceValue = metadata[mapping.sourceFieldId];
-            if (sourceValue !== undefined) {
-              const targetFieldId = mapping.targetFieldId;
-              const targetGroupId = fieldToGroupMap[targetFieldId];
-              
-              if (targetGroupId) {
-                updatedData[targetGroupId] = { 
-                  ...(updatedData[targetGroupId] || {}), 
-                  [targetFieldId]: sourceValue 
-                };
-              } else {
-                updatedData[targetFieldId] = sourceValue;
-              }
+          if (mapping.targetFieldId) {
+            const targetFieldId = mapping.targetFieldId;
+            const targetGroupId = fieldToGroupMap[targetFieldId];
+            
+            if (targetGroupId) {
+              updatedData[targetGroupId] = { 
+                ...(updatedData[targetGroupId] || {}), 
+                [targetFieldId]: null 
+              };
+            } else {
+              updatedData[targetFieldId] = null;
             }
           }
         });
+
+        // Then, map the new values from metadata if available
+        if (metadata) {
+          field.lookupOutputMappings.forEach(mapping => {
+            if (mapping.sourceFieldId && mapping.targetFieldId) {
+              const sourceValue = metadata[mapping.sourceFieldId];
+              if (sourceValue !== undefined) {
+                const targetFieldId = mapping.targetFieldId;
+                const targetGroupId = fieldToGroupMap[targetFieldId];
+                
+                if (targetGroupId) {
+                  updatedData[targetGroupId] = { 
+                    ...(updatedData[targetGroupId] || {}), 
+                    [targetFieldId]: sourceValue 
+                  };
+                } else {
+                  updatedData[targetFieldId] = sourceValue;
+                }
+              }
+            }
+          });
+        }
       }
       
       return updatedData;
@@ -301,7 +321,13 @@ export const ModuleView = () => {
             </Link>
             <button 
               onClick={() => {
-                setNewEntryData({});
+                const initialDefaults = {};
+                allFields.forEach((f: any) => {
+                  if (f.defaultValue !== undefined && f.defaultValue !== '') {
+                    (initialDefaults as any)[f.id] = f.defaultValue;
+                  }
+                });
+                setNewEntryData(initialDefaults);
                 setEditingRecord(null);
                 if (moduleData.tabs && moduleData.tabs.length > 0) {
                   setActiveTabId(moduleData.tabs[0].id);
@@ -464,8 +490,14 @@ export const ModuleView = () => {
           </div>
           <button 
             onClick={() => {
+              const initialDefaults = {};
+              allFields.forEach((f: any) => {
+                if (f.defaultValue !== undefined && f.defaultValue !== '') {
+                  (initialDefaults as any)[f.id] = f.defaultValue;
+                }
+              });
+              setNewEntryData(initialDefaults);
               setEditingRecord(null);
-              setNewEntryData({});
               if (moduleData?.tabs && moduleData.tabs.length > 0) {
                 setActiveTabId(moduleData.tabs[0].id);
               } else {
@@ -602,12 +634,21 @@ export const ModuleView = () => {
                                     if (!isFieldVisible(nestedField, newEntryData[field.id] || {})) return null;
                                     return (
                                     <div key={nestedField.id} className="space-y-2">
-                                      <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                                      <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
                                         {nestedField.label}
+                                        {nestedField.tooltip && (
+                                          <div className="relative cursor-help">
+                                            <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                              {nestedField.tooltip}
+                                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                            </div>
+                                          </div>
+                                        )}
                                       </label>
                                       <FieldInput 
                                         field={nestedField}
-                                        value={newEntryData[field.id]?.[nestedField.id]}
+                                        value={newEntryData[field.id]?.[nestedField.id] ?? nestedField.defaultValue}
                                         onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                         usersData={[]}
                                         lookupData={{}}
@@ -618,13 +659,22 @@ export const ModuleView = () => {
                               </div>
                             ) : (
                               <>
-                                <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+                                <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
                                   {field.label}
                                   {field.required && <span className="text-rose-500">*</span>}
+                                  {field.tooltip && (
+                                    <div className="relative cursor-help">
+                                      <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        {field.tooltip}
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                      </div>
+                                    </div>
+                                  )}
                                 </label>
                                 <FieldInput 
                                   field={field}
-                                  value={newEntryData[field.id]}
+                                  value={newEntryData[field.id] ?? field.defaultValue}
                                   onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                   usersData={[]}
                                   lookupData={{}}
