@@ -9,13 +9,15 @@ interface RepeatableGroupBlockProps {
   value: any[]; // The array of sub-records
   onChange?: (newValue: any[]) => void;
   readOnly?: boolean;
+  hideHeader?: boolean;
 }
 
 export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   field,
   value = [],
   onChange,
-  readOnly = false
+  readOnly = false,
+  hideHeader = false
 }) => {
   const { pushModal } = useModalStack();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -76,26 +78,28 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded-lg">
-            <Layers size={14} />
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded-lg">
+              <Layers size={14} />
+            </div>
+            <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</h3>
+            <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-[9px] font-bold text-zinc-400">
+              {value.length}
+            </span>
           </div>
-          <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</h3>
-          <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-[9px] font-bold text-zinc-400">
-            {value.length}
-          </span>
+          {!readOnly && (
+            <button 
+              onClick={handleAdd}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-indigo-500 hover:bg-indigo-500/5 transition-all uppercase tracking-widest"
+            >
+              <Plus size={14} />
+              Add Row
+            </button>
+          )}
         </div>
-        {!readOnly && (
-          <button 
-            onClick={handleAdd}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-indigo-500 hover:bg-indigo-500/5 transition-all uppercase tracking-widest"
-          >
-            <Plus size={14} />
-            Add Row
-          </button>
-        )}
-      </div>
+      )}
 
       {displayMode === 'list' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

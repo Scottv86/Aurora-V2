@@ -350,7 +350,7 @@ export const ConditionModal = ({
                       </optgroup>
                       {tabs.map(tab => {
                         const tabFields = availableFields
-                          .filter(f => f.tabId === tab.id)
+                          .filter(f => f.tabId === tab.id && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))
                           .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
                         
                         if (tabFields.length === 0) return null;
@@ -363,10 +363,10 @@ export const ConditionModal = ({
                           </optgroup>
                         );
                       })}
-                      {availableFields.some(f => !f.tabId || !tabs.find(t => t.id === f.tabId)) && (
+                      {availableFields.some(f => (!f.tabId || !tabs.find(t => t.id === f.tabId)) && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type)) && (
                         <optgroup label="Other Fields">
                           {availableFields
-                            .filter(f => !f.tabId || !tabs.find(t => t.id === f.tabId))
+                            .filter(f => (!f.tabId || !tabs.find(t => t.id === f.tabId)) && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))
                             .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0))
                             .map(f => (
                               <option key={f.id} value={f.id}>{f.label}</option>
@@ -422,11 +422,11 @@ export const ConditionModal = ({
                             </optgroup>
                             {tabs.map(tab => {
                               const tabFields = availableFields
-                                .filter(f => f.id !== r.fieldId && f.tabId === tab.id)
+                                .filter(f => f.id !== r.fieldId && f.tabId === tab.id && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))
                                 .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
                               
                               if (tabFields.length === 0) return null;
-
+ 
                               return (
                                 <optgroup key={tab.id} label={tab.label}>
                                   {tabFields.map(f => (
@@ -435,10 +435,10 @@ export const ConditionModal = ({
                                 </optgroup>
                               );
                             })}
-                            {availableFields.some(f => f.id !== r.fieldId && (!f.tabId || !tabs.find(t => t.id === f.tabId))) && (
+                            {availableFields.some(f => f.id !== r.fieldId && (!f.tabId || !tabs.find(t => t.id === f.tabId)) && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type)) && (
                               <optgroup label="Other Fields">
                                 {availableFields
-                                  .filter(f => f.id !== r.fieldId && (!f.tabId || !tabs.find(t => t.id === f.tabId)))
+                                  .filter(f => f.id !== r.fieldId && (!f.tabId || !tabs.find(t => t.id === f.tabId)) && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))
                                   .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0))
                                   .map(f => (
                                     <option key={f.id} value={f.id}>{f.label}</option>

@@ -11,15 +11,24 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  readonly?: boolean;
 }
 
 export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   value,
   onChange,
   placeholder,
-  className
+  className,
+  readonly = false
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus when becoming editable
+  React.useEffect(() => {
+    if (!readonly && editorRef.current) {
+      editorRef.current.focus();
+    }
+  }, [readonly]);
 
   const execCommand = (command: string, value?: string) => {
     document.execCommand(command, false, value);
@@ -34,7 +43,10 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       className
     )}>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1 p-2 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+      <div className={cn(
+        "flex flex-wrap items-center gap-1 p-2 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800",
+        readonly && "opacity-50 pointer-events-none"
+      )}>
         <ToolbarButton onClick={() => execCommand('bold')} icon={<Bold size={14} />} title="Bold" />
         <ToolbarButton onClick={() => execCommand('italic')} icon={<Italic size={14} />} title="Italic" />
         <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
@@ -54,10 +66,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       {/* Content Area */}
       <div
         ref={editorRef}
-        contentEditable
+        contentEditable={!readonly}
         onInput={(e) => onChange(e.currentTarget.innerHTML)}
         dangerouslySetInnerHTML={{ __html: value }}
-        className="p-5 min-h-[150px] text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none prose prose-zinc dark:prose-invert max-w-none"
+        className={cn(
+          "p-5 min-h-[150px] text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none prose prose-zinc dark:prose-invert max-w-none",
+          readonly && "cursor-default"
+        )}
         placeholder={placeholder}
       />
     </div>

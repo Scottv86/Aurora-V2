@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2, Copy } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers } from 'lucide-react';
+import { cn, calculateHeight } from '../../lib/utils';
 import { useGridEngine, GridItem, GridPos } from '../../hooks/useGridEngine';
+import { GRID_CONFIG } from '../ModuleEditor';
 
 export interface Field {
   id: string;
@@ -19,41 +20,88 @@ export interface Field {
   tabId?: string;
   options?: string[];
   parentId?: string;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+  isCollapsed?: boolean;
+  showIcon?: boolean;
+  iconName?: string;
 }
+
+import { DynamicIcon } from '../UI/DynamicIcon';
 
 interface FieldGroupProps {
   block: Field;
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  selectedIds: string[];
+  onSelect: (id: string, e?: React.MouseEvent) => void;
   onUpdate: (id: string, updates: Partial<Field>) => void;
   onDelete: (id: string) => void;
   onDrop: (e: React.DragEvent, parentId?: string) => void;
+  onDragOver?: (e: React.DragEvent, parentId?: string) => void;
   onDragStart: (e: React.DragEvent, data: any) => void;
+  isDraggingOver?: boolean;
   renderNested?: (fields: Field[], parentId: string) => React.ReactNode;
   viewportSize: 'desktop' | 'tablet' | 'mobile';
   onClone: (id: string) => void;
+  hoveredMapping?: { sourceFieldId: string, targetFieldId: string } | null;
+  dragOverInfo?: { col: number, span: number, index: number, active: boolean, parentId?: string, height?: number } | null;
 }
 
 export const FieldGroup: React.FC<FieldGroupProps> = ({
   block,
-  selectedId,
+  selectedIds,
   onSelect,
   onUpdate,
   onDelete,
   onDrop,
+  onDragOver,
   onDragStart,
   renderNested,
   viewportSize,
-  onClone
+  onClone,
+  isDraggingOver,
+  hoveredMapping,
+  dragOverInfo
 }) => {
-  const isSelected = selectedId === block.id;
+  const isSelected = selectedIds.includes(block.id);
   const isRepeatable = block.type === 'repeatableGroup';
+  const isCard = block.type === 'card';
+  const isAccordion = block.type === 'accordion';
+  const isTabs = block.type === 'tabs_nested';
+  
+  const getIcon = () => {
+    if (block.iconName) {
+      return <DynamicIcon name={block.iconName} size={16} />;
+    }
+
+    switch (block.type) {
+      case 'card': return <Box size={16} />;
+      case 'accordion': return <LayoutGrid size={16} />;
+      case 'tabs_nested': return <FolderTree size={16} />;
+      case 'stepper': return <ListOrdered size={16} />;
+      case 'timeline': return <GitCommit size={16} />;
+      case 'repeatableGroup': return <ListPlus size={16} />;
+      case 'group': return <Layers size={16} />;
+      case 'fieldGroup': return <Folder size={16} />;
+      default: return <Folder size={16} />;
+    }
+  };
+
+  const showIcon = block.showIcon !== false;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState<'left' | 'right' | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isContentHovered, setIsContentHovered] = useState(false);
 
   const { snapToGrid } = useGridEngine();
+  const isCollapsed = block.collapsible ? (block.isCollapsed ?? block.defaultCollapsed ?? false) : false;
+  const isNested = !!block.parentId;
+  const isDraggingOverTarget = dragOverInfo?.active && dragOverInfo?.parentId === block.id;
+  const currentHeight = calculateHeight(block, isDraggingOverTarget ? { 
+    index: dragOverInfo!.index,
+    rowSpan: (dragOverInfo as any).rowSpan 
+  } : null);
+
 
   const handleResizeStart = (e: React.PointerEvent, direction: 'left' | 'right') => {
     e.preventDefault();
@@ -71,7 +119,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
       if (!canvas) return;
       
       const rect = canvas.getBoundingClientRect();
-      const padding = 64; // Based on ModuleEditor p-8 * 2
+      const padding = isNested ? GRID_CONFIG.nestedPadding : GRID_CONFIG.padding;
       const canvasWidth = rect.width - padding;
       const colWidth = canvasWidth / 12;
       
@@ -113,31 +161,44 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
       exit={{ opacity: 0, scale: 0.95 }}
       style={{
         gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-        gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${(block.rowSpan || 1)}`
+        gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${currentHeight}`
       }}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect(block.id);
+        onSelect(block.id, e);
       }}
       className={cn(
-        "group/group relative p-6 rounded-[24px] cursor-pointer transition-all duration-300",
-        "bg-white dark:bg-zinc-950 border-2 border-zinc-200 dark:border-zinc-800",
-        isSelected ? "border-indigo-500 ring-4 ring-indigo-500/10 z-30 shadow-2xl" : "hover:border-zinc-300 dark:hover:border-zinc-700 z-10 hover:z-40",
-        isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30"
+        "group/group relative p-4 rounded-[24px] cursor-pointer transition-all duration-300 border-2 h-full flex flex-col",
+        isCard ? "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-xl" :
+        isAccordion ? "bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-100 dark:border-zinc-800 shadow-sm" :
+        "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800",
+        isSelected ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30 shadow-2xl" : "hover:border-indigo-500/30 z-10 hover:z-40",
+        isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30",
+        hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
       )}
     >
-      {/* Ghost Background during Drag/Resize (Visual Polish) */}
+      {isSelected && (
+        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-50">
+          Selected
+        </div>
+      )}
       <div className="absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent rounded-[22px] pointer-events-none" />
 
-      {/* Header */}
-      <div className="relative flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "p-2 rounded-xl transition-colors",
-            isSelected ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-900 text-zinc-500"
-          )}>
-            {isRepeatable ? <ListPlus size={16} /> : <Folder size={16} />}
-          </div>
+          {showIcon && (
+            <div className={cn(
+              "w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500",
+              isSelected ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30 rotate-3" : 
+              isRepeatable ? "bg-amber-500/10 text-amber-500" :
+              isCard ? "bg-blue-500/10 text-blue-500" :
+              isAccordion ? "bg-purple-500/10 text-purple-500" :
+              isTabs ? "bg-emerald-500/10 text-emerald-500" :
+              "bg-zinc-100 dark:bg-zinc-900 text-zinc-500"
+            )}>
+              {getIcon()}
+            </div>
+          )}
           <div>
             <h4 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.15em] mb-0.5">
               {block.type.replace('Group', ' Group')}
@@ -147,15 +208,26 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {block.collapsible && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onUpdate(block.id, { isCollapsed: !isCollapsed }); }}
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300",
+                isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500"
+              )}
+            >
+              <ChevronDown 
+                size={14} 
+                className={cn("transition-transform duration-500 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
+              />
+            </button>
+          )}
           {block.visibilityRule && (
             <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20 shadow-sm shadow-indigo-500/10" title="Conditional Logic Applied">
               <BrainCircuit size={12} className="text-indigo-500" />
               <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">Logic</span>
             </div>
           )}
-          <div className="flex items-center gap-1 px-2 py-1 bg-zinc-100 dark:bg-zinc-900 rounded-lg opacity-0 group-hover/group:opacity-100 transition-opacity">
-            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-tighter">W: {block.colSpan}</span>
-          </div>
           <button 
             draggable
             onDragStart={(e) => {
@@ -168,6 +240,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
       </div>
 
+      {/* Floating Action Buttons */}
       <button 
         onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
         className={cn(
@@ -180,7 +253,6 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         <Copy size={14} />
       </button>
 
-      {/* Top-Right Delete Button (Hover State) */}
       <button 
         onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
         className={cn(
@@ -193,34 +265,58 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         <Trash2 size={16} />
       </button>
 
-      {/* Nested Content Area */}
-      <div 
-        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-        onDrop={(e) => onDrop(e, block.id)}
-        onMouseEnter={() => setIsContentHovered(true)}
-        onMouseLeave={() => setIsContentHovered(false)}
-        className={cn(
-          "relative min-h-[120px] rounded-[18px] border-2 border-dashed transition-all duration-300 p-4",
-          "bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800",
-          "group-hover/group:border-indigo-500/30 group-hover/group:bg-indigo-500/5"
-        )}
-      >
-        {block.fields && block.fields.length > 0 ? (
-          <div 
-            className="grid grid-cols-12 gap-4"
-            style={{ gridAutoRows: '120px' }}
+      {/* Selection Pill */}
+      {isSelected && (
+        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-50">
+          Selected
+        </div>
+      )}
+
+      <AnimatePresence initial={false}>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ 
+              height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] },
+              opacity: { duration: 0.2, delay: 0.1 }
+            }}
           >
-            {renderNested && renderNested(block.fields, block.id)}
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-40">
-            <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-700">
-              <Move size={20} className="text-zinc-400" />
+            <div 
+              onDragOver={(e) => { 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+                onDragOver?.(e, block.id);
+              }}
+              onDrop={(e) => onDrop(e, block.id)}
+              onMouseEnter={() => setIsContentHovered(true)}
+              onMouseLeave={() => setIsContentHovered(false)}
+              className={cn(
+                "relative rounded-[18px] border-2 border-dashed transition-all duration-300 p-3 mt-4 flex-grow",
+                isDraggingOver ? "min-h-[400px] border-indigo-500/50 bg-indigo-500/5" : "min-h-[120px] bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800",
+                "group-hover/group:border-indigo-500/30 group-hover/group:bg-indigo-500/5"
+              )}
+            >
+              {((block.fields && block.fields.length > 0) || isDraggingOver) ? (
+                <div 
+                  className="grid grid-cols-12 gap-5 min-h-full"
+                  style={{ gridAutoRows: '50px' }}
+                >
+                  {renderNested && renderNested(block.fields || [], block.id)}
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-40">
+                  <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-700">
+                    <Move size={20} className="text-zinc-400" />
+                  </div>
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drop fields to nest</p>
+                </div>
+              )}
             </div>
-            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drop fields to nest</p>
-          </div>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
 
       {/* Fluid Interaction Controls */}
       {viewportSize !== 'mobile' && isSelected && (

@@ -23,6 +23,8 @@ import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField } from '../../types/platform';
+import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
+import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 
 import { useModalStack } from '../../context/ModalStackContext';
 
@@ -73,13 +75,20 @@ export const ModuleView = () => {
 
   const fieldToGroupMap = useMemo(() => {
     const map: Record<string, string> = {};
-    (moduleData?.layout || []).forEach((f: any) => {
-      if (f.type === 'fieldGroup' && f.fields) {
-        f.fields.forEach((nf: any) => {
-          map[nf.id] = f.id;
-        });
-      }
-    });
+    const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
+    
+    const processFields = (fields: any[], parentId?: string) => {
+      fields.forEach((f: any) => {
+        if (parentId) {
+          map[f.id] = parentId;
+        }
+        if (containerTypes.includes(f.type) && f.fields) {
+          processFields(f.fields, f.id);
+        }
+      });
+    };
+    
+    processFields(moduleData?.layout || []);
     return map;
   }, [moduleData]);
 
@@ -626,9 +635,8 @@ export const ModuleView = () => {
                               )}>
                                 {field.label}
                               </div>
-                            ) : field.type === 'fieldGroup' ? (
-                              <div className="bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 space-y-6">
-                                <h5 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</h5>
+                            ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(field.type) ? (
+                              <CollapsibleFieldGroup field={field}>
                                 <div className="space-y-4">
                                   {(field.fields || []).map((nestedField: any) => {
                                     if (!isFieldVisible(nestedField, newEntryData[field.id] || {})) return null;
@@ -656,7 +664,16 @@ export const ModuleView = () => {
                                     </div>
                                   )})}
                                 </div>
-                              </div>
+                              </CollapsibleFieldGroup>
+                            ) : field.type === 'repeatableGroup' ? (
+                              <CollapsibleFieldGroup field={field} count={(newEntryData[field.id] || []).length}>
+                                <RepeatableGroupBlock 
+                                  field={field}
+                                  value={newEntryData[field.id] || []}
+                                  onChange={(val) => handleFieldChange(field.id, val)}
+                                  hideHeader={true}
+                                />
+                              </CollapsibleFieldGroup>
                             ) : (
                               <>
                                 <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">

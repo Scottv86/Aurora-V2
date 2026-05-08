@@ -37,6 +37,7 @@ interface FieldSelectorModalProps {
   onClose: () => void;
   onSelect: (fieldId: string) => void;
   fields: Field[];
+  tabs?: any[];
   title?: string;
   selectedFieldId?: string;
   excludeFieldIds?: string[];

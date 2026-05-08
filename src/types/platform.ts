@@ -65,7 +65,7 @@ export type FieldType =
 
 export interface ModuleField {
   id: string;
-  name: string;
+  name?: string;
   label: string;
   type: FieldType;
   options?: string[];
@@ -75,6 +75,7 @@ export interface ModuleField {
   tooltip?: string;
   defaultValue?: any;
   calculationLogic?: string;
+  calculationTriggers?: string[];
   targetModuleId?: string;
   targetPlatformModuleId?: string;
   globalListId?: string;
@@ -93,6 +94,7 @@ export interface ModuleField {
   colSpan?: number; // 1-12
   startCol?: number; // 1-12
   rowIndex?: number; // 0-indexed
+  rowSpan?: number;
   tabId?: string;
   visibilityRule?: {
     fieldId: string;
@@ -101,6 +103,31 @@ export interface ModuleField {
     action?: 'show' | 'hide';
   };
   hidden?: boolean;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+  
+  // UI & Component specific
+  variant?: string;
+  action?: string;
+  showIcon?: boolean;
+  iconName?: string;
+  icon?: any;
+  min?: number;
+  max?: number;
+  step?: number;
+  
+  // Auto-number settings
+  autonumberPrefix?: string;
+  autonumberSuffix?: string;
+  autonumberStart?: number;
+  autonumberDigits?: number;
+  
+  // View & Table settings
+  showInTable?: boolean;
+  inlineEdit?: boolean;
+  columnWidth?: number;
+  optionLayout?: 'vertical' | 'horizontal';
+  isCollapsed?: boolean;
 }
 
 export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';

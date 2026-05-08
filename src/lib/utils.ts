@@ -16,10 +16,34 @@ export function stripUndefined(obj: any) {
   return newObj ?? {};
 }
 
+/**
+ * Resolves a field value from a data object, searching both root level
+ * and inside any nested objects (like groups).
+ */
+export function getFieldValue(data: any, fieldId: string): any {
+  if (!data || !fieldId) return undefined;
+  
+  // 1. Try root level first
+  if (data[fieldId] !== undefined) return data[fieldId];
+  
+// 2. Search inside nested objects (groups)
+  for (const key in data) {
+    if (data[key] && typeof data[key] === 'object' && !Array.isArray(data[key])) {
+      const nestedVal = getFieldValue(data[key], fieldId);
+      if (nestedVal !== undefined) {
+        return nestedVal;
+      }
+    }
+  }
+  
+  return undefined;
+}
+
 export const isFieldVisible = (field: any, data: any) => {
   if (field.hidden) return false;
-  if (!field.visibilityRule) return true;
-  return checkCondition(field.visibilityRule, data);
+  const rule = field.visibilityRule || field.visibility;
+  if (!rule) return true;
+  return checkCondition(rule, data);
 };
 
 const checkCondition = (condition: any, data: any): boolean => {
@@ -45,27 +69,32 @@ const checkCondition = (condition: any, data: any): boolean => {
       isMet = true;
     } else {
       const actualFieldId = fieldId === '_record_key' ? (data?.key ? 'key' : 'id') : fieldId;
-      const actualValue = data?.[actualFieldId];
+      const actualValue = getFieldValue(data, actualFieldId);
       let compareValue = value;
 
       // If comparing against another field, fetch its value from data
       if (valueType === 'field' && value) {
         const compareFieldId = value === '_record_key' ? (data?.key ? 'key' : 'id') : value;
-        compareValue = data?.[compareFieldId];
+        compareValue = getFieldValue(data, compareFieldId);
       }
       
       const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
+      const safeString = (val: any) => (val === undefined || val === null) ? '' : String(val);
 
       switch (operator) {
         case 'equals':
-          isMet = String(actualValue) === String(compareValue); break;
+        case 'eq':
+          isMet = safeString(actualValue) === safeString(compareValue); break;
         case 'not_equals':
-          isMet = String(actualValue) !== String(compareValue); break;
+        case 'neq':
+          isMet = safeString(actualValue) !== safeString(compareValue); break;
         case 'contains':
-          isMet = String(actualValue || '').toLowerCase().includes(String(compareValue || '').toLowerCase()); break;
+          isMet = safeString(actualValue).toLowerCase().includes(safeString(compareValue).toLowerCase()); break;
         case 'greater_than':
+        case 'gt':
           isMet = Number(actualValue) > Number(compareValue); break;
         case 'less_than':
+        case 'lt':
           isMet = Number(actualValue) < Number(compareValue); break;
         case 'is_empty':
           isMet = isEmpty(actualValue); break;
@@ -74,6 +103,15 @@ const checkCondition = (condition: any, data: any): boolean => {
         default:
           isMet = true;
       }
+      console.log(`[checkCondition Debug] Evaluated rule for field ${actualFieldId}:`, {
+        operator,
+        actualValue,
+        compareValue,
+        safeActual: safeString(actualValue),
+        safeCompare: safeString(compareValue),
+        isMet,
+        action
+      });
     }
   }
 
@@ -108,13 +146,15 @@ export const evaluateFormula = (formula: string, data: any): string | number => 
   }
 };
 
-export const flattenFields = (fields: any[]): any[] => {
+export const flattenFields = (fields: any[], parentTabId?: string): any[] => {
   const result: any[] = [];
   if (!fields) return result;
   fields.forEach(f => {
-    result.push(f);
+    // Ensure field has the tabId of its parent if it doesn't have one
+    const currentField = { ...f, tabId: f.tabId || parentTabId };
+    result.push(currentField);
     if (f.fields && f.fields.length > 0) {
-      result.push(...flattenFields(f.fields));
+      result.push(...flattenFields(f.fields, currentField.tabId));
     }
   });
   return result;
@@ -142,11 +182,42 @@ export const generateDefaultLayout = (fields: any[]): any[] => {
 };
 
 
-export const calculateHeight = (field: any) => {
-  if (!field) return 1;
+export const isContainerField = (type: string): boolean => {
+  return ['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(type);
+};
+
+export const calculateHeight = (field: any, placeholder?: { index: number, span?: number, rowSpan?: number } | null): number => {
+  if (!field) return 2;
+  
+  // Use rowSpan if explicitly set (e.g. for placeholders)
+  if (field.rowSpan) return field.rowSpan;
+  
   const type = field.type;
-  // Containers need a bit more space for their label and drop zone
-  if (type === 'repeatableGroup' || type === 'fieldGroup' || type === 'group') return 2;
-  // All other fields default to a single row unit (120px)
-  return 1;
+  
+  if (isContainerField(type)) {
+    // If collapsed, return 2 units to match standard field height (120px)
+    if (field.isCollapsed) return 2;
+    
+    const fields = field.fields || [];
+    if (fields.length === 0 && !placeholder) return 4;
+    
+    const childHeights = fields.map((f: any) => {
+      const h = calculateHeight(f);
+      const r = typeof f.rowIndex === 'number' ? f.rowIndex : 0;
+      return r + h;
+    });
+
+    if (placeholder) {
+      // Use the rowSpan of the placeholder if provided, otherwise default to 2
+      const pHeight = placeholder.rowSpan || 2;
+      childHeights.push(placeholder.index + pHeight);
+    }
+    
+    const maxChildBottom = Math.max(0, ...childHeights);
+    
+    // Ensure container is at least 4 units high and has some padding at the bottom
+    return Math.max(4, maxChildBottom + 2);
+  }
+  
+  return 2;
 };

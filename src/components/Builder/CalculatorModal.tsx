@@ -64,6 +64,7 @@ interface CalculatorModalProps {
   relatedFields?: Record<string, Field[]>;
   allModules?: any[];
   targetLabel: string;
+  tabs?: any[];
 }
 
 const OPERATORS = [
@@ -459,7 +460,8 @@ export const CalculatorModal = ({
   availableFields,
   relatedFields = {},
   allModules = [],
-  targetLabel
+  targetLabel,
+  tabs = []
 }: CalculatorModalProps) => {
   const [logic, setLogic] = useState(initialLogic);
   const [triggers, setTriggers] = useState<string[]>(initialTriggers || DEFAULT_TRIGGERS);
@@ -1520,7 +1522,7 @@ export const CalculatorModal = ({
             )}
           >
             {field.type === 'currency' ? <span className="text-[10px] font-bold">$</span> : 
-             field.type === 'repeatableGroup' ? (isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) :
+             ['repeatableGroup', 'group', 'fieldGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) :
              field.type === 'number' || field.type === 'calculation' ? <Hash size={12} /> :
              <Terminal size={12} />}
           </div>
@@ -1539,35 +1541,37 @@ export const CalculatorModal = ({
             </div>
           </div>
 
-          <div className="hidden group-hover:flex items-center gap-1 animate-in fade-in zoom-in-95 duration-200">
-            <button
-              type="button"
-              onClick={() => {
-                if (!mockValues[fullLabel]) {
-                  setMockValues(prev => ({ ...prev, [fullLabel]: '' }));
-                }
-                setRightActiveTab('sandbox');
-              }}
-              className={cn(
-                "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                mockValues[fullLabel] !== undefined
-                  ? "bg-amber-500/20 text-amber-500 shadow-inner"
-                  : "text-zinc-300 hover:text-amber-500 hover:bg-amber-500/10"
-              )}
-              title="Test in Sandbox"
-            >
-              <Zap size={12} />
-            </button>
-            <div className="w-px h-3 bg-zinc-100 dark:bg-zinc-800 mx-0.5" />
-            <button
-              type="button"
-              onClick={() => handleInsertField(fullLabel)}
-              className="w-7 h-7 flex items-center justify-center text-zinc-300 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-lg transition-all"
-              title="Add to Formula"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
+          {!['group', 'fieldGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) && (
+            <div className="hidden group-hover:flex items-center gap-1 animate-in fade-in zoom-in-95 duration-200">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!mockValues[fullLabel]) {
+                    setMockValues(prev => ({ ...prev, [fullLabel]: '' }));
+                  }
+                  setRightActiveTab('sandbox');
+                }}
+                className={cn(
+                  "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
+                  mockValues[fullLabel] !== undefined
+                    ? "bg-amber-500/20 text-amber-500 shadow-inner"
+                    : "text-zinc-300 hover:text-amber-500 hover:bg-amber-500/10"
+                )}
+                title="Test in Sandbox"
+              >
+                <Zap size={12} />
+              </button>
+              <div className="w-px h-3 bg-zinc-100 dark:bg-zinc-800 mx-0.5" />
+              <button
+                type="button"
+                onClick={() => handleInsertField(fullLabel)}
+                className="w-7 h-7 flex items-center justify-center text-zinc-300 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-lg transition-all"
+                title="Add to Formula"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         {isExpanded && hasChildren && (
@@ -1582,9 +1586,8 @@ export const CalculatorModal = ({
   const validation = getValidation();
   const sandbox = computeResult();
 
-  const filteredFields = [...SYSTEM_FIELDS, ...availableFields].filter(f => {
-    if (f.type === 'group' || f.type === 'fieldGroup') return false;
-    
+  const filteredFields = availableFields.filter(f => {
+    // Allow all types to be rendered in the tree, but we'll hide the insert buttons for containers
     const matchesSearch = (f.label || "").toLowerCase().includes(variableSearch.toLowerCase());
     if (!matchesSearch) return false;
     
@@ -1709,10 +1712,49 @@ export const CalculatorModal = ({
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        {filteredFields.length > 0 ? (
-                          filteredFields.map(field => renderField(field))
-                        ) : (
+                      <div className="space-y-6">
+                        {/* System Fields */}
+                        <div className="space-y-2">
+                          <p className="px-1 text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-2">System</p>
+                          {SYSTEM_FIELDS.map(field => renderField(field))}
+                        </div>
+
+                        {/* Grouped by Tab */}
+                        {tabs.map(tab => {
+                          const tabFields = filteredFields
+                            .filter(f => f.tabId === tab.id && !['divider', 'spacer', 'heading'].includes(f.type))
+                            .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
+                          
+                          if (tabFields.length === 0) return null;
+
+                          return (
+                            <div key={tab.id} className="space-y-2">
+                              <p className="px-1 text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <Layers size={10} className="text-zinc-300" />
+                                {tab.label}
+                              </p>
+                              {tabFields.map(field => renderField(field))}
+                            </div>
+                          );
+                        })}
+
+                        {/* Other Fields (no tab) */}
+                        {(() => {
+                          const otherFields = filteredFields
+                            .filter(f => (!f.tabId || !tabs.find(t => t.id === f.tabId)) && !SYSTEM_FIELDS.find(sf => sf.id === f.id) && !['divider', 'spacer', 'heading'].includes(f.type))
+                            .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
+                          
+                          if (otherFields.length === 0) return null;
+
+                          return (
+                            <div className="space-y-2">
+                              <p className="px-1 text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-2">Other</p>
+                              {otherFields.map(field => renderField(field))}
+                            </div>
+                          );
+                        })()}
+
+                        {filteredFields.length === 0 && (
                           <div className="p-8 text-center space-y-3">
                             <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto">
                               <Info size={20} className="text-zinc-400" />

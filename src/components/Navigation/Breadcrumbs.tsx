@@ -50,7 +50,7 @@ export const Breadcrumbs = () => {
     if (breadcrumbOverrides[segment]) return breadcrumbOverrides[segment];
 
     // 2. Check modules if it's a module ID (these are loaded globally)
-    if (pathnames[index - 1] === 'modules') {
+    if (pathnames[index - 1] === 'modules' || pathnames[index - 1] === 'builder') {
       const mod = modules.find(m => m.id === segment);
       if (mod) return mod.name;
     }

@@ -28,6 +28,14 @@ const SearchableLookup = ({
   const [search, setSearch] = React.useState('');
   const [openUp, setOpenUp] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Auto-focus when becoming editable
+  React.useEffect(() => {
+    if (!readonly && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [readonly]);
 
   React.useLayoutEffect(() => {
     if (isOpen && containerRef.current) {
@@ -109,6 +117,7 @@ const SearchableLookup = ({
       <div className="relative group">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={14} />
         <input 
+          ref={inputRef}
           type="text"
           placeholder={loading ? 'Loading...' : placeholder || `Search ${platformEntity || 'records'}...`}
           value={isOpen ? search : localName}
@@ -201,6 +210,16 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
 
   const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
+  const inputRef = React.useRef<any>(null);
+
+  // Auto-focus when becoming editable
+  React.useEffect(() => {
+    if (!readonly && inputRef.current) {
+      if (typeof inputRef.current.focus === 'function') {
+        inputRef.current.focus();
+      }
+    }
+  }, [readonly]);
 
   const resolvedOptions = React.useMemo(() => {
     if (lookupSource || (optionsSource && optionsSource !== 'manual')) {
@@ -272,6 +291,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     return (
       <div className="relative w-full">
         <select 
+          ref={inputRef}
           value={value || ''}
           disabled={readonly}
           onChange={(e) => onChange(e.target.value)}
@@ -428,7 +448,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'richtext') {
-    return <RichTextEditor value={value || ''} onChange={onChange} placeholder={placeholder} />;
+    return <RichTextEditor value={value || ''} onChange={onChange} placeholder={placeholder} readonly={readonly} />;
   }
 
   if (type === 'signature_pad') {
@@ -626,12 +646,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
-  if (type === 'time') return <input type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'date') return <input ref={inputRef} type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'time') return <input ref={inputRef} type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
       <input 
+        ref={inputRef}
         type="number" 
         value={value || ''} 
         onChange={(e) => onChange(e.target.value)} 
@@ -644,7 +665,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     </div>
   );
 
-  if (type === 'longText') return <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'longText') return <textarea ref={inputRef} value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
 
   // User & Lookup
   if (type === 'user') {
@@ -724,6 +745,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   // Default Fallback
   return (
     <input 
+      ref={inputRef}
       type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : 'text'}
       placeholder={placeholder || `Enter ${(label || 'value').toLowerCase()}...`}
       value={value || ''}

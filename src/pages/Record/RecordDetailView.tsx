@@ -31,9 +31,10 @@ import { MODULES } from '../../constants/modules';
 import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
-import { cn, isFieldVisible, flattenFields, calculateHeight } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
+import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 
@@ -81,6 +82,7 @@ export const RecordDetailView = () => {
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [usersData] = useState<any[]>([]);
   const [lookupData] = useState<Record<string, any[]>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   // Global click-away handler
   useEffect(() => {
@@ -114,13 +116,20 @@ export const RecordDetailView = () => {
 
   const fieldToGroupMap = useMemo(() => {
     const map: Record<string, string> = {};
-    (moduleData?.layout || []).forEach((f: any) => {
-      if (f.type === 'fieldGroup' && f.fields) {
-        f.fields.forEach((nf: any) => {
-          map[nf.id] = f.id;
-        });
-      }
-    });
+    const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
+    
+    const processFields = (fields: any[], parentId?: string) => {
+      fields.forEach((f: any) => {
+        if (parentId) {
+          map[f.id] = parentId;
+        }
+        if (containerTypes.includes(f.type) && f.fields) {
+          processFields(f.fields, f.id);
+        }
+      });
+    };
+    
+    processFields(moduleData?.layout || []);
     return map;
   }, [moduleData]);
 
@@ -246,16 +255,9 @@ export const RecordDetailView = () => {
 
     fetchModAndRecord();
   }, [tenant?.id, moduleId, recordId, platformLoading, session?.access_token]);
-
   const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
     let updatedData = { ...editData };
-    
-    const groupId = fieldToGroupMap[fieldId];
-    if (groupId) {
-      updatedData[groupId] = { ...(editData[groupId] || {}), [fieldId]: val };
-    } else {
-      updatedData[fieldId] = val;
-    }
+    updatedData[fieldId] = val;
     
     // Execute Lookup Output Mappings
     const field = allFields.find(f => f.id === fieldId);
@@ -264,16 +266,7 @@ export const RecordDetailView = () => {
       field.lookupOutputMappings.forEach(mapping => {
         if (mapping.targetFieldId) {
           const targetFieldId = mapping.targetFieldId;
-          const targetGroupId = fieldToGroupMap[targetFieldId];
-          
-          if (targetGroupId) {
-            updatedData[targetGroupId] = { 
-              ...(updatedData[targetGroupId] || {}), 
-              [targetFieldId]: null 
-            };
-          } else {
-            updatedData[targetFieldId] = null;
-          }
+          updatedData[targetFieldId] = null;
         }
       });
 
@@ -284,16 +277,7 @@ export const RecordDetailView = () => {
             const sourceValue = metadata[mapping.sourceFieldId];
             if (sourceValue !== undefined) {
               const targetFieldId = mapping.targetFieldId;
-              const targetGroupId = fieldToGroupMap[targetFieldId];
-              
-              if (targetGroupId) {
-                updatedData[targetGroupId] = { 
-                  ...(updatedData[targetGroupId] || {}), 
-                  [targetFieldId]: sourceValue 
-                };
-              } else {
-                updatedData[targetFieldId] = sourceValue;
-              }
+              updatedData[targetFieldId] = sourceValue;
             }
           }
         });
@@ -323,10 +307,9 @@ export const RecordDetailView = () => {
     // Check if the value has actually changed before proceeding with save
     if (record && fieldIdBeingSaved) {
       const data = dataToSave || editData;
-      const groupId = fieldToGroupMap[fieldIdBeingSaved];
       
-      const newValue = groupId ? data[groupId]?.[fieldIdBeingSaved] : data[fieldIdBeingSaved];
-      const oldValue = groupId ? record[groupId]?.[fieldIdBeingSaved] : record[fieldIdBeingSaved];
+      const newValue = getFieldValue(data, fieldIdBeingSaved);
+      const oldValue = getFieldValue(record, fieldIdBeingSaved);
 
       // Deep compare using JSON.stringify for simplicity and reliability with arrays/objects
       if (JSON.stringify(newValue) === JSON.stringify(oldValue)) {
@@ -339,14 +322,19 @@ export const RecordDetailView = () => {
     const data = dataToSave || editData;
     const missingFields = allFields.filter(f => {
       if (!f.required) return false;
-      const val = f.id.includes('.') ? // Handle potential nested fields if any (though usually handled by fieldGroup logic)
-        f.id.split('.').reduce((obj, key) => obj?.[key], data) :
-        data[f.id];
       
-      // Also check fieldGroup nested fields
-      const groupId = fieldToGroupMap[f.id];
-      const actualVal = groupId ? data[groupId]?.[f.id] : val;
+      // Check visibility of the field itself
+      if (!isFieldVisible(f, data)) return false;
+      
+      // Check visibility of all parent containers
+      let currentParentId = fieldToGroupMap[f.id];
+      while (currentParentId) {
+        const parentField = allFields.find(p => p.id === currentParentId);
+        if (parentField && !isFieldVisible(parentField, data)) return false;
+        currentParentId = fieldToGroupMap[currentParentId];
+      }
 
+      const actualVal = getFieldValue(data, f.id);
       return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
     });
 
@@ -383,7 +371,11 @@ export const RecordDetailView = () => {
 
       const updatedRecord = await res.json();
       setRecord(updatedRecord);
-      setEditData(updatedRecord);
+      
+      // CRITICAL: Re-evaluate calculations on the fresh record from server
+      // to ensure visibility rules and other UI logic remain in sync.
+      const withCalculations = evaluateCalculations(updatedRecord, allFields);
+      setEditData(withCalculations);
 
       if (recordId && updatedRecord._record_key) {
         setBreadcrumbOverride(recordId, updatedRecord._record_key);
@@ -627,11 +619,19 @@ export const RecordDetailView = () => {
                     const visibleFields = compactLayout(
                       (moduleData.layout || [])
                         .filter((field: ModuleField) => {
-                          if (!moduleData.tabs || moduleData.tabs.length === 0) return true;
+                          const isVisible = isFieldVisible(field, editData || record);
+                          if (['group', 'fieldGroup'].includes(field.type)) {
+                            console.log(`[Visibility Debug] Group ${field.id} (${field.label}): visible = ${isVisible}`, { rule: field.visibilityRule, data: editData || record });
+                          }
+                          if (!moduleData.tabs || moduleData.tabs.length === 0) return isVisible;
                           const firstTabId = moduleData.tabs[0]?.id;
                           const fieldTabId = field.tabId || firstTabId;
-                          return fieldTabId === activeTabId && isFieldVisible(field, editData || record);
+                          return fieldTabId === activeTabId && isVisible;
                         })
+                        .map((field: ModuleField) => ({
+                          ...field,
+                          isCollapsed: collapsedGroups[field.id] ?? field.defaultCollapsed ?? false
+                        }))
                     );
 
                     return (
@@ -653,14 +653,14 @@ export const RecordDetailView = () => {
                             data-active-field={activeFieldId === field.id ? field.id : undefined}
                             className={cn(
                               "group/field transition-all relative min-w-0",
-                              !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "cursor-pointer"
+                              !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "cursor-pointer"
                             )}
                             style={{
                               gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                               gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                             }}
                             onClick={() => {
-                              if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
+                              if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
                                 setEditData(record);
                                 setActiveFieldId(field.id);
                               }
@@ -670,8 +670,8 @@ export const RecordDetailView = () => {
                             "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
                             activeFieldId === field.id 
                               ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                              : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) 
-                                ? "hover:bg-indigo-500/5 hover:border-indigo-500/10 border-transparent"
+                              : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) 
+                                ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
                                 : "border-transparent"
                           )}>
                             {activeFieldId === field.id && (
@@ -719,22 +719,24 @@ export const RecordDetailView = () => {
                             )}>
                               {field.label}
                             </div>
-                          ) : field.type === 'fieldGroup' ? (
-                            <div className="bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6">
-                              <h5 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</h5>
+                          ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (
+                            <CollapsibleFieldGroup 
+                              field={field}
+                              isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
+                              onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
+                            >
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {(field.fields || []).map((nestedField: any) => {
-                                  if (!isFieldVisible(nestedField, record[field.id] || {})) return null;
+                                  if (!isFieldVisible(nestedField, editData || record)) return null;
                                   return (
                                   <div 
                                     key={nestedField.id} 
                                     className={cn(
-                                      "space-y-1 rounded-xl transition-all relative border-2",
-                                      activeFieldId === nestedField.id
-                                        ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10 p-2 -m-2"
-                                        : !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) 
-                                          ? "cursor-pointer hover:bg-indigo-500/5 p-2 -m-2 border-transparent"
-                                          : "border-transparent"
+                                      "p-4 rounded-3xl transition-all relative border-2 group/nestedField",
+                                      activeFieldId === nestedField.id 
+                                        ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
+                                        : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
+                                      !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
                                     )}
                                     data-field-id={nestedField.id}
                                     data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
@@ -782,10 +784,19 @@ export const RecordDetailView = () => {
                                           </div>
                                         </div>
                                       )}
+                                      {!activeFieldId && (
+                                        ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
+                                          <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
+                                        ) : (
+                                          !['datatable', 'duallist'].includes(nestedField.type) && (
+                                            <Edit2 size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-indigo-500" />
+                                          )
+                                        )
+                                      )}
                                     </label>
                                     <FieldInput 
                                       field={nestedField}
-                                      value={editData[field.id]?.[nestedField.id] ?? record[field.id]?.[nestedField.id] ?? nestedField.defaultValue}
+                                      value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? nestedField.defaultValue}
                                       onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleUpdateEntry();
@@ -800,13 +811,16 @@ export const RecordDetailView = () => {
                                   </div>
                                 )})}
                               </div>
-                            </div>
+                            </CollapsibleFieldGroup>
                           ) : field.type === 'repeatableGroup' ? (
-                            <RepeatableGroupBlock 
-                               field={field}
-                               value={record?.[field.id] || []}
-                               onChange={(newVal) => handleUpdateEntry({ ...record, [field.id]: newVal })}
-                            />
+                            <CollapsibleFieldGroup field={field}>
+                              <RepeatableGroupBlock 
+                                 field={field}
+                                 value={record?.[field.id] || []}
+                                 onChange={(newVal) => handleUpdateEntry({ ...record, [field.id]: newVal })}
+                                 hideHeader={true}
+                              />
+                            </CollapsibleFieldGroup>
                           ) : field.type === 'connector' ? (
                             <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
                               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />

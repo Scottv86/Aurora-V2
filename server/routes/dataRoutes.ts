@@ -182,8 +182,9 @@ router.post('/records', async (req: TenantRequest, res) => {
       // Let's check both for safety.
       let actualVal = val;
       if (actualVal === undefined || actualVal === null) {
-        // Find if this field belongs to a group
-        const group = layout.find((l: any) => l.type === 'fieldGroup' && l.fields?.some((nf: any) => nf.id === f.id));
+        // Find if this field belongs to a container in the data
+        const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
+        const group = layout.find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
         if (group) {
           actualVal = data[group.id]?.[f.id];
         }
@@ -330,7 +331,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       const missingFields = requiredFields.filter((f: any) => {
         let actualVal = updatedData[f.id];
         if (actualVal === undefined || actualVal === null) {
-          const group = layout.find((l: any) => l.type === 'fieldGroup' && l.fields?.some((nf: any) => nf.id === f.id));
+          const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
+          const group = layout.find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
           if (group) {
             actualVal = updatedData[group.id]?.[f.id];
           }

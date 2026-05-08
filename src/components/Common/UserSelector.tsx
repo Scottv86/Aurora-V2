@@ -39,6 +39,15 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     [members, value]
   );
 
+  // Auto-open when becoming editable
+  useEffect(() => {
+    if (!readonly) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  }, [readonly]);
+
   // Group members by team
   const groupedMembers = useMemo(() => {
     const groups: Record<string, TenantMember[]> = {};
