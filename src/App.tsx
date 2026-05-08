@@ -183,7 +183,7 @@ const App = () => {
                 <Route path="workforce" element={<WorkforcePage />} />
                 <Route path="workforce/member/:id" element={<MemberDetailView />} />
                 <Route path="workforce/teams/:id" element={<TeamDetailView />} />
-                <Route path="workforce/roles/:id" element={<PositionDetailView />} />
+                <Route path="workforce/positions/:id" element={<PositionDetailView />} />
               </Route>
               
               {/* External / Public */}

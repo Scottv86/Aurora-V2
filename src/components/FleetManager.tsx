@@ -20,6 +20,7 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { toast } from 'sonner';
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -34,13 +35,21 @@ const COLORS = ['#6366f1', '#a855f7', '#10b981', '#f59e0b', '#ef4444'];
 
 export const FleetManager = () => {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [fleet, setFleet] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchFleet = async () => {
     try {
-      const res = await fetch(`${API_BASE}/versions`);
+      if (!session?.access_token) return;
+
+      const res = await fetch(`${API_BASE}/versions`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       const data = await res.json();
       setFleet(data);
     } catch (error) {
@@ -50,7 +59,11 @@ export const FleetManager = () => {
     }
   };
 
-  useEffect(() => { fetchFleet(); }, []);
+  useEffect(() => { 
+    if (session?.access_token) {
+      fetchFleet(); 
+    }
+  }, [session?.access_token]);
 
   if (loading) {
     return (

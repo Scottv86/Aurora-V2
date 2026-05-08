@@ -26,6 +26,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
           include: {
             tenant: true,
             position: true,
+            team: true,
             permissionGroups: {
               include: {
                 permissionGroup: true
@@ -56,6 +57,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     const contextData = {
       user: {
         id: user.id,
+        memberId: primaryMembership?.id,
         email: user.email,
         firstName: primaryMembership?.firstName,
         lastName: primaryMembership?.familyName,
@@ -64,6 +66,9 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         licenceType: primaryMembership?.licenceType || (user.isSuperAdmin ? 'Developer' : 'Standard'),
         avatarUrl: primaryMembership?.avatarUrl,
         position: primaryMembership?.position?.title,
+        positionId: primaryMembership?.positionId,
+        teamId: primaryMembership?.teamId,
+        team: primaryMembership?.team?.name,
         capabilities: user.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : capabilities
       },
       tenant: tenant ? {
@@ -83,12 +88,6 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
       } : null,
       menuConfig // Resolved menu config (profile override or tenant default)
     };
-
-    console.log(`[PlatformAPI] Returning context for ${user.email}:`, {
-      role: contextData.user.role,
-      licenceType: contextData.user.licenceType,
-      tenant: contextData.tenant?.name
-    });
 
     res.json(contextData);
   } catch (error: any) {
@@ -176,12 +175,18 @@ router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) 
       return res.status(403).json({ error: 'An Admin role or Developer license seat is required to update organization settings.' });
     }
 
-    const updatedTenant = await globalPrisma.tenant.update({
-      where: { id: tenantId },
-      data: {
-        ...(name && { name }),
-        ...(subdomain && { subdomain }),
-        ...(branding && { branding }),
+      console.log('[PlatformRoutes] PATCH /settings body:', JSON.stringify(req.body, null, 2));
+      console.log('[PlatformRoutes] Updating settings for tenant:', tenantId, {
+        name,
+        branding: branding ? JSON.stringify(branding) : 'null'
+      });
+
+      const updatedTenant = await globalPrisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          ...(name && { name }),
+          ...(subdomain && { subdomain }),
+          ...(branding && { branding }),
         ...(localization && { localization }),
         ...(metadata && { metadata }),
         ...(workspaceSettings && { workspaceSettings }),

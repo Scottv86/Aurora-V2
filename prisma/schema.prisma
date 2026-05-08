@@ -7,38 +7,38 @@ datasource db {
 }
 
 model Tenant {
-  id                 String         @id(map: "Tenant_pkey") @default(cuid())
-  name               String
-  subdomain          String         @unique(map: "Tenant_subdomain_key")
-  status             String         @default("active")
-  dbConnectionString String?        @map("db_connection_string")
-  planTier           String         @default("standard") @map("plan_tier")
-  createdAt          DateTime       @default(now()) @map("created_at")
-  updatedAt          DateTime       @updatedAt @map("updated_at")
-  members            TenantMember[]
-  usageLogs          UsageLog[]
-  workspaces         Workspace[]
-  teams              Team[]
-  agents             Agent[]
-  positions          Position[]
-  phoneNumbers       MemberPhoneNumber[]
-  certifications     MemberCertification[]
-  education          MemberEducation[]
-  skills             MemberSkill[]
-  menuConfig         Json?          @map("menu_config")
-  branding           Json?
-  localization       Json?
-  metadata           Json?
-  workspaceSettings  Json?          @map("workspace_settings")
-  enabledApps        Json?          @map("enabled_apps")
-  permissionGroups   PermissionGroup[]
+  id                     String                  @id(map: "Tenant_pkey") @default(cuid())
+  name                   String
+  subdomain              String                  @unique(map: "Tenant_subdomain_key")
+  status                 String                  @default("active")
+  dbConnectionString     String?                 @map("db_connection_string")
+  planTier               String                  @default("standard") @map("plan_tier")
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  menuConfig             Json?                   @map("menu_config")
+  branding               Json?
+  localization           Json?
+  metadata               Json?
+  workspaceSettings      Json?                   @map("workspace_settings")
+  enabledApps            Json?                   @map("enabled_apps")
+  agents                 Agent[]
+  auditLogs              AuditLog[]
+  globalLists            GlobalList[]
+  certifications         MemberCertification[]
+  education              MemberEducation[]
   memberPermissionGroups MemberPermissionGroup[]
-  auditLogs          AuditLog[]
-  parties            Party[]
-  partyRelationships PartyRelationship[]
-  taxonomies         Taxonomy[]
-  globalLists        GlobalList[]
-  connectors         TenantConnector[]
+  phoneNumbers           MemberPhoneNumber[]
+  skills                 MemberSkill[]
+  parties                Party[]
+  partyRelationships     PartyRelationship[]
+  permissionGroups       PermissionGroup[]
+  positions              Position[]
+  taxonomies             Taxonomy[]
+  teams                  Team[]
+  connectors             TenantConnector[]
+  members                TenantMember[]
+  usageLogs              UsageLog[]
+  workspaces             Workspace[]
 
   @@map("tenants")
 }
@@ -63,8 +63,8 @@ model Workspace {
   modules  Module[]
   tenant   Tenant   @relation(fields: [tenantId], references: [id], map: "Workspace_tenantId_fkey")
 
-  @@index([tenantId], map: "Workspace_tenantId_idx")
   @@unique([id, tenantId])
+  @@index([tenantId], map: "Workspace_tenantId_idx")
   @@map("workspaces")
 }
 
@@ -73,17 +73,17 @@ model Module {
   tenantId    String    @map("tenant_id")
   workspaceId String    @map("workspace_id")
   name        String
-  category    String    @default("Custom")
-  icon        String    @default("Box")
-  type        String    @default("RECORD")
-  enabled     Boolean   @default(true)
   config      Json
   createdAt   DateTime  @default(now()) @map("created_at")
+  category    String    @default("Custom")
+  enabled     Boolean   @default(true)
+  icon        String    @default("Box")
+  type        String    @default("RECORD")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], map: "Module_workspaceId_fkey")
   records     Record[]
 
-  @@index([tenantId], map: "Module_tenantId_idx")
   @@unique([id, tenantId])
+  @@index([tenantId], map: "Module_tenantId_idx")
   @@map("modules")
 }
 
@@ -99,58 +99,50 @@ model User {
 }
 
 model TenantMember {
-  id          String   @id(map: "TenantMember_pkey") @default(cuid())
-  userId      String?  @map("user_id")
-  agentId     String?  @map("agent_id")
-  tenantId    String   @map("tenant_id")
-  teamId      String?  @map("team_id")
-  roleId      String   @default("Standard") @map("role_id") // Maps to 'Standard', 'Lead', 'Admin'
-  positionId  String?  @map("position_id")
-  isSynthetic Boolean  @default(false) @map("is_synthetic")
-  status      String   @default("Active") @map("status")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
-  
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
-  user        User?    @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
-  agent       Agent?   @relation(fields: [agentId], references: [id], map: "TenantMember_agentId_fkey")
-  team        Team?    @relation(fields: [teamId], references: [id], map: "TenantMember_teamId_fkey")
-  position    Position? @relation(fields: [positionId], references: [id], map: "TenantMember_positionId_fkey")
-  menuConfig  Json?    @map("menu_config")
-
-  // Comprehensive Staff Details
-  firstName       String?   @map("first_name")
-  otherName       String?   @map("other_name")
-  familyName      String?   @map("family_name")
-  personalEmail   String?   @map("personal_email")
-  homeAddress     String?   @map("home_address")
-  workArrangements String?   @map("work_arrangements")
-  emergencyContact String?   @map("emergency_contact")
-  dateOfBirth     DateTime? @map("date_of_birth")
-  gender          String?   @map("gender")
-  nationality     String?   @map("nationality")
-  startDate       DateTime? @map("start_date")
-  endDate         DateTime? @map("end_date")
-  
-  // Workforce Hub Enhancements
-  avatarUrl       String?   @map("avatar_url")
-  isContractor    Boolean   @default(false) @map("is_contractor")
-  licenceType     String    @default("Standard") @map("licence_type")
-  aiHumour        Float     @default(0.5) @map("ai_humour")
-  workEmail       String?   @map("work_email")
-  signature       String?   @map("signature")
-
-  phoneNumbers    MemberPhoneNumber[]
-  certifications  MemberCertification[]
-  education       MemberEducation[]
-  skills          MemberSkill[]
-  permissionGroups MemberPermissionGroup[]
-  
-  // HR & Succession Relations
-  successions      MemberSuccession[]
+  id               String                  @id(map: "TenantMember_pkey") @default(cuid())
+  userId           String?                 @map("user_id")
+  tenantId         String                  @map("tenant_id")
+  roleId           String                  @default("Standard") @map("role_id")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @default(now()) @updatedAt @map("updated_at")
+  menuConfig       Json?                   @map("menu_config")
+  agentId          String?                 @map("agent_id")
+  isSynthetic      Boolean                 @default(false) @map("is_synthetic")
+  status           String                  @default("Active") @map("status")
+  teamId           String?                 @map("team_id")
+  positionId       String?                 @map("position_id")
+  dateOfBirth      DateTime?               @map("date_of_birth")
+  emergencyContact String?                 @map("emergency_contact")
+  endDate          DateTime?               @map("end_date")
+  familyName       String?                 @map("family_name")
+  firstName        String?                 @map("first_name")
+  gender           String?                 @map("gender")
+  homeAddress      String?                 @map("home_address")
+  nationality      String?                 @map("nationality")
+  otherName        String?                 @map("other_name")
+  personalEmail    String?                 @map("personal_email")
+  startDate        DateTime?               @map("start_date")
+  workArrangements String?                 @map("work_arrangements")
+  aiHumour         Float                   @default(0.5) @map("ai_humour")
+  avatarUrl        String?                 @map("avatar_url")
+  isContractor     Boolean                 @default(false) @map("is_contractor")
+  licenceType      String                  @default("Standard") @map("licence_type")
+  signature        String?                 @map("signature")
+  workEmail        String?                 @map("work_email")
   contracts        EmploymentContract[]
   leaveBalances    LeaveBalance[]
   leaveRequests    LeaveRequest[]
+  certifications   MemberCertification[]
+  education        MemberEducation[]
+  permissionGroups MemberPermissionGroup[]
+  phoneNumbers     MemberPhoneNumber[]
+  skills           MemberSkill[]
+  successions      MemberSuccession[]
+  agent            Agent?                  @relation(fields: [agentId], references: [id], map: "TenantMember_agentId_fkey")
+  position         Position?               @relation(fields: [positionId], references: [id], map: "TenantMember_positionId_fkey")
+  team             Team?                   @relation(fields: [teamId], references: [id], map: "TenantMember_teamId_fkey")
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
+  user             User?                   @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
   timesheets       Timesheet[]
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
@@ -161,54 +153,54 @@ model TenantMember {
 }
 
 model MemberPhoneNumber {
-  id        String   @id @default(cuid())
-  memberId  String   @map("member_id")
-  tenantId  String   @map("tenant_id")
-  label     String   // e.g. 'Work', 'Home', 'Mobile'
-  number    String
-  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       String       @id @default(cuid())
+  memberId String       @map("member_id")
+  label    String
+  number   String
+  tenantId String       @map("tenant_id")
+  member   TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("member_phone_numbers")
 }
 
 model MemberCertification {
-  id            String    @id @default(cuid())
-  memberId      String    @map("member_id")
-  tenantId      String    @map("tenant_id")
-  name          String
-  issuer        String?
-  dateObtained  DateTime? @map("date_obtained")
-  expiryDate    DateTime? @map("expiry_date")
-  member        TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  memberId     String       @map("member_id")
+  name         String
+  issuer       String?
+  dateObtained DateTime?    @map("date_obtained")
+  expiryDate   DateTime?    @map("expiry_date")
+  tenantId     String       @map("tenant_id")
+  member       TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("member_certifications")
 }
 
 model MemberEducation {
-  id            String    @id @default(cuid())
-  memberId      String    @map("member_id")
-  tenantId      String    @map("tenant_id")
-  institution   String
-  degree        String?
-  fieldOfStudy  String?   @map("field_of_study")
-  startDate     DateTime? @map("start_date")
-  endDate       DateTime? @map("end_date")
-  member        TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  memberId     String       @map("member_id")
+  institution  String
+  degree       String?
+  fieldOfStudy String?      @map("field_of_study")
+  startDate    DateTime?    @map("start_date")
+  endDate      DateTime?    @map("end_date")
+  tenantId     String       @map("tenant_id")
+  member       TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("member_education")
 }
 
 model MemberSkill {
-  id              String   @id @default(cuid())
-  memberId        String   @map("member_id")
-  tenantId        String   @map("tenant_id")
-  name            String
-  proficiencyLevel String?  @map("proficiency_level")
-  member          TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  tenant          Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id               String       @id @default(cuid())
+  memberId         String       @map("member_id")
+  name             String
+  proficiencyLevel String?      @map("proficiency_level")
+  tenantId         String       @map("tenant_id")
+  member           TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("member_skills")
 }
@@ -218,13 +210,13 @@ model Team {
   tenantId    String         @map("tenant_id")
   name        String
   description String?
-  avatarUrl   String?        @map("avatar_url")
   createdAt   DateTime       @default(now()) @map("created_at")
+  avatarUrl   String?        @map("avatar_url")
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
   members     TenantMember[]
 
-  @@index([tenantId])
   @@unique([id, tenantId])
+  @@index([tenantId])
   @@map("teams")
 }
 
@@ -238,23 +230,23 @@ model Agent {
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
   memberships TenantMember[]
 
-  @@index([tenantId])
   @@unique([id, tenantId])
+  @@index([tenantId])
   @@map("agents")
 }
 
 model Record {
-  id        String   @id(map: "Record_pkey") @default(cuid())
-  tenantId  String   @map("tenant_id")
-  moduleId  String   @map("module_id")
-  data      Json
-  associations Json     @default("[]")
-  path      String?  @map("_path")
+  id            String   @id(map: "Record_pkey") @default(cuid())
+  tenantId      String   @map("tenant_id")
+  moduleId      String   @map("module_id")
+  data          Json
   status        String   @default("active")
-  workflowState Json?    @map("workflow_state")
   createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  path          String?  @map("_path")
+  associations  Json     @default("[]")
+  workflowState Json?    @map("workflow_state")
+  module        Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
 
   @@index([moduleId], map: "Record_moduleId_idx")
   @@index([tenantId], map: "Record_tenantId_idx")
@@ -299,20 +291,19 @@ model GeneratedDocument {
 }
 
 model Position {
-  id             String         @id @default(cuid())
-  tenantId       String         @map("tenant_id")
-  positionNumber String         @map("position_number")
+  id             String             @id @default(cuid())
+  tenantId       String             @map("tenant_id")
+  positionNumber String             @map("position_number")
   title          String
   description    String?
-  parentId       String?        @map("parent_id")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  
-  tenant         Tenant         @relation(fields: [tenantId], references: [id])
-  parent         Position?      @relation("PositionToPosition", fields: [parentId], references: [id])
-  children       Position[]     @relation("PositionToPosition")
-  members        TenantMember[]
+  parentId       String?            @map("parent_id")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
   successors     MemberSuccession[]
+  parent         Position?          @relation("PositionToPosition", fields: [parentId], references: [id])
+  children       Position[]         @relation("PositionToPosition")
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
+  members        TenantMember[]
 
   @@unique([tenantId, positionNumber])
   @@unique([id, tenantId])
@@ -321,33 +312,31 @@ model Position {
 }
 
 model PermissionGroup {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
-  parentGroupId String? @map("parent_group_id")
-  name        String
-  description String?
-  capabilities Json?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  parentGroup PermissionGroup? @relation("GroupInheritance", fields: [parentGroupId], references: [id])
-  childGroups PermissionGroup[] @relation("GroupInheritance")
-  members     MemberPermissionGroup[]
+  id            String                  @id @default(cuid())
+  tenantId      String                  @map("tenant_id")
+  name          String
+  description   String?
+  capabilities  Json?
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+  parentGroupId String?                 @map("parent_group_id")
+  members       MemberPermissionGroup[]
+  parentGroup   PermissionGroup?        @relation("GroupInheritance", fields: [parentGroupId], references: [id])
+  childGroups   PermissionGroup[]       @relation("GroupInheritance")
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@map("permission_groups")
 }
 
 model MemberPermissionGroup {
-  tenantId          String   @map("tenant_id")
-  memberId          String   @map("member_id")
-  permissionGroupId String   @map("permission_group_id")
-  assignedAt        DateTime @default(now()) @map("assigned_at")
-
-  tenant             Tenant          @relation(fields: [tenantId], references: [id])
+  memberId          String          @map("member_id")
+  permissionGroupId String          @map("permission_group_id")
+  assignedAt        DateTime        @default(now()) @map("assigned_at")
+  tenantId          String          @map("tenant_id")
   member            TenantMember    @relation(fields: [memberId], references: [id], onDelete: Cascade)
   permissionGroup   PermissionGroup @relation(fields: [permissionGroupId], references: [id], onDelete: Cascade)
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
 
   @@id([memberId, permissionGroupId])
   @@index([tenantId])
@@ -358,16 +347,251 @@ model AuditLog {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")
   actorId    String   @map("actor_id")
-  action     String   
+  action     String
   resourceId String   @map("resource_id")
   oldValue   Json?
   newValue   Json?
   timestamp  DateTime @default(now()) @map("timestamp")
-
   tenant     Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, timestamp])
   @@map("audit_logs")
+}
+
+model Party {
+  id                  String                 @id @default(cuid())
+  tenantId            String                 @map("tenant_id")
+  partyType           PartyType              @map("party_type")
+  status              EntityStatus           @default(DRAFT)
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  createdBySwarmId    String?                @map("created_by_swarm_id")
+  creationContextLog  String?                @map("creation_context_log")
+  embeddings          Unsupported("vector")?
+  organization        Organization?
+  tenant              Tenant                 @relation(fields: [tenantId], references: [id])
+  sourceRelationships PartyRelationship[]    @relation("SourceParty")
+  targetRelationships PartyRelationship[]    @relation("TargetParty")
+  person              Person?
+
+  @@index([tenantId])
+  @@map("parties")
+}
+
+model Person {
+  partyId       String    @id @map("party_id")
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  dateOfBirth   DateTime? @map("date_of_birth")
+  isHumanInLoop Boolean   @default(false) @map("is_human_in_loop")
+  party         Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@map("persons")
+}
+
+model Organization {
+  partyId           String    @id @map("party_id")
+  legalName         String    @map("legal_name")
+  orgStructureType  String    @map("org_structure_type")
+  incorporationDate DateTime? @map("incorporation_date")
+  taxIdentifier     String?   @map("tax_identifier")
+  party             Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@map("organizations")
+}
+
+model PartyRelationship {
+  id                  String    @id @default(cuid())
+  tenantId            String    @map("tenant_id")
+  sourcePartyId       String    @map("source_party_id")
+  targetPartyId       String    @map("target_party_id")
+  relationshipType    String    @map("relationship_type")
+  ownershipPercentage Decimal?  @map("ownership_percentage") @db.Decimal(5, 2)
+  validFrom           DateTime  @default(now()) @map("valid_from")
+  validTo             DateTime? @map("valid_to")
+  sourceParty         Party     @relation("SourceParty", fields: [sourcePartyId], references: [id], onDelete: Cascade)
+  targetParty         Party     @relation("TargetParty", fields: [targetPartyId], references: [id], onDelete: Cascade)
+  tenant              Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("party_relationships")
+}
+
+model MemberSuccession {
+  id         String       @id @default(cuid())
+  positionId String       @map("position_id")
+  memberId   String       @map("member_id")
+  ranking    Int          @default(0)
+  member     TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  position   Position     @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@index([positionId])
+  @@map("member_successions")
+}
+
+model EmploymentContract {
+  id           String               @id @default(cuid())
+  memberId     String               @map("member_id")
+  tenantId     String               @map("tenant_id")
+  type         String
+  startDate    DateTime             @map("start_date")
+  endDate      DateTime?            @map("end_date")
+  status       String               @default("Active")
+  documentUrl  String?              @map("document_url")
+  member       TenantMember         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  remuneration RemunerationDetail[]
+
+  @@index([memberId])
+  @@map("employment_contracts")
+}
+
+model RemunerationDetail {
+  id            String             @id @default(cuid())
+  contractId    String             @map("contract_id")
+  amount        Float
+  currency      String             @default("AUD")
+  effectiveDate DateTime           @map("effective_date")
+  contract      EmploymentContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("remuneration_details")
+}
+
+model LeaveBalance {
+  id       String       @id @default(cuid())
+  memberId String       @map("member_id")
+  type     String
+  accrued  Float        @default(0)
+  used     Float        @default(0)
+  member   TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id        String       @id @default(cuid())
+  memberId  String       @map("member_id")
+  type      String
+  startDate DateTime     @map("start_date")
+  endDate   DateTime     @map("end_date")
+  status    String       @default("Pending")
+  reason    String?
+  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("leave_requests")
+}
+
+model Timesheet {
+  id          String           @id @default(cuid())
+  memberId    String           @map("member_id")
+  status      String           @default("Draft")
+  periodStart DateTime         @map("period_start")
+  periodEnd   DateTime         @map("period_end")
+  entries     TimesheetEntry[]
+  member      TenantMember     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("timesheets")
+}
+
+model TimesheetEntry {
+  id          String    @id @default(cuid())
+  timesheetId String    @map("timesheet_id")
+  date        DateTime
+  hours       Float
+  description String?
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+
+  @@map("timesheet_entries")
+}
+
+model Taxonomy {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  category    String
+  name        String
+  slug        String
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, category, slug])
+  @@index([tenantId])
+  @@map("taxonomies")
+}
+
+model GlobalList {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String           @map("tenant_id")
+  name        String
+  description String?
+  columns     Json?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  items       GlobalListItem[]
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+
+  @@unique([id, tenantId])
+  @@map("global_lists")
+}
+
+model GlobalListItem {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listId    String     @map("list_id") @db.Uuid
+  tenantId  String     @map("tenant_id")
+  data      Json
+  sortOrder Int        @default(0) @map("sort_order")
+  isActive  Boolean    @default(true) @map("is_active")
+  validFrom DateTime   @default(now()) @map("valid_from")
+  validTo   DateTime?  @map("valid_to")
+  list      GlobalList @relation(fields: [listId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@map("global_list_items")
+}
+
+model NexusConnector {
+  id              String            @id @default(cuid())
+  name            String
+  icon            String
+  category        String
+  edgeFunctionUrl String?           @map("edge_function_url")
+  ioSchema        Json              @map("io_schema")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  config          Json?             @map("config")
+  isCustom        Boolean           @default(false) @map("is_custom")
+  tenantId        String?           @map("tenant_id")
+  tenants         TenantConnector[]
+
+  @@map("nexus_connectors")
+}
+
+model TenantConnector {
+  id          String                  @id @default(cuid())
+  tenantId    String                  @map("tenant_id")
+  connectorId String                  @map("connector_id")
+  isActive    Boolean                 @default(false) @map("is_active")
+  displayName String                  @map("display_name")
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+  secrets     TenantConnectorSecret[]
+  connector   NexusConnector          @relation(fields: [connectorId], references: [id])
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, connectorId])
+  @@map("tenant_connectors")
+}
+
+model TenantConnectorSecret {
+  id                String          @id @default(cuid())
+  tenantConnectorId String          @map("tenant_connector_id")
+  secretKey         String          @map("secret_key")
+  secretValue       String          @map("secret_value")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  tenantConnector   TenantConnector @relation(fields: [tenantConnectorId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantConnectorId, secretKey])
+  @@map("tenant_connector_secrets")
 }
 
 enum PartyType {
@@ -380,261 +604,4 @@ enum EntityStatus {
   PENDING_REVIEW
   ACTIVE
   INACTIVE
-}
-
-model Party {
-  id                 String    @id @default(cuid())
-  tenantId           String    @map("tenant_id")
-  partyType          PartyType @map("party_type")
-  status             EntityStatus @default(DRAFT)
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
-  
-  // Agentic Context
-  createdBySwarmId   String?   @map("created_by_swarm_id")
-  creationContextLog String?   @map("creation_context_log") @db.Text
-  
-  // Search
-  embeddings      Unsupported("vector(768)")? // Requires pgvector extension
-  
-  tenant             Tenant    @relation(fields: [tenantId], references: [id])
-  person             Person?
-  organization       Organization?
-  sourceRelationships PartyRelationship[] @relation("SourceParty")
-  targetRelationships PartyRelationship[] @relation("TargetParty")
-
-  @@index([tenantId])
-  @@map("parties")
-}
-
-model Person {
-  partyId        String   @id @map("party_id")
-  firstName      String   @map("first_name")
-  lastName       String   @map("last_name")
-  dateOfBirth    DateTime? @map("date_of_birth")
-  isHumanInLoop Boolean  @default(false) @map("is_human_in_loop")
-  
-  party          Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
-
-  @@map("persons")
-}
-
-model Organization {
-  partyId           String   @id @map("party_id")
-  legalName         String   @map("legal_name")
-  orgStructureType  String   @map("org_structure_type") // Mapped to taxonomy
-  incorporationDate DateTime? @map("incorporation_date")
-  taxIdentifier     String?  @map("tax_identifier")
-  
-  party             Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
-
-  @@map("organizations")
-}
-
-model PartyRelationship {
-  id                  String   @id @default(cuid())
-  tenantId            String   @map("tenant_id")
-  sourcePartyId       String   @map("source_party_id")
-  targetPartyId       String   @map("target_party_id")
-  relationshipType    String   @map("relationship_type") // Mapped to taxonomy
-  ownershipPercentage Decimal? @map("ownership_percentage") @db.Decimal(5, 2)
-  validFrom           DateTime @default(now()) @map("valid_from")
-  validTo             DateTime? @map("valid_to")
-  
-  tenant              Tenant   @relation(fields: [tenantId], references: [id])
-  sourceParty         Party    @relation("SourceParty", fields: [sourcePartyId], references: [id], onDelete: Cascade)
-  targetParty         Party    @relation("TargetParty", fields: [targetPartyId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@map("party_relationships")
-}
-
-
-model MemberSuccession {
-  id         String   @id @default(cuid())
-  positionId String   @map("position_id")
-  memberId   String   @map("member_id")
-  ranking    Int      @default(0)
-  
-  position   Position     @relation(fields: [positionId], references: [id], onDelete: Cascade)
-  member     TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  @@index([positionId])
-  @@map("member_successions")
-}
-
-model EmploymentContract {
-  id          String   @id @default(cuid())
-  memberId    String   @map("member_id")
-  tenantId    String   @map("tenant_id")
-  type        String   // e.g. 'Permanent', 'Fixed Term', 'Casual'
-  startDate   DateTime @map("start_date")
-  endDate     DateTime? @map("end_date")
-  status      String   @default("Active")
-  documentUrl String?  @map("document_url")
-  
-  member      TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  remuneration RemunerationDetail[]
-
-  @@index([memberId])
-  @@map("employment_contracts")
-}
-
-model RemunerationDetail {
-  id          String   @id @default(cuid())
-  contractId  String   @map("contract_id")
-  amount      Float
-  currency    String   @default("AUD")
-  effectiveDate DateTime @map("effective_date")
-  
-  contract    EmploymentContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
-
-  @@map("remuneration_details")
-}
-
-model LeaveBalance {
-  id        String @id @default(cuid())
-  memberId  String @map("member_id")
-  type      String // e.g. 'Annual', 'Sick', 'Long Service'
-  accrued   Float  @default(0)
-  used      Float  @default(0)
-  
-  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  @@map("leave_balances")
-}
-
-model LeaveRequest {
-  id        String   @id @default(cuid())
-  memberId  String   @map("member_id")
-  type      String
-  startDate DateTime @map("start_date")
-  endDate   DateTime @map("end_date")
-  status    String   @default("Pending") // Pending, Approved, Rejected
-  reason    String?
-  
-  member    TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  @@map("leave_requests")
-}
-
-model Timesheet {
-  id          String   @id @default(cuid())
-  memberId    String   @map("member_id")
-  status      String   @default("Draft")
-  periodStart DateTime @map("period_start")
-  periodEnd   DateTime @map("period_end")
-  
-  member      TenantMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  entries     TimesheetEntry[]
-
-  @@map("timesheets")
-}
-
-model TimesheetEntry {
-  id          String   @id @default(cuid())
-  timesheetId String   @map("timesheet_id")
-  date        DateTime
-  hours       Float
-  description String?
-  
-  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
-
-  @@map("timesheet_entries")
-}
-
-model Taxonomy {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
-  category    String   // e.g., "ORG_TYPE", "RELATIONSHIP_TYPE"
-  name        String
-  slug        String
-  description String?
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, category, slug])
-  @@index([tenantId])
-  @@map("taxonomies")
-}
-
-model GlobalList {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id")
-  name        String
-  description String?
-  columns     Json?    // [{ id: string, name: string, type: string, options?: any }]
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  tenant      Tenant           @relation(fields: [tenantId], references: [id])
-  items       GlobalListItem[]
-
-  @@unique([id, tenantId])
-  @@map("global_lists")
-}
-
-model GlobalListItem {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  listId      String    @map("list_id") @db.Uuid
-  tenantId    String    @map("tenant_id")
-  data        Json      // { columnId: value }
-  sortOrder   Int       @default(0) @map("sort_order")
-  isActive    Boolean   @default(true) @map("is_active")
-  validFrom   DateTime  @default(now()) @map("valid_from")
-  validTo     DateTime? @map("valid_to")
-
-  list        GlobalList @relation(fields: [listId, tenantId], references: [id, tenantId], onDelete: Cascade)
-
-  @@map("global_list_items")
-}
-
-model NexusConnector {
-  id              String   @id @default(cuid())
-  name            String
-  icon            String
-  category        String
-  edgeFunctionUrl String?  @map("edge_function_url")
-  ioSchema        Json     @map("io_schema")
-  isCustom        Boolean  @default(false) @map("is_custom")
-  tenantId        String?  @map("tenant_id")
-  config          Json?    @map("config")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  tenants         TenantConnector[]
-
-  @@map("nexus_connectors")
-}
-
-model TenantConnector {
-  id              String   @id @default(cuid())
-  tenantId        String   @map("tenant_id")
-  connectorId     String   @map("connector_id")
-  isActive        Boolean  @default(false) @map("is_active")
-  displayName     String   @map("display_name")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
-  connector       NexusConnector @relation(fields: [connectorId], references: [id])
-  secrets         TenantConnectorSecret[]
-
-  @@unique([tenantId, connectorId])
-  @@map("tenant_connectors")
-}
-
-model TenantConnectorSecret {
-  id                String   @id @default(cuid())
-  tenantConnectorId String   @map("tenant_connector_id")
-  secretKey         String   @map("secret_key")
-  secretValue       String   @map("secret_value")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  tenantConnector   TenantConnector @relation(fields: [tenantConnectorId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantConnectorId, secretKey])
-  @@map("tenant_connector_secrets")
 }

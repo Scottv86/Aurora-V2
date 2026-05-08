@@ -97,7 +97,7 @@ import {
   Copy
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
-import { Workflow } from '../types/platform';
+import { Workflow, FieldType, Tab, VisibilityRule } from '../types/platform';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   DndContext,
@@ -448,25 +448,7 @@ const ConnectionLine = ({ hoveredMapping, containerRef }: {
 
 // --- Types ---
 
-export type FieldType = 
-  | 'text' | 'longText' | 'textarea' | 'number' | 'checkbox' | 'boolean' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select' | 'file'
-  | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
-  | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module';
 
-export interface VisibilityRule {
-  id: string;
-  type: 'rule' | 'group';
-  fieldId?: string;
-  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
-  value?: string;
-  valueType?: 'literal' | 'field';
-  logicalOperator?: 'AND' | 'OR';
-  rules?: VisibilityRule[];
-  action?: 'show' | 'hide';
-  isCollapsed?: boolean;
-  name?: string;
-}
 
 export interface UserFilter {
   id: string;
@@ -540,11 +522,6 @@ export interface Field {
   parentId?: string;
 }
 
-export interface Tab {
-  id: string;
-  label: string;
-  visibilityRule?: VisibilityRule;
-}
 
 export interface Column {
   id: string;
@@ -1310,7 +1287,7 @@ export const ModuleEditor = () => {
   const id = routeId || 'new';
   const navigate = useNavigate();
   const { tenant, modules, refreshModules, setBreadcrumbOverride } = usePlatform();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const { lists: globalLists } = useGlobalLists();
   const { teams } = useTeams();
   const { positions } = usePositions();
@@ -2458,6 +2435,8 @@ export const ModuleEditor = () => {
   };
 
   const selectedField = selectedId ? findFieldRecursive(layout, selectedId) : null;
+  const parentField = (selectedField && selectedField.parentId) ? findFieldRecursive(layout, selectedField.parentId) : null;
+  const isAccordionSection = selectedField?.type === 'group' && parentField?.type === 'accordion';
   const selectedTab = selectedId ? tabs.find(t => t.id === selectedId) : null;
 
   const updateTab = (tabId: string, updates: Partial<Tab>) => {
@@ -2930,7 +2909,7 @@ export const ModuleEditor = () => {
                                const type = block.type?.toLowerCase();
                                if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
 
-                               if ((activeTab as string) === 'preview' && !isFieldVisible(block, {})) return false;
+                               if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
 
                                if (isNested) return true;
                                return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
@@ -6755,7 +6734,7 @@ export const ModuleEditor = () => {
                         />
                       </div>
 
-                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(selectedField.type) && (
+                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button'].includes(selectedField.type) && (
                         <>
                           <div className="space-y-2">
                             <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Helper Text</label>
@@ -6802,7 +6781,7 @@ export const ModuleEditor = () => {
                         </>
                       )}
 
-                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(selectedField.type) && (
+                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button'].includes(selectedField.type) && (
                         <div className="pt-2">
                           <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
                             <div className="flex items-center gap-3">
@@ -7361,145 +7340,231 @@ export const ModuleEditor = () => {
 
                             <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
 
-                            <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
-                              <div className="flex items-center gap-3">
-                                <div className={cn(
-                                  "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                  selectedField.collapsible ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
-                                )}>
-                                  <ChevronDown size={14} className={cn("transition-transform", selectedField.collapsible ? "" : "-rotate-90")} />
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Collapsible Panel</span>
-                                  <span className="block text-[9px] text-zinc-500">{selectedField.collapsible ? 'User can collapse this group' : 'Group is always expanded'}</span>
-                                </div>
-                              </div>
-                              <button 
-                                onClick={() => updateField(selectedField.id, { collapsible: !selectedField.collapsible })}
-                                className={cn(
-                                  "w-10 h-5 rounded-full relative transition-colors duration-300",
-                                  selectedField.collapsible ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
-                                )}
-                              >
-                                <motion.div 
-                                  animate={{ x: selectedField.collapsible ? 22 : 2 }}
-                                  className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
-                                />
-                              </button>
-                            </label>
+                            {!['accordion', 'tabs_nested'].includes(selectedField.type) && !isAccordionSection && (
+                              <>
+                                <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
+                                  <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                      selectedField.collapsible ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                                    )}>
+                                      <ChevronDown size={14} className={cn("transition-transform", selectedField.collapsible ? "" : "-rotate-90")} />
+                                    </div>
+                                    <div>
+                                      <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Collapsible Panel</span>
+                                      <span className="block text-[9px] text-zinc-500">{selectedField.collapsible ? 'User can collapse this group' : 'Group is always expanded'}</span>
+                                    </div>
+                                  </div>
+                                  <button 
+                                    onClick={() => updateField(selectedField.id, { collapsible: !selectedField.collapsible })}
+                                    className={cn(
+                                      "w-10 h-5 rounded-full relative transition-colors duration-300",
+                                      selectedField.collapsible ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                                    )}
+                                  >
+                                    <motion.div 
+                                      animate={{ x: selectedField.collapsible ? 22 : 2 }}
+                                      className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
+                                    />
+                                  </button>
+                                </label>
 
-                            {selectedField.collapsible && (
-                              <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
-                                <div className="flex items-center gap-3">
-                                  <div className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                    selectedField.defaultCollapsed ? "bg-amber-500/10 text-amber-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
-                                  )}>
-                                    <EyeOff size={14} />
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Default Collapsed</span>
-                                    <span className="block text-[9px] text-zinc-500">{selectedField.defaultCollapsed ? 'Starts hidden' : 'Starts visible'}</span>
-                                  </div>
-                                </div>
-                                <button 
-                                  onClick={() => updateField(selectedField.id, { defaultCollapsed: !selectedField.defaultCollapsed })}
-                                  className={cn(
-                                    "w-10 h-5 rounded-full relative transition-colors duration-300",
-                                    selectedField.defaultCollapsed ? "bg-amber-500" : "bg-zinc-300 dark:bg-zinc-700"
-                                  )}
-                                >
-                                  <motion.div 
-                                    animate={{ x: selectedField.defaultCollapsed ? 22 : 2 }}
-                                    className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
-                                  />
-                                </button>
-                              </label>
+                                {selectedField.collapsible && (
+                                  <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
+                                    <div className="flex items-center gap-3">
+                                      <div className={cn(
+                                        "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                        selectedField.defaultCollapsed ? "bg-amber-500/10 text-amber-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                                      )}>
+                                        <EyeOff size={14} />
+                                      </div>
+                                      <div>
+                                        <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Default Collapsed</span>
+                                        <span className="block text-[9px] text-zinc-500">{selectedField.defaultCollapsed ? 'Starts hidden' : 'Starts visible'}</span>
+                                      </div>
+                                    </div>
+                                    <button 
+                                      onClick={() => updateField(selectedField.id, { defaultCollapsed: !selectedField.defaultCollapsed })}
+                                      className={cn(
+                                        "w-10 h-5 rounded-full relative transition-colors duration-300",
+                                        selectedField.defaultCollapsed ? "bg-amber-500" : "bg-zinc-300 dark:bg-zinc-700"
+                                      )}
+                                    >
+                                      <motion.div 
+                                        animate={{ x: selectedField.defaultCollapsed ? 22 : 2 }}
+                                        className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
+                                      />
+                                    </button>
+                                  </label>
+                                )}
+                              </>
                             )}
                           </div>
 
                           <div className="h-px bg-zinc-200 dark:bg-zinc-800" />
 
-                          <div className="space-y-4">
-                          <div className="flex items-center justify-between px-1">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Nested Elements</label>
-                            {selectedField.type === 'repeatableGroup' && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9px] font-bold text-zinc-400 uppercase">View:</span>
-                                <select 
-                                  value={selectedField.variant || 'table'}
-                                  onChange={(e) => updateField(selectedField.id, { variant: e.target.value })}
-                                  className="bg-zinc-100 dark:bg-zinc-800 border-none rounded-md px-2 py-0.5 text-[9px] font-bold text-zinc-600 dark:text-zinc-400 focus:ring-0"
+                          {selectedField.type === 'accordion' ? (
+                            <div className="space-y-6">
+                              <div className="flex items-center justify-between px-1">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Accordion Sections</label>
+                                <button 
+                                  onClick={() => {
+                                    const newSection = {
+                                      id: `section-${Date.now()}`,
+                                      type: 'group' as FieldType,
+                                      label: `New Section ${ (selectedField.fields?.length || 0) + 1 }`,
+                                      fields: []
+                                    };
+                                    updateField(selectedField.id, { fields: [...(selectedField.fields || []), newSection] });
+                                  }}
+                                  className="text-[10px] font-bold text-indigo-500 hover:text-indigo-400 transition-colors uppercase tracking-widest"
                                 >
-                                  <option value="table">Table</option>
-                                  <option value="list">Master/Detail</option>
-                                </select>
+                                  Add Section
+                                </button>
                               </div>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            {(selectedField.fields || []).map((nestedField, idx) => (
-                              <div key={nestedField.id} className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-medium text-white">{nestedField.label}</span>
-                                  <button 
-                                    onClick={() => {
-                                      const newFields = [...(selectedField.fields || [])];
-                                      newFields.splice(idx, 1);
-                                      updateField(selectedField.id, { fields: newFields });
-                                    }}
-                                    className="p-1 text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <input 
-                                    type="text" 
-                                    value={nestedField.label}
-                                    onChange={(e) => {
-                                      const newFields = [...(selectedField.fields || [])];
-                                      newFields[idx] = { ...nestedField, label: e.target.value };
-                                      updateField(selectedField.id, { fields: newFields });
-                                    }}
-                                    placeholder="Label"
-                                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                  />
-                                  <select
-                                    value={nestedField.type}
-                                    onChange={(e) => {
-                                      const newFields = [...(selectedField.fields || [])];
-                                      newFields[idx] = { ...nestedField, type: e.target.value as FieldType };
-                                      updateField(selectedField.id, { fields: newFields });
-                                    }}
-                                    className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 appearance-none"
-                                  >
-                                    {FIELD_CATEGORIES.flatMap(c => c.fields).filter(f => !['fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(f.id)).map(f => (
-                                      <option key={f.id} value={f.id}>{f.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
+                              
+                              <div className="space-y-3">
+                                {(selectedField.fields || []).map((section, idx) => (
+                                  <div key={section.id} className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[1.5rem] space-y-4 group/section">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                                          <DynamicIcon name={section.iconName || 'Folder'} size={12} />
+                                        </div>
+                                        <div>
+                                          <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Section {idx + 1}</p>
+                                          <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">{section.label}</p>
+                                        </div>
+                                      </div>
+                                      <button 
+                                        onClick={() => {
+                                          const newFields = (selectedField.fields || []).filter(f => f.id !== section.id);
+                                          updateField(selectedField.id, { fields: newFields });
+                                        }}
+                                        className="p-1.5 text-zinc-500 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                      <div className="space-y-1.5">
+                                        <label className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest px-1">Subtitle / Label</label>
+                                        <input 
+                                          type="text" 
+                                          value={section.label}
+                                          onChange={(e) => {
+                                            const newFields = [...(selectedField.fields || [])];
+                                            newFields[idx] = { ...section, label: e.target.value };
+                                            updateField(selectedField.id, { fields: newFields });
+                                          }}
+                                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                                        />
+                                      </div>
+                                      
+                                      <div className="flex items-center justify-between pt-1">
+                                        <span className="text-[9px] text-zinc-500 font-medium">{section.fields?.length || 0} Fields Nested</span>
+                                        <button 
+                                          onClick={() => setSelectedId(section.id)}
+                                          className="text-[9px] font-bold text-indigo-500 hover:text-indigo-400 uppercase tracking-widest flex items-center gap-1"
+                                        >
+                                          Configure Fields
+                                          <ArrowRight size={10} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+
+                                {(!selectedField.fields || selectedField.fields.length === 0) && (
+                                  <div className="py-8 text-center border-2 border-dashed border-zinc-100 dark:border-zinc-800 rounded-[1.5rem]">
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">No Sections Added</p>
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                            <button 
-                              onClick={() => {
-                                const newFields = [...(selectedField.fields || []), {
-                                  id: `nested-${Date.now()}`,
-                                  type: 'text' as FieldType,
-                                  label: 'New Element',
-                                  required: false
-                                }];
-                                updateField(selectedField.id, { fields: newFields });
-                              }}
-                              className="w-full py-2 border border-dashed border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
-                            >
-                              <Plus size={14} />
-                              Add Nested Element
-                            </button>
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between px-1">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Nested Elements</label>
+                                {selectedField.type === 'repeatableGroup' && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-bold text-zinc-400 uppercase">View:</span>
+                                    <select 
+                                      value={selectedField.variant || 'table'}
+                                      onChange={(e) => updateField(selectedField.id, { variant: e.target.value })}
+                                      className="bg-zinc-100 dark:bg-zinc-800 border-none rounded-md px-2 py-0.5 text-[9px] font-bold text-zinc-600 dark:text-zinc-400 focus:ring-0"
+                                    >
+                                      <option value="table">Table</option>
+                                      <option value="list">Master/Detail</option>
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                {(selectedField.fields || []).map((nestedField, idx) => (
+                                  <div key={nestedField.id} className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-medium text-zinc-900 dark:text-white">{nestedField.label}</span>
+                                      <button 
+                                        onClick={() => {
+                                          const newFields = [...(selectedField.fields || [])];
+                                          newFields.splice(idx, 1);
+                                          updateField(selectedField.id, { fields: newFields });
+                                        }}
+                                        className="p-1 text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <input 
+                                        type="text" 
+                                        value={nestedField.label}
+                                        onChange={(e) => {
+                                          const newFields = [...(selectedField.fields || [])];
+                                          newFields[idx] = { ...nestedField, label: e.target.value };
+                                          updateField(selectedField.id, { fields: newFields });
+                                        }}
+                                        placeholder="Label"
+                                        className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                      />
+                                      <select
+                                        value={nestedField.type}
+                                        onChange={(e) => {
+                                          const newFields = [...(selectedField.fields || [])];
+                                          newFields[idx] = { ...nestedField, type: e.target.value as FieldType };
+                                          updateField(selectedField.id, { fields: newFields });
+                                        }}
+                                        className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 appearance-none"
+                                      >
+                                        {FIELD_CATEGORIES.flatMap(c => c.fields).filter(f => !['fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(f.id)).map(f => (
+                                          <option key={f.id} value={f.id}>{f.label}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                ))}
+                                <button 
+                                  onClick={() => {
+                                    const newFields = [...(selectedField.fields || []), {
+                                      id: `nested-${Date.now()}`,
+                                      type: 'text' as FieldType,
+                                      label: 'New Element',
+                                      required: false
+                                    }];
+                                    updateField(selectedField.id, { fields: newFields });
+                                  }}
+                                  className="w-full py-2 border border-dashed border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                  <Plus size={14} />
+                                  Add Nested Element
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
 
                       {selectedField.type === 'calculation' && (
                         <div className="space-y-4">

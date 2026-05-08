@@ -121,7 +121,7 @@ export const OrgVisualizer = () => {
         <Briefcase size={48} className="mb-4 text-zinc-200" />
         <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">No Structure Found</h3>
         <p className="text-zinc-500 max-w-sm text-center mt-2 text-sm leading-relaxed">
-          Assign roles and reporting lines to see your organization chart.
+          Assign positions and reporting lines to see your organization chart.
         </p>
       </div>
     );
@@ -227,7 +227,7 @@ export const OrgVisualizer = () => {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   whileHover={{ y: -6, scale: 1.05 }}
-                  onClick={() => navigate(`/workspace/settings/workforce/roles/${node.data.id}`)}
+                  onClick={() => navigate(`/workspace/settings/workforce/positions/${node.data.id}`)}
                   className={`flex flex-col h-full rounded-2xl border bg-white p-3 shadow-xl transition-all cursor-pointer dark:bg-zinc-900 ${
                     searchQuery && (node.data.title.toLowerCase().includes(searchQuery.toLowerCase()) || node.data.positionNumber.toLowerCase().includes(searchQuery.toLowerCase()))
                       ? 'border-blue-500 ring-4 ring-blue-500/20' 
@@ -301,7 +301,7 @@ export const OrgVisualizer = () => {
         </div>
         <div className="h-3 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
         <div className="flex items-center gap-2 text-zinc-900 dark:text-white">
-          Total Roles: <span className="text-blue-600">{positions.length}</span>
+          Total Positions: <span className="text-blue-600">{positions.length}</span>
         </div>
       </div>
     </div>

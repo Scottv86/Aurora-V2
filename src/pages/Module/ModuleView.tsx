@@ -31,7 +31,7 @@ import { useModalStack } from '../../context/ModalStackContext';
 export const ModuleView = () => {
   const { moduleId } = useParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const { tenant, isLoading: platformLoading } = usePlatform();
   useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
@@ -590,7 +590,7 @@ export const ModuleView = () => {
                       })
                       .sort((a, b) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
                       .map((field: ModuleField) => {
-                        if (!isFieldVisible(field, newEntryData)) return null;
+                        if (!isFieldVisible(field, newEntryData, { user })) return null;
                         
                         return (
                             <div 
@@ -639,7 +639,7 @@ export const ModuleView = () => {
                               <CollapsibleFieldGroup field={field}>
                                 <div className="space-y-4">
                                   {(field.fields || []).map((nestedField: any) => {
-                                    if (!isFieldVisible(nestedField, newEntryData[field.id] || {})) return null;
+                                    if (!isFieldVisible(nestedField, newEntryData[field.id] || {}, { user })) return null;
                                     return (
                                     <div key={nestedField.id} className="space-y-2">
                                       <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 relative group/label">

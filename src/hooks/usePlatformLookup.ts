@@ -9,6 +9,7 @@ import { usePlatform } from './usePlatform';
 import { useAuth } from './useAuth';
 import { LookupFilter } from '../types/platform';
 import { useGlobalList } from './useGlobalList';
+import { API_BASE_URL } from '../config';
 
 export interface LookupItem {
   id: string;
@@ -63,7 +64,7 @@ export const usePlatformLookup = (field: any) => {
   
   const { members: users, loading: usersLoading } = useUsers(lookupSource === 'platform' && platformEntity === 'users');
   const { teams, loading: teamsLoading } = useTeams(lookupSource === 'platform' && platformEntity === 'teams');
-  const { positions: roles, loading: rolesLoading } = usePositions(lookupSource === 'platform' && platformEntity === 'roles');
+  const { positions, loading: positionsLoading } = usePositions(lookupSource === 'platform' && (platformEntity === 'roles' || platformEntity === 'positions'));
   const { groups: securityGroups, loading: groupsLoading } = usePermissionGroups(lookupSource === 'platform' && platformEntity === 'security_groups');
   const { list: gList, items: gItems, loading: gLoading } = useGlobalList(lookupSource === 'global_list' ? globalListId : null);
   
@@ -92,30 +93,38 @@ export const usePlatformLookup = (field: any) => {
           ...u 
         })));
         setLoading(usersLoading);
-        return;
-      }
-      if (entity === 'teams') {
-        setRawData(teams.map(t => ({ id: t.id, name: lookupDisplayField ? t[lookupDisplayField] : t.name, ...t })));
+      } else if (entity === 'teams') {
+        setRawData(teams.map(t => ({ 
+          id: t.id, 
+          name: lookupDisplayField ? t[lookupDisplayField] : t.name, 
+          ...t 
+        })));
         setLoading(teamsLoading);
-        return;
-      }
-      if (entity === 'roles') {
-        setRawData(roles.map(r => ({ id: r.id, name: lookupDisplayField ? r[lookupDisplayField] : r.name, ...r })));
-        setLoading(rolesLoading);
-        return;
-      }
-      if (entity === 'security_groups') {
-        setRawData(securityGroups.map(g => ({ id: g.id, name: lookupDisplayField ? g[lookupDisplayField] : g.name, ...g })));
+      } else if (entity === 'roles' || entity === 'positions') {
+        setRawData(positions.map(p => ({ 
+          id: p.id, 
+          name: lookupDisplayField ? p[lookupDisplayField] : (p.title || p.name), 
+          ...p 
+        })));
+        setLoading(positionsLoading);
+      } else if (entity === 'security_groups') {
+        setRawData(securityGroups.map(g => ({ 
+          id: g.id, 
+          name: lookupDisplayField ? g[lookupDisplayField] : g.name, 
+          ...g 
+        })));
         setLoading(groupsLoading);
-        return;
-      }
-      
-      // If it's "modules" but no specific target, show the list of platform modules (sync)
-      if (entity === 'modules' && !targetPlatformModuleId) {
+      } else if (entity === 'modules' && !targetPlatformModuleId) {
         setRawData(MODULES.map(m => ({ id: m.id, name: m.name })));
         setLoading(false);
         return;
       }
+      
+      // If it's a platform source but not one of the local ones above, 
+      // and it's not the async 'modules' with targetPlatformModuleId, we return.
+      // But we must NOT return if it's an async case.
+      const isAsyncPlatform = entity === 'modules' && targetPlatformModuleId;
+      if (!isAsyncPlatform) return;
     }
 
     // Handle Global Lists (sync with useGlobalList)
@@ -150,7 +159,9 @@ export const usePlatformLookup = (field: any) => {
           let results: any[] = [];
           
           if (lookupSource === 'module_records' && targetModuleId) {
-            const res = await fetch(`http://localhost:3001/api/data/records?moduleId=${targetModuleId}`, {
+            const url = `${API_BASE_URL}/api/data/records?moduleId=${targetModuleId}`;
+            console.log(`[usePlatformLookup] Fetching module records: ${url}`, { tenantId: tenant?.id });
+            const res = await fetch(url, {
               headers: {
                 'Authorization': `Bearer ${session?.access_token}`,
                 'x-tenant-id': tenant?.id || ''
@@ -158,16 +169,21 @@ export const usePlatformLookup = (field: any) => {
             });
             if (res.ok) {
               const json = await res.json();
+              console.log(`[usePlatformLookup] Received module records:`, json.records?.length || 0);
               results = (json.records || []).map((r: any) => ({
                 id: r.id,
                 name: lookupDisplayField ? r[lookupDisplayField] : (r.fullName || r.name || r.title || r.subject || r.subjectLine || r.id),
                 ...r
               }));
+            } else {
+              console.error(`[usePlatformLookup] Failed to fetch module records: ${res.status} ${res.statusText}`);
             }
           } else if (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) {
             const platformMod = PLATFORM_MODULES.find(m => m.id === targetPlatformModuleId);
             if (platformMod) {
-              const res = await fetch(`http://localhost:3001${platformMod.apiEndpoint}`, {
+              const url = `${API_BASE_URL}${platformMod.apiEndpoint}`;
+              console.log(`[usePlatformLookup] Fetching platform module: ${url}`, { tenantId: tenant?.id });
+              const res = await fetch(url, {
                 headers: {
                   'Authorization': `Bearer ${session?.access_token}`,
                   'x-tenant-id': tenant?.id || ''
@@ -175,24 +191,49 @@ export const usePlatformLookup = (field: any) => {
               });
               if (res.ok) {
                 const json = await res.json();
+                console.log(`[usePlatformLookup] Received platform records for ${targetPlatformModuleId}:`, Array.isArray(json) ? json.length : (json.records?.length || 0));
                 results = (Array.isArray(json) ? json : (json.records || [])).map((r: any) => {
-                  if (lookupDisplayField && r[lookupDisplayField]) {
-                    return { id: r.id, name: r[lookupDisplayField], ...r };
-                  }
+                  let item = { ...r };
+                  
+                  // Special handling for People & Organisations: Flatten nested data
                   if (platformMod.id === 'people-organisations') {
-                    const name = r.partyType === 'PERSON' 
-                      ? `${r.person?.firstName} ${r.person?.lastName}`
-                      : r.organization?.legalName;
-                    return { 
-                      id: r.id, 
-                      name: name || r.id, 
-                      ...r,
-                      ...(r.person || {}),
-                      ...(r.organization || {})
+                    item = { 
+                      ...item, 
+                      ...(r.person || {}), 
+                      ...(r.organization || {}) 
                     };
                   }
-                  return { id: r.id, name: r.name || r.id, ...r };
+
+                  // 1. Priority: Explicit lookupDisplayField
+                  if (lookupDisplayField && item[lookupDisplayField]) {
+                    // Smart override: If they selected 'firstName' for a Person, show full name for better search context
+                    if (platformMod.id === 'people-organisations' && lookupDisplayField === 'firstName' && r.partyType === 'PERSON') {
+                      const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : null;
+                      if (personName) {
+                        return { id: r.id, name: personName, ...item };
+                      }
+                    }
+                    return { id: r.id, name: String(item[lookupDisplayField]), ...item };
+                  }
+
+                  // 2. Special Fallback: People & Organisations smart name
+                  if (platformMod.id === 'people-organisations') {
+                    const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : null;
+                    const orgName = r.organization?.legalName;
+                    const name = r.partyType === 'PERSON' ? personName : orgName;
+                    
+                    return { 
+                      id: r.id, 
+                      name: name || r.id || 'Unnamed Record', 
+                      ...item
+                    };
+                  }
+
+                  // 3. General Fallback
+                  return { id: r.id, name: r.name || r.id, ...item };
                 });
+              } else {
+                console.error(`[usePlatformLookup] Failed to fetch platform records: ${res.status} ${res.statusText}`);
               }
             }
           }
@@ -211,7 +252,7 @@ export const usePlatformLookup = (field: any) => {
     configKey,
     users, usersLoading,
     teams, teamsLoading,
-    roles, rolesLoading,
+    positions, positionsLoading,
     securityGroups, groupsLoading,
     gItems, gLoading,
     session?.access_token

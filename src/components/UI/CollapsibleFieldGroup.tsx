@@ -70,7 +70,6 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
     <div className={cn(
       "overflow-hidden transition-all duration-300",
       isCard ? "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-xl shadow-black/5" :
-      isAccordion ? "bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-3xl" :
       "bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem]",
       isCollapsed ? "shadow-sm" : "shadow-lg shadow-black/5",
       className

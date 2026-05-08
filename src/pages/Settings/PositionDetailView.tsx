@@ -203,7 +203,7 @@ export const PositionDetailView = () => {
                       <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Post Description & Requirements</label>
                       <textarea 
                         className="w-full h-32 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl p-4 text-sm resize-none focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Describe the responsibilities associated with this role..."
+                        placeholder="Describe the responsibilities associated with this position..."
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                       />

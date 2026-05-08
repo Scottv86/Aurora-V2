@@ -37,6 +37,7 @@ import { Module, ModuleField } from '../../types/platform';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
+import { AccordionContainer } from '../../components/UI/AccordionContainer';
 
 interface WorkflowState {
   currentNodeId: string;
@@ -51,8 +52,9 @@ interface WorkflowState {
 export const RecordDetailView = () => {
   const { moduleId, recordId } = useParams();
   const navigate = useNavigate();
-  const { session } = useAuth();
-  const { tenant, isLoading: platformLoading, setBreadcrumbOverride } = usePlatform();
+  const auth = useAuth();
+  const { session, user: supabaseUser } = auth;
+  const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride } = usePlatform();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [record, setRecord] = useState<Record<string, any> | null>(null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
@@ -104,11 +106,25 @@ export const RecordDetailView = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeFieldId, editData]);
 
+  const visibilityContext = useMemo(() => {
+    return {
+      user: platformUser || supabaseUser,
+      tenant,
+      session
+    };
+  }, [platformUser, supabaseUser, tenant, session]);
+  
+  const visibleTabs = useMemo(() => {
+    if (!moduleData?.tabs) return [];
+    const filtered = moduleData.tabs.filter(tab => isFieldVisible(tab, editData || record || {}, visibilityContext));
+    return filtered;
+  }, [moduleData?.tabs, editData, record, visibilityContext]);
+
   useEffect(() => {
-    if (moduleData?.tabs && moduleData.tabs.length > 0 && !activeTabId) {
-      setActiveTabId(moduleData.tabs[0].id);
+    if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find(t => t.id === activeTabId))) {
+      setActiveTabId(visibleTabs[0].id);
     }
-  }, [moduleData, activeTabId]);
+  }, [visibleTabs, activeTabId]);
 
   const allFields = useMemo(() => {
     return flattenFields(moduleData?.layout || []) as ModuleField[];
@@ -324,13 +340,13 @@ export const RecordDetailView = () => {
       if (!f.required) return false;
       
       // Check visibility of the field itself
-      if (!isFieldVisible(f, data)) return false;
+      if (!isFieldVisible(f, data, visibilityContext)) return false;
       
       // Check visibility of all parent containers
       let currentParentId = fieldToGroupMap[f.id];
       while (currentParentId) {
         const parentField = allFields.find(p => p.id === currentParentId);
-        if (parentField && !isFieldVisible(parentField, data)) return false;
+        if (parentField && !isFieldVisible(parentField, data, visibilityContext)) return false;
         currentParentId = fieldToGroupMap[currentParentId];
       }
 
@@ -536,6 +552,92 @@ export const RecordDetailView = () => {
     }
   };
 
+  const renderNestedField = (nestedField: any) => {
+    if (!isFieldVisible(nestedField, editData || record || {}, visibilityContext)) return null;
+    return (
+      <div 
+        key={nestedField.id} 
+        className={cn(
+          "p-4 rounded-3xl transition-all relative border-2 group/nestedField",
+          activeFieldId === nestedField.id 
+            ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
+            : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
+          !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
+        )}
+        data-field-id={nestedField.id}
+        data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
+        onClick={(e) => {
+          if (!activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
+            e.stopPropagation();
+            setEditData(record);
+            setActiveFieldId(nestedField.id);
+          }
+        }}
+      >
+        {activeFieldId === nestedField.id && (
+          <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
+            {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin" />}
+            {savingFieldId === nestedField.id ? 'Saving' : 'Editing'}
+          </div>
+        )}
+        {activeFieldId === nestedField.id && !savingFieldId && (
+          <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
+              className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-500 transition-all hover:scale-110 active:scale-95"
+              title="Confirm Changes"
+            >
+              <Check size={12} />
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
+              className="p-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-full shadow-lg border border-zinc-800 transition-all hover:scale-110 active:scale-95"
+              title="Cancel Changes"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+          {nestedField.label}
+          {nestedField.required && <span className="text-rose-500">*</span>}
+          {nestedField.tooltip && (
+            <div className="relative cursor-help">
+              <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                {nestedField.tooltip}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+              </div>
+            </div>
+          )}
+          {!activeFieldId && (
+            ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
+              <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
+            ) : (
+              !['datatable', 'duallist'].includes(nestedField.type) && (
+                <Edit2 size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-indigo-500" />
+              )
+            )
+          )}
+        </label>
+        <FieldInput 
+          field={nestedField}
+          value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? nestedField.defaultValue}
+          onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleUpdateEntry();
+            if (e.key === 'Escape') setActiveFieldId(null);
+          }}
+          readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
+          usersData={usersData}
+        />
+        {nestedField.helperText && (
+          <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{nestedField.helperText}</p>
+        )}
+      </div>
+    );
+  };
+
   if (loading || platformLoading) return (
     <div className="h-64 flex items-center justify-center">
       <Loader2 className="animate-spin text-indigo-500" size={32} />
@@ -592,7 +694,7 @@ export const RecordDetailView = () => {
           <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
             {moduleData?.tabs && moduleData.tabs.length > 0 && (
               <div className="flex gap-2 p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar">
-                {(moduleData.tabs || []).map((tab: any) => (
+                {visibleTabs.map((tab: any) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTabId(tab.id)}
@@ -619,13 +721,10 @@ export const RecordDetailView = () => {
                     const visibleFields = compactLayout(
                       (moduleData.layout || [])
                         .filter((field: ModuleField) => {
-                          const isVisible = isFieldVisible(field, editData || record);
-                          if (['group', 'fieldGroup'].includes(field.type)) {
-                            console.log(`[Visibility Debug] Group ${field.id} (${field.label}): visible = ${isVisible}`, { rule: field.visibilityRule, data: editData || record });
-                          }
-                          if (!moduleData.tabs || moduleData.tabs.length === 0) return isVisible;
-                          const firstTabId = moduleData.tabs[0]?.id;
-                          const fieldTabId = field.tabId || firstTabId;
+                          const isVisible = isFieldVisible(field, editData || record || {}, visibilityContext);
+                          if (visibleTabs.length === 0) return isVisible;
+                          const firstVisibleTabId = visibleTabs[0]?.id;
+                          const fieldTabId = field.tabId || firstVisibleTabId;
                           return fieldTabId === activeTabId && isVisible;
                         })
                         .map((field: ModuleField) => ({
@@ -719,97 +818,23 @@ export const RecordDetailView = () => {
                             )}>
                               {field.label}
                             </div>
-                          ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (
+                          ) : field.type === 'accordion' ? (
+                            <AccordionContainer 
+                              field={field}
+                              renderContent={(section) => (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  {(section.fields || []).map(renderNestedField)}
+                                </div>
+                              )}
+                            />
+                          ) : ['fieldGroup', 'group', 'card', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (
                             <CollapsibleFieldGroup 
                               field={field}
                               isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
                               onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
                             >
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {(field.fields || []).map((nestedField: any) => {
-                                  if (!isFieldVisible(nestedField, editData || record)) return null;
-                                  return (
-                                  <div 
-                                    key={nestedField.id} 
-                                    className={cn(
-                                      "p-4 rounded-3xl transition-all relative border-2 group/nestedField",
-                                      activeFieldId === nestedField.id 
-                                        ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
-                                        : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
-                                      !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
-                                    )}
-                                    data-field-id={nestedField.id}
-                                    data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
-                                    onClick={(e) => {
-                                      if (!activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
-                                        e.stopPropagation();
-                                        setEditData(record);
-                                        setActiveFieldId(nestedField.id);
-                                      }
-                                    }}
-                                  >
-                                    {activeFieldId === nestedField.id && (
-                                      <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
-                                        {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin" />}
-                                        {savingFieldId === nestedField.id ? 'Saving' : 'Editing'}
-                                      </div>
-                                    )}
-                                    {activeFieldId === nestedField.id && !savingFieldId && (
-                                      <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
-                                          className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-500 transition-all hover:scale-110 active:scale-95"
-                                          title="Confirm Changes"
-                                        >
-                                          <Check size={12} />
-                                        </button>
-                                        <button 
-                                          onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
-                                          className="p-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-full shadow-lg border border-zinc-800 transition-all hover:scale-110 active:scale-95"
-                                          title="Cancel Changes"
-                                        >
-                                          <X size={12} />
-                                        </button>
-                                      </div>
-                                    )}
-                                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                                      {nestedField.label}
-                                      {nestedField.required && <span className="text-rose-500">*</span>}
-                                      {nestedField.tooltip && (
-                                        <div className="relative cursor-help">
-                                          <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                            {nestedField.tooltip}
-                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
-                                          </div>
-                                        </div>
-                                      )}
-                                      {!activeFieldId && (
-                                        ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
-                                          <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
-                                        ) : (
-                                          !['datatable', 'duallist'].includes(nestedField.type) && (
-                                            <Edit2 size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-indigo-500" />
-                                          )
-                                        )
-                                      )}
-                                    </label>
-                                    <FieldInput 
-                                      field={nestedField}
-                                      value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? nestedField.defaultValue}
-                                      onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleUpdateEntry();
-                                        if (e.key === 'Escape') setActiveFieldId(null);
-                                      }}
-                                      readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
-                                      usersData={usersData}
-                                    />
-                                    {nestedField.helperText && (
-                                      <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{nestedField.helperText}</p>
-                                    )}
-                                  </div>
-                                )})}
+                                {(field.fields || []).map(renderNestedField)}
                               </div>
                             </CollapsibleFieldGroup>
                           ) : field.type === 'repeatableGroup' ? (
@@ -1155,7 +1180,7 @@ export const RecordDetailView = () => {
                   </div>
                 </div>
                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
-                  {activeWorkflow.nodes.length} Nodes • {activeWorkflow.edges.length} Transitions
+                  {activeWorkflow?.nodes?.length || 0} Nodes • {activeWorkflow?.edges?.length || 0} Transitions
                 </p>
               </div>
             </motion.div>

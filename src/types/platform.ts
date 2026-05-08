@@ -20,6 +20,9 @@ export interface Tenant {
     secondaryColor?: string;
     accentColor?: string;
     faviconUrl?: string;
+    useTenantBranding?: boolean;
+    aiEnabled?: boolean;
+    forceDarkMode?: boolean;
   };
   localization?: {
     timezone?: string;
@@ -58,10 +61,25 @@ export interface Suite {
 }
 
 export type FieldType = 
-  | 'text' | 'longText' | 'number' | 'checkbox' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select'
+  | 'text' | 'longText' | 'textarea' | 'number' | 'checkbox' | 'boolean' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select' | 'file'
   | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
   | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'connector';
+  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module' | 'placeholder';
+
+export interface VisibilityRule {
+  id: string;
+  type: 'rule' | 'group';
+  fieldId?: string;
+  fieldType?: 'field' | 'variable';
+  operator?: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
+  value?: any;
+  valueType?: 'literal' | 'field' | 'variable';
+  logicalOperator?: 'AND' | 'OR';
+  rules?: VisibilityRule[];
+  action?: 'show' | 'hide';
+  isCollapsed?: boolean;
+  name?: string;
+}
 
 export interface ModuleField {
   id: string;
@@ -96,12 +114,7 @@ export interface ModuleField {
   rowIndex?: number; // 0-indexed
   rowSpan?: number;
   tabId?: string;
-  visibilityRule?: {
-    fieldId: string;
-    operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'not_empty';
-    value: any;
-    action?: 'show' | 'hide';
-  };
+  visibilityRule?: VisibilityRule;
   hidden?: boolean;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
@@ -139,6 +152,12 @@ export interface LookupFilter {
   value: any;
 }
 
+export interface Tab {
+  id: string;
+  label: string;
+  visibilityRule?: VisibilityRule;
+}
+
 export interface ModuleConfig {
   titleFieldId?: string;
   [key: string]: any;
@@ -155,7 +174,7 @@ export interface Module {
   isCustom?: boolean;
   layout: ModuleField[];
   fields?: ModuleField[]; // Deprecated: use layout instead
-  tabs?: { id: string; label: string }[];
+  tabs?: Tab[];
   workflow?: Workflow;
   workflows?: Workflow[];
 

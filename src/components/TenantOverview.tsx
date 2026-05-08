@@ -14,6 +14,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -27,13 +28,21 @@ const HUD_STATUS = [
 export const TenantOverview = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchTenant = async () => {
       try {
-        const res = await fetch(`${API_BASE}/tenancy/${id}`);
+        if (!session?.access_token) return;
+
+        const res = await fetch(`${API_BASE}/tenancy/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        });
         const data = await res.json();
         setTenant(data);
       } catch (error) {
@@ -42,8 +51,10 @@ export const TenantOverview = () => {
         setLoading(false);
       }
     };
-    fetchTenant();
-  }, [id]);
+    if (session?.access_token) {
+      fetchTenant();
+    }
+  }, [id, session?.access_token]);
 
   if (loading) {
     return (

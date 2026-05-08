@@ -1,26 +1,18 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { Button, Input } from '../../UI/Primitives';
-import { Image as ImageIcon, Palette, Upload, X } from 'lucide-react';
+import { Image as ImageIcon, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BrandingSettingsProps {
   tenant: any;
-  onUpdate: (updates: any) => Promise<void>;
+  branding: any;
+  setBranding: React.Dispatch<React.SetStateAction<any>>;
 }
 
-export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) => {
-  const [loading, setLoading] = useState(false);
-  const [branding, setBranding] = useState({
-    logoUrl: tenant?.branding?.logoUrl || '',
-    primaryColor: tenant?.branding?.primaryColor || '#2563eb',
-    accentColor: tenant?.branding?.accentColor || '#4f46e5',
-    faviconUrl: tenant?.branding?.faviconUrl || '',
-    aiEnabled: tenant?.branding?.aiEnabled ?? true,
-    forceDarkMode: tenant?.branding?.forceDarkMode ?? false,
-  });
+export const BrandingSettings = ({ tenant, branding, setBranding }: BrandingSettingsProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -31,32 +23,18 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setBranding(prev => ({ ...prev, logoUrl: reader.result as string }));
+      setBranding((prev: any) => ({ ...prev, logoUrl: reader.result as string }));
     };
     reader.readAsDataURL(file);
   };
 
   const removeLogo = () => {
-    setBranding(prev => ({ ...prev, logoUrl: '' }));
+    setBranding((prev: any) => ({ ...prev, logoUrl: '' }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await onUpdate({
-        branding: {
-          ...branding
-        }
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-12">
+    <div className="space-y-12">
       <div className="space-y-12">
         {/* Visual Identity Section */}
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-3">
@@ -68,62 +46,79 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
           </div>
 
           <div className="lg:col-span-2 space-y-10">
-            {/* Logo Upload Mock */}
+            {/* Brand Usage Toggle */}
+            <div className="p-6 rounded-3xl bg-blue-500/5 border border-blue-500/10 dark:bg-blue-500/5 dark:border-blue-500/20 flex items-center justify-between group/toggle">
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-slate-800 dark:text-white">Use Organization Branding</p>
+                <p className="text-xs text-slate-500 max-w-md">When enabled, the workspace will use {tenant?.name || 'your organization'}'s name and logo instead of Aurora defaults.</p>
+              </div>
+              <div 
+                onClick={() => setBranding((prev: any) => ({ ...prev, useTenantBranding: !prev.useTenantBranding }))}
+                className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors shadow-inner ${branding.useTenantBranding ? 'bg-blue-600' : 'bg-slate-300 dark:bg-zinc-700'}`}
+              >
+                <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-md transition-all duration-300 ease-in-out ${branding.useTenantBranding ? 'right-1' : 'left-1'}`} />
+              </div>
+            </div>
+
+            {/* Logo Upload */}
             <div className="space-y-4">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-500">Workspace Logo</label>
-              <div className="flex items-center gap-8 p-8 rounded-3xl border-2 border-dashed border-slate-300/70 bg-slate-100/50 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md">
-                <div className="h-24 w-24 flex items-center justify-center rounded-2xl bg-white border border-slate-200 dark:bg-white/5 dark:border-zinc-700 overflow-hidden shadow-md relative group/logo">
-                  {branding.logoUrl ? (
-                    <>
-                      <img src={branding.logoUrl} alt="Logo Preview" className="h-full w-full object-contain p-2" />
-                      <button 
-                        type="button"
-                        onClick={removeLogo}
-                        className="absolute inset-0 bg-black/40 opacity-0 group-hover/logo:opacity-100 transition-opacity flex items-center justify-center text-white"
-                      >
-                        <X size={20} />
-                      </button>
-                    </>
-                  ) : (
-                    <ImageIcon size={32} className="text-slate-300 dark:text-zinc-300" />
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-500">Organization Logo</label>
+              <div className="flex items-start gap-6">
+                <div className="relative group">
+                  <div className="h-24 w-24 rounded-2xl bg-slate-100 dark:bg-white/5 border-2 border-dashed border-slate-200 dark:border-zinc-800 flex items-center justify-center overflow-hidden transition-all group-hover:border-blue-500/50">
+                    {branding.logoUrl ? (
+                      <img src={branding.logoUrl} alt="Logo" className="h-full w-full object-cover" />
+                    ) : (
+                      <ImageIcon className="h-8 w-8 text-slate-300 dark:text-zinc-700" />
+                    )}
+                  </div>
+                  {branding.logoUrl && (
+                    <button 
+                      onClick={removeLogo}
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
                   )}
                 </div>
-                <div className="space-y-2">
+                
+                <div className="flex-1 space-y-3">
                   <input 
                     type="file" 
-                    ref={fileInputRef} 
-                    onChange={handleLogoChange} 
-                    className="hidden" 
-                    accept="image/*" 
+                    ref={fileInputRef}
+                    onChange={handleLogoUpload}
+                    accept="image/*"
+                    className="hidden"
                   />
                   <Button 
-                    type="button" 
-                    variant="secondary" 
-                    size="sm" 
-                    className="gap-2"
+                    variant="outline" 
                     onClick={() => fileInputRef.current?.click()}
+                    className="gap-2"
                   >
-                    <Upload size={14} /> Upload New Logo
+                    <Upload size={16} />
+                    Choose Logo
                   </Button>
-                  <p className="text-[10px] text-slate-500 font-medium">Recommended: PNG or SVG, max 2MB. Square or horizontal aspect ratio.</p>
+                  <p className="text-xs text-slate-500">
+                    PNG, JPG or WebP. Max 2MB. Recommended size 512x512px.
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* Color Palette */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Brand Colors */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-zinc-500">Primary Brand Color</label>
                 <div className="flex items-center gap-4">
                   <input 
                     type="color" 
                     value={branding.primaryColor}
-                    onChange={(e) => setBranding(prev => ({ ...prev, primaryColor: e.target.value }))}
+                    onChange={(e) => setBranding((prev: any) => ({ ...prev, primaryColor: e.target.value }))}
                     className="h-12 w-12 rounded-xl border-0 p-0 overflow-hidden cursor-pointer shadow-sm"
                   />
                   <Input 
                     value={branding.primaryColor} 
-                    onChange={(e) => setBranding(prev => ({ ...prev, primaryColor: e.target.value }))}
+                    onChange={(e: any) => setBranding((prev: any) => ({ ...prev, primaryColor: e.target.value }))}
                     className="font-mono text-xs font-bold uppercase"
                   />
                 </div>
@@ -135,12 +130,12 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
                   <input 
                     type="color" 
                     value={branding.accentColor}
-                    onChange={(e) => setBranding(prev => ({ ...prev, accentColor: e.target.value }))}
+                    onChange={(e) => setBranding((prev: any) => ({ ...prev, accentColor: e.target.value }))}
                     className="h-12 w-12 rounded-xl border-0 p-0 overflow-hidden cursor-pointer shadow-sm"
                   />
                   <Input 
                     value={branding.accentColor} 
-                    onChange={(e) => setBranding(prev => ({ ...prev, accentColor: e.target.value }))}
+                    onChange={(e: any) => setBranding((prev: any) => ({ ...prev, accentColor: e.target.value }))}
                     className="font-mono text-xs font-bold uppercase"
                   />
                 </div>
@@ -161,46 +156,34 @@ export const BrandingSettings = ({ tenant, onUpdate }: BrandingSettingsProps) =>
           <div className="lg:col-span-2">
             <div className="p-6 rounded-3xl bg-slate-100/60 border border-slate-200 dark:bg-white/5 dark:backdrop-blur-xl dark:border-zinc-800 space-y-6">
               <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-800 dark:text-white">Aesthetic Intelligence (AI)</p>
-                    <p className="text-xs text-slate-500">Allow AI to suggest UI improvements based on user behavior.</p>
-                  </div>
-                  <div 
-                    onClick={() => setBranding(prev => ({ ...prev, aiEnabled: !prev.aiEnabled }))}
-                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${branding.aiEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-white/10'}`}
-                  >
-                    <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${branding.aiEnabled ? 'right-1' : 'left-1'}`} />
-                  </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-slate-800 dark:text-white">Aesthetic Intelligence (AI)</p>
+                  <p className="text-xs text-slate-500">Allow AI to suggest UI improvements based on user behavior.</p>
+                </div>
+                <div 
+                  onClick={() => setBranding((prev: any) => ({ ...prev, aiEnabled: !prev.aiEnabled }))}
+                  className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors shadow-inner ${branding.aiEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-zinc-700'}`}
+                >
+                  <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-md transition-all duration-300 ease-in-out ${branding.aiEnabled ? 'right-1' : 'left-1'}`} />
+                </div>
               </div>
-              
+
               <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-800 dark:text-white">System Dark Mode Defaults</p>
-                    <p className="text-xs text-slate-500">Force system theme across all organization devices.</p>
-                  </div>
-                  <div 
-                    onClick={() => setBranding(prev => ({ ...prev, forceDarkMode: !prev.forceDarkMode }))}
-                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${branding.forceDarkMode ? 'bg-blue-600' : 'bg-slate-300 dark:bg-white/10'}`}
-                  >
-                    <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${branding.forceDarkMode ? 'right-1' : 'left-1'}`} />
-                  </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-slate-800 dark:text-white">Force Dark Mode</p>
+                  <p className="text-xs text-slate-500">Enforce a high-contrast dark theme for all organization members.</p>
+                </div>
+                <div 
+                  onClick={() => setBranding((prev: any) => ({ ...prev, forceDarkMode: !prev.forceDarkMode }))}
+                  className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors shadow-inner ${branding.forceDarkMode ? 'bg-blue-600' : 'bg-slate-300 dark:bg-zinc-700'}`}
+                >
+                  <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-md transition-all duration-300 ease-in-out ${branding.forceDarkMode ? 'right-1' : 'left-1'}`} />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
-      <div className="flex items-center justify-end pt-8 border-t border-slate-200 dark:border-zinc-800">
-        <Button 
-          type="submit" 
-          variant="primary" 
-          loading={loading}
-          className="gap-2 px-8 font-bold shadow-lg shadow-blue-500/20"
-        >
-          <Palette size={18} /> Update Brand Identity
-        </Button>
-      </div>
-    </form>
-
+    </div>
   );
 };

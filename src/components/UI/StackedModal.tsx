@@ -60,7 +60,7 @@ const RecordModal = ({
   onPop: () => void
 }) => {
   const { tenant } = usePlatform();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [moduleData, setModuleData] = useState<any>(null);
   const [record, setRecord] = useState<any>(null);
@@ -216,7 +216,7 @@ const RecordModal = ({
                       (moduleData.layout || [])
                         .sort((a: any, b: any) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
                         .map((field: any) => {
-                          if (!isFieldVisible(field, record)) return null;
+                          if (!isFieldVisible(field, record, { user })) return null;
                           
                           return (
                             <div 

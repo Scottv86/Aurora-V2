@@ -132,7 +132,7 @@ export const PeopleCenter = ({ searchQuery = '', onSearchChange, activeFilter = 
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
           <input 
             type="text" 
-            placeholder="Search people, roles or teams..." 
+            placeholder="Search people, positions or teams..." 
             value={searchQuery}
             onChange={(e) => onSearchChange?.(e.target.value)}
             className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"

@@ -32,17 +32,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user]);
 
   useEffect(() => {
-    // 1. Initial Session Check
-    const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await syncUser(session.access_token);
-      }
-      setLoading(false);
-    };
-    initSession();
+    // onAuthStateChange handles INITIAL_SESSION, SIGNED_IN, and SIGNED_OUT events.
+    // This listener is sufficient for managing authentication state and syncing user data.
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`[AuthTrace] !! EVENT: ${event}`, { 

@@ -16,18 +16,27 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
 export const HealthMonitor = () => {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [health, setHealth] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(new Date());
 
   const fetchHealth = async () => {
     try {
-      const res = await fetch(`${API_BASE}/nodes`);
+      if (!session?.access_token) return;
+
+      const res = await fetch(`${API_BASE}/nodes`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       const data = await res.json();
       setHealth(data);
       setLastSync(new Date());
@@ -39,10 +48,12 @@ export const HealthMonitor = () => {
   };
 
   useEffect(() => {
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 5000); 
-    return () => clearInterval(interval);
-  }, []);
+    if (session?.access_token) {
+      fetchHealth();
+      const interval = setInterval(fetchHealth, 5000); 
+      return () => clearInterval(interval);
+    }
+  }, [session?.access_token]);
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers } from 'lucide-react';
+import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus } from 'lucide-react';
 import { cn, calculateHeight } from '../../lib/utils';
 import { useGridEngine, GridItem, GridPos } from '../../hooks/useGridEngine';
 import { GRID_CONFIG } from '../ModuleEditor';
@@ -25,6 +25,7 @@ export interface Field {
   isCollapsed?: boolean;
   showIcon?: boolean;
   iconName?: string;
+  visibilityRule?: any;
 }
 
 import { DynamicIcon } from '../UI/DynamicIcon';
@@ -42,7 +43,7 @@ interface FieldGroupProps {
   renderNested?: (fields: Field[], parentId: string) => React.ReactNode;
   viewportSize: 'desktop' | 'tablet' | 'mobile';
   onClone: (id: string) => void;
-  hoveredMapping?: { sourceFieldId: string, targetFieldId: string } | null;
+  hoveredMapping?: { connectorId: string, sourceOutput: string, targetFieldId: string } | null;
   dragOverInfo?: { col: number, span: number, index: number, active: boolean, parentId?: string, height?: number } | null;
 }
 
@@ -285,33 +286,129 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
           >
             <div 
               onDragOver={(e) => { 
+                if (isAccordion) return; // Handled by sections
                 e.preventDefault(); 
                 e.stopPropagation(); 
                 onDragOver?.(e, block.id);
               }}
-              onDrop={(e) => onDrop(e, block.id)}
+              onDrop={(e) => {
+                if (isAccordion) return; // Handled by sections
+                onDrop(e, block.id);
+              }}
               onMouseEnter={() => setIsContentHovered(true)}
               onMouseLeave={() => setIsContentHovered(false)}
               className={cn(
                 "relative rounded-[18px] border-2 border-dashed transition-all duration-300 p-3 mt-4 flex-grow",
-                isDraggingOver ? "min-h-[400px] border-indigo-500/50 bg-indigo-500/5" : "min-h-[120px] bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800",
-                "group-hover/group:border-indigo-500/30 group-hover/group:bg-indigo-500/5"
+                isAccordion ? "p-0 mt-6 bg-transparent border-none" : "p-3 mt-4 bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800"
               )}
             >
-              {((block.fields && block.fields.length > 0) || isDraggingOver) ? (
-                <div 
-                  className="grid grid-cols-12 gap-5 min-h-full"
-                  style={{ gridAutoRows: '50px' }}
-                >
-                  {renderNested && renderNested(block.fields || [], block.id)}
+              {isAccordion ? (
+                <div className="flex flex-col gap-4">
+                  {block.fields && block.fields.length > 0 ? (
+                    block.fields.map((section) => (
+                      <div 
+                        key={section.id} 
+                        className={cn(
+                          "bg-white dark:bg-zinc-950 border-2 transition-all overflow-hidden",
+                          selectedIds.includes(section.id) ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl z-10 scale-[1.02]" : "border-zinc-200 dark:border-zinc-800 rounded-[2rem] shadow-sm",
+                          dragOverInfo?.parentId === section.id && "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl"
+                        )}
+                        style={{ borderRadius: selectedIds.includes(section.id) ? '2.2rem' : '2rem' }}
+                      >
+                        {/* Section Header in Builder */}
+                        <div 
+                          onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
+                          className={cn(
+                            "px-6 py-4 flex items-center justify-between cursor-pointer select-none transition-colors",
+                            selectedIds.includes(section.id) ? "bg-indigo-500/5" : "bg-zinc-50/80 dark:bg-zinc-900/80 border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-xl flex items-center justify-center transition-all",
+                              selectedIds.includes(section.id) ? "bg-indigo-500 text-white shadow-lg rotate-3" : "bg-indigo-500/10 text-indigo-500"
+                            )}>
+                              <DynamicIcon name={section.iconName || 'Folder'} size={14} />
+                            </div>
+                            <div>
+                              <p className={cn(
+                                "text-[8px] font-black uppercase tracking-widest",
+                                selectedIds.includes(section.id) ? "text-indigo-600" : "text-zinc-400"
+                              )}>Section Subtitle</p>
+                              <p className="text-xs font-bold text-zinc-900 dark:text-white">{section.label}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
+                               className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-indigo-500 transition-colors"
+                             >
+                               <Settings2 size={12} />
+                             </button>
+                          </div>
+                        </div>
+
+                        {/* Nesting Zone for Section */}
+                        <div 
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDragOver?.(e, section.id);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDrop(e, section.id);
+                          }}
+                          className={cn(
+                            "p-4 grid grid-cols-12 gap-5 min-h-[100px] transition-colors",
+                            dragOverInfo?.parentId === section.id ? "bg-indigo-500/5" : "bg-transparent"
+                          )}
+                          style={{ gridAutoRows: '50px' }}
+                        >
+                          {renderNested && renderNested(section.fields || [], section.id)}
+                          {(!section.fields || section.fields.length === 0) && !isDraggingOver && (
+                            <div className="col-span-12 flex flex-col items-center justify-center py-8 opacity-30">
+                              <Move size={16} className="text-zinc-400 mb-2" />
+                              <p className="text-[8px] font-black uppercase tracking-widest">Drop fields into {section.label}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div 
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDragOver?.(e, block.id);
+                      }}
+                      onDrop={(e) => onDrop(e, block.id)}
+                      className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center gap-2 opacity-40 hover:opacity-100 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all"
+                    >
+                      <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                        <Plus size={24} />
+                      </div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Drop a Group to create a section</p>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-40">
-                  <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-700">
-                    <Move size={20} className="text-zinc-400" />
+                ((block.fields && block.fields.length > 0) || isDraggingOver) ? (
+                  <div 
+                    className="grid grid-cols-12 gap-5 min-h-full"
+                    style={{ gridAutoRows: '50px' }}
+                  >
+                    {renderNested && renderNested(block.fields || [], block.id)}
                   </div>
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drop fields to nest</p>
-                </div>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-40">
+                    <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-700">
+                      <Move size={20} className="text-zinc-400" />
+                    </div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drop fields to nest</p>
+                  </div>
+                )
               )}
             </div>
           </motion.div>

@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import type { User, Tenant, Environment, BillingUsage } from '../types/platform';
 import { API_BASE_URL } from '../config';
@@ -12,6 +12,7 @@ interface PlatformContextType {
   environment: Environment;
   setEnvironment: (env: Environment) => void;
   isLoading: boolean;
+  refetchContext: () => Promise<void>;
   isDeveloper: boolean;
   capabilities: Set<string>;
   modules: any[];
@@ -56,6 +57,14 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
+
+  const userRef = useRef<User | null>(null);
+  const tenantRef = useRef<Tenant | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+    tenantRef.current = tenant;
+  }, [user, tenant]);
 
   const setBreadcrumbOverride = useCallback((id: string, label: string) => {
     setBreadcrumbOverrides(prev => ({ ...prev, [id]: label }));
@@ -117,6 +126,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      console.log('[PlatformContext] Updating tenant:', updates);
       const res = await fetch(`${API_BASE_URL}/api/platform/settings`, {
         method: 'PATCH',
         headers: {
@@ -129,10 +139,12 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
       if (res.ok) {
         const data = await res.json();
+        console.log('[PlatformContext] Update response:', data);
         setTenant(prev => prev ? { ...prev, ...data.tenant } : data.tenant);
         toast.success('Organization settings updated.');
       } else {
         const error = await res.json();
+        console.log('[PlatformContext] Update error:', error);
         throw new Error(error.error || 'Failed to update settings');
       }
     } catch (err: any) {
@@ -164,17 +176,120 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [supabaseUser, tenant?.id, session?.access_token]);
 
-  useEffect(() => {
-    console.log('[PlatformContext] Initializing sync effect...', { 
-      hasSupabaseUser: !!supabaseUser, 
-      authLoading,
-      tokenPresent: !!session?.access_token 
-    });
 
+  const fetchContext = useCallback(async () => {
+    if (!supabaseUser) return;
+
+    // Only show global spinner if we don't have the core context yet
+    if (!userRef.current || !tenantRef.current) {
+      setIsLoading(true);
+    }
+    
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const response = await fetch(`${API_BASE_URL}/api/platform/context`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Sync failed with status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const synchronizedUser = data.user ? {
+        ...data.user,
+        // Extract memberId and organizational details from the nested member object or top-level fallbacks
+        memberId: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
+        cuid: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
+        teamId: data.user.teamId || data.user.team_id || data.member?.teamId || data.member?.team_id || data.membership?.teamId || data.membership?.team_id || data.tenantMember?.teamId || data.tenantMember?.team_id,
+        team: data.user.team || data.member?.team || data.membership?.team || data.tenantMember?.team,
+        positionId: data.user.positionId || data.user.position_id || data.member?.positionId || data.member?.position_id || data.membership?.positionId || data.membership?.position_id || data.tenantMember?.positionId || data.tenantMember?.position_id,
+        position: data.user.position || data.member?.position || data.membership?.position || data.tenantMember?.position
+      } : null;
+      
+      setUser(synchronizedUser);
+      setTenant(data.tenant);
+      
+      // Use backend menuConfig if available, otherwise fall back to system default
+      // Merge any new default items that may have been added since the config was saved
+      let resolvedConfig: MenuConfig;
+      if (data.menuConfig && Array.isArray(data.menuConfig.sections)) {
+        const mergedSections = systemDefaultMenuConfig.sections.map(defaultSection => {
+          // Support legacy ID mapping during transition
+          const savedSection = (data.menuConfig.sections as any[]).find((s: any) => 
+            s.id === defaultSection.id || (defaultSection.id === 'platform' && s.id === 'operations')
+          );
+          
+          if (!savedSection) return defaultSection;
+          
+          // Find items in the default that aren't in the saved config
+          const savedItemIds = new Set((savedSection.items || []).map((i: any) => i.id));
+          const missingItems = defaultSection.items.filter(i => {
+            // Handle item rename transition: if we have 'people' or 'entities' saved but now expect 'people-orgs'
+            if (i.id === 'people-orgs' && (savedItemIds.has('people') || savedItemIds.has('entities'))) return false;
+            return !savedItemIds.has(i.id);
+          });
+          
+          // Filter out saved items that are no longer in defaults, unless they are dynamically generated
+          const currentDefaultItemIds = new Set(defaultSection.items.map(i => i.id));
+          const validSavedItems = (savedSection.items || [])
+            .filter((i: any) => 
+              currentDefaultItemIds.has(i.id) || 
+              (i.id === 'people' && currentDefaultItemIds.has('people-orgs')) ||
+              (i.id === 'entities' && currentDefaultItemIds.has('people-orgs')) ||
+              (i.id && i.id.startsWith('module:'))
+            )
+            .map((savedItem: any) => {
+              if (savedItem.id.startsWith('module:')) return savedItem;
+              
+              // Handle item rename transition
+              const isLegacy = savedItem.id === 'people' || savedItem.id === 'entities';
+              const lookupId = (isLegacy && currentDefaultItemIds.has('people-orgs')) ? 'people-orgs' : savedItem.id;
+              const defaultItem = defaultSection.items.find(i => i.id === lookupId);
+              
+              // Inherit code updates (like 'to', 'label') but preserve user's visibility setting
+              return defaultItem ? { ...defaultItem, isVisible: savedItem.isVisible ?? defaultItem.isVisible } : savedItem;
+            });
+
+          return {
+            ...savedSection,
+            id: defaultSection.id, // Ensure we use the new ID
+            title: defaultSection.title, // Ensure we use the new Title
+            items: [...(validSavedItems || []), ...(missingItems || [])]
+          };
+        });
+        // Legacy Transition: Filter out 'operations' from custom sections if 'platform' is now in defaults
+        const defaultSectionIds = new Set(systemDefaultMenuConfig.sections.map(s => s.id));
+        const customSections = data.menuConfig.sections.filter((s: any) => {
+          if (s.id === 'operations' && defaultSectionIds.has('platform')) return false;
+          return !defaultSectionIds.has(s.id);
+        });
+        resolvedConfig = { sections: [...mergedSections, ...customSections] };
+      } else {
+        resolvedConfig = systemDefaultMenuConfig;
+      }
+      setMenuConfig(resolvedConfig);
+    } catch (err: any) {
+      console.error('[PlatformContext] Sync Critical Failure:', err.message);
+      setUser(null);
+      setTenant(null);
+      setMenuConfig(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabaseUser, session?.access_token]);
+
+  const refetchContext = async () => {
+    await fetchContext();
+  };
+
+  useEffect(() => {
     if (authLoading) return;
     
     if (!supabaseUser) {
-      console.log('[PlatformContext] No supabase user. Clearing state.');
       setUser(null);
       setTenant(null);
       setModules([]);
@@ -184,102 +299,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const fetchContext = async () => {
-      // Only show global spinner if we don't have the core context yet
-      if (!user || !tenant) {
-        setIsLoading(true);
-      }
-      
-      try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const response = await fetch(`${API_BASE_URL}/api/platform/context`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Sync failed with status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        setUser(data.user);
-        setTenant(data.tenant);
-        
-        // Use backend menuConfig if available, otherwise fall back to system default
-        // Merge any new default items that may have been added since the config was saved
-        let resolvedConfig: MenuConfig;
-        if (data.menuConfig && Array.isArray(data.menuConfig.sections)) {
-          const mergedSections = systemDefaultMenuConfig.sections.map(defaultSection => {
-            // Support legacy ID mapping during transition
-            const savedSection = (data.menuConfig.sections as any[]).find((s: any) => 
-              s.id === defaultSection.id || (defaultSection.id === 'platform' && s.id === 'operations')
-            );
-            
-            if (!savedSection) return defaultSection;
-            
-            // Find items in the default that aren't in the saved config
-            const savedItemIds = new Set((savedSection.items || []).map((i: any) => i.id));
-            const missingItems = defaultSection.items.filter(i => {
-              // Handle item rename transition: if we have 'people' or 'entities' saved but now expect 'people-orgs'
-              if (i.id === 'people-orgs' && (savedItemIds.has('people') || savedItemIds.has('entities'))) return false;
-              return !savedItemIds.has(i.id);
-            });
-            
-            // Filter out saved items that are no longer in defaults, unless they are dynamically generated
-            const currentDefaultItemIds = new Set(defaultSection.items.map(i => i.id));
-            const validSavedItems = (savedSection.items || [])
-              .filter((i: any) => 
-                currentDefaultItemIds.has(i.id) || 
-                (i.id === 'people' && currentDefaultItemIds.has('people-orgs')) ||
-                (i.id === 'entities' && currentDefaultItemIds.has('people-orgs')) ||
-                (i.id && i.id.startsWith('module:'))
-              )
-              .map((savedItem: any) => {
-                if (savedItem.id.startsWith('module:')) return savedItem;
-                
-                // Handle item rename transition
-                const isLegacy = savedItem.id === 'people' || savedItem.id === 'entities';
-                const lookupId = (isLegacy && currentDefaultItemIds.has('people-orgs')) ? 'people-orgs' : savedItem.id;
-                const defaultItem = defaultSection.items.find(i => i.id === lookupId);
-                
-                // Inherit code updates (like 'to', 'label') but preserve user's visibility setting
-                return defaultItem ? { ...defaultItem, isVisible: savedItem.isVisible ?? defaultItem.isVisible } : savedItem;
-              });
-
-            return {
-              ...savedSection,
-              id: defaultSection.id, // Ensure we use the new ID
-              title: defaultSection.title, // Ensure we use the new Title
-              items: [...(validSavedItems || []), ...(missingItems || [])]
-            };
-          });
-          // Legacy Transition: Filter out 'operations' from custom sections if 'platform' is now in defaults
-          const defaultSectionIds = new Set(systemDefaultMenuConfig.sections.map(s => s.id));
-          const customSections = data.menuConfig.sections.filter((s: any) => {
-            if (s.id === 'operations' && defaultSectionIds.has('platform')) return false;
-            return !defaultSectionIds.has(s.id);
-          });
-          resolvedConfig = { sections: [...mergedSections, ...customSections] };
-        } else {
-          resolvedConfig = systemDefaultMenuConfig;
-        }
-        setMenuConfig(resolvedConfig);
-
-        console.log(`[PlatformContext] Sync Success: ${data.user.email} @ ${data.tenant?.name || 'No Tenant'}`);
-      } catch (err: any) {
-        console.error('[PlatformContext] Sync Critical Failure:', err.message);
-        setUser(null);
-        setTenant(null);
-        setMenuConfig(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchContext();
-  }, [supabaseUser, authLoading, session?.access_token]);
+  }, [supabaseUser, authLoading, fetchContext]);
 
   // Fetch modules once tenant is available
   useEffect(() => {
@@ -296,6 +317,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       environment, 
       setEnvironment, 
       isLoading,
+      refetchContext,
       isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || user?.role === 'Admin' || false,
       capabilities,
       modules,

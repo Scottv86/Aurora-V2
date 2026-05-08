@@ -58,6 +58,19 @@ export const Navbar = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (tenant) {
+      console.log('[Navbar] Tenant Branding Update:', {
+        useTenantBranding: tenant?.branding?.useTenantBranding,
+        name: tenant?.name,
+        logoUrl: tenant?.branding?.logoUrl
+      });
+    }
+  }, [tenant]);
+
+  const isTenantBrandingEnabled = tenant?.branding?.useTenantBranding === true || 
+                                  (tenant?.branding as any)?.useTenantBranding === 'true';
   
   // Get user details from Platform Context (Database) or fallback to Supabase metadata/email
   const platformName = platformUser?.firstName && platformUser?.lastName 
@@ -72,18 +85,30 @@ export const Navbar = () => {
     <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4 flex-1">
         <div className="flex items-center gap-2">
-          <div className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 overflow-hidden",
-            !tenant?.branding?.logoUrl && "bg-gradient-to-br from-indigo-500 to-purple-600"
-          )}>
-            {tenant?.branding?.logoUrl ? (
-              <img src={tenant.branding.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+          <div 
+            className={cn(
+              "w-8 h-8 rounded-lg flex items-center justify-center shadow-lg overflow-hidden",
+              !isTenantBrandingEnabled && "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/20"
+            )}
+            style={isTenantBrandingEnabled && !tenant?.branding?.logoUrl ? { 
+              backgroundColor: tenant?.branding?.primaryColor || '#2563eb',
+              boxShadow: `0 10px 15px -3px ${tenant?.branding?.primaryColor}33`
+            } : undefined}
+          >
+            {isTenantBrandingEnabled ? (
+              tenant?.branding?.logoUrl ? (
+                <img src={tenant.branding.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white font-bold text-sm uppercase">
+                  {tenant?.name?.charAt(0) || 'A'}
+                </span>
+              )
             ) : (
               <Sparkles size={18} className="text-white" />
             )}
           </div>
           <span className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white">
-            {tenant?.name || 'Aurora'}
+            {isTenantBrandingEnabled ? (tenant?.name || 'Organization') : 'Aurora'}
           </span>
         </div>
         <div className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-2" />

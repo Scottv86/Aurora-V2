@@ -13,17 +13,26 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '../hooks/useAuth';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
 export const ComputeMatrix = () => {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [compute, setCompute] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchCompute = async () => {
     try {
-      const res = await fetch(`${API_BASE}/compute`);
+      if (!session?.access_token) return;
+
+      const res = await fetch(`${API_BASE}/compute`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       const data = await res.json();
       setCompute(data);
     } catch (error) {
@@ -34,10 +43,12 @@ export const ComputeMatrix = () => {
   };
 
   useEffect(() => {
-    fetchCompute();
-    const interval = setInterval(fetchCompute, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    if (session?.access_token) {
+      fetchCompute();
+      const interval = setInterval(fetchCompute, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [session?.access_token]);
 
   if (loading) {
     return (

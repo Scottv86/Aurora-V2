@@ -98,7 +98,7 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', onSearc
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
           <input 
             type="text" 
-            placeholder="Search roles or position IDs..." 
+            placeholder="Search positions..." 
             value={searchQuery}
             onChange={(e) => onSearchChange?.(e.target.value)}
             className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
@@ -110,8 +110,8 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', onSearc
           columns={columns} 
           loading={loading}
           pagination={true}
-          onRowClick={(p) => navigate(`/workspace/settings/workforce/roles/${p.id}`)}
-          emptyMessage="No roles found. Add a role to get started."
+          onRowClick={(p) => navigate(`/workspace/settings/workforce/positions/${p.id}`)}
+          emptyMessage="No positions found. Add a position to get started."
           className="bg-transparent dark:bg-transparent border-none shadow-none"
         />
       </div>
@@ -119,11 +119,11 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', onSearc
       <Modal
         isOpen={isModalOpen}
         onClose={onCloseModal}
-        title="Create Role"
+        title="Create Position"
         footer={
           <>
             <Button variant="secondary" onClick={onCloseModal}>Cancel</Button>
-            <Button variant="primary" onClick={handleCreate}>Create Role</Button>
+            <Button variant="primary" onClick={handleCreate}>Create Position</Button>
           </>
         }
       >
@@ -144,7 +144,7 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', onSearc
           </div>
           <Input 
             label="Description" 
-            placeholder="Key responsibilities and role requirements..." 
+            placeholder="Key responsibilities and position requirements..." 
             value={newPosition.description}
             onChange={(e) => setNewPosition(prev => ({ ...prev, description: e.target.value }))}
           />

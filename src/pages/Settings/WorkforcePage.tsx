@@ -24,7 +24,7 @@ export const WorkforcePage = () => {
   
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
-  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isPositionModalOpen, setIsPositionModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -33,7 +33,7 @@ export const WorkforcePage = () => {
   const tabs = [
     { id: 'directory', label: 'People', icon: Users },
     { id: 'teams', label: 'Teams', icon: Network },
-    { id: 'roles', label: 'Roles', icon: Shield },
+    { id: 'positions', label: 'Positions', icon: Shield },
     ...(hasCapability('view:settings') ? [{ id: 'groups', label: 'Security Groups', icon: ShieldCheck }] : []),
     { id: 'visualizer', label: 'Org Visualizer', icon: LayoutGrid },
     ...(hasCapability('view:audit_logs') ? [{ id: 'audit', label: 'Activity Log', icon: Activity }] : [])
@@ -49,10 +49,10 @@ export const WorkforcePage = () => {
           { id: 'status:Active', label: 'Active Only' },
           { id: 'status:Pending', label: 'Open Slots' }
         ];
-      case 'roles':
+      case 'positions':
         return [
-          { id: 'all', label: 'All Roles' },
-          { id: 'filled', label: 'Filled Roles' },
+          { id: 'all', label: 'All Positions' },
+          { id: 'filled', label: 'Filled Positions' },
           { id: 'open', label: 'Open Slots' }
         ];
       case 'audit':
@@ -72,8 +72,8 @@ export const WorkforcePage = () => {
         return { label: 'Add Person', icon: Plus, onClick: () => setIsOnboardingOpen(true) };
       case 'teams':
         return { label: 'Create Team', icon: Plus, onClick: () => setIsTeamModalOpen(true) };
-      case 'roles':
-        return { label: 'Create Role', icon: Plus, onClick: () => setIsRoleModalOpen(true) };
+      case 'positions':
+        return { label: 'Create Position', icon: Plus, onClick: () => setIsPositionModalOpen(true) };
       case 'groups':
         return { label: 'Create Group', icon: Shield, onClick: () => setIsGroupModalOpen(true) };
       case 'audit':
@@ -91,7 +91,7 @@ export const WorkforcePage = () => {
       <div className="flex flex-col w-full px-6 lg:px-12 py-10">
         <PageHeader 
         title="Workforce"
-        description="Manage your team of people and AI agents in one place. Organize teams, define roles, and control access permissions."
+        description="Manage your team of people and AI agents in one place. Organize teams, define positions, and control access permissions."
         actions={
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -182,10 +182,10 @@ export const WorkforcePage = () => {
                   activeFilter={activeFilter}
                 />
               )}
-              {activeTab === 'roles' && (
+              {activeTab === 'positions' && (
                 <OrgDesign 
-                  isModalOpen={isRoleModalOpen} 
-                  onCloseModal={() => setIsRoleModalOpen(false)} 
+                  isModalOpen={isPositionModalOpen} 
+                  onCloseModal={() => setIsPositionModalOpen(false)} 
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}

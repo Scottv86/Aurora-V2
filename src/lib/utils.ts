@@ -39,14 +39,77 @@ export function getFieldValue(data: any, fieldId: string): any {
   return undefined;
 }
 
-export const isFieldVisible = (field: any, data: any) => {
+export const isFieldVisible = (field: any, data: any, context?: any) => {
   if (field.hidden) return false;
   const rule = field.visibilityRule || field.visibility;
+  
   if (!rule) return true;
-  return checkCondition(rule, data);
+  return checkCondition(rule, data, context);
 };
 
-const checkCondition = (condition: any, data: any): boolean => {
+const resolveVariable = (token: string, context?: any): any => {
+  if (!token) return '';
+  const cleanToken = token.trim().replace(/[{}]/g, '').trim();
+  
+  if (cleanToken === 'currentUser.id') {
+    const user = context?.user;
+    if (!user) return '';
+    
+    // 1. Check known properties
+    const knownId = user.recordId || user.userRecordId || user.platformId || user.cid || user.id;
+    if (knownId && String(knownId).startsWith('cmn')) return String(knownId);
+    
+    // 2. Brute force scan for anything that looks like an Aurora CUID (starts with 'cmn')
+    for (const key in user) {
+      if (typeof user[key] === 'string' && user[key].startsWith('cmn')) {
+        return user[key];
+      }
+    }
+    
+    const ids = [user.id, user.memberId, user.userRecordId, user.cuid].filter(Boolean);
+    
+    // Safety Net: Scan all string properties for CUIDs (cmn...)
+    Object.entries(user).forEach(([key, val]) => {
+      if (typeof val === 'string' && val.startsWith('cmn') && !ids.includes(val)) {
+        ids.push(val);
+      }
+    });
+    
+    const finalId = ids[0] || user.email || user.name || '';
+    
+    return ids.length > 1 ? ids : finalId;
+  }
+  if (cleanToken === 'currentUser.role') return context?.user?.role || context?.user?.roleId || '';
+  if (cleanToken === 'currentUser.team') {
+    const user = context?.user;
+    const ids = [
+      user?.teamId, user?.team_id,
+      user?.team?.id, user?.team?.recordId,
+      user?.team,
+      user?.membership?.teamId, user?.membership?.team_id,
+      user?.tenantMember?.teamId, user?.tenantMember?.team_id
+    ].filter(v => v && typeof v !== 'object').map(v => String(v));
+    return Array.from(new Set(ids));
+  }
+  if (cleanToken === 'currentUser.position') {
+    const user = context?.user;
+    const ids = [
+      user?.positionId, user?.position_id,
+      user?.position?.id, user?.position?.recordId,
+      user?.position,
+      user?.membership?.positionId, user?.membership?.position_id,
+      user?.tenantMember?.positionId, user?.tenantMember?.position_id
+    ].filter(v => v && typeof v !== 'object').map(v => String(v));
+    return Array.from(new Set(ids));
+  }
+  if (cleanToken === 'currentUser.email') return context?.user?.email || '';
+  if (cleanToken === 'currentUser.name') return context?.user?.name || '';
+  if (cleanToken === 'today') return new Date().toISOString().split('T')[0];
+  if (cleanToken === 'now') return new Date().toISOString();
+  return cleanToken;
+};
+
+const checkCondition = (condition: any, data: any, context?: any): boolean => {
   if (!condition) return true;
 
   const action = condition.action || 'show';
@@ -58,38 +121,68 @@ const checkCondition = (condition: any, data: any): boolean => {
     if (!rules || rules.length === 0) {
       isMet = true;
     } else if (logicalOperator === 'AND') {
-      isMet = rules.every((r: any) => checkCondition(r, data));
+      isMet = rules.every((r: any) => checkCondition(r, data, context));
     } else {
-      isMet = rules.some((r: any) => checkCondition(r, data));
+      isMet = rules.some((r: any) => checkCondition(r, data, context));
     }
   } else {
     // Handle single rule (new or old format)
-    const { fieldId, operator, value, valueType } = condition;
+    const { fieldId, fieldType = 'field', operator, value, valueType = 'literal' } = condition;
     if (!fieldId) {
       isMet = true;
     } else {
-      const actualFieldId = fieldId === '_record_key' ? (data?.key ? 'key' : 'id') : fieldId;
-      const actualValue = getFieldValue(data, actualFieldId);
-      let compareValue = value;
+      // 1. Resolve Target (Left Side)
+      let actualValue: any;
+      if (fieldType === 'variable') {
+        actualValue = resolveVariable(fieldId, context);
+      } else {
+        const actualFieldId = fieldId === '_record_key' ? (data?.key ? 'key' : 'id') : fieldId;
+        actualValue = getFieldValue(data, actualFieldId);
+      }
 
-      // If comparing against another field, fetch its value from data
+      // 2. Resolve Comparison (Right Side)
+      let compareValue = value;
       if (valueType === 'field' && value) {
         const compareFieldId = value === '_record_key' ? (data?.key ? 'key' : 'id') : value;
         compareValue = getFieldValue(data, compareFieldId);
+      } else if (valueType === 'variable' && value) {
+        compareValue = resolveVariable(value, context);
       }
       
       const isEmpty = (val: any) => val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
-      const safeString = (val: any) => (val === undefined || val === null) ? '' : String(val);
+      
+      // Robust value normalization
+      const normalize = (val: any): string[] => {
+        if (val === undefined || val === null) return [];
+        if (Array.isArray(val)) return val.map(v => normalize(v)).flat();
+        if (typeof val === 'object') {
+          return [
+            val.id, val.recordId, val.teamId, val.team_id, val.positionId, val.position_id, 
+            val.key, val.value, val.name, val.email
+          ].filter(Boolean).map(v => String(v).toLowerCase());
+        }
+        return [String(val).toLowerCase()];
+      };
+
+      const actuals = normalize(actualValue);
+      const compares = normalize(compareValue);
 
       switch (operator) {
         case 'equals':
         case 'eq':
-          isMet = safeString(actualValue) === safeString(compareValue); break;
+          isMet = actuals.length > 0 && compares.length > 0 && actuals.some(a => compares.includes(a));
+          // Direct string fallback for simple primitives
+          if (!isMet && typeof actualValue !== 'object' && typeof compareValue !== 'object') {
+             isMet = String(actualValue).toLowerCase() === String(compareValue).toLowerCase();
+          }
+          break;
         case 'not_equals':
         case 'neq':
-          isMet = safeString(actualValue) !== safeString(compareValue); break;
+          isMet = !actuals.some(a => compares.includes(a));
+          break;
         case 'contains':
-          isMet = safeString(actualValue).toLowerCase().includes(safeString(compareValue).toLowerCase()); break;
+          isMet = actuals.some(a => compares.some(c => a.includes(c)));
+          break;
         case 'greater_than':
         case 'gt':
           isMet = Number(actualValue) > Number(compareValue); break;
@@ -103,15 +196,6 @@ const checkCondition = (condition: any, data: any): boolean => {
         default:
           isMet = true;
       }
-      console.log(`[checkCondition Debug] Evaluated rule for field ${actualFieldId}:`, {
-        operator,
-        actualValue,
-        compareValue,
-        safeActual: safeString(actualValue),
-        safeCompare: safeString(compareValue),
-        isMet,
-        action
-      });
     }
   }
 
@@ -201,6 +285,20 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
     const fields = field.fields || [];
     if (fields.length === 0 && !placeholder) return 4;
     
+    if (type === 'accordion') {
+      // Accordion sections are stacked vertically in the builder, so we sum their heights
+      let totalHeight = 0;
+      fields.forEach((f: any) => {
+        // Just sum the base calculateHeight for each section
+        totalHeight += calculateHeight(f); 
+      });
+      if (placeholder) {
+        totalHeight += (placeholder.rowSpan || 2);
+      }
+      // Add +1 unit per section for its header/gap, plus +1 for the accordion container
+      return Math.max(6, totalHeight + (fields.length || 0) + 1);
+    }
+
     const childHeights = fields.map((f: any) => {
       const h = calculateHeight(f);
       const r = typeof f.rowIndex === 'number' ? f.rowIndex : 0;

@@ -25,6 +25,7 @@ import { NavigationArchitect } from '../../components/Settings/NavigationArchite
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { BrandingSettings } from '../../components/Settings/Organization/BrandingSettings';
 import { cn } from '../../lib/utils';
+import { API_BASE_URL } from '../../config';
 
 // Types
 interface MenuItem {
@@ -56,6 +57,18 @@ export const AppearanceSettings = () => {
   ]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('menu');
+  const [initialized, setInitialized] = useState(false);
+
+  // Unified Branding State
+  const [branding, setBranding] = useState({
+    logoUrl: '',
+    primaryColor: '#2563eb',
+    accentColor: '#4f46e5',
+    faviconUrl: '',
+    aiEnabled: true,
+    forceDarkMode: false,
+    useTenantBranding: false,
+  });
 
   const tabs = [
     { id: 'menu', label: 'Menu' },
@@ -65,24 +78,38 @@ export const AppearanceSettings = () => {
 
   // Initialize from tenant config if available
   useEffect(() => {
-    if (tenant?.menuConfig) {
-      if (Array.isArray(tenant.menuConfig)) {
-        setMenuItems(tenant.menuConfig as MenuItem[]);
-      } else if ((tenant.menuConfig as any).sections) {
-        // Flatten sections for the legacy architect
-        const allItems = (tenant.menuConfig as any).sections.flatMap((s: any) => s.items || []);
-        setMenuItems(allItems);
+    if (tenant && !initialized) {
+      if (tenant.menuConfig) {
+        if (Array.isArray(tenant.menuConfig)) {
+          setMenuItems(tenant.menuConfig as MenuItem[]);
+        } else if ((tenant.menuConfig as any).sections) {
+          const allItems = (tenant.menuConfig as any).sections.flatMap((s: any) => s.items || []);
+          setMenuItems(allItems);
+        }
       }
+      
+      if (tenant.branding) {
+        setBranding({
+          logoUrl: tenant.branding.logoUrl || '',
+          primaryColor: tenant.branding.primaryColor || '#2563eb',
+          accentColor: tenant.branding.accentColor || '#4f46e5',
+          faviconUrl: tenant.branding.faviconUrl || '',
+          aiEnabled: tenant.branding.aiEnabled ?? true,
+          forceDarkMode: tenant.branding.forceDarkMode ?? false,
+          useTenantBranding: tenant.branding.useTenantBranding ?? false,
+        });
+        if (tenant.branding.layout_style) {
+          setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
+        }
+      }
+      setInitialized(true);
     }
-    if (tenant?.branding?.layout_style) {
-      setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
-    }
-  }, [tenant]);
+  }, [tenant, initialized]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('http://localhost:3001/api/platform/settings', {
+      const res = await fetch(`${API_BASE_URL}/api/platform/settings`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -90,7 +117,11 @@ export const AppearanceSettings = () => {
           'x-tenant-id': tenant?.id || ''
         },
         body: JSON.stringify({
-          branding: { ...tenant?.branding, layout_style: layoutStyle },
+          branding: { 
+            ...tenant?.branding, 
+            ...branding,
+            layout_style: layoutStyle
+          },
           workspaceSettings: { ...tenant?.workspaceSettings, navigation_manifest: menuItems }
         })
       });
@@ -98,7 +129,7 @@ export const AppearanceSettings = () => {
       if (!res.ok) throw new Error('Failed to save settings');
       
       // Use the specific config endpoint as requested
-      await fetch(`http://localhost:3001/api/tenants/${tenant?.id}/config`, {
+      await fetch(`${API_BASE_URL}/api/tenants/${tenant?.id}/config`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -190,15 +221,14 @@ export const AppearanceSettings = () => {
             {activeTab === 'branding' && (
               <motion.div
                 key="branding-tab"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-10"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
               >
                 <BrandingSettings 
                   tenant={tenant} 
-                  onUpdate={updateTenant} 
+                  branding={branding}
+                  setBranding={setBranding}
                 />
               </motion.div>
             )}
