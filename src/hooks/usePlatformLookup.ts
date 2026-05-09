@@ -96,28 +96,28 @@ export const usePlatformLookup = (field: any) => {
       if (entity === 'users') {
         setRawData(users.map(u => ({ 
           id: u.id, 
-          name: lookupDisplayField ? u[lookupDisplayField] : (u.name || u.email), 
+          name: lookupDisplayField ? (u as any)[lookupDisplayField] : (u.name || u.email), 
           ...u 
         })));
         setLoading(usersLoading);
       } else if (entity === 'teams') {
         setRawData(teams.map(t => ({ 
           id: t.id, 
-          name: lookupDisplayField ? t[lookupDisplayField] : t.name, 
+          name: lookupDisplayField ? (t as any)[lookupDisplayField] : t.name, 
           ...t 
         })));
         setLoading(teamsLoading);
       } else if (entity === 'roles' || entity === 'positions') {
         setRawData(positions.map(p => ({ 
           id: p.id, 
-          name: lookupDisplayField ? p[lookupDisplayField] : (p.title || p.name), 
+          name: lookupDisplayField ? (p as any)[lookupDisplayField] : p.title, 
           ...p 
         })));
         setLoading(positionsLoading);
       } else if (entity === 'security_groups') {
         setRawData(securityGroups.map(g => ({ 
           id: g.id, 
-          name: lookupDisplayField ? g[lookupDisplayField] : g.name, 
+          name: lookupDisplayField ? (g as any)[lookupDisplayField] : g.name, 
           ...g 
         })));
         setLoading(groupsLoading);

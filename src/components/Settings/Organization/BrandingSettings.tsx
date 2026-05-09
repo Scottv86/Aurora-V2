@@ -91,7 +91,7 @@ export const BrandingSettings = ({ tenant, branding, setBranding }: BrandingSett
                     className="hidden"
                   />
                   <Button 
-                    variant="outline" 
+                    variant="secondary" 
                     onClick={() => fileInputRef.current?.click()}
                     className="gap-2"
                   >

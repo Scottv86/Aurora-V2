@@ -23,6 +23,7 @@ import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField } from '../../types/platform';
+import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 
@@ -330,10 +331,11 @@ export const ModuleView = () => {
             </Link>
             <button 
               onClick={() => {
-                const initialDefaults = {};
+                const initialDefaults: any = {};
                 allFields.forEach((f: any) => {
-                  if (f.defaultValue !== undefined && f.defaultValue !== '') {
-                    (initialDefaults as any)[f.id] = f.defaultValue;
+                  const defVal = calculateDefaultValue(f, initialDefaults);
+                  if (defVal !== undefined && defVal !== null && defVal !== '') {
+                    initialDefaults[f.id] = defVal;
                   }
                 });
                 setNewEntryData(initialDefaults);
@@ -656,10 +658,11 @@ export const ModuleView = () => {
                                       </label>
                                       <FieldInput 
                                         field={nestedField}
-                                        value={newEntryData[field.id]?.[nestedField.id] ?? nestedField.defaultValue}
+                                        value={newEntryData[field.id]?.[nestedField.id] ?? calculateDefaultValue(nestedField, newEntryData[field.id] || {})}
                                         onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                         usersData={[]}
                                         lookupData={{}}
+                                        recordData={newEntryData[field.id] || {}}
                                       />
                                     </div>
                                   )})}
@@ -689,13 +692,14 @@ export const ModuleView = () => {
                                     </div>
                                   )}
                                 </label>
-                                <FieldInput 
-                                  field={field}
-                                  value={newEntryData[field.id] ?? field.defaultValue}
-                                  onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
-                                  usersData={[]}
-                                  lookupData={{}}
-                                />
+                                  <FieldInput 
+                                    field={field}
+                                    value={newEntryData[field.id] ?? calculateDefaultValue(field, newEntryData)}
+                                    onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                                    usersData={[]}
+                                    lookupData={{}}
+                                    recordData={newEntryData}
+                                  />
                                 {field.helperText && (
                                   <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
                                 )}

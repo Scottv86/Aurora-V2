@@ -545,51 +545,51 @@ export const FIELD_CATEGORIES = [
     label: 'Inputs',
     fields: [
       { id: 'text', label: 'Short Text', icon: Type, defaultSpan: 6 },
-      { id: 'longText', label: 'Long Text', icon: AlignLeft, defaultSpan: 12 },
-      { id: 'number', label: 'Number', icon: Hash, defaultSpan: 4 },
-      { id: 'currency', label: 'Currency', icon: DollarSign, defaultSpan: 4 },
-      { id: 'date', label: 'Date Picker', icon: Calendar, defaultSpan: 4 },
-      { id: 'time', label: 'Time Picker', icon: Clock, defaultSpan: 4 },
+      { id: 'longText', label: 'Long Text', icon: AlignLeft, defaultSpan: 6 },
+      { id: 'number', label: 'Number', icon: Hash, defaultSpan: 6 },
+      { id: 'currency', label: 'Currency', icon: DollarSign, defaultSpan: 6 },
+      { id: 'date', label: 'Date Picker', icon: Calendar, defaultSpan: 6 },
+      { id: 'time', label: 'Time Picker', icon: Clock, defaultSpan: 6 },
       { id: 'select', label: 'Dropdown', icon: ListFilter, defaultSpan: 6 },
       { id: 'radio', label: 'Radio Buttons', icon: Radio, defaultSpan: 6 },
       { id: 'checkboxGroup', label: 'Checkbox Group', icon: ListPlus, defaultSpan: 6 },
-      { id: 'checkbox', label: 'Single Checkbox', icon: CheckSquare, defaultSpan: 3 },
-      { id: 'toggle', label: 'Switch / Toggle', icon: ToggleRight, defaultSpan: 3 },
+      { id: 'checkbox', label: 'Single Checkbox', icon: CheckSquare, defaultSpan: 6 },
+      { id: 'toggle', label: 'Switch / Toggle', icon: ToggleRight, defaultSpan: 6 },
       { id: 'slider', label: 'Range Slider', icon: Sliders, defaultSpan: 6 },
-      { id: 'rating', label: 'Star Rating', icon: Star, defaultSpan: 4 },
-      { id: 'colorpicker', label: 'Color Picker', icon: Palette, defaultSpan: 4 },
-      { id: 'tag', label: 'Tag Input', icon: Tag, defaultSpan: 12 },
+      { id: 'rating', label: 'Star Rating', icon: Star, defaultSpan: 6 },
+      { id: 'colorpicker', label: 'Color Picker', icon: Palette, defaultSpan: 6 },
+      { id: 'tag', label: 'Tag Input', icon: Tag, defaultSpan: 6 },
     ]
   },
   {
     id: 'actions',
     label: 'Actions & Tools',
     fields: [
-      { id: 'button', label: 'Action Button', icon: MousePointer2, defaultSpan: 3 },
+      { id: 'button', label: 'Action Button', icon: MousePointer2, defaultSpan: 6 },
       { id: 'buttonGroup', label: 'Button Group', icon: Layers, defaultSpan: 6 },
       { id: 'signature', label: 'Signature Pad', icon: PenTool, defaultSpan: 6 },
-      { id: 'qr_scanner', label: 'QR / Barcode', icon: QrCode, defaultSpan: 4 },
+      { id: 'qr_scanner', label: 'QR / Barcode', icon: QrCode, defaultSpan: 6 },
       { id: 'payment', label: 'Payment Control', icon: CreditCard, defaultSpan: 6 },
-      { id: 'file', label: 'File Upload', icon: UploadCloud, defaultSpan: 12 },
+      { id: 'file', label: 'File Upload', icon: UploadCloud, defaultSpan: 6 },
     ]
   },
   {
     id: 'display',
     label: 'Content & Display',
     fields: [
-      { id: 'heading', label: 'Heading', icon: Heading, defaultSpan: 12 },
-      { id: 'richtext', label: 'Rich Text / WYSIWYG', icon: FileJson, defaultSpan: 12 },
-      { id: 'html', label: 'HTML Block', icon: Code, defaultSpan: 12 },
-      { id: 'icon', label: 'Icon Display', icon: Smile, defaultSpan: 2 },
-      { id: 'divider', label: 'Divider', icon: Minus, defaultSpan: 12 },
-      { id: 'spacer', label: 'Spacer', icon: Maximize2, defaultSpan: 12 },
-      { id: 'alert', label: 'Alert Notice', icon: AlertCircle, defaultSpan: 12 },
-      { id: 'image', label: 'Image Holder', icon: Image, defaultSpan: 12 },
-      { id: 'video', label: 'Video Player', icon: Video, defaultSpan: 12 },
+      { id: 'heading', label: 'Heading', icon: Heading, defaultSpan: 6 },
+      { id: 'richtext', label: 'Rich Text / WYSIWYG', icon: FileJson, defaultSpan: 6 },
+      { id: 'html', label: 'HTML Block', icon: Code, defaultSpan: 6 },
+      { id: 'icon', label: 'Icon Display', icon: Smile, defaultSpan: 6 },
+      { id: 'divider', label: 'Divider', icon: Minus, defaultSpan: 6 },
+      { id: 'spacer', label: 'Spacer', icon: Maximize2, defaultSpan: 6 },
+      { id: 'alert', label: 'Alert Notice', icon: AlertCircle, defaultSpan: 6 },
+      { id: 'image', label: 'Image Holder', icon: Image, defaultSpan: 6 },
+      { id: 'video', label: 'Video Player', icon: Video, defaultSpan: 6 },
       { id: 'audio', label: 'Audio Player', icon: Music, defaultSpan: 6 },
       { id: 'progress', label: 'Progress Bar', icon: Activity, defaultSpan: 6 },
-      { id: 'map', label: 'Map / Geolocation', icon: MapPin, defaultSpan: 12 },
-      { id: 'canvas', label: 'Drawing Canvas', icon: Brush, defaultSpan: 12 },
+      { id: 'map', label: 'Map / Geolocation', icon: MapPin, defaultSpan: 6 },
+      { id: 'canvas', label: 'Drawing Canvas', icon: Brush, defaultSpan: 6 },
       { id: 'chat', label: 'Chat Stream', icon: MessageSquare, defaultSpan: 6 },
     ]
   },
@@ -597,36 +597,36 @@ export const FIELD_CATEGORIES = [
     id: 'layout',
     label: 'Containers & Layout',
     fields: [
-      { id: 'card', label: 'Card Container', icon: Box, defaultSpan: 12 },
-      { id: 'accordion', label: 'Accordion', icon: GridIcon, defaultSpan: 12 },
-      { id: 'tabs_nested', label: 'Nested Tabs', icon: FolderTree, defaultSpan: 12 },
-      { id: 'stepper', label: 'Step Progress', icon: ListOrdered, defaultSpan: 12 },
-      { id: 'timeline', label: 'Timeline View', icon: GitCommit, defaultSpan: 12 },
-      { id: 'group', label: 'Group Container', icon: Layers, defaultSpan: 12 },
-      { id: 'fieldGroup', label: 'Field Section', icon: Folder, defaultSpan: 12 },
-      { id: 'repeatableGroup', label: 'Repeatable List', icon: ListPlus, defaultSpan: 12 },
+      { id: 'card', label: 'Card Container', icon: Box, defaultSpan: 6 },
+      { id: 'accordion', label: 'Accordion', icon: GridIcon, defaultSpan: 6 },
+      { id: 'tabs_nested', label: 'Nested Tabs', icon: FolderTree, defaultSpan: 6 },
+      { id: 'stepper', label: 'Step Progress', icon: ListOrdered, defaultSpan: 6 },
+      { id: 'timeline', label: 'Timeline View', icon: GitCommit, defaultSpan: 6 },
+      { id: 'group', label: 'Group Container', icon: Layers, defaultSpan: 6 },
+      { id: 'fieldGroup', label: 'Field Section', icon: Folder, defaultSpan: 6 },
+      { id: 'repeatableGroup', label: 'Repeatable List', icon: ListPlus, defaultSpan: 6 },
     ]
   },
   {
     id: 'data',
     label: 'Data & Intelligence',
     fields: [
-      { id: 'datatable', label: 'Data Table', icon: Table, defaultSpan: 12 },
-      { id: 'duallist', label: 'Dual List', icon: ArrowRightLeft, defaultSpan: 12 },
+      { id: 'datatable', label: 'Data Table', icon: Table, defaultSpan: 6 },
+      { id: 'duallist', label: 'Dual List', icon: ArrowRightLeft, defaultSpan: 6 },
       { id: 'treeview', label: 'Tree View', icon: TreePalm, defaultSpan: 6 },
-      { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 12 },
+      { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 6 },
       { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
       { id: 'user', label: 'User Selector', icon: Users, defaultSpan: 6 },
       { id: 'autonumber', label: 'Auto-increment', icon: Hash, defaultSpan: 6 },
-      { id: 'connector', label: 'Connector', icon: Zap, defaultSpan: 12 },
-      { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 12 },
+      { id: 'connector', label: 'Connector', icon: Zap, defaultSpan: 6 },
+      { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 6 },
     ]
   },
   {
     id: 'hierarchical',
     label: 'Hierarchical',
     fields: [
-      { id: 'sub_module', label: 'Nested Collection', icon: Layers, defaultSpan: 12 },
+      { id: 'sub_module', label: 'Nested Collection', icon: Layers, defaultSpan: 6 },
     ]
   }
 ];
@@ -1224,7 +1224,14 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout }: any) =
             </p>
           )}
           <div className="mt-2 flex items-center gap-2">
-             <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{fObj.type}</span>
+             <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+               {(() => {
+                 const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === fObj.type);
+                 const Icon = fieldDef?.icon;
+                 return Icon ? <Icon size={8} className="text-zinc-400" /> : null;
+               })()}
+               {fObj.type}
+             </span>
           </div>
         </div>
       ) : (
@@ -1237,10 +1244,18 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout }: any) =
              <span>
                {fObj.placeholderOverride || (['select', 'lookup', 'user'].includes(field?.type || '') 
                  ? `Select ${field?.label?.toLowerCase() || 'option'}...` 
+                  : field?.type === 'date' ? (field?.dateFormat === 'yyyy-MM-dd' ? 'YYYY-MM-DD' : field?.dateFormat === 'dd/MM/yyyy' ? 'DD / MM / YYYY' : field?.dateFormat === 'MM/dd/yyyy' ? 'MM / DD / YYYY' : 'May 9th, 2026')
+                  : field?.type === 'time' ? (field?.timeFormat === '24h' ? '00:00' : '00:00 AM')
                  : `Enter ${field?.label?.toLowerCase() || 'value'}...`)}
              </span>
              {['select', 'lookup', 'user'].includes(field?.type || '') && (
                <ChevronDown size={14} className="text-zinc-400" />
+             )}
+             {field?.type === 'date' && (
+               <Calendar size={14} className="text-zinc-400" />
+             )}
+             {field?.type === 'time' && (
+               <Clock size={14} className="text-zinc-400" />
              )}
            </div>
         </div>
@@ -3014,7 +3029,12 @@ export const ModuleEditor = () => {
                                    <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
-                                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1">
+                                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                                           {(() => {
+                                             const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+                                             const Icon = fieldDef?.icon;
+                                             return Icon ? <Icon size={10} className="text-zinc-400" /> : null;
+                                           })()}
                                           {block.type.replace('_', ' ')}
                                           {block.required && <span className="text-rose-500">*</span>}
                                           {block.tooltip && <HelpCircle size={10} className="text-zinc-400" />}
@@ -3762,6 +3782,16 @@ export const ModuleEditor = () => {
                                         <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 truncate flex-1">
                                           {block.calculationLogic || 'No formula defined'}
                                         </span>
+                                      </div>
+                                    ) : block.type === 'date' ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">MM / DD / YYYY</span>
+                                        <Calendar size={14} className="text-zinc-400 dark:text-zinc-600" />
+                                      </div>
+                                    ) : block.type === 'time' ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
+                                        <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
                                       </div>
                                     ) : (block.type === 'select' || block.type === 'lookup' || block.type === 'user') ? (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
@@ -6705,8 +6735,6 @@ export const ModuleEditor = () => {
                       exit={{ opacity: 0, x: 20 }}
                       className="p-6 space-y-8"
                     >
-                      <>
-                        {/* Header with Close */}
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <div className="w-1 h-4 bg-indigo-500 rounded-full" />
@@ -6934,6 +6962,324 @@ export const ModuleEditor = () => {
 
                     {/* Specific Settings */}
                     <div className="space-y-6">
+                      {selectedField.type === 'date' && (
+                        <div className="space-y-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Date Format</label>
+                            <select 
+                              value={selectedField.dateFormat || 'PPP'}
+                              onChange={(e) => updateField(selectedField.id, { dateFormat: e.target.value })}
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                            >
+                              <option value="PPP">Friendly (May 9th, 2026)</option>
+                              <option value="yyyy-MM-dd">ISO (2026-05-09)</option>
+                              <option value="dd/MM/yyyy">European (09/05/2026)</option>
+                              <option value="MM/dd/yyyy">US (05/09/2026)</option>
+                            </select>
+                          </div>
+
+                          <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                selectedField.excludeWeekends ? "bg-amber-500/10 text-amber-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                              )}>
+                                <Calendar size={14} />
+                              </div>
+                              <div>
+                                <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Exclude Weekends</span>
+                                <span className="block text-[9px] text-zinc-500">{selectedField.excludeWeekends ? 'Saturdays & Sundays disabled' : 'All days selectable'}</span>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => updateField(selectedField.id, { excludeWeekends: !selectedField.excludeWeekends })}
+                              className={cn(
+                                "w-10 h-5 rounded-full relative transition-colors duration-300",
+                                selectedField.excludeWeekends ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                              )}
+                            >
+                              <motion.div 
+                                animate={{ x: selectedField.excludeWeekends ? 22 : 2 }}
+                                className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
+                              />
+                            </button>
+                          </label>
+
+                          <div className="h-px bg-zinc-200 dark:bg-zinc-900" />
+                          
+                          <div className="space-y-4">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Default Value Strategy</label>
+                            <select 
+                              value={selectedField.defaultType || 'static'}
+                              onChange={(e) => updateField(selectedField.id, { defaultType: e.target.value as any })}
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                            >
+                              <option value="static">Static Date</option>
+                              <option value="today">Today</option>
+                              <option value="start_of_week">Start of Current Week</option>
+                              <option value="end_of_week">End of Current Week</option>
+                              <option value="start_of_month">Start of Current Month</option>
+                              <option value="end_of_month">End of Current Month</option>
+                              <option value="start_of_year">Start of Current Year</option>
+                              <option value="end_of_year">End of Current Year</option>
+                              <option value="relative">Relative Offset from Today</option>
+                              <option value="field_copy">Copy from Another Field</option>
+                              <option value="rounded_now">Rounded Current Time</option>
+                            </select>
+
+                            {selectedField.defaultType === 'relative' && (
+                              <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2">
+                                <input 
+                                  type="number"
+                                  placeholder="Amount"
+                                  value={selectedField.defaultOffset || 0}
+                                  onChange={(e) => updateField(selectedField.id, { defaultOffset: parseInt(e.target.value) })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                />
+                                <select 
+                                  value={selectedField.defaultOffsetUnit || 'days'}
+                                  onChange={(e) => updateField(selectedField.id, { defaultOffsetUnit: e.target.value as any })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                >
+                                  <option value="days">Days</option>
+                                  <option value="business_days">Business Days</option>
+                                  <option value="months">Months</option>
+                                  <option value="years">Years</option>
+                                </select>
+                              </div>
+                            )}
+
+                            {selectedField.defaultType === 'rounded_now' && (
+                              <select 
+                                value={selectedField.defaultRounding || 15}
+                                onChange={(e) => updateField(selectedField.id, { defaultRounding: parseInt(e.target.value) })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs animate-in slide-in-from-top-2 appearance-none"
+                              >
+                                <option value="5">5 Minutes</option>
+                                <option value="10">10 Minutes</option>
+                                <option value="15">15 Minutes</option>
+                                <option value="30">30 Minutes</option>
+                                <option value="60">1 Hour</option>
+                              </select>
+                            )}
+
+                            {selectedField.defaultType === 'field_copy' && (
+                              <select 
+                                value={selectedField.defaultSourceFieldId || ''}
+                                onChange={(e) => updateField(selectedField.id, { defaultSourceFieldId: e.target.value })}
+                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs animate-in slide-in-from-top-2 appearance-none"
+                              >
+                                <option value="">Select Source Field...</option>
+                                {allFields
+                                  .filter(f => f.type === 'date' && f.id !== selectedField.id)
+                                  .map(f => (
+                                    <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                  ))}
+                              </select>
+                            )}
+                          </div>
+
+                          <div className="h-px bg-zinc-200 dark:bg-zinc-900" />
+
+                          <div className="space-y-4">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Validation Constraints</label>
+                            
+                            {/* Min Date */}
+                            <div className="space-y-2">
+                              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Minimum Date</span>
+                              <div className="grid grid-cols-2 gap-2">
+                                <select 
+                                  value={selectedField.minDateType || 'none'}
+                                  onChange={(e) => updateField(selectedField.id, { minDateType: e.target.value as any })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                >
+                                  <option value="none">No Minimum</option>
+                                  <option value="static">Static</option>
+                                  <option value="today">Today</option>
+                                  <option value="relative">Relative to Today</option>
+                                  <option value="field_value">Field Value</option>
+                                </select>
+                                {selectedField.minDateType === 'static' && (
+                                  <input 
+                                    type="date"
+                                    value={selectedField.minDateValue || ''}
+                                    onChange={(e) => updateField(selectedField.id, { minDateValue: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                  />
+                                )}
+                                {selectedField.minDateType === 'relative' && (
+                                  <div className="flex gap-2 animate-in slide-in-from-top-2">
+                                    <input 
+                                      type="number"
+                                      value={selectedField.minDateOffset || 0}
+                                      onChange={(e) => updateField(selectedField.id, { minDateOffset: parseInt(e.target.value) })}
+                                      className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-xs"
+                                    />
+                                    <select 
+                                      value={selectedField.minDateOffsetUnit || 'days'}
+                                      onChange={(e) => updateField(selectedField.id, { minDateOffsetUnit: e.target.value as any })}
+                                      className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-xs appearance-none"
+                                    >
+                                      <option value="days">Days</option>
+                                      <option value="business_days">Biz Days</option>
+                                      <option value="months">Months</option>
+                                    </select>
+                                  </div>
+                                )}
+                                {selectedField.minDateType === 'field_value' && (
+                                  <select 
+                                    value={selectedField.minDateFieldId || ''}
+                                    onChange={(e) => updateField(selectedField.id, { minDateFieldId: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  >
+                                    <option value="">Select Field...</option>
+                                    {allFields.filter(f => f.type === 'date' && f.id !== selectedField.id).map(f => (
+                                      <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Max Date */}
+                            <div className="space-y-2">
+                              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Maximum Date</span>
+                              <div className="grid grid-cols-2 gap-2">
+                                <select 
+                                  value={selectedField.maxDateType || 'none'}
+                                  onChange={(e) => updateField(selectedField.id, { maxDateType: e.target.value as any })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                >
+                                  <option value="none">No Maximum</option>
+                                  <option value="static">Static</option>
+                                  <option value="today">Today</option>
+                                  <option value="relative">Relative to Today</option>
+                                  <option value="field_value">Field Value</option>
+                                </select>
+                                {selectedField.maxDateType === 'static' && (
+                                  <input 
+                                    type="date"
+                                    value={selectedField.maxDateValue || ''}
+                                    onChange={(e) => updateField(selectedField.id, { maxDateValue: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                  />
+                                )}
+                                {selectedField.maxDateType === 'relative' && (
+                                  <div className="flex gap-2 animate-in slide-in-from-top-2">
+                                    <input 
+                                      type="number"
+                                      value={selectedField.maxDateOffset || 0}
+                                      onChange={(e) => updateField(selectedField.id, { maxDateOffset: parseInt(e.target.value) })}
+                                      className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-xs"
+                                    />
+                                    <select 
+                                      value={selectedField.maxDateOffsetUnit || 'days'}
+                                      onChange={(e) => updateField(selectedField.id, { maxDateOffsetUnit: e.target.value as any })}
+                                      className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-xs appearance-none"
+                                    >
+                                      <option value="days">Days</option>
+                                      <option value="business_days">Biz Days</option>
+                                      <option value="months">Months</option>
+                                    </select>
+                                  </div>
+                                )}
+                                {selectedField.maxDateType === 'field_value' && (
+                                  <select 
+                                    value={selectedField.maxDateFieldId || ''}
+                                    onChange={(e) => updateField(selectedField.id, { maxDateFieldId: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  >
+                                    <option value="">Select Field...</option>
+                                    {allFields.filter(f => f.type === 'date' && f.id !== selectedField.id).map(f => (
+                                      <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedField.type === 'time' && (
+                        <div className="space-y-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Time Display</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { id: '12h', label: '12 Hour (AM/PM)' },
+                                { id: '24h', label: '24 Hour' }
+                              ].map((fmt) => (
+                                <button 
+                                  key={fmt.id}
+                                  onClick={() => updateField(selectedField.id, { timeFormat: fmt.id as any })}
+                                  className={cn(
+                                    "py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
+                                    (selectedField.timeFormat || '12h') === fmt.id
+                                      ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                      : "bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
+                                  )}
+                                >
+                                  {fmt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Minute Increment</label>
+                            <select 
+                              value={selectedField.minuteStep || 15}
+                              onChange={(e) => updateField(selectedField.id, { minuteStep: parseInt(e.target.value) })}
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                            >
+                              <option value="1">1 Minute</option>
+                              <option value="5">5 Minutes</option>
+                              <option value="10">10 Minutes</option>
+                              <option value="15">15 Minutes</option>
+                              <option value="30">30 Minutes</option>
+                              <option value="60">1 Hour</option>
+                            </select>
+                            <p className="text-[9px] text-zinc-500 font-medium px-1 italic">Controls the step for arrow keys and quick select presets.</p>
+                          </div>
+
+                          <div className="h-px bg-zinc-200 dark:bg-zinc-900" />
+                          
+                          <div className="space-y-4">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Default Time Strategy</label>
+                            <select 
+                              value={selectedField.defaultType || 'static'}
+                              onChange={(e) => updateField(selectedField.id, { defaultType: e.target.value as any })}
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                            >
+                              <option value="static">Static Time</option>
+                              <option value="now">Current Time (Now)</option>
+                              <option value="rounded_now">Rounded Current Time</option>
+                              <option value="relative">Relative Offset from Now</option>
+                            </select>
+
+                            {selectedField.defaultType === 'relative' && (
+                              <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2">
+                                <input 
+                                  type="number"
+                                  placeholder="Amount"
+                                  value={selectedField.defaultOffset || 0}
+                                  onChange={(e) => updateField(selectedField.id, { defaultOffset: parseInt(e.target.value) })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                />
+                                <select 
+                                  value={selectedField.defaultOffsetUnit || 'minutes'}
+                                  onChange={(e) => updateField(selectedField.id, { defaultOffsetUnit: e.target.value as any })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                >
+                                  <option value="minutes">Minutes</option>
+                                  <option value="hours">Hours</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       {selectedField.type === 'currency' && (
                         <div className="space-y-2">
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Currency Symbol</label>
@@ -7783,115 +8129,117 @@ export const ModuleEditor = () => {
                               </select>
                             </div>
                           )}
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between px-1">
-                                  <div className="flex items-center gap-2">
-                                    <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
-                                      <ArrowRightLeft size={12} />
-                                    </div>
-                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Field Mapping</label>
+
+                          {selectedField.lookupSource && (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
+                                    <ArrowRightLeft size={12} />
                                   </div>
-                                  <button 
-                                    onClick={() => {
-                                      const currentMappings = selectedField.lookupOutputMappings || [];
-                                      updateField(selectedField.id, { 
-                                        lookupOutputMappings: [...currentMappings, { id: Math.random().toString(36).substr(2, 9), sourceFieldId: '', targetFieldId: '' }] 
-                                      });
-                                    }}
-                                    className="text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 flex items-center gap-1"
-                                  >
-                                    <Plus size={10} /> Add Mapping
-                                  </button>
+                                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Field Mapping</label>
                                 </div>
+                                <button 
+                                  onClick={() => {
+                                    const currentMappings = selectedField.lookupOutputMappings || [];
+                                    updateField(selectedField.id, { 
+                                      lookupOutputMappings: [...currentMappings, { id: Math.random().toString(36).substr(2, 9), sourceFieldId: '', targetFieldId: '' }] 
+                                    });
+                                  }}
+                                  className="text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 flex items-center gap-1"
+                                >
+                                  <Plus size={10} /> Add Mapping
+                                </button>
+                              </div>
 
-                                <div className="space-y-2">
-                                  {(selectedField.lookupOutputMappings || []).map((mapping: any, idx: number) => (
-                                    <div key={mapping.id} className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 rounded-xl group/mapping">
-                                      <div className="flex-1 space-y-1">
-                                        {selectedField.lookupSource === 'module_records' ? (
-                                          <button
-                                            onClick={() => {
-                                              setActiveMappingIdx(idx);
-                                              setActiveMappingType('source');
-                                              setShowMappingModal(true);
-                                            }}
-                                            className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 text-left flex items-center justify-between hover:text-indigo-500 transition-all group/src-btn"
-                                          >
-                                            <span className="truncate">
-                                              {(() => {
-                                                const relatedData = selectedField.targetModuleId ? relatedModulesMap[selectedField.targetModuleId] : null;
-                                                const allFields = relatedData ? flattenFields(relatedData.layout || []) : [];
-                                                const source = allFields.find(f => f.id === mapping.sourceFieldId);
-                                                if (source) return source.label;
-
-                                                // Fallback to platform modules list if not in related map yet
-                                                const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
-                                                const fallbackFields = targetMod ? flattenFields(targetMod.layout || []) : [];
-                                                const fallbackSource = fallbackFields.find(f => f.id === mapping.sourceFieldId);
-                                                return fallbackSource ? fallbackSource.label : 'Select Source...';
-                                              })()}
-                                            </span>
-                                            <Search size={10} className="text-zinc-400 group-hover/src-btn:text-indigo-500" />
-                                          </button>
-                                        ) : (
-                                          <select 
-                                            value={mapping.sourceFieldId}
-                                            onChange={(e) => {
-                                              const newMappings = [...(selectedField.lookupOutputMappings || [])];
-                                              newMappings[idx] = { ...newMappings[idx], sourceFieldId: e.target.value };
-                                              updateField(selectedField.id, { lookupOutputMappings: newMappings });
-                                            }}
-                                            className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
-                                          >
-                                            <option value="">Source Field...</option>
-                                            {(() => {
-                                              let targetFields: any[] = [];
-                                              if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
-                                                const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
-                                                if (platformMod) targetFields = platformMod.availableFields;
-                                              }
-                                              return targetFields.map(f => (
-                                                <option key={f.id} value={f.id}>{f.label}</option>
-                                              ));
-                                            })()}
-                                          </select>
-                                        )}
-                                        <div className="flex items-center gap-1 text-[8px] text-zinc-400 font-black uppercase tracking-widest px-1">
-                                          <ArrowRight size={8} /> Target
-                                        </div>
+                              <div className="space-y-2">
+                                {(selectedField.lookupOutputMappings || []).map((mapping: any, idx: number) => (
+                                  <div key={mapping.id} className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 rounded-xl group/mapping">
+                                    <div className="flex-1 space-y-1">
+                                      {selectedField.lookupSource === 'module_records' ? (
                                         <button
                                           onClick={() => {
                                             setActiveMappingIdx(idx);
-                                            setActiveMappingType('target');
+                                            setActiveMappingType('source');
                                             setShowMappingModal(true);
                                           }}
-                                          className="w-full bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 text-left flex items-center justify-between hover:border-indigo-500 transition-all group/btn"
+                                          className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 text-left flex items-center justify-between hover:text-indigo-500 transition-all group/src-btn"
                                         >
                                           <span className="truncate">
                                             {(() => {
-                                              const allFields = flattenFields(layout);
-                                              const target = allFields.find(f => f.id === mapping.targetFieldId);
-                                              return target ? target.label : 'Select Target...';
+                                              const relatedData = selectedField.targetModuleId ? relatedModulesMap[selectedField.targetModuleId] : null;
+                                              const allFields = relatedData ? flattenFields(relatedData.layout || []) : [];
+                                              const source = allFields.find(f => f.id === mapping.sourceFieldId);
+                                              if (source) return source.label;
+
+                                              const targetMod = modules.find((m: any) => m.id === selectedField.targetModuleId);
+                                              const fallbackFields = targetMod ? flattenFields(targetMod.layout || []) : [];
+                                              const fallbackSource = fallbackFields.find(f => f.id === mapping.sourceFieldId);
+                                              return fallbackSource ? fallbackSource.label : 'Select Source...';
                                             })()}
                                           </span>
-                                          <Search size={10} className="text-zinc-400 group-hover/btn:text-indigo-500" />
+                                          <Search size={10} className="text-zinc-400 group-hover/src-btn:text-indigo-500" />
                                         </button>
+                                      ) : (
+                                        <select 
+                                          value={mapping.sourceFieldId}
+                                          onChange={(e) => {
+                                            const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                                            newMappings[idx] = { ...newMappings[idx], sourceFieldId: e.target.value };
+                                            updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                          }}
+                                          className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
+                                        >
+                                          <option value="">Source Field...</option>
+                                          {(() => {
+                                            let targetFields: any[] = [];
+                                            if (selectedField.lookupSource === 'platform' && selectedField.platformEntity === 'modules' && selectedField.targetPlatformModuleId) {
+                                              const platformMod = PLATFORM_MODULES.find(m => m.id === selectedField.targetPlatformModuleId);
+                                              if (platformMod) targetFields = platformMod.availableFields;
+                                            }
+                                            return targetFields.map(f => (
+                                              <option key={f.id} value={f.id}>{f.label}</option>
+                                            ));
+                                          })()}
+                                        </select>
+                                      )}
+                                      <div className="flex items-center gap-1 text-[8px] text-zinc-400 font-black uppercase tracking-widest px-1">
+                                        <ArrowRight size={8} /> Target
                                       </div>
-                                      <button 
+                                      <button
                                         onClick={() => {
-                                          const newMappings = (selectedField.lookupOutputMappings || []).filter((m: any) => m.id !== mapping.id);
-                                          updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                          setActiveMappingIdx(idx);
+                                          setActiveMappingType('target');
+                                          setShowMappingModal(true);
                                         }}
-                                        className="p-1 text-zinc-400 hover:text-rose-500 opacity-0 group-hover/mapping:opacity-100 transition-all"
+                                        className="w-full bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 text-left flex items-center justify-between hover:border-indigo-500 transition-all group/btn"
                                       >
-                                        <Trash2 size={12} />
+                                        <span className="truncate">
+                                          {(() => {
+                                            const allFields = flattenFields(layout);
+                                            const target = allFields.find(f => f.id === mapping.targetFieldId);
+                                            return target ? target.label : 'Select Target...';
+                                          })()}
+                                        </span>
+                                        <Search size={10} className="text-zinc-400 group-hover/btn:text-indigo-500" />
                                       </button>
                                     </div>
-                                  ))}
-                                </div>
+                                    <button 
+                                      onClick={() => {
+                                        const newMappings = (selectedField.lookupOutputMappings || []).filter((m: any) => m.id !== mapping.id);
+                                        updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                      }}
+                                      className="p-1 text-zinc-400 hover:text-rose-500 opacity-0 group-hover/mapping:opacity-100 transition-all"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
+                        </div>
+                      )}
 
                       {selectedField.type === 'sub_module' && (
                         <div className="space-y-4">
@@ -7944,8 +8292,106 @@ export const ModuleEditor = () => {
                                   </div>
                                 </div>
                               </div>
+                              <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                                <div className="flex items-center justify-between px-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                    <h4 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Data Mapping</h4>
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      const conn = activeConnectors.find(c => c.connectorId === selectedField.connectorId) || 
+                                                   connectorRegistry.find(c => c.id === selectedField.connectorId);
+                                      if (conn) {
+                                        const outputs = (conn.ioSchema?.outputs) || (conn.connector?.ioSchema?.outputs) || [];
+                                        const fields = layout.filter(f => f.type !== 'connector' && f.type !== 'automation');
+                                        const newMappings = { ...(connectorMappings[selectedField.connectorId] || {}) };
+                                        let count = 0;
+                                        outputs.forEach((output: any) => {
+                                          if (newMappings[output.name]) return;
+                                          const match = fields.find(f => 
+                                            f.id === output.name || 
+                                            f.label.toLowerCase() === (output.label || output.name).toLowerCase()
+                                          );
+                                          if (match) {
+                                            newMappings[output.name] = match.id;
+                                            count++;
+                                          }
+                                        });
+                                        setConnectorMappings(prev => ({ ...prev, [selectedField.connectorId]: newMappings }));
+                                        if (count > 0) toast.success(`Auto-mapped ${count} fields`);
+                                        else toast.info("No matching fields found for auto-mapping");
+                                      }
+                                    }}
+                                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all shadow-sm"
+                                  >
+                                    <Wand2 size={10} />
+                                    Auto-Map
+                                  </button>
+                                </div>
 
+                                <div className="space-y-3">
+                                  {(() => {
+                                    const conn = activeConnectors.find(c => c.connectorId === selectedField.connectorId) || 
+                                                 connectorRegistry.find(c => c.id === selectedField.connectorId);
+                                    const outputs = (conn?.ioSchema?.outputs) || (conn?.connector?.ioSchema?.outputs) || [];
+                                    const targetFields = layout.filter(f => f.type !== 'connector' && f.type !== 'automation');
+                                    const mappings = connectorMappings[selectedField.connectorId] || {};
 
+                                    if (outputs.length === 0) {
+                                      return (
+                                        <div className="p-8 text-center bg-zinc-50 dark:bg-zinc-900/50 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                                          <Zap size={20} className="mx-auto mb-3 text-zinc-300" />
+                                          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">No API Outputs Defined</p>
+                                        </div>
+                                      );
+                                    }
+
+                                    return outputs.map((output: any) => {
+                                      const currentTarget = mappings[output.name];
+                                      const isDuplicate = Object.values(mappings).filter(v => v === currentTarget && v !== '').length > 1;
+
+                                      return (
+                                        <div key={output.name} className="group p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3 hover:border-indigo-500/30 transition-all shadow-sm">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                                                <Zap size={12} className="text-indigo-500" />
+                                              </div>
+                                              <div>
+                                                <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">{output.label || output.name}</span>
+                                                <span className="block text-[8px] font-mono text-zinc-500">{output.name}</span>
+                                              </div>
+                                            </div>
+                                            {isDuplicate && (
+                                              <div className="w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-white text-[8px] font-bold shadow-lg animate-pulse">!</div>
+                                            )}
+                                          </div>
+                                          
+                                          <select 
+                                            value={currentTarget || ''}
+                                            onChange={(e) => {
+                                              const newMappings = { ...mappings, [output.name]: e.target.value };
+                                              setConnectorMappings(prev => ({ ...prev, [selectedField.connectorId]: newMappings }));
+                                            }}
+                                            className={cn(
+                                              "w-full bg-zinc-50 dark:bg-zinc-800/50 border rounded-xl px-3 py-2 text-[10px] font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all appearance-none",
+                                              isDuplicate ? "border-amber-500/50 text-amber-600" : "border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
+                                            )}
+                                          >
+                                            <option value="">Unmapped</option>
+                                            {targetFields.map(f => (
+                                              <option key={f.id} value={f.id}>
+                                                {f.label} {Object.values(mappings).some(v => v === f.id && v !== currentTarget) ? ' (Already Used)' : ''}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+                              </div>
                             </div>
                           )}
                           <p className="text-[9px] text-zinc-600 italic px-1">Connect this block to an active Nexus integration.</p>
@@ -8084,8 +8530,7 @@ export const ModuleEditor = () => {
                         <span>Delete Field</span>
                       </button>
                     </div>
-                  </>
-                </motion.div>
+                  </motion.div>
                 ) : selectedTab ? (
                   <motion.div 
                     key={selectedTab.id}

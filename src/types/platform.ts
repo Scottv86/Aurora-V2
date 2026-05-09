@@ -135,6 +135,32 @@ export interface ModuleField {
   autonumberStart?: number;
   autonumberDigits?: number;
   
+  // Date & Time settings
+  dateFormat?: string;
+  timeFormat?: '12h' | '24h';
+  minuteStep?: number;
+  excludeWeekends?: boolean;
+  
+  // Advanced Defaults
+  defaultType?: 'static' | 'today' | 'now' | 'relative' | 'field_copy' | 'start_of_month' | 'end_of_month' | 'rounded_now' | 'start_of_week' | 'end_of_week' | 'start_of_year' | 'end_of_year';
+  defaultSourceFieldId?: string;
+  defaultOffset?: number;
+  defaultOffsetUnit?: 'days' | 'business_days' | 'months' | 'years' | 'minutes' | 'hours';
+  defaultRounding?: number; // e.g., 15 for 15-min blocks
+  
+  // Constraints
+  minDateType?: 'static' | 'today' | 'field_value' | 'relative';
+  minDateFieldId?: string;
+  minDateValue?: string;
+  minDateOffset?: number;
+  minDateOffsetUnit?: 'days' | 'business_days' | 'months' | 'years' | 'minutes' | 'hours';
+  
+  maxDateType?: 'static' | 'today' | 'field_value' | 'relative';
+  maxDateFieldId?: string;
+  maxDateValue?: string;
+  maxDateOffset?: number;
+  maxDateOffsetUnit?: 'days' | 'business_days' | 'months' | 'years' | 'minutes' | 'hours';
+
   // View & Table settings
   showInTable?: boolean;
   inlineEdit?: boolean;

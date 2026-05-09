@@ -34,6 +34,7 @@ import { generateAISummary, evaluateCalculations } from '../../services/aiServic
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
+import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
@@ -622,7 +623,7 @@ export const RecordDetailView = () => {
         </label>
         <FieldInput 
           field={nestedField}
-          value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? nestedField.defaultValue}
+          value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? calculateDefaultValue(nestedField, editData)}
           onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleUpdateEntry();
@@ -630,6 +631,7 @@ export const RecordDetailView = () => {
           }}
           readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
           usersData={usersData}
+          recordData={editData}
         />
         {nestedField.helperText && (
           <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{nestedField.helperText}</p>
@@ -906,14 +908,15 @@ export const RecordDetailView = () => {
                               </label>
                               <FieldInput 
                                 field={field}
-                                value={editData[field.id] ?? record[field.id] ?? field.defaultValue}
+                                value={getFieldValue(editData, field.id) ?? getFieldValue(record, field.id) ?? calculateDefaultValue(field, editData)}
                                 onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleUpdateEntry();
                                   if (e.key === 'Escape') setActiveFieldId(null);
                                 }}
-                                readonly={savingFieldId === field.id || (activeFieldId !== field.id && !['datatable', 'duallist'].includes(field.type))}
+                                readonly={savingFieldId === field.id || activeFieldId !== field.id}
                                 usersData={usersData}
+                                recordData={editData}
                               />
                               {field.helperText && (
                                 <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>

@@ -10,7 +10,10 @@ import { RichTextEditor } from './UI/RichTextEditor';
 import { SignaturePad } from './UI/SignaturePad';
 import { DynamicIcon } from './UI/DynamicIcon';
 import { usePlatformLookup } from '../hooks/usePlatformLookup';
+import { DatePicker } from './UI/DatePicker';
+import { TimePicker } from './UI/TimePicker';
 import { UserSelector } from './Common/UserSelector';
+import { resolveConstraint } from '../services/fieldService';
 
 const SearchableLookup = ({ 
   value, 
@@ -205,9 +208,14 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   readonly = false,
   error = false,
   onBlur,
-  onKeyDown
+  onKeyDown,
+  recordData = {}
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
+
+  // Resolve constraints
+  const minConstraint = (type === 'date' || type === 'time') ? resolveConstraint(field, 'min', recordData) : undefined;
+  const maxConstraint = (type === 'date' || type === 'time') ? resolveConstraint(field, 'max', recordData) : undefined;
 
   const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
   const inputRef = React.useRef<any>(null);
@@ -646,8 +654,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <input ref={inputRef} type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
-  if (type === 'time') return <input ref={inputRef} type="time" value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'date') return <DatePicker value={value} onChange={onChange} readonly={readonly} onBlur={onBlur} dateFormat={field.dateFormat} excludeWeekends={field.excludeWeekends} min={minConstraint} max={maxConstraint} />;
+  if (type === 'time') return <TimePicker value={value} onChange={onChange} readonly={readonly} onBlur={onBlur} timeFormat={field.timeFormat} minuteStep={field.minuteStep} min={minConstraint} max={maxConstraint} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
