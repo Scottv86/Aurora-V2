@@ -520,6 +520,26 @@ export interface Field {
   hidden?: boolean;
   optionLayout?: 'vertical' | 'horizontal';
   parentId?: string;
+  // Date/Time specific settings
+  dateFormat?: string;
+  timeFormat?: '12h' | '24h';
+  minuteStep?: number;
+  excludeWeekends?: boolean;
+  defaultType?: 'static' | 'today' | 'now' | 'rounded_now' | 'relative' | 'field_copy' | 'start_of_week' | 'end_of_week' | 'start_of_month' | 'end_of_month' | 'start_of_year' | 'end_of_year';
+  defaultOffset?: number;
+  defaultOffsetUnit?: 'minutes' | 'hours' | 'days' | 'business_days' | 'months' | 'years';
+  defaultRounding?: number;
+  defaultSourceFieldId?: string;
+  minDateType?: 'none' | 'static' | 'today' | 'relative' | 'field_value';
+  minDateValue?: string;
+  minDateOffset?: number;
+  minDateOffsetUnit?: 'days' | 'business_days' | 'months';
+  minDateFieldId?: string;
+  maxDateType?: 'none' | 'static' | 'today' | 'relative' | 'field_value';
+  maxDateValue?: string;
+  maxDateOffset?: number;
+  maxDateOffsetUnit?: 'days' | 'business_days' | 'months';
+  maxDateFieldId?: string;
 }
 
 
@@ -1324,6 +1344,7 @@ export const ModuleEditor = () => {
   });
   
   const [layout, setLayout] = useState<Layout>([]);
+  const allFields = React.useMemo(() => flattenFields(layout), [layout]);
   const [viewportSize, setViewportSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
   const [tabs, setTabs] = useState<Tab[]>([
@@ -1965,15 +1986,10 @@ export const ModuleEditor = () => {
 
   // Helper for single selection
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
-  const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
+const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
   // --- Helpers ---
   
-
-  const getFieldHeight = (field: Partial<Field>) => {
-    const units = calculateHeight(field);
-    return (units * GRID_CONFIG.rowHeight) + ((units - 1) * GRID_CONFIG.gap);
-  };
 
   const resolveCollisionsInArray = useCallback((triggerField: Field, fields: Field[]) => {
 
@@ -2142,18 +2158,15 @@ export const ModuleEditor = () => {
     
     // Determine span and height from activeDragItem
     let span = 12;
-    let fieldType = 'text';
 
     if (activeDragItem) {
       if (activeDragItem.type === 'field') {
         const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === activeDragItem.fieldType);
         if (fieldDef?.defaultSpan) span = fieldDef.defaultSpan;
-        fieldType = activeDragItem.fieldType || 'text';
       } else if (activeDragItem.type === 'move') {
         const field = layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || '');
         if (field) {
           span = field.colSpan || 12;
-          fieldType = field.type;
         }
       }
     }
@@ -7755,7 +7768,7 @@ export const ModuleEditor = () => {
                                 <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Accordion Sections</label>
                                 <button 
                                   onClick={() => {
-                                    const newSection = {
+                                    const newSection: Field = {
                                       id: `section-${Date.now()}`,
                                       type: 'group' as FieldType,
                                       label: `New Section ${ (selectedField.fields?.length || 0) + 1 }`,
