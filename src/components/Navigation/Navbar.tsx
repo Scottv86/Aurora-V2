@@ -60,13 +60,7 @@ export const Navbar = () => {
   }, []);
 
   useEffect(() => {
-    if (tenant) {
-      console.log('[Navbar] Tenant Branding Update:', {
-        useTenantBranding: tenant?.branding?.useTenantBranding,
-        name: tenant?.name,
-        logoUrl: tenant?.branding?.logoUrl
-      });
-    }
+    // Branding handled via style bindings below
   }, [tenant]);
 
   const isTenantBrandingEnabled = tenant?.branding?.useTenantBranding === true || 

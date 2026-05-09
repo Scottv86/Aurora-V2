@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, ReactNode, useRef } from 'react';
+import { createContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -26,57 +26,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [tenantIds, setTenantIds] = useState<string[]>([]);
   const [currentRoleId, setCurrentRoleId] = useState<string | null>(null);
   const userRef = useRef<User | null>(null);
+  const isInitialCheck = useRef(true);
+  const lastSyncedRef = useRef<{ sessionId: string; timestamp: number } | null>(null);
 
   useEffect(() => {
     userRef.current = user;
   }, [user]);
 
-  useEffect(() => {
-    // onAuthStateChange handles INITIAL_SESSION, SIGNED_IN, and SIGNED_OUT events.
-    // This listener is sufficient for managing authentication state and syncing user data.
+  const syncUser = useCallback(async (token: string, sessionId: string) => {
+    // Prevent syncing the same session twice within a short window
+    const now = Date.now();
+    if (lastSyncedRef.current?.sessionId === sessionId && (now - lastSyncedRef.current.timestamp) < 2000) {
+      console.log(`[AuthTrace] Skipping redundant sync for session: ${sessionId}`);
+      return;
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AuthTrace] !! EVENT: ${event}`, { 
-        email: session?.user?.email,
-        hasSession: !!session,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Determine if this is a background event (like token refresh or focus-triggered check)
-      // that doesn't need to block the UI with a spinner.
-      const isInitialEvent = event === 'INITIAL_SESSION' && !userRef.current;
-      const isSignOut = event === 'SIGNED_OUT';
-      const isFirstSignIn = event === 'SIGNED_IN' && !userRef.current;
-      
-      const shouldShowSpinner = isInitialEvent || isSignOut || isFirstSignIn;
-
-      if (shouldShowSpinner) {
-        setLoading(true);
-      }
-
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'INITIAL_SESSION') && session) {
-        console.log(`[AuthTrace] Triggering syncUser for ${session.user.email}`);
-        await syncUser(session.access_token);
-      } else if (event === 'SIGNED_OUT') {
-        console.log(`[AuthTrace] Clearing all local state on SIGNED_OUT`);
-        setIsSuperAdmin(false);
-        setTenantIds([]);
-        setCurrentRoleId(null);
-      }
-      
-      if (shouldShowSpinner) {
-        console.log(`[AuthTrace] Auth flow complete for ${session?.user?.email || 'Anonymous'}. Setting loading=false.`);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const syncUser = async (token: string) => {
     try {
       const response = await fetch('http://localhost:3001/api/auth/sync', {
         method: 'POST',
@@ -92,8 +56,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsSuperAdmin(sessionData.isSuperAdmin);
         setTenantIds(sessionData.tenantIds || []);
         setCurrentRoleId(sessionData.roleId || null);
+        
+        lastSyncedRef.current = { sessionId, timestamp: now };
+        return sessionData;
       } else {
-        const err = await response.json();
+        const err = await response.json().catch(() => ({}));
         console.error("Backend sync error:", err);
         toast.error(`Registry Sync Failed: ${err.error || response.statusText}`);
       }
@@ -101,7 +68,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("Backend sync critical failure:", e);
       toast.error(`Platform Connection Error: ${e.message}`);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // onAuthStateChange handles INITIAL_SESSION, SIGNED_IN, and SIGNED_OUT events.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AuthTrace] !! EVENT: ${event}`, { 
+        email: session?.user?.email,
+        hasSession: !!session,
+        timestamp: new Date().toISOString(),
+        isInitial: isInitialCheck.current
+      });
+      
+      const isSignOut = event === 'SIGNED_OUT';
+      const isSignIn = event === 'SIGNED_IN';
+      const isInitial = isInitialCheck.current;
+
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.access_token && (isSignIn || event === 'USER_UPDATED' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED')) {
+        const sessionId = session.user.id + (session.expires_at || '');
+        await syncUser(session.access_token, sessionId);
+      } else if (isSignOut) {
+        console.log(`[AuthTrace] Clearing local state on SIGNED_OUT`);
+        setIsSuperAdmin(false);
+        setTenantIds([]);
+        setCurrentRoleId(null);
+        lastSyncedRef.current = null;
+      }
+      
+      // Always ensure loading is false after the first event or sign-in/out
+      if (isInitial || isSignIn || isSignOut) {
+        setLoading(false);
+        isInitialCheck.current = false;
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [syncUser]);
 
   const signInWithEmail = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

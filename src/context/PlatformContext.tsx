@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import type { User, Tenant, Environment, BillingUsage } from '../types/platform';
 import { API_BASE_URL } from '../config';
@@ -38,6 +38,17 @@ interface PlatformContextType {
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
+
+export const usePlatform = () => {
+  const context = useContext(PlatformContext);
+  if (context === undefined) {
+    throw new Error(
+      'usePlatform must be used within PlatformProvider. ' +
+      'Check if PlatformProvider is correctly wrapping the component tree in App.tsx.'
+    );
+  }
+  return context;
+};
 
 export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const { user: supabaseUser, loading: authLoading, session } = useAuth();
@@ -199,19 +210,32 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const data = await response.json();
-      const synchronizedUser = data.user ? {
-        ...data.user,
-        // Extract memberId and organizational details from the nested member object or top-level fallbacks
-        memberId: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
-        cuid: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
-        teamId: data.user.teamId || data.user.team_id || data.member?.teamId || data.member?.team_id || data.membership?.teamId || data.membership?.team_id || data.tenantMember?.teamId || data.tenantMember?.team_id,
-        team: data.user.team || data.member?.team || data.membership?.team || data.tenantMember?.team,
-        positionId: data.user.positionId || data.user.position_id || data.member?.positionId || data.member?.position_id || data.membership?.positionId || data.membership?.position_id || data.tenantMember?.positionId || data.tenantMember?.position_id,
-        position: data.user.position || data.member?.position || data.membership?.position || data.tenantMember?.position
-      } : null;
       
-      setUser(synchronizedUser);
-      setTenant(data.tenant);
+      // Prevent redundant state updates if data hasn't changed
+      // We check user and tenant separately to be more granular
+      const currentUserStr = JSON.stringify(userRef.current);
+      const tenantRefStr = JSON.stringify(tenantRef.current);
+      
+      const newUserStr = JSON.stringify(data.user);
+      const newTenantStr = JSON.stringify(data.tenant);
+
+      if (currentUserStr !== newUserStr) {
+        const synchronizedUser = data.user ? {
+          ...data.user,
+          // Extract memberId and organizational details from the nested member object or top-level fallbacks
+          memberId: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
+          cuid: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
+          teamId: data.user.teamId || data.user.team_id || data.member?.teamId || data.member?.team_id || data.membership?.teamId || data.membership?.team_id || data.tenantMember?.teamId || data.tenantMember?.team_id,
+          team: data.user.team || data.member?.team || data.membership?.team || data.tenantMember?.team,
+          positionId: data.user.positionId || data.user.position_id || data.member?.positionId || data.member?.position_id || data.membership?.positionId || data.membership?.position_id || data.tenantMember?.positionId || data.tenantMember?.position_id,
+          position: data.user.position || data.member?.position || data.membership?.position || data.tenantMember?.position
+        } : null;
+        setUser(synchronizedUser);
+      }
+
+      if (tenantRefStr !== newTenantStr) {
+        setTenant(data.tenant);
+      }
       
       // Use backend menuConfig if available, otherwise fall back to system default
       // Merge any new default items that may have been added since the config was saved
@@ -302,6 +326,14 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     fetchContext();
   }, [supabaseUser, authLoading, fetchContext]);
 
+  useEffect(() => {
+    console.log('[PlatformTrace] PlatformProvider Mounted', { 
+      hasSupabaseUser: !!supabaseUser, 
+      authLoading, 
+      hasSession: !!session 
+    });
+  }, []);
+
   // Fetch modules once tenant is available
   useEffect(() => {
     if (tenant?.id) {
@@ -341,6 +373,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       breadcrumbOverrides,
       setBreadcrumbOverride
     }}>
+      {/* 
+          IMPORTANT: We must always render children here. 
+          If we return null during loading, components like ProtectedRoute (which usePlatform)
+          will throw "must be used within PlatformProvider" because the Provider was unmounted.
+      */}
       {children}
     </PlatformContext.Provider>
   );

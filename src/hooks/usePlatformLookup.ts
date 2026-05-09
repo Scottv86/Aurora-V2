@@ -60,6 +60,13 @@ export const usePlatformLookup = (field: any) => {
   const activeFilters = useMemo(() => lookupFilters.length > 0 ? lookupFilters : (userFilters || []), [JSON.stringify(lookupFilters), JSON.stringify(userFilters)]);
   
   const { tenant } = usePlatform();
+  
+  // Debug log to ensure context is available
+  useEffect(() => {
+    if (!tenant) {
+      console.warn('[usePlatformLookup] Platform context found but tenant is null');
+    }
+  }, [tenant]);
   const { session } = useAuth();
   
   const { members: users, loading: usersLoading } = useUsers(lookupSource === 'platform' && platformEntity === 'users');
@@ -75,6 +82,7 @@ export const usePlatformLookup = (field: any) => {
   const lastConfigRef = useRef<string>("");
   const configKey = `${lookupSource}-${platformEntity}-${targetModuleId}-${targetPlatformModuleId}-${globalListId}-${tenant?.id}`;
 
+  // 1. Sync Effect: Handles Local/Platform sources and Global Lists
   useEffect(() => {
     if (!lookupSource) {
       setRawData([]);
@@ -82,7 +90,6 @@ export const usePlatformLookup = (field: any) => {
       return;
     }
 
-    // Handle Local/Platform sources (sync with their respective hooks)
     if (lookupSource === 'platform' || lookupSource === 'tenant_users') {
       const entity = platformEntity || 'users';
       
@@ -117,17 +124,10 @@ export const usePlatformLookup = (field: any) => {
       } else if (entity === 'modules' && !targetPlatformModuleId) {
         setRawData(MODULES.map(m => ({ id: m.id, name: m.name })));
         setLoading(false);
-        return;
       }
-      
-      // If it's a platform source but not one of the local ones above, 
-      // and it's not the async 'modules' with targetPlatformModuleId, we return.
-      // But we must NOT return if it's an async case.
-      const isAsyncPlatform = entity === 'modules' && targetPlatformModuleId;
-      if (!isAsyncPlatform) return;
+      return;
     }
 
-    // Handle Global Lists (sync with useGlobalList)
     if (lookupSource === 'global_list') {
       if (!gLoading && gItems && gList) {
         const displayColId = gList.columns[0]?.id;
@@ -141,26 +141,55 @@ export const usePlatformLookup = (field: any) => {
       } else {
         setLoading(gLoading);
       }
-      return;
     }
+  }, [
+    lookupSource, platformEntity, lookupDisplayField,
+    users, usersLoading,
+    teams, teamsLoading,
+    positions, positionsLoading,
+    securityGroups, groupsLoading,
+    gItems, gLoading, gList
+  ]);
 
-    // Handle Async sources (Module Records & Platform Module Records)
+  // 2. Async Effect: Handles Network-based fetches (Module Records & Platform Modules)
+  useEffect(() => {
     const isAsync = (lookupSource === 'module_records' && targetModuleId) || 
                     (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
 
-    if (isAsync) {
-      // Only fetch if config has actually changed
-      if (lastConfigRef.current === configKey) return;
-      lastConfigRef.current = configKey;
+    if (!isAsync) return;
 
-      const fetchData = async () => {
-        setLoading(true);
-        try {
-          let results: any[] = [];
-          
-          if (lookupSource === 'module_records' && targetModuleId) {
-            const url = `${API_BASE_URL}/api/data/records?moduleId=${targetModuleId}`;
-            console.log(`[usePlatformLookup] Fetching module records: ${url}`, { tenantId: tenant?.id });
+    // Only fetch if config has actually changed or we have no data
+    if (lastConfigRef.current === configKey && rawData.length > 0) return;
+    lastConfigRef.current = configKey;
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        let results: any[] = [];
+        
+        if (lookupSource === 'module_records' && targetModuleId) {
+          const url = `${API_BASE_URL}/api/data/records?moduleId=${targetModuleId}`;
+          console.log(`[usePlatformLookup] Fetching module records: ${url}`, { tenantId: tenant?.id });
+          const res = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+              'x-tenant-id': tenant?.id || ''
+            }
+          });
+          if (res.ok) {
+            const json = await res.json();
+            console.log(`[usePlatformLookup] Received module records:`, json.records?.length || 0);
+            results = (json.records || []).map((r: any) => ({
+              id: r.id,
+              name: lookupDisplayField ? r[lookupDisplayField] : (r.fullName || r.name || r.title || r.subject || r.subjectLine || r.id),
+              ...r
+            }));
+          }
+        } else if (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) {
+          const platformMod = PLATFORM_MODULES.find(m => m.id === targetPlatformModuleId);
+          if (platformMod) {
+            const url = `${API_BASE_URL}${platformMod.apiEndpoint}`;
+            console.log(`[usePlatformLookup] Fetching platform module: ${url}`, { tenantId: tenant?.id });
             const res = await fetch(url, {
               headers: {
                 'Authorization': `Bearer ${session?.access_token}`,
@@ -169,94 +198,42 @@ export const usePlatformLookup = (field: any) => {
             });
             if (res.ok) {
               const json = await res.json();
-              console.log(`[usePlatformLookup] Received module records:`, json.records?.length || 0);
-              results = (json.records || []).map((r: any) => ({
-                id: r.id,
-                name: lookupDisplayField ? r[lookupDisplayField] : (r.fullName || r.name || r.title || r.subject || r.subjectLine || r.id),
-                ...r
-              }));
-            } else {
-              console.error(`[usePlatformLookup] Failed to fetch module records: ${res.status} ${res.statusText}`);
-            }
-          } else if (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) {
-            const platformMod = PLATFORM_MODULES.find(m => m.id === targetPlatformModuleId);
-            if (platformMod) {
-              const url = `${API_BASE_URL}${platformMod.apiEndpoint}`;
-              console.log(`[usePlatformLookup] Fetching platform module: ${url}`, { tenantId: tenant?.id });
-              const res = await fetch(url, {
-                headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
-                  'x-tenant-id': tenant?.id || ''
-                }
-              });
-              if (res.ok) {
-                const json = await res.json();
-                console.log(`[usePlatformLookup] Received platform records for ${targetPlatformModuleId}:`, Array.isArray(json) ? json.length : (json.records?.length || 0));
-                results = (Array.isArray(json) ? json : (json.records || [])).map((r: any) => {
-                  let item = { ...r };
+              console.log(`[usePlatformLookup] Received platform records for ${targetPlatformModuleId}:`, Array.isArray(json) ? json.length : (json.records?.length || 0));
+              results = (Array.isArray(json) ? json : (json.records || [])).map((r: any) => {
+                let item = { ...r };
+                if (platformMod.id === 'people-organisations') {
+                  const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : '';
+                  const orgName = r.organization?.legalName || '';
+                  const computedName = r.partyType === 'PERSON' ? personName : orgName;
                   
-                  // Special handling for People & Organisations: Flatten nested data
-                  if (platformMod.id === 'people-organisations') {
-                    item = { 
-                      ...item, 
-                      ...(r.person || {}), 
-                      ...(r.organization || {}) 
-                    };
-                  }
+                  item = { 
+                    ...item, 
+                    ...(r.person || {}), 
+                    ...(r.organization || {}),
+                    name: computedName
+                  };
+                }
 
-                  // 1. Priority: Explicit lookupDisplayField
-                  if (lookupDisplayField && item[lookupDisplayField]) {
-                    // Smart override: If they selected 'firstName' for a Person, show full name for better search context
-                    if (platformMod.id === 'people-organisations' && lookupDisplayField === 'firstName' && r.partyType === 'PERSON') {
-                      const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : null;
-                      if (personName) {
-                        return { id: r.id, name: personName, ...item };
-                      }
-                    }
-                    return { id: r.id, name: String(item[lookupDisplayField]), ...item };
-                  }
+                const displayName = (lookupDisplayField && item[lookupDisplayField]) 
+                  ? String(item[lookupDisplayField]) 
+                  : (item.name || item.fullName || item.id || 'Unnamed Record');
 
-                  // 2. Special Fallback: People & Organisations smart name
-                  if (platformMod.id === 'people-organisations') {
-                    const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : null;
-                    const orgName = r.organization?.legalName;
-                    const name = r.partyType === 'PERSON' ? personName : orgName;
-                    
-                    return { 
-                      id: r.id, 
-                      name: name || r.id || 'Unnamed Record', 
-                      ...item
-                    };
-                  }
-
-                  // 3. General Fallback
-                  return { id: r.id, name: r.name || r.id, ...item };
-                });
-              } else {
-                console.error(`[usePlatformLookup] Failed to fetch platform records: ${res.status} ${res.statusText}`);
-              }
+                return { id: r.id, name: displayName, ...item };
+              });
             }
           }
-
-          setRawData(results);
-        } catch (err) {
-          console.error('Lookup fetch error:', err);
-        } finally {
-          setLoading(false);
         }
-      };
 
-      fetchData();
-    }
-  }, [
-    configKey,
-    users, usersLoading,
-    teams, teamsLoading,
-    positions, positionsLoading,
-    securityGroups, groupsLoading,
-    gItems, gLoading,
-    session?.access_token
-  ]);
+        setRawData(results);
+      } catch (err) {
+        console.error('Lookup fetch error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [configKey, session?.access_token, lookupDisplayField]);
 
   const filteredData = useMemo(() => applyFilters(rawData, activeFilters), [rawData, activeFilters]);
 
