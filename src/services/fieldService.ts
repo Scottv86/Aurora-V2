@@ -20,18 +20,21 @@ import { ModuleField } from '../types/platform';
 /**
  * Helper to apply offsets to a date.
  */
-const applyOffset = (date: Date, offset?: number, unit?: string): Date => {
-  if (!offset) return date;
-  let result = date;
+const applyOffset = (date: Date | null | undefined, offset?: number | string, unit?: string): Date | null => {
+  if (!date || !isValid(date)) return null;
+  const numericOffset = typeof offset === 'string' ? parseInt(offset) : (offset || 0);
+  if (isNaN(numericOffset)) return new Date(date);
+  
+  let result = new Date(date);
   switch (unit) {
-    case 'days': result = addDays(result, offset); break;
-    case 'months': result = addMonths(result, offset); break;
-    case 'years': result = addYears(result, offset); break;
-    case 'minutes': result = addMinutes(result, offset); break;
-    case 'hours': result = addHours(result, offset); break;
+    case 'days': result = addDays(result, numericOffset); break;
+    case 'months': result = addMonths(result, numericOffset); break;
+    case 'years': result = addYears(result, numericOffset); break;
+    case 'minutes': result = addMinutes(result, numericOffset); break;
+    case 'hours': result = addHours(result, numericOffset); break;
     case 'business_days': 
-      let daysToAdd = Math.abs(offset);
-      const direction = offset > 0 ? 1 : -1;
+      let daysToAdd = Math.abs(numericOffset);
+      const direction = numericOffset > 0 ? 1 : -1;
       while (daysToAdd > 0) {
         result = addDays(result, direction);
         const day = result.getDay();
@@ -55,10 +58,11 @@ export const calculateDefaultValue = (field: ModuleField, currentData: Record<st
   const now = new Date();
 
   if (type === 'date') {
-    let baseDate = startOfToday();
+    let baseDate: Date | null = null;
 
     switch (defaultType) {
       case 'today':
+      case 'relative': // 'relative' is now treated as 'today' with an offset
         baseDate = startOfToday();
         break;
       case 'start_of_week':
@@ -79,16 +83,25 @@ export const calculateDefaultValue = (field: ModuleField, currentData: Record<st
       case 'end_of_year':
         baseDate = parse(`${now.getFullYear()}-12-31`, 'yyyy-MM-dd', new Date());
         break;
-      case 'relative':
-        baseDate = applyOffset(baseDate, defaultOffset, defaultOffsetUnit);
-        break;
       case 'field_copy':
         if (field.defaultSourceFieldId && currentData[field.defaultSourceFieldId]) {
-          return currentData[field.defaultSourceFieldId];
+          const val = currentData[field.defaultSourceFieldId];
+          const parsed = new Date(val);
+          if (isValid(parsed)) {
+            baseDate = parsed;
+          }
         }
-        return null;
+        break;
     }
-    return format(baseDate, 'yyyy-MM-dd');
+
+    if (!baseDate) return null;
+
+    // Apply offset if configured
+    if (defaultOffset) {
+      baseDate = applyOffset(baseDate, defaultOffset, defaultOffsetUnit || 'days');
+    }
+
+    return baseDate ? format(baseDate, 'yyyy-MM-dd') : null;
   }
 
   if (type === 'time') {
@@ -101,10 +114,28 @@ export const calculateDefaultValue = (field: ModuleField, currentData: Record<st
       case 'rounded_now':
         baseTime = roundToNearestMinutes(now, { nearestTo: (defaultRounding || 15) as any });
         break;
+      case 'field_copy':
+        if (field.defaultSourceFieldId && currentData[field.defaultSourceFieldId]) {
+          const val = currentData[field.defaultSourceFieldId];
+          // Try parsing as HH:mm or full ISO
+          const parsed = parse(val, 'HH:mm', new Date());
+          if (isValid(parsed)) {
+            baseTime = parsed;
+          } else {
+            const isoParsed = new Date(val);
+            if (isValid(isoParsed)) baseTime = isoParsed;
+          }
+        }
+        break;
       case 'relative':
-        baseTime = applyOffset(baseTime, defaultOffset, defaultOffsetUnit || 'minutes');
+        baseTime = now;
         break;
     }
+
+    if (defaultOffset) {
+      baseTime = applyOffset(baseTime, defaultOffset, defaultOffsetUnit || 'minutes') || baseTime;
+    }
+
     return format(baseTime, 'HH:mm');
   }
 
@@ -133,7 +164,8 @@ export const resolveConstraint = (
 
   if (!type || type === 'none') return undefined;
 
-  let baseDate = startOfToday();
+  const isTimeField = field.type === 'time';
+  let baseDate = isTimeField ? new Date() : startOfToday();
 
   switch (type) {
     case 'static':
@@ -141,22 +173,33 @@ export const resolveConstraint = (
     case 'today':
       baseDate = startOfToday();
       break;
-    case 'relative':
-      baseDate = applyOffset(startOfToday(), offset, unit);
+    case 'now':
+      baseDate = new Date();
       break;
     case 'field_value':
       if (sourceFieldId && currentData[sourceFieldId]) {
         const val = currentData[sourceFieldId];
-        const date = new Date(val);
-        if (isValid(date)) baseDate = date;
-        else return undefined;
-      } else {
-        return undefined;
+        if (isTimeField) {
+          const parsed = parse(val, 'HH:mm', new Date());
+          if (isValid(parsed)) {
+            baseDate = parsed;
+          } else {
+            const isoParsed = new Date(val);
+            if (isValid(isoParsed)) baseDate = isoParsed;
+          }
+        } else {
+          baseDate = new Date(val);
+        }
       }
       break;
-    default:
-      return undefined;
+    case 'relative':
+      baseDate = isTimeField ? new Date() : startOfToday();
+      break;
   }
 
-  return format(baseDate, 'yyyy-MM-dd');
+  if (offset) {
+    baseDate = applyOffset(baseDate, offset, unit || (isTimeField ? 'minutes' : 'days')) || baseDate;
+  }
+
+  return format(baseDate, isTimeField ? 'HH:mm' : 'yyyy-MM-dd');
 };

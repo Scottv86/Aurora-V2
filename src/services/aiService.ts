@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Module, ModuleField } from "../types/platform";
+import { createFormulaContext } from "../lib/formulaEngine";
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -292,6 +293,14 @@ export const generateExpression = async (prompt: string, fields: any[], function
       AVAILABLE FUNCTIONS:
       ${functionsString}
 
+      EXTENDED FUNCTIONS (Implemented):
+      - POW(base, exp)
+      - FIND(needle, haystack, [start])
+      - TIMESPAN(unit, d1, d2)
+      - ADD_TIME(date, span)
+      - SUB_TIME(date, span)
+      - VLOOKUP(val, list, searchCol, returnCol)
+
       STRICT RULES:
       1. Return ONLY the expression string. No markdown, no comments, no intro.
       2. If you don't understand the request, return a helpful comment starting with "// AI: " explaining why.
@@ -406,9 +415,13 @@ export const evaluateCalculations = (data: Record<string, any>, fields: ModuleFi
           logic = logic.replace(/\{Record Key\}/gi, `"${recordKey.replace(/"/g, '\\"')}"`);
           logic = logic.replace(/\{\{_record_key\}\}/g, `"${recordKey.replace(/"/g, '\\"')}"`);
           
+          // Use centralized formula engine
+          const context = createFormulaContext();
+          
           // Evaluate the logic safely using Function
           // eslint-disable-next-line no-new-func
-          const result = new Function(`return ${logic}`)();
+          const func = new Function(...Object.keys(context), `return ${logic}`);
+          const result = func(...Object.values(context));
           
           const finalResult = (result === undefined || result === null) ? "" : result;
           

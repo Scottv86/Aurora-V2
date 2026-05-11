@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { createFormulaContext } from './formulaEngine';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -216,9 +217,10 @@ export const evaluateFormula = (formula: string, data: any): string | number => 
       return val !== undefined ? (isNaN(Number(val)) ? `"${val}"` : val) : '0';
     });
     
-    // Use Function constructor for a safe-ish sandbox evaluation of simple math
-    // In a production app, use a dedicated library like mathjs
-    const result = new Function(`return ${expression}`)();
+    // Use centralized formula engine
+    const context = createFormulaContext();
+    const func = new Function(...Object.keys(context), `return ${expression}`);
+    const result = func(...Object.values(context));
     
     if (typeof result === 'number') {
       return Number.isInteger(result) ? result : Number(result.toFixed(2));

@@ -45,6 +45,7 @@ router.get('/', async (req: TenantRequest, res) => {
 
     res.json(formatted);
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -128,6 +129,7 @@ router.get('/:id', async (req: TenantRequest, res) => {
 
     res.json(formatted);
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -173,6 +175,7 @@ router.get('/:id/effective-permissions', async (req: TenantRequest, res) => {
       breakdown
     });
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -351,6 +354,7 @@ router.post('/invite', authorize('manage:staff'), async (req: TenantRequest, res
 
     res.json(member);
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -386,6 +390,7 @@ router.post('/provision', authorize('manage:staff'), async (req: TenantRequest, 
 
     res.json(member);
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -463,6 +468,7 @@ router.post('/clone/:id', authorize('manage:staff'), async (req: TenantRequest, 
 
     res.json(newMember);
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -482,6 +488,7 @@ router.delete('/:id', authorize('decommission:staff'), async (req: TenantRequest
 
     res.json({ success: true });
   } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

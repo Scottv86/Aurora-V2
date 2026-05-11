@@ -14,6 +14,7 @@ import { DatePicker } from './UI/DatePicker';
 import { TimePicker } from './UI/TimePicker';
 import { UserSelector } from './Common/UserSelector';
 import { resolveConstraint } from '../services/fieldService';
+import { useFormula } from '../hooks/useFormula';
 
 const SearchableLookup = ({ 
   value, 
@@ -198,6 +199,8 @@ interface FieldInputProps {
   error?: boolean;
   onBlur?: () => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  recordData?: Record<string, any>;
+  allFields?: any[];
 }
 
 export const FieldInput: React.FC<FieldInputProps> = ({ 
@@ -209,7 +212,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   error = false,
   onBlur,
   onKeyDown,
-  recordData = {}
+  recordData = {},
+  allFields = []
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
 
@@ -701,13 +705,23 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     );
   }
 
+  const formulaPreview = useFormula(type === 'calculation' ? (field.calculationLogic || field.logic || field.expression || '') : '', recordData, allFields);
+
   if (type === 'ai_summary' || type === 'calculation' || type === 'autonumber') {
+    const isErrorOrPlaceholder = !value || value === 'Error' || value === 'Value will be calculated after saving.';
+    const displayValue = (type === 'calculation' && isErrorOrPlaceholder && formulaPreview.result) ? formulaPreview.result : value;
+    
     return (
-      <div className={cn(inputClasses)}>
-        {value || (
-          type === 'ai_summary' ? 'AI Summary will be generated after saving.' : 
-          type === 'calculation' ? 'Value will be calculated after saving.' :
-          'Auto-number will be generated after saving.'
+      <div className={cn(inputClasses, "flex items-center justify-between")}>
+        <span>
+          {displayValue || (
+            type === 'ai_summary' ? 'AI Summary will be generated after saving.' : 
+            type === 'calculation' ? (formulaPreview.isFetching ? 'Calculating...' : 'Value will be calculated after saving.') :
+            'Auto-number will be generated after saving.'
+          )}
+        </span>
+        {type === 'calculation' && formulaPreview.isFetching && (
+          <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
         )}
       </div>
     );

@@ -530,15 +530,15 @@ export interface Field {
   defaultOffsetUnit?: 'minutes' | 'hours' | 'days' | 'business_days' | 'months' | 'years';
   defaultRounding?: number;
   defaultSourceFieldId?: string;
-  minDateType?: 'none' | 'static' | 'today' | 'relative' | 'field_value';
+  minDateType?: 'none' | 'static' | 'today' | 'now' | 'relative' | 'field_value';
   minDateValue?: string;
   minDateOffset?: number;
-  minDateOffsetUnit?: 'days' | 'business_days' | 'months';
+  minDateOffsetUnit?: 'minutes' | 'hours' | 'days' | 'business_days' | 'months';
   minDateFieldId?: string;
-  maxDateType?: 'none' | 'static' | 'today' | 'relative' | 'field_value';
+  maxDateType?: 'none' | 'static' | 'today' | 'now' | 'relative' | 'field_value';
   maxDateValue?: string;
   maxDateOffset?: number;
-  maxDateOffsetUnit?: 'days' | 'business_days' | 'months';
+  maxDateOffsetUnit?: 'minutes' | 'hours' | 'days' | 'business_days' | 'months';
   maxDateFieldId?: string;
 }
 
@@ -1951,6 +1951,25 @@ export const ModuleEditor = () => {
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
   const [showGridlines, setShowGridlines] = useState(true);
   const [showSystemFields, setShowSystemFields] = useState(true);
+  
+  // Tab Scrolling Refs & State
+  const tabContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftScroll, setShowLeftScroll] = useState(false);
+  const [showRightScroll, setShowRightScroll] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    if (tabContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = tabContainerRef.current;
+      setShowLeftScroll(scrollLeft > 0);
+      setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 5);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [checkScroll, tabs]);
 
   // Handle tab visibility auto-switch in Preview
   useEffect(() => {
@@ -2675,8 +2694,8 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
           {/* Main Tab Content Area */}
           <div 
             className={cn(
-              "flex-1 relative overflow-hidden",
-              activeTab === 'builder' ? "p-6 overflow-y-auto" : "p-0 overflow-y-auto"
+              "flex-1 relative overflow-y-auto",
+              activeTab === 'builder' ? "p-0" : "p-0"
             )}
             onClick={(e) => {
               if (activeTab === 'builder') {
@@ -2688,133 +2707,143 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
           >
           {activeTab === 'builder' ? (
             <>
-              {/* Blueprint Grid Background */}
-              {showGridlines && (
-                <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.05]" 
-                     style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-              )}
-              
-              <div className="w-full space-y-4 relative px-4">
-                {/* Page Header / Title Configuration Block */}
+              {/* Unified Page Control Bar */}
+              <div className="sticky top-0 z-30 bg-zinc-100/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-8 py-3 flex items-center gap-6">
+                {/* Left: Title & Settings */}
                 <div 
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedId('page-header');
                   }}
                   className={cn(
-                    "group relative p-8 bg-white dark:bg-zinc-900 border-2 rounded-[2.5rem] transition-all cursor-pointer overflow-hidden",
-                    selectedId === 'page-header' 
-                      ? "border-indigo-500 shadow-2xl shadow-indigo-500/10" 
-                      : "border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30"
+                    "flex items-center gap-3 cursor-pointer group px-3 py-1.5 rounded-xl transition-all flex-shrink-0",
+                    selectedId === 'page-header' ? "bg-indigo-500/10 ring-1 ring-indigo-500/50" : "hover:bg-zinc-200 dark:hover:bg-zinc-800"
                   )}
                 >
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 pointer-events-none" />
-                  <div className="flex items-center gap-6 relative z-10">
-                    <div className={cn(
-                      "w-16 h-16 rounded-[2rem] flex items-center justify-center transition-colors shadow-lg",
-                      selectedId === 'page-header' ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500"
-                    )}>
-                      <Layout size={32} />
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">
-                          {moduleSettings.titleFieldId 
-                            ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Page Title') 
-                            : 'Page Title'}
-                        </h2>
-                        {!moduleSettings.titleFieldId && (
-                          <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded text-[9px] font-black uppercase tracking-widest">Default ID</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-zinc-500 font-medium opacity-60">
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-sm",
+                    selectedId === 'page-header' ? "bg-indigo-600 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500"
+                  )}>
+                    <DynamicIcon name={moduleSettings.iconName || 'Box'} size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate">
                         {moduleSettings.titleFieldId 
-                          ? `Currently mapped to ${layout.find(f => f.id === moduleSettings.titleFieldId)?.label}` 
-                          : 'Click to configure which field serves as the primary record title'}
-                      </p>
+                          ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Page Title') 
+                          : 'Page Title'}
+                      </h2>
+                      <Settings2 size={12} className={cn("transition-opacity flex-shrink-0", selectedId === 'page-header' ? "opacity-100 text-indigo-500" : "opacity-0 group-hover:opacity-100 text-zinc-400")} />
                     </div>
-                    {selectedId === 'page-header' && (
-                      <div className="w-8 h-8 bg-indigo-500/10 text-indigo-500 rounded-full flex items-center justify-center animate-pulse">
-                        <Settings2 size={16} />
-                      </div>
-                    )}
+                    <p className="text-[10px] text-zinc-500 font-medium opacity-60">Record Title Mapping</p>
                   </div>
                 </div>
 
-                {/* Tab Management */}
-                <div className="flex items-center gap-2 mb-8 overflow-x-auto pt-2 pb-2 px-2 scrollbar-hide">
-                  <Reorder.Group 
-                    axis="x" 
-                    values={tabs} 
-                    onReorder={setTabs}
-                    className="flex items-center gap-2"
+                <div className="h-6 w-px bg-zinc-300 dark:bg-zinc-700 mx-1 flex-shrink-0" />
+
+                {/* Right: Tabs */}
+                <div className="flex-1 flex items-center gap-2 relative overflow-hidden">
+                  {showLeftScroll && (
+                    <button 
+                      onClick={() => tabContainerRef.current?.scrollBy({ left: -200, behavior: 'smooth' })}
+                      className="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-zinc-100 dark:from-zinc-900 via-zinc-100/80 dark:via-zinc-900/80 to-transparent z-10 flex items-center group/scroll"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-800 shadow-md flex items-center justify-center ml-1 text-zinc-500 group-hover/scroll:text-indigo-600 transition-colors">
+                        <ChevronLeft size={14} />
+                      </div>
+                    </button>
+                  )}
+                  
+                  <div 
+                    ref={tabContainerRef}
+                    onScroll={checkScroll}
+                    className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide py-1 px-2"
                   >
-                    {tabs.map((tab) => (
-                      <Reorder.Item 
-                        key={tab.id} 
-                        value={tab}
-                        dragListener={isEditingTab !== tab.id}
-                        className="group relative flex-shrink-0"
-                      >
-                        {isEditingTab === tab.id ? (
-                          <input
-                            autoFocus
-                            className="px-4 py-2 bg-white dark:bg-zinc-900 border-2 border-indigo-500 rounded-xl text-sm font-bold focus:outline-none min-w-[120px]"
-                            value={tab.label}
-                            onChange={(e) => {
-                              const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                              setTabs(newTabs);
-                            }}
-                            onBlur={() => setIsEditingTab(null)}
-                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                          />
-                        ) : (
-                          <div className="flex items-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCurrentTabId(tab.id);
-                                setSelectedId(tab.id);
+                    <Reorder.Group 
+                      axis="x" 
+                      values={tabs} 
+                      onReorder={setTabs}
+                      className="flex items-center gap-1.5"
+                    >
+                      {tabs.map((tab) => (
+                        <Reorder.Item 
+                          key={tab.id} 
+                          value={tab}
+                          dragListener={isEditingTab !== tab.id}
+                          className="group relative flex-shrink-0"
+                        >
+                          {isEditingTab === tab.id ? (
+                            <input
+                              autoFocus
+                              className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg"
+                              value={tab.label}
+                              onChange={(e) => {
+                                const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                setTabs(newTabs);
                               }}
-                              onDoubleClick={() => setIsEditingTab(tab.id)}
-                              className={cn(
-                                "px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border-2",
-                                currentTabId === tab.id
-                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
-                              )}
-                            >
-                              {tab.label}
-                              {currentTabId === tab.id && (
-                                <Settings2 
-                                  size={14} 
-                                  className="ml-2 opacity-60 hover:opacity-100 transition-opacity" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedId(tab.id);
-                                  }}
-                                />
-                              )}
-                            </button>
-                            {tabs.length > 1 && (
+                              onBlur={() => setIsEditingTab(null)}
+                              onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                            />
+                          ) : (
+                            <div className="flex items-center">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const newTabs = tabs.filter(t => t.id !== tab.id);
-                                  setTabs(newTabs);
-                                  if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                  setLayout(layout.filter(field => field.tabId !== tab.id));
+                                  setCurrentTabId(tab.id);
+                                  setSelectedId(tab.id);
                                 }}
-                                className="absolute -top-2 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                onDoubleClick={() => setIsEditingTab(tab.id)}
+                                className={cn(
+                                  "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border whitespace-nowrap",
+                                  currentTabId === tab.id
+                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                                )}
                               >
-                                <X size={10} />
+                                {tab.label}
+                                {currentTabId === tab.id && (
+                                  <Settings2 
+                                    size={12} 
+                                    className="ml-1 opacity-60 hover:opacity-100 transition-opacity" 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedId(tab.id);
+                                    }}
+                                  />
+                                )}
                               </button>
-                            )}
-                          </div>
-                        )}
-                      </Reorder.Item>
-                    ))}
-                  </Reorder.Group>
+                              {tabs.length > 1 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newTabs = tabs.filter(t => t.id !== tab.id);
+                                    setTabs(newTabs);
+                                    if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
+                                    setLayout(layout.filter(field => field.tabId !== tab.id));
+                                  }}
+                                  className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                >
+                                  <X size={8} />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </Reorder.Item>
+                      ))}
+                    </Reorder.Group>
+                  </div>
+
+                  {showRightScroll && (
+                    <button 
+                      onClick={() => tabContainerRef.current?.scrollBy({ left: 200, behavior: 'smooth' })}
+                      className="absolute right-10 top-0 bottom-0 w-10 bg-gradient-to-l from-zinc-100 dark:from-zinc-900 via-zinc-100/80 dark:via-zinc-900/80 to-transparent z-10 flex items-center justify-end group/scroll"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-800 shadow-md flex items-center justify-center mr-1 text-zinc-500 group-hover/scroll:text-indigo-600 transition-colors">
+                        <ChevronRight size={14} />
+                      </div>
+                    </button>
+                  )}
+                  
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -2824,11 +2853,21 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                       setIsEditingTab(newId);
                       setSelectedId(newId);
                     }}
-                    className="p-2.5 bg-zinc-100 dark:bg-zinc-900 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0"
+                    className="p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0 shadow-sm"
+                    title="Add New Tab"
                   >
-                    <Plus size={18} />
+                    <Plus size={16} />
                   </button>
                 </div>
+              </div>
+
+              {/* Blueprint Grid Background */}
+              {showGridlines && (
+                <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.05]" 
+                     style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+              )}
+              
+              <div className="w-full space-y-4 relative px-6 py-6">
 
                 {/* Grid Canvas */}
                 <div 
@@ -6725,6 +6764,17 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                           </p>
                         </div>
 
+                        <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                          <IconPicker 
+                            label="Module Icon"
+                            value={moduleSettings.iconName || 'Box'}
+                            onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
+                          />
+                          <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed">
+                            This icon represents the module across the entire platform sidebar and workspace.
+                          </p>
+                        </div>
+
                         <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
                           <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3">
                             <div className="w-8 h-8 bg-amber-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -7029,66 +7079,67 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                             >
                               <option value="static">Static Date</option>
                               <option value="today">Today</option>
-                              <option value="start_of_week">Start of Current Week</option>
-                              <option value="end_of_week">End of Current Week</option>
-                              <option value="start_of_month">Start of Current Month</option>
-                              <option value="end_of_month">End of Current Month</option>
-                              <option value="start_of_year">Start of Current Year</option>
-                              <option value="end_of_year">End of Current Year</option>
-                              <option value="relative">Relative Offset from Today</option>
-                              <option value="field_copy">Copy from Another Field</option>
-                              <option value="rounded_now">Rounded Current Time</option>
+                              <option value="start_of_week">Start of Week</option>
+                              <option value="end_of_week">End of Week</option>
+                              <option value="start_of_month">Start of Month</option>
+                              <option value="end_of_month">End of Month</option>
+                              <option value="start_of_year">Start of Year</option>
+                              <option value="end_of_year">End of Year</option>
+                              <option value="field_copy">Value from Another Field</option>
                             </select>
 
-                            {selectedField.defaultType === 'relative' && (
-                              <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2">
-                                <input 
-                                  type="number"
-                                  placeholder="Amount"
-                                  value={selectedField.defaultOffset || 0}
-                                  onChange={(e) => updateField(selectedField.id, { defaultOffset: parseInt(e.target.value) })}
-                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
-                                />
+                            {selectedField.defaultType === 'field_copy' && (
+                              <div className="space-y-2 animate-in slide-in-from-top-2">
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Source Field</label>
                                 <select 
-                                  value={selectedField.defaultOffsetUnit || 'days'}
-                                  onChange={(e) => updateField(selectedField.id, { defaultOffsetUnit: e.target.value as any })}
-                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  value={selectedField.defaultSourceFieldId || ''}
+                                  onChange={(e) => updateField(selectedField.id, { defaultSourceFieldId: e.target.value })}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs appearance-none"
                                 >
-                                  <option value="days">Days</option>
-                                  <option value="business_days">Business Days</option>
-                                  <option value="months">Months</option>
-                                  <option value="years">Years</option>
+                                  <option value="">Select Date Field...</option>
+                                  {allFields
+                                    .filter(f => (f.type === 'date' || f.type === 'calculation') && f.id !== selectedField.id)
+                                    .map(f => (
+                                      <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                    ))}
                                 </select>
                               </div>
                             )}
 
-                            {selectedField.defaultType === 'rounded_now' && (
-                              <select 
-                                value={selectedField.defaultRounding || 15}
-                                onChange={(e) => updateField(selectedField.id, { defaultRounding: parseInt(e.target.value) })}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs animate-in slide-in-from-top-2 appearance-none"
-                              >
-                                <option value="5">5 Minutes</option>
-                                <option value="10">10 Minutes</option>
-                                <option value="15">15 Minutes</option>
-                                <option value="30">30 Minutes</option>
-                                <option value="60">1 Hour</option>
-                              </select>
-                            )}
-
-                            {selectedField.defaultType === 'field_copy' && (
-                              <select 
-                                value={selectedField.defaultSourceFieldId || ''}
-                                onChange={(e) => updateField(selectedField.id, { defaultSourceFieldId: e.target.value })}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs animate-in slide-in-from-top-2 appearance-none"
-                              >
-                                <option value="">Select Source Field...</option>
-                                {allFields
-                                  .filter(f => f.type === 'date' && f.id !== selectedField.id)
-                                  .map(f => (
-                                    <option key={f.id} value={f.id}>{f.label || f.id}</option>
-                                  ))}
-                              </select>
+                            {selectedField.defaultType && selectedField.defaultType !== 'static' && (
+                              <div className="space-y-2 animate-in slide-in-from-top-2">
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Offset (±)</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input 
+                                    type="number"
+                                    placeholder="Amount"
+                                    value={selectedField.defaultOffset ?? ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === '' || val === '-') {
+                                        updateField(selectedField.id, { defaultOffset: undefined });
+                                      } else {
+                                        const parsed = parseInt(val);
+                                        if (!isNaN(parsed)) {
+                                          updateField(selectedField.id, { defaultOffset: parsed });
+                                        }
+                                      }
+                                    }}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                  />
+                                  <select 
+                                    value={selectedField.defaultOffsetUnit || 'days'}
+                                    onChange={(e) => updateField(selectedField.id, { defaultOffsetUnit: e.target.value as any })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  >
+                                    <option value="days">Days</option>
+                                    <option value="business_days">Business Days</option>
+                                    <option value="months">Months</option>
+                                    <option value="years">Years</option>
+                                  </select>
+                                </div>
+                                <p className="text-[9px] text-zinc-500 font-medium px-1 italic">Use negative numbers to subtract (e.g. -7).</p>
+                              </div>
                             )}
                           </div>
 
@@ -7124,8 +7175,18 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                   <div className="flex gap-2 animate-in slide-in-from-top-2">
                                     <input 
                                       type="number"
-                                      value={selectedField.minDateOffset || 0}
-                                      onChange={(e) => updateField(selectedField.id, { minDateOffset: parseInt(e.target.value) })}
+                                      value={selectedField.minDateOffset ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || val === '-') {
+                                          updateField(selectedField.id, { minDateOffset: undefined });
+                                        } else {
+                                          const parsed = parseInt(val);
+                                          if (!isNaN(parsed)) {
+                                            updateField(selectedField.id, { minDateOffset: parsed });
+                                          }
+                                        }
+                                      }}
                                       className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-xs"
                                     />
                                     <select 
@@ -7146,7 +7207,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                     className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
                                   >
                                     <option value="">Select Field...</option>
-                                    {allFields.filter(f => f.type === 'date' && f.id !== selectedField.id).map(f => (
+                                    {allFields.filter(f => (f.type === 'date' || f.type === 'calculation') && f.id !== selectedField.id).map(f => (
                                       <option key={f.id} value={f.id}>{f.label || f.id}</option>
                                     ))}
                                   </select>
@@ -7181,8 +7242,18 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                   <div className="flex gap-2 animate-in slide-in-from-top-2">
                                     <input 
                                       type="number"
-                                      value={selectedField.maxDateOffset || 0}
-                                      onChange={(e) => updateField(selectedField.id, { maxDateOffset: parseInt(e.target.value) })}
+                                      value={selectedField.maxDateOffset ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || val === '-') {
+                                          updateField(selectedField.id, { maxDateOffset: undefined });
+                                        } else {
+                                          const parsed = parseInt(val);
+                                          if (!isNaN(parsed)) {
+                                            updateField(selectedField.id, { maxDateOffset: parsed });
+                                          }
+                                        }
+                                      }}
                                       className="w-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-xs"
                                     />
                                     <select 
@@ -7203,7 +7274,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                     className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
                                   >
                                     <option value="">Select Field...</option>
-                                    {allFields.filter(f => f.type === 'date' && f.id !== selectedField.id).map(f => (
+                                    {allFields.filter(f => (f.type === 'date' || f.type === 'calculation') && f.id !== selectedField.id).map(f => (
                                       <option key={f.id} value={f.id}>{f.label || f.id}</option>
                                     ))}
                                   </select>
@@ -7269,27 +7340,197 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                               <option value="now">Current Time (Now)</option>
                               <option value="rounded_now">Rounded Current Time</option>
                               <option value="relative">Relative Offset from Now</option>
+                              <option value="field_copy">Value from Another Field</option>
                             </select>
 
-                            {selectedField.defaultType === 'relative' && (
-                              <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2">
-                                <input 
-                                  type="number"
-                                  placeholder="Amount"
-                                  value={selectedField.defaultOffset || 0}
-                                  onChange={(e) => updateField(selectedField.id, { defaultOffset: parseInt(e.target.value) })}
-                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
-                                />
+                            {selectedField.defaultType === 'field_copy' && (
+                              <div className="space-y-2 animate-in slide-in-from-top-2">
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Source Field</label>
                                 <select 
-                                  value={selectedField.defaultOffsetUnit || 'minutes'}
-                                  onChange={(e) => updateField(selectedField.id, { defaultOffsetUnit: e.target.value as any })}
-                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  value={selectedField.defaultSourceFieldId || ''}
+                                  onChange={(e) => updateField(selectedField.id, { defaultSourceFieldId: e.target.value })}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs appearance-none"
                                 >
-                                  <option value="minutes">Minutes</option>
-                                  <option value="hours">Hours</option>
+                                  <option value="">Select Time Field...</option>
+                                  {allFields
+                                    .filter(f => (f.type === 'time' || f.type === 'calculation') && f.id !== selectedField.id)
+                                    .map(f => (
+                                      <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                    ))}
                                 </select>
                               </div>
                             )}
+
+                            {selectedField.defaultType && selectedField.defaultType !== 'static' && (
+                              <div className="space-y-2 animate-in slide-in-from-top-2">
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Offset (±)</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input 
+                                    type="number"
+                                    placeholder="Amount"
+                                    value={selectedField.defaultOffset ?? ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === '' || val === '-') {
+                                        updateField(selectedField.id, { defaultOffset: undefined });
+                                      } else {
+                                        const parsed = parseInt(val);
+                                        if (!isNaN(parsed)) {
+                                          updateField(selectedField.id, { defaultOffset: parsed });
+                                        }
+                                      }
+                                    }}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                  />
+                                  <select 
+                                    value={selectedField.defaultOffsetUnit || 'minutes'}
+                                    onChange={(e) => updateField(selectedField.id, { defaultOffsetUnit: e.target.value as any })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  >
+                                    <option value="minutes">Minutes</option>
+                                    <option value="hours">Hours</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="h-px bg-zinc-200 dark:bg-zinc-900 my-2" />
+
+                            {/* Min Time */}
+                            <div className="space-y-2">
+                              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Minimum Time</span>
+                              <div className="grid grid-cols-2 gap-2">
+                                <select 
+                                  value={selectedField.minDateType || 'none'}
+                                  onChange={(e) => updateField(selectedField.id, { minDateType: e.target.value as any })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                >
+                                  <option value="none">No Minimum</option>
+                                  <option value="static">Static</option>
+                                  <option value="now">Now</option>
+                                  <option value="relative">Relative to Now</option>
+                                  <option value="field_value">Field Value</option>
+                                </select>
+                                {selectedField.minDateType === 'static' && (
+                                  <input 
+                                    type="time"
+                                    value={selectedField.minDateValue || ''}
+                                    onChange={(e) => updateField(selectedField.id, { minDateValue: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                  />
+                                )}
+                                {selectedField.minDateType === 'relative' && (
+                                  <div className="flex gap-2 animate-in slide-in-from-top-2">
+                                    <input 
+                                      type="number"
+                                      value={selectedField.minDateOffset ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || val === '-') {
+                                          updateField(selectedField.id, { minDateOffset: undefined });
+                                        } else {
+                                          const parsed = parseInt(val);
+                                          if (!isNaN(parsed)) {
+                                            updateField(selectedField.id, { minDateOffset: parsed });
+                                          }
+                                        }
+                                      }}
+                                      className="w-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-2 text-xs"
+                                    />
+                                    <select 
+                                      value={selectedField.minDateOffsetUnit || 'minutes'}
+                                      onChange={(e) => updateField(selectedField.id, { minDateOffsetUnit: e.target.value as any })}
+                                      className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-2 text-xs appearance-none"
+                                    >
+                                      <option value="minutes">Mins</option>
+                                      <option value="hours">Hours</option>
+                                    </select>
+                                  </div>
+                                )}
+                                {selectedField.minDateType === 'field_value' && (
+                                  <select 
+                                    value={selectedField.minDateFieldId || ''}
+                                    onChange={(e) => updateField(selectedField.id, { minDateFieldId: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  >
+                                    <option value="">Select Field...</option>
+                                    {allFields
+                                      .filter(f => (f.type === 'time' || f.type === 'calculation') && f.id !== selectedField.id)
+                                      .map(f => (
+                                        <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                      ))}
+                                  </select>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Max Time */}
+                            <div className="space-y-2">
+                              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Maximum Time</span>
+                              <div className="grid grid-cols-2 gap-2">
+                                <select 
+                                  value={selectedField.maxDateType || 'none'}
+                                  onChange={(e) => updateField(selectedField.id, { maxDateType: e.target.value as any })}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                >
+                                  <option value="none">No Maximum</option>
+                                  <option value="static">Static</option>
+                                  <option value="now">Now</option>
+                                  <option value="relative">Relative to Now</option>
+                                  <option value="field_value">Field Value</option>
+                                </select>
+                                {selectedField.maxDateType === 'static' && (
+                                  <input 
+                                    type="time"
+                                    value={selectedField.maxDateValue || ''}
+                                    onChange={(e) => updateField(selectedField.id, { maxDateValue: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs"
+                                  />
+                                )}
+                                {selectedField.maxDateType === 'relative' && (
+                                  <div className="flex gap-2 animate-in slide-in-from-top-2">
+                                    <input 
+                                      type="number"
+                                      value={selectedField.maxDateOffset ?? ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || val === '-') {
+                                          updateField(selectedField.id, { maxDateOffset: undefined });
+                                        } else {
+                                          const parsed = parseInt(val);
+                                          if (!isNaN(parsed)) {
+                                            updateField(selectedField.id, { maxDateOffset: parsed });
+                                          }
+                                        }
+                                      }}
+                                      className="w-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-2 text-xs"
+                                    />
+                                    <select 
+                                      value={selectedField.maxDateOffsetUnit || 'minutes'}
+                                      onChange={(e) => updateField(selectedField.id, { maxDateOffsetUnit: e.target.value as any })}
+                                      className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-2 text-xs appearance-none"
+                                    >
+                                      <option value="minutes">Mins</option>
+                                      <option value="hours">Hours</option>
+                                    </select>
+                                  </div>
+                                )}
+                                {selectedField.maxDateType === 'field_value' && (
+                                  <select 
+                                    value={selectedField.maxDateFieldId || ''}
+                                    onChange={(e) => updateField(selectedField.id, { maxDateFieldId: e.target.value })}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs appearance-none"
+                                  >
+                                    <option value="">Select Field...</option>
+                                    {allFields
+                                      .filter(f => (f.type === 'time' || f.type === 'calculation') && f.id !== selectedField.id)
+                                      .map(f => (
+                                        <option key={f.id} value={f.id}>{f.label || f.id}</option>
+                                      ))}
+                                  </select>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -33,13 +33,16 @@ import {
   Layers,
   HelpCircle,
   Bookmark,
-  Trash2
+  Trash2,
+  Layout
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Field } from '../ModuleEditor';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL } from '../../config';
 import { generateExpression, fixExpression } from '../../services/aiService';
+import { createFormulaContext } from '../../lib/formulaEngine';
+import { supabase } from '../../lib/supabase';
 
 interface Snapshot {
   logic: string;
@@ -138,6 +141,17 @@ const FUNCTIONS = [
       { name: 'decimals', desc: 'Number of decimal places' }
     ],
     examples: ['ROUND({Tax}, 2)', 'ROUND({Total}, 0)']
+  },
+  { 
+    name: 'POW', 
+    template: 'POW(base, exponent)', 
+    description: 'Power function',
+    longDescription: 'Returns the base value to the power of the exponent value.',
+    params: [
+      { name: 'base', desc: 'The base number' },
+      { name: 'exponent', desc: 'The exponent' }
+    ],
+    examples: ['POW(2, 3)', 'POW({Value}, 2)']
   },
   { name: 'NOT', template: 'NOT(condition)', description: 'Logical NOT' },
   { name: 'CONTAINS', template: 'CONTAINS(text, search)', description: 'Check for substring' },
@@ -259,6 +273,18 @@ const FUNCTIONS = [
     examples: ['DIFF_DAYS({CreatedAt}, TODAY())']
   },
   { 
+    name: 'TIMESPAN', 
+    template: 'TIMESPAN(unit, date1, date2)', 
+    description: 'Difference between dates',
+    longDescription: 'Returns the difference between two dates in specified units (Days, Hours, Minutes, Seconds, Milliseconds).',
+    params: [
+      { name: 'unit', desc: 'Unit of measure (e.g. "Days")' },
+      { name: 'date1', desc: 'Start date' },
+      { name: 'date2', desc: 'End date' }
+    ],
+    examples: ['TIMESPAN("Days", #17/02/2013#, #01/02/2013#)']
+  },
+  { 
     name: 'ADD_DAYS', 
     template: 'ADD_DAYS(date, days)', 
     description: 'Add days to date',
@@ -267,6 +293,28 @@ const FUNCTIONS = [
       { name: 'days', desc: 'Number of days to add' }
     ],
     examples: ['ADD_DAYS(TODAY(), 7)']
+  },
+  { 
+    name: 'ADD_TIME', 
+    template: 'ADD_TIME(date, span)', 
+    description: 'Add time to date',
+    longDescription: 'Adds a time span (e.g. "1y 3m 2w 8d") to a date.',
+    params: [
+      { name: 'date', desc: 'Starting date' },
+      { name: 'span', desc: 'Time span string (e.g. "1y 3m")' }
+    ],
+    examples: ['ADD_TIME(TODAY(), "1y 3m")']
+  },
+  { 
+    name: 'SUB_TIME', 
+    template: 'SUB_TIME(date, span)', 
+    description: 'Subtract time from date',
+    longDescription: 'Subtracts a time span (e.g. "1y 3m 2w 8d") from a date.',
+    params: [
+      { name: 'date', desc: 'Starting date' },
+      { name: 'span', desc: 'Time span string (e.g. "1y 3m")' }
+    ],
+    examples: ['SUB_TIME(TODAY(), "1y 3m")']
   },
   { 
     name: 'AT', 
@@ -311,6 +359,18 @@ const FUNCTIONS = [
     template: 'SEARCH(text, query)', 
     description: 'Find text (case-insensitive)',
     examples: ['SEARCH({Notes}, "urgent")']
+  },
+  { 
+    name: 'FIND', 
+    template: 'FIND(needle, haystack, start)', 
+    description: 'Find text position',
+    longDescription: 'Returns the 1-based position of a string within another string.',
+    params: [
+      { name: 'needle', desc: 'Text to find' },
+      { name: 'haystack', desc: 'Text to search within' },
+      { name: 'start', desc: 'Optional start position (1-based)', optional: true }
+    ],
+    examples: ['FIND("abc", "text abc", 1)']
   },
   { 
     name: 'ROW_INDEX', 
@@ -423,6 +483,19 @@ const FUNCTIONS = [
   { name: 'YEAR', template: 'YEAR(date)', description: 'Extract year' },
   { name: 'MONTH', template: 'MONTH(date)', description: 'Extract month' },
   { name: 'DAY', template: 'DAY(date)', description: 'Extract day' },
+  { 
+    name: 'VLOOKUP', 
+    template: 'VLOOKUP(value, list, searchCol, returnCol)', 
+    description: 'Lookup in global list',
+    longDescription: 'Searches for a value in a Global List and returns a value from another column.',
+    params: [
+      { name: 'value', desc: 'Value to look up' },
+      { name: 'list', desc: 'Name of the Global List' },
+      { name: 'searchCol', desc: 'Column name to search in' },
+      { name: 'returnCol', desc: 'Column name to return value from', optional: true }
+    ],
+    examples: ['VLOOKUP({State}, "Australian States", "Abbreviation", "Description")']
+  },
   { name: 'PROPER', template: 'PROPER(text)', description: 'Title Case' },
 ];
 
@@ -469,7 +542,9 @@ export const CalculatorModal = ({
   const [activeTab, setActiveTab] = useState<'fields' | 'functions' | 'relationships'>('fields');
   const [drillPath, setDrillPath] = useState<string[]>([]);
   const [drillModuleId, setDrillModuleId] = useState<string | null>(null);
-  const [relSource, setRelSource] = useState<'linked' | 'platform' | 'library'>('linked');
+  const [relSource, setRelSource] = useState<'linked' | 'platform' | 'library' | 'lists'>('linked');
+  const [globalLists, setGlobalLists] = useState<any[]>([]);
+  const [isFetchingGlobalLists, setIsFetchingGlobalLists] = useState(false);
   const [variableSearch, setVariableSearch] = useState('');
   const [variableTypeFilter, setVariableTypeFilter] = useState<'all' | 'repeatable' | 'lookup' | 'numeric'>('all');
   const [rightActiveTab, setRightActiveTab] = useState<'execution' | 'sandbox' | 'docs' | 'history'>('execution');
@@ -521,6 +596,93 @@ export const CalculatorModal = ({
 
   // Cursor Insights
   const [activeInsight, setActiveInsight] = useState<any | null>(null);
+
+  // Global List Cache for VLOOKUP sandbox
+  const [listDataCache, setListDataCache] = useState<Record<string, any[]>>({});
+  const [isFetchingLists, setIsFetchingLists] = useState(false);
+
+  // Fetch Global Lists when tab selected
+  useEffect(() => {
+    if (relSource === 'lists' && globalLists.length === 0) {
+      const fetchLists = async () => {
+        setIsFetchingGlobalLists(true);
+        try {
+          const { data } = await supabase
+            .from('global_lists')
+            .select('*')
+            .order('name');
+          if (data) setGlobalLists(data);
+        } catch (err) {
+          console.error('Failed to fetch global lists:', err);
+        } finally {
+          setIsFetchingGlobalLists(false);
+        }
+      };
+      fetchLists();
+    }
+  }, [relSource, globalLists.length]);
+
+  // Detect VLOOKUP lists in component body
+  const listNames = useMemo(() => {
+    const names = new Set<string>();
+    let match;
+    const regex = /VLOOKUP\s*\(\s*[\s\S]*?\s*,\s*['"]([^'"]+)['"]/gi;
+    while ((match = regex.exec(logic)) !== null) {
+      names.add(match[1]);
+    }
+    return Array.from(names);
+  }, [logic]);
+
+  // Fetch Global Lists when needed
+  useEffect(() => {
+    const fetchMissingLists = async () => {
+      const missing = listNames.filter(name => !listDataCache[name]);
+      
+      if (missing.length === 0) return;
+
+      setIsFetchingLists(true);
+      try {
+        for (const name of missing) {
+          const { data: lists } = await supabase
+            .from('global_lists')
+            .select('id, columns')
+            .ilike('name', name);
+          
+          if (lists && lists.length > 0) {
+            const { data: items } = await supabase
+              .from('global_list_items')
+              .select('data')
+              .eq('list_id', lists[0].id)
+              .eq('is_active', true);
+            
+            if (items) {
+              const columns = lists[0].columns || [];
+              const idToName: Record<string, string> = {};
+              columns.forEach((c: any) => { idToName[c.id] = c.name; });
+
+              const transformedItems = items.map(i => {
+                const row: Record<string, any> = {};
+                const itemData = i.data || {};
+                Object.entries(itemData).forEach(([id, val]) => {
+                  const colName = idToName[id] || id;
+                  row[colName] = val;
+                });
+                return row;
+              });
+
+              setListDataCache(prev => ({ ...prev, [name]: transformedItems }));
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[VLOOKUP] Fetch Error:', err);
+      } finally {
+        setIsFetchingLists(false);
+      }
+    };
+
+    fetchMissingLists();
+  }, [listNames]); // Only depend on listNames, not the cache itself
 
   useEffect(() => {
     localStorage.setItem('aurora_logic_snippets', JSON.stringify(snippets));
@@ -1325,114 +1487,9 @@ export const CalculatorModal = ({
       executable = executable.replace(/==/g, '===');
       
       // 3. Execution Context (Aggregations)
-      const context = {
-        IF: (c: any, t: any, e: any) => c ? t : e,
-        AND: (...args: any[]) => args.every(Boolean),
-        OR: (...args: any[]) => args.some(Boolean),
-        ROUND: (n: number, d: number) => Number(Number(n).toFixed(d)),
-        SUM: (...args: any[]) => args.flat().reduce((a, b) => Number(a) + Number(b), 0),
-        AVG: (...args: any[]) => {
-          const flat = args.flat();
-          return flat.reduce((a, b) => Number(a) + Number(b), 0) / (flat.length || 1);
-        },
-        COUNT: (...args: any[]) => args.flat().length,
-        MAX: (...args: any[]) => Math.max(...args.flat().map(Number)),
-        MIN: (...args: any[]) => Math.min(...args.flat().map(Number)),
-        JOIN: (arr: any, s: string) => Array.isArray(arr) ? arr.join(s) : String(arr),
-        LEN: (s: any) => String(s).length,
-        ABS: Math.abs,
-        UPPER: (s: any) => String(s).toUpperCase(),
-        LOWER: (s: any) => String(s).toLowerCase(),
-        CONTAINS: (s: any, q: any) => String(s).includes(q),
-        CONCAT: (...args: any[]) => args.join(''),
-        FILTER: (val: any, expression: string) => {
-          const collection = Array.isArray(val) ? val : [val];
-          return collection.filter(item => {
-            const subExpr = expression.replace(/\$/g, JSON.stringify(item));
-            try {
-              // eslint-disable-next-line no-new-func
-              return new Function(`return ${subExpr}`)();
-            } catch {
-              return false;
-            }
-          });
-        },
-        MAP: (val: any, expression: string) => {
-          const collection = Array.isArray(val) ? val : [val];
-          return collection.map(item => {
-            const subExpr = expression.replace(/\$/g, JSON.stringify(item));
-            try {
-              // eslint-disable-next-line no-new-func
-              return new Function(`return ${subExpr}`)();
-            } catch {
-              return item;
-            }
-          });
-        },
-        NOW: () => new Date().toISOString(),
-        DATETIME: (...args: any[]) => {
-          if (args.length === 0) return new Date().toISOString();
-          const [y, m, d, h = 0, mi = 0, s = 0] = args;
-          return new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(mi), Number(s)).toISOString();
-        },
-        TODAY: () => new Date().toISOString().split('T')[0],
-        DIFF_DAYS: (d1: any, d2: any) => {
-          const start = new Date(d1);
-          const end = new Date(d2);
-          const diffTime = Math.abs(end.getTime() - start.getTime());
-          return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        },
-        ADD_DAYS: (d: any, days: number) => {
-          const date = new Date(d);
-          date.setDate(date.getDate() + Number(days));
-          return date.toISOString().split('T')[0];
-        },
-        AT: (arr: any, i: number) => Array.isArray(arr) ? arr[i] : (i === 0 ? arr : null),
-        INDEX_OF: (arr: any, v: any) => Array.isArray(arr) ? arr.indexOf(v) : (arr === v ? 0 : -1),
-        UNIQUE: (arr: any) => Array.isArray(arr) ? [...new Set(arr)] : [arr],
-        SORT: (arr: any) => Array.isArray(arr) ? [...arr].sort() : [arr],
-        REPLACE: (s: any, f: any, r: any) => String(s).replace(new RegExp(f, 'g'), r),
-        TRIM: (s: any) => String(s).trim(),
-        SUBSTR: (s: any, start: number, len: number) => String(s).substring(start, start + len),
-        LEFT: (s: any, n: number) => String(s).substring(0, n),
-        MID: (s: any, start: number, n: number) => String(s).substring(start - 1, (start - 1) + n),
-        RIGHT: (s: any, n: number) => {
-          const str = String(s);
-          return str.substring(str.length - n);
-        },
-        SEARCH: (s: any, q: any) => String(s).toLowerCase().includes(String(q).toLowerCase()),
-        ROW_INDEX: (arr: any, item: any) => Array.isArray(arr) ? arr.indexOf(item) : 0,
-        CEIL: Math.ceil,
-        FLOOR: Math.floor,
-        PERCENT: (v: number, t: number) => (Number(v) / Number(t)) * 100,
-        SWITCH: (val: any, ...args: any[]) => {
-          for (let i = 0; i < args.length - 1; i += 2) {
-            if (val === args[i]) return args[i + 1];
-          }
-          return args[args.length - 1]; // Return default (last arg)
-        },
-        COALESCE: (...args: any[]) => args.find(a => a !== null && a !== undefined && a !== ''),
-        IS_NULL: (v: any) => v === null || v === undefined || v === '',
-        YEAR: (d: any) => new Date(d).getFullYear(),
-        MONTH: (d: any) => new Date(d).getMonth() + 1,
-        DAY: (d: any) => new Date(d).getDate(),
-        EOMONTH: (d: any, m: number) => {
-          const date = new Date(d);
-          date.setMonth(date.getMonth() + m + 1);
-          date.setDate(0);
-          return date.toISOString().split('T')[0];
-        },
-        WORKDAY: (d: any, days: number) => {
-          let date = new Date(d);
-          let count = 0;
-          while (count < Math.abs(days)) {
-            date.setDate(date.getDate() + (days > 0 ? 1 : -1));
-            if (date.getDay() !== 0 && date.getDay() !== 6) count++;
-          }
-          return date.toISOString().split('T')[0];
-        },
-        PROPER: (s: any) => String(s).replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
-      };
+      const context = createFormulaContext({
+        getGlobalListItems: (name) => listDataCache[name] || []
+      });
       
       // 4. Execution
       // eslint-disable-next-line no-new-func
@@ -1500,6 +1557,43 @@ export const CalculatorModal = ({
   };
 
   const renderField = (field: Field, depth = 0, parentPath = '') => {
+    if ((field as any).isGlobalListCol) {
+      const colName = field.label;
+      const listName = (field as any).listName;
+      return (
+        <div 
+          key={field.id}
+          className="group flex items-center gap-3 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/50 transition-all"
+        >
+          <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500 shrink-0">
+            <Layout size={14} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-bold text-zinc-900 dark:text-white">
+              {field.label}
+            </p>
+            <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">List Column</p>
+          </div>
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={() => insertText(`"${colName}"`)}
+              className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[8px] font-black uppercase tracking-widest rounded-lg border border-zinc-200 dark:border-zinc-700 hover:border-indigo-500/50 hover:text-indigo-500"
+            >
+              Insert
+            </button>
+            <button
+              type="button"
+              onClick={() => insertText(`VLOOKUP({Field}, "${listName}", "${colName}", "Return Col")`)}
+              className="px-2 py-1 bg-indigo-600 text-white text-[8px] font-black uppercase tracking-widest rounded-lg shadow-lg shadow-indigo-500/20 hover:bg-indigo-500"
+            >
+              Lookup
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     const isExpanded = expandedFields.has(field.id);
     const hasChildren = field.fields && field.fields.length > 0;
     const fullLabel = parentPath ? `${parentPath}.${field.label}` : field.label;
@@ -1793,8 +1887,8 @@ export const CalculatorModal = ({
                   ) : activeTab === 'relationships' ? (
                     <div className="space-y-4">
                       {/* Explorer Navigation */}
-                      <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl mb-4">
-                        {(['linked', 'platform', 'library'] as const).map((source) => (
+                      <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl mb-4 overflow-x-auto no-scrollbar">
+                        {(['linked', 'platform', 'library', 'lists'] as const).map((source) => (
                           <button
                             key={source}
                             type="button"
@@ -1804,13 +1898,13 @@ export const CalculatorModal = ({
                               setDrillModuleId(null);
                             }}
                             className={cn(
-                              "flex-1 px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all",
+                              "flex-1 px-2 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-wider transition-all whitespace-nowrap",
                               relSource === source 
                                 ? "bg-white dark:bg-zinc-800 text-indigo-500 shadow-sm" 
                                 : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                             )}
                           >
-                            {source === 'linked' ? 'Linked' : source === 'platform' ? 'System' : 'Library'}
+                            {source === 'linked' ? 'Linked' : source === 'platform' ? 'System' : source === 'library' ? 'Library' : 'Lists'}
                           </button>
                         ))}
                       </div>
@@ -1823,7 +1917,7 @@ export const CalculatorModal = ({
                           }}
                           className={cn("transition-colors", drillPath.length > 0 ? "text-indigo-500 hover:text-indigo-400" : "text-zinc-400")}
                         >
-                          {relSource === 'linked' ? 'Relations' : relSource === 'platform' ? 'System' : 'Modules'}
+                          {relSource === 'linked' ? 'Relations' : relSource === 'platform' ? 'System' : relSource === 'library' ? 'Modules' : 'Global Lists'}
                         </button>
                         {drillPath.map((p, i) => (
                           <React.Fragment key={i}>
@@ -1918,12 +2012,43 @@ export const CalculatorModal = ({
                               </div>
                             )
                           )}
+
+                          {relSource === 'lists' && (
+                            isFetchingGlobalLists ? (
+                              <div className="p-8 text-center space-y-3">
+                                <RotateCcw size={20} className="text-indigo-500 animate-spin mx-auto" />
+                                <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Loading Lists...</p>
+                              </div>
+                            ) : globalLists.length > 0 ? (
+                              globalLists.map(list => (
+                                <button
+                                  key={list.id}
+                                  type="button"
+                                  onClick={() => setDrillPath([list.name])}
+                                  className="w-full flex items-center gap-3 p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] transition-all group text-left shadow-sm"
+                                >
+                                  <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500 shrink-0">
+                                    <Database size={18} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{list.name}</p>
+                                    <p className="text-[8px] text-indigo-500 font-black uppercase tracking-widest mt-0.5">{list.columns?.length || 0} Columns</p>
+                                  </div>
+                                  <ChevronRight size={14} className="text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                                </button>
+                              ))
+                            ) : (
+                              <div className="p-8 text-center space-y-3">
+                                <p className="text-xs text-zinc-500">No global lists found.</p>
+                              </div>
+                            )
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-1 animate-in fade-in slide-in-from-right-4 duration-300">
                           {(() => {
                             let schema: Field[] = [];
-                            let parentPrefix = drillPath[0];
+                            const parentPrefix = drillPath[0];
 
                             if (relSource === 'linked') {
                               const activeLookup = availableFields.find(f => f.label === drillPath[0]);
@@ -1932,6 +2057,17 @@ export const CalculatorModal = ({
                               schema = SYSTEM_SCHEMAS[drillPath[0]] || [];
                             } else if (relSource === 'library' && drillModuleId) {
                               schema = fetchedLibrarySchemas[drillModuleId] || relatedFields?.[drillModuleId] || [];
+                            } else if (relSource === 'lists') {
+                              const list = globalLists.find(l => l.name === drillPath[0]);
+                              if (list) {
+                                schema = (list.columns || []).map((col: any) => ({
+                                  id: col.id || Math.random().toString(),
+                                  label: col.name || col.label || 'Unknown Column',
+                                  type: col.type === 'number' ? 'number' : 'text',
+                                  isGlobalListCol: true,
+                                  listName: list.name
+                                }));
+                              }
                             }
                             
                             return isFetchingLibrary ? (

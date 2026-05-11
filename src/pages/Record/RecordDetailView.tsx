@@ -220,11 +220,21 @@ export const RecordDetailView = () => {
           const recData = await recRes.json();
           setRecord(recData);
           
-          // CRITICAL: Compute flat fields from the actual module we just fetched
-          // to avoid using stale allFields memo during this effect execution.
+          // CRITICAL: Compute flat fields and merge defaults into editData
+          // so that calculations (including VLOOKUP) can see fields that rely on default values.
           const currentFlatFields = flattenFields(currentModule?.layout || []) as ModuleField[];
           
-          const withCalculations = evaluateCalculations(recData, currentFlatFields);
+          const dataWithDefaults = { ...recData };
+          currentFlatFields.forEach(f => {
+            if (dataWithDefaults[f.id] === undefined || dataWithDefaults[f.id] === null) {
+              const defaultValue = calculateDefaultValue(f, recData);
+              if (defaultValue !== undefined && defaultValue !== null) {
+                dataWithDefaults[f.id] = defaultValue;
+              }
+            }
+          });
+
+          const withCalculations = evaluateCalculations(dataWithDefaults, currentFlatFields);
           setEditData(withCalculations);
           
           if (recordId && recData._record_key) {
@@ -301,6 +311,19 @@ export const RecordDetailView = () => {
       }
     }
     
+    // Re-calculate dynamic defaults that might depend on this field
+    allFields.forEach(f => {
+      if (f.id !== fieldId && f.defaultType === 'field_copy' && f.defaultSourceFieldId === fieldId) {
+        const currentVal = updatedData[f.id];
+        const oldDefault = calculateDefaultValue(f, editData);
+        
+        // Only overwrite if it was empty or matched the previous default
+        if (!currentVal || currentVal === oldDefault) {
+          updatedData[f.id] = calculateDefaultValue(f, updatedData);
+        }
+      }
+    });
+
     const withCalculations = evaluateCalculations(updatedData, allFields);
     setEditData(withCalculations);
     
@@ -632,6 +655,7 @@ export const RecordDetailView = () => {
           readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
           usersData={usersData}
           recordData={editData}
+          allFields={allFields}
         />
         {nestedField.helperText && (
           <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{nestedField.helperText}</p>
@@ -917,6 +941,7 @@ export const RecordDetailView = () => {
                                 readonly={savingFieldId === field.id || activeFieldId !== field.id}
                                 usersData={usersData}
                                 recordData={editData}
+                                allFields={allFields}
                               />
                               {field.helperText && (
                                 <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>

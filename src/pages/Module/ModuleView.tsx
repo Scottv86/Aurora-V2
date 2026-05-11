@@ -257,6 +257,19 @@ export const ModuleView = () => {
         }
       }
       
+      // Re-calculate dynamic defaults that might depend on this field
+      allFields.forEach(f => {
+        if (f.id !== fieldId && f.defaultType === 'field_copy' && f.defaultSourceFieldId === fieldId) {
+          const currentVal = updatedData[f.id];
+          const oldDefault = calculateDefaultValue(f, prev);
+          
+          // Only overwrite if it was empty or matched the previous default
+          if (!currentVal || currentVal === oldDefault) {
+            updatedData[f.id] = calculateDefaultValue(f, updatedData);
+          }
+        }
+      });
+      
       return updatedData;
     });
   };
