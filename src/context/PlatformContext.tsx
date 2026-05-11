@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import type { User, Tenant, Environment, BillingUsage } from '../types/platform';
+import type { User, Tenant, Environment, BillingUsage, TenantMember, Team } from '../types/platform';
 import { API_BASE_URL } from '../config';
 import { MenuConfig } from '../types/menu';
 import { systemDefaultMenuConfig } from '../config/menuDefaults';
@@ -35,6 +35,12 @@ interface PlatformContextType {
   setIsNotificationsOpen: (open: boolean) => void;
   breadcrumbOverrides: Record<string, string>;
   setBreadcrumbOverride: (id: string, label: string) => void;
+  members: TenantMember[];
+  membersLoading: boolean;
+  refreshMembers: () => Promise<void>;
+  teams: Team[];
+  teamsLoading: boolean;
+  refreshTeams: () => Promise<void>;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -68,6 +74,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
+  
+  const [members, setMembers] = useState<TenantMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
 
   const userRef = useRef<User | null>(null);
   const tenantRef = useRef<Tenant | null>(null);
@@ -184,6 +195,52 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       console.error('[PlatformContext] Failed to fetch billing usage:', err);
     } finally {
       setBillingLoading(false);
+    }
+  }, [supabaseUser, tenant?.id, session?.access_token]);
+
+  const refreshMembers = useCallback(async () => {
+    if (!supabaseUser || !tenant?.id) return;
+    
+    setMembersLoading(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/members`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMembers(data);
+      }
+    } catch (err) {
+      console.error('[PlatformContext] Failed to fetch members:', err);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [supabaseUser, tenant?.id, session?.access_token]);
+
+  const refreshTeams = useCallback(async () => {
+    if (!supabaseUser || !tenant?.id) return;
+    
+    setTeamsLoading(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/teams`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTeams(data);
+      }
+    } catch (err) {
+      console.error('[PlatformContext] Failed to fetch teams:', err);
+    } finally {
+      setTeamsLoading(false);
     }
   }, [supabaseUser, tenant?.id, session?.access_token]);
 
@@ -339,8 +396,10 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     if (tenant?.id) {
       refreshModules();
       refreshBilling();
+      refreshMembers();
+      refreshTeams();
     }
-  }, [tenant?.id, supabaseUser, refreshBilling]);
+  }, [tenant?.id, supabaseUser, refreshBilling, refreshMembers, refreshTeams]);
 
   return (
     <PlatformContext.Provider value={{ 
@@ -371,7 +430,13 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       isNotificationsOpen,
       setIsNotificationsOpen,
       breadcrumbOverrides,
-      setBreadcrumbOverride
+      setBreadcrumbOverride,
+      members,
+      membersLoading,
+      refreshMembers,
+      teams,
+      teamsLoading,
+      refreshTeams
     }}>
       {/* 
           IMPORTANT: We must always render children here. 

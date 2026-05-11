@@ -95,6 +95,7 @@ router.get('/records', async (req: TenantRequest, res) => {
       total = await db.record.count({ where: whereClause });
       records = await db.record.findMany({
         where: whereClause,
+        include: { createdByMember: true },
         orderBy: { createdAt: 'desc' },
         skip,
         take: l
@@ -110,6 +111,7 @@ router.get('/records', async (req: TenantRequest, res) => {
       path: r.path,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
+      createdBy: r.createdByMember ? `${r.createdByMember.firstName || ''} ${r.createdByMember.familyName || ''}`.trim() : 'System',
       ...(r.data as any),
       workflowState: r.workflowState
     }));
@@ -131,7 +133,10 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;
-    const record = await db.record.findUnique({ where: { id } });
+    const record = await db.record.findUnique({ 
+      where: { id },
+      include: { createdByMember: true }
+    });
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
@@ -143,6 +148,7 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+      createdBy: (record as any).createdByMember ? `${(record as any).createdByMember.firstName || ''} ${(record as any).createdByMember.familyName || ''}`.trim() : 'System',
       ...(record.data as any),
       workflowState: record.workflowState
     });
@@ -270,8 +276,14 @@ router.post('/records', async (req: TenantRequest, res) => {
         associations: associations || [],
         path: path || null,
         status: (data as any).status || (workflowState ? (workflow.nodes.find((n: any) => n.id === workflowState.currentNodeId)?.name) : 'New'),
+        createdByMemberId: (req as any).user?.memberId,
         workflowState: workflowState as any
       }
+    });
+
+    const recordWithMember = await db.record.findUnique({
+      where: { id: record.id },
+      include: { createdByMember: true }
     });
 
     const formatted = {
@@ -282,6 +294,7 @@ router.post('/records', async (req: TenantRequest, res) => {
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+      createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
       ...(record.data as any),
       workflowState: record.workflowState
     };
@@ -385,6 +398,11 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       data: updatePayload
     });
 
+    const recordWithMember = await db.record.findUnique({
+      where: { id: record.id },
+      include: { createdByMember: true }
+    });
+
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
@@ -393,6 +411,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+      createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
       ...(record.data as any),
       workflowState: record.workflowState
     };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { 
   motion, 
@@ -10,6 +10,7 @@ import {
   Loader2,
   ArrowLeft, 
   ChevronRight,
+  ChevronLeft,
   Sparkles, 
   History, 
   AlertCircle, 
@@ -83,9 +84,10 @@ export const RecordDetailView = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
-  const [usersData] = useState<any[]>([]);
   const [lookupData] = useState<Record<string, any[]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  
+
 
   // Global click-away handler
   useEffect(() => {
@@ -120,6 +122,35 @@ export const RecordDetailView = () => {
     const filtered = moduleData.tabs.filter(tab => isFieldVisible(tab, editData || record || {}, visibilityContext));
     return filtered;
   }, [moduleData?.tabs, editData, record, visibilityContext]);
+
+  // Tab scrolling state
+  const tabContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftScroll, setShowLeftScroll] = useState(false);
+  const [showRightScroll, setShowRightScroll] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    if (tabContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = tabContainerRef.current;
+      setShowLeftScroll(scrollLeft > 0);
+      setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 5);
+    }
+  }, []);
+
+  const handleScroll = (direction: 'left' | 'right') => {
+    if (tabContainerRef.current) {
+      const scrollAmount = 200;
+      tabContainerRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [checkScroll, visibleTabs]);
 
   useEffect(() => {
     if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find(t => t.id === activeTabId))) {
@@ -653,7 +684,6 @@ export const RecordDetailView = () => {
             if (e.key === 'Escape') setActiveFieldId(null);
           }}
           readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
-          usersData={usersData}
           recordData={editData}
           allFields={allFields}
         />
@@ -691,16 +721,62 @@ export const RecordDetailView = () => {
                 {recordTitle}
               </h1>
             </div>
-            <p className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-2">
-              <span className="font-medium">{moduleData.name}</span>
-              {(editData._record_key || record._record_key) && (
-                <>
-                  <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
-                  <span className="font-medium">{editData._record_key || record._record_key}</span>
-                </>
-              )}
-              <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
-              <span>Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
+            <p className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-1.5 text-xs">
+              {(() => {
+                const config = moduleData.config || (moduleData as any).config;
+                const subtitleFieldIds = config?.subtitleFieldIds;
+                
+                if (subtitleFieldIds && Array.isArray(subtitleFieldIds) && subtitleFieldIds.length > 0) {
+                  const items = subtitleFieldIds.map((fieldId) => {
+                    // Special handling for metadata fields
+                    if (fieldId === 'createdAt') {
+                      return record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now';
+                    }
+                    if (fieldId === 'createdBy') {
+                      return record.createdBy || 'System';
+                    }
+                    if (fieldId === '_record_key') {
+                      return record._record_key || record.id;
+                    }
+
+                    const value = getFieldValue(editData, fieldId) ?? getFieldValue(record, fieldId);
+                    if (!value && value !== 0) return null;
+                    
+                    // Format value if it's a date or other special type
+                    const field = allFields.find(f => f.id === fieldId);
+                    let displayValue = value;
+                    if (field?.type === 'date' && value) {
+                      displayValue = new Date(value).toLocaleDateString();
+                    }
+                    
+                    return displayValue;
+                  }).filter(Boolean);
+
+                  if (items.length > 0) {
+                    return items.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5">
+                        {idx > 0 && <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />}
+                        <span className="font-medium">{String(item)}</span>
+                      </div>
+                    ));
+                  }
+                }
+                
+                // Fallback to default: Module Name • Record Key • Created Date
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium">{moduleData.name}</span>
+                    {(editData._record_key || record._record_key) && (
+                      <>
+                        <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+                        <span className="font-medium">{editData._record_key || record._record_key}</span>
+                      </>
+                    )}
+                    <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+                    <span>Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
+                  </div>
+                );
+              })()}
             </p>
           </div>
         </div>
@@ -719,21 +795,67 @@ export const RecordDetailView = () => {
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
             {moduleData?.tabs && moduleData.tabs.length > 0 && (
-              <div className="flex gap-2 p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar">
-                {visibleTabs.map((tab: any) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTabId(tab.id)}
-                    className={cn(
-                      "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
-                      activeTabId === tab.id
-                        ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
-                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+              <div className="relative group/tabs overflow-hidden rounded-t-[31px]">
+                <AnimatePresence>
+                  {showLeftScroll && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
+                    >
+                      <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                        <button 
+                          onClick={() => handleScroll('left')}
+                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div 
+                  ref={tabContainerRef}
+                  onScroll={checkScroll}
+                  className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
+                >
+                  {visibleTabs.map((tab: any) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTabId(tab.id)}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                        activeTabId === tab.id
+                          ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
+                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence>
+                  {showRightScroll && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
+                    >
+                      <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                        <button 
+                          onClick={() => handleScroll('right')}
+                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
 
@@ -939,7 +1061,6 @@ export const RecordDetailView = () => {
                                   if (e.key === 'Escape') setActiveFieldId(null);
                                 }}
                                 readonly={savingFieldId === field.id || activeFieldId !== field.id}
-                                usersData={usersData}
                                 recordData={editData}
                                 allFields={allFields}
                               />

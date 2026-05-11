@@ -144,6 +144,7 @@ model TenantMember {
   tenant           Tenant                  @relation(fields: [tenantId], references: [id], map: "TenantMember_tenantId_fkey")
   user             User?                   @relation(fields: [userId], references: [id], map: "TenantMember_userId_fkey")
   timesheets       Timesheet[]
+  createdRecords   Record[]                @relation("RecordCreator")
 
   @@unique([userId, tenantId], map: "TenantMember_userId_tenantId_key")
   @@unique([id, tenantId])
@@ -243,10 +244,12 @@ model Record {
   status        String   @default("active")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
+  createdByMemberId String? @map("created_by_member_id")
   path          String?  @map("_path")
   associations  Json     @default("[]")
   workflowState Json?    @map("workflow_state")
   module        Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
+  createdByMember TenantMember? @relation("RecordCreator", fields: [createdByMemberId, tenantId], references: [id, tenantId])
 
   @@index([moduleId], map: "Record_moduleId_idx")
   @@index([tenantId], map: "Record_tenantId_idx")

@@ -1,64 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { toast } from 'sonner';
 import { usePlatform } from './usePlatform';
 import { useAuth } from './useAuth';
-
-export interface Team {
-  id: string;
-  name: string;
-  description: string;
-  memberCount: number;
-  agentCount: number;
-  avatar?: string;
-}
+import { Team } from '../types/platform';
 
 const API_BASE_URL = 'http://localhost:3001/api/teams';
 
 export const useTeams = (enabled: boolean = true) => {
-  const { tenant } = usePlatform();
+  const { tenant, teams, teamsLoading, refreshTeams } = usePlatform();
   const { session } = useAuth();
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [loading, setLoading] = useState(enabled);
-
-  const fetchTeams = useCallback(async () => {
-    if (!tenant?.id || !enabled) return;
-    setLoading(true);
-    try {
-      const res = await fetch(API_BASE_URL, {
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-          'x-tenant-id': tenant.id
-        }
-      });
-      if (!res.ok) throw new Error('Failed to fetch teams');
-      const data = await res.json();
-      setTeams(data);
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [tenant?.id, session?.access_token]);
-
-  useEffect(() => {
-    fetchTeams();
-  }, [fetchTeams]);
 
   const createTeam = async (data: { name: string, description: string, avatarUrl?: string }) => {
     if (!tenant?.id) return;
     try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(API_BASE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         },
         body: JSON.stringify(data)
       });
       if (!res.ok) throw new Error('Failed to create team');
       const newTeam = await res.json();
-      setTeams(prev => [...prev, newTeam]);
+      await refreshTeams();
       toast.success(`Team "${data.name}" created successfully`);
       return newTeam;
     } catch (err: any) {
@@ -70,18 +37,19 @@ export const useTeams = (enabled: boolean = true) => {
   const updateTeam = async (id: string, data: Partial<Team> & { avatarUrl?: string }) => {
     if (!tenant?.id) return;
     try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         },
         body: JSON.stringify(data)
       });
       if (!res.ok) throw new Error('Failed to update team');
       const updated = await res.json();
-      setTeams(prev => prev.map(t => t.id === id ? { ...t, ...updated } : t));
+      await refreshTeams();
       toast.success('Team updated successfully');
       return updated;
     } catch (err: any) {
@@ -93,15 +61,16 @@ export const useTeams = (enabled: boolean = true) => {
   const deleteTeam = async (id: string) => {
     if (!tenant?.id) return;
     try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         }
       });
       if (!res.ok) throw new Error('Failed to delete team');
-      setTeams(prev => prev.filter(t => t.id !== id));
+      await refreshTeams();
       toast.success('Team deleted');
     } catch (err: any) {
       toast.error(err.message);
@@ -109,22 +78,30 @@ export const useTeams = (enabled: boolean = true) => {
     }
   };
 
-  return { teams, loading, createTeam, updateTeam, deleteTeam, refetch: fetchTeams };
+  return { 
+    teams: enabled ? teams : [], 
+    loading: enabled ? teamsLoading : false, 
+    createTeam, 
+    updateTeam, 
+    deleteTeam, 
+    refetch: refreshTeams 
+  };
 };
 
 export const useTeam = (id?: string) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
-  const [team, setTeam] = useState<Team & { members?: any[] } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [team, setTeam] = React.useState<Team & { members?: any[] } | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
   const fetchTeam = useCallback(async () => {
     if (!tenant?.id || !id) return;
     setLoading(true);
     try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/${id}`, {
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         }
       });
@@ -141,18 +118,19 @@ export const useTeam = (id?: string) => {
     }
   }, [tenant?.id, id, session?.access_token]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchTeam();
   }, [fetchTeam]);
 
   const updateTeam = async (data: Partial<Team> & { avatarUrl?: string }) => {
     if (!tenant?.id || !id) return;
     try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         },
         body: JSON.stringify(data)
@@ -171,10 +149,11 @@ export const useTeam = (id?: string) => {
   const deleteTeam = async () => {
     if (!tenant?.id || !id) return;
     try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         }
       });
@@ -188,3 +167,5 @@ export const useTeam = (id?: string) => {
 
   return { team, loading, updateTeam, deleteTeam, refetch: fetchTeam };
 };
+
+export type { Team };

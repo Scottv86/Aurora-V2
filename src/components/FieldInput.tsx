@@ -194,20 +194,19 @@ interface FieldInputProps {
   field: any;
   value: any;
   onChange: (value: any, metadata?: any) => void;
-  usersData?: any[];
   readonly?: boolean;
   error?: boolean;
   onBlur?: () => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
   recordData?: Record<string, any>;
   allFields?: any[];
+  lookupData?: any;
 }
 
 export const FieldInput: React.FC<FieldInputProps> = ({ 
   field, 
   value, 
   onChange, 
-  usersData = [], 
   readonly = false,
   error = false,
   onBlur,
@@ -709,11 +708,17 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'ai_summary' || type === 'calculation' || type === 'autonumber') {
     const isErrorOrPlaceholder = !value || value === 'Error' || value === 'Value will be calculated after saving.';
-    const displayValue = (type === 'calculation' && isErrorOrPlaceholder && formulaPreview.result) ? formulaPreview.result : value;
+    const rawValue = (type === 'calculation' && isErrorOrPlaceholder && formulaPreview.result !== null && formulaPreview.result !== undefined) ? formulaPreview.result : value;
     
+    let displayValue = rawValue;
+    if (type === 'calculation' && field.showAsCurrency && rawValue !== null && rawValue !== undefined && !isNaN(Number(rawValue)) && rawValue !== '') {
+       const symbol = field.currencySymbol || '$';
+       displayValue = `${symbol}${Number(rawValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
     return (
       <div className={cn(inputClasses, "flex items-center justify-between")}>
-        <span>
+        <span className="truncate">
           {displayValue || (
             type === 'ai_summary' ? 'AI Summary will be generated after saving.' : 
             type === 'calculation' ? (formulaPreview.isFetching ? 'Calculating...' : 'Value will be calculated after saving.') :

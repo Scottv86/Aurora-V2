@@ -141,6 +141,12 @@ import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
 import { FieldSelectorModal } from './Builder/FieldSelectorModal';
 
+const METADATA_FIELDS = [
+  { id: 'createdAt', label: 'Created Date', type: 'date', tabId: 'metadata' },
+  { id: 'createdBy', label: 'Creation User', type: 'user', tabId: 'metadata' },
+  { id: '_record_key', label: 'Record Key', type: 'text', tabId: 'metadata' },
+];
+
 // --- Grid Constants ---
 export const GRID_CONFIG = {
   rowHeight: 50,
@@ -466,6 +472,8 @@ export interface LookupFilter {
 
 export interface Field {
   id: string;
+  name?: string;
+  isNameManuallyEdited?: boolean;
   type: FieldType;
   label: string;
   placeholder?: string;
@@ -540,6 +548,8 @@ export interface Field {
   maxDateOffset?: number;
   maxDateOffsetUnit?: 'minutes' | 'hours' | 'days' | 'business_days' | 'months';
   maxDateFieldId?: string;
+  // Calculation formatting
+  showAsCurrency?: boolean;
 }
 
 
@@ -1341,7 +1351,9 @@ export const ModuleEditor = () => {
     recordKeySuffix: '',
     nextKeyNumber: 1,
     titleFieldId: '',
+    subtitleFieldIds: [] as string[],
   });
+  const [isFieldSelectorOpen, setIsFieldSelectorOpen] = useState(false);
   
   const [layout, setLayout] = useState<Layout>([]);
   const allFields = React.useMemo(() => flattenFields(layout), [layout]);
@@ -1441,6 +1453,8 @@ export const ModuleEditor = () => {
     targetId: string;
     logic?: string;
     triggers?: string[];
+    showAsCurrency?: boolean;
+    currencySymbol?: string;
   } | null>(null);
 
   const [relatedModulesMap, setRelatedModulesMap] = useState<Record<string, { layout: Field[], tabs: Tab[] }>>({});
@@ -1797,6 +1811,7 @@ export const ModuleEditor = () => {
                 recordKeySuffix: (standardModule as any).recordKeySuffix || '',
                 nextKeyNumber: (standardModule as any).nextKeyNumber || 1,
                 titleFieldId: (standardModule as any).config?.titleFieldId || '',
+                subtitleFieldIds: (standardModule as any).config?.subtitleFieldIds || [],
               });
               setBreadcrumbOverride(id, standardModule.name);
               setIsLoading(false);
@@ -1820,6 +1835,7 @@ export const ModuleEditor = () => {
           recordKeySuffix: data.recordKeySuffix || '',
           nextKeyNumber: data.nextKeyNumber || 1,
           titleFieldId: data.config?.titleFieldId || '',
+          subtitleFieldIds: data.config?.subtitleFieldIds || [],
         });
 
         setBreadcrumbOverride(id, data.name || 'Untitled Module');
@@ -1877,7 +1893,8 @@ export const ModuleEditor = () => {
       const payload = {
         ...moduleSettings,
         config: {
-          titleFieldId: moduleSettings.titleFieldId
+          titleFieldId: moduleSettings.titleFieldId,
+          subtitleFieldIds: moduleSettings.subtitleFieldIds,
         },
         id: isNew && id !== 'new' ? id : undefined, // Pass templateId if standard module
         enabled: moduleSettings.status === 'ACTIVE',
@@ -2112,26 +2129,66 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
 
   const generateId = () => Math.random().toString(36).substring(2, 11);
+  
+  const generateSlug = (label: string, fields: Field[], currentFieldId?: string): string => {
+    // 1. Basic slugification
+    let slug = label
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    
+    if (!slug) slug = 'field';
+    
+    // 2. Uniqueness check
+    const getAllSlugs = (f: Field[]): string[] => {
+      let slugs: string[] = [];
+      f.forEach(field => {
+        if (field.id !== currentFieldId && field.name) slugs.push(field.name);
+        if (field.fields) slugs.push(...getAllSlugs(field.fields));
+      });
+      return slugs;
+    };
+    
+    const existingSlugs = getAllSlugs(fields);
+    let finalSlug = slug;
+    let counter = 1;
+    
+    while (existingSlugs.includes(finalSlug)) {
+      finalSlug = `${slug}_${counter}`;
+      counter++;
+    }
+    
+    return finalSlug;
+  };
 
-  const createField = (type: FieldType): Field => ({
-    id: `field-${generateId()}`,
-    type,
-    label: `New ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}`,
-    placeholder: ['select', 'lookup', 'user'].includes(type) 
-      ? `Select ${type.replace('_', ' ')}...`
-      : `Enter ${type.replace('_', ' ')}...`,
-    helperText: '',
-    required: false,
-    currencySymbol: '$',
-    options: ['Option 1', 'Option 2'],
-    calculationLogic: '',
-    targetModuleId: '',
-    colSpan: 6, // Uniform default for all field types
-    startCol: 1,
-    rowIndex: layout.length, // Add to end by default
-    tabId: currentTabId,
-    fields: isContainerField(type) ? [] : undefined
-  });
+  const createField = (type: FieldType): Field => {
+    const id = `field-${generateId()}`;
+    const label = `New ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}`;
+    const name = generateSlug(label, layout, id);
+    
+    return {
+      id,
+      name,
+      type,
+      label,
+      placeholder: ['select', 'lookup', 'user'].includes(type) 
+        ? `Select ${type.replace('_', ' ')}...`
+        : `Enter ${type.replace('_', ' ')}...`,
+      helperText: '',
+      required: false,
+      currencySymbol: '$',
+      options: ['Option 1', 'Option 2'],
+      calculationLogic: '',
+      targetModuleId: '',
+      colSpan: 6,
+      startCol: 1,
+      rowIndex: layout.length,
+      tabId: currentTabId,
+      fields: isContainerField(type) ? [] : undefined
+    };
+  };
 
   // --- DnD Handlers ---
 
@@ -2225,7 +2282,8 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
       rowIndex: info.index,
       rowSpan: draggedHeight,
       parentId: info.parentId,
-      tabId: currentTabId
+      tabId: currentTabId,
+      name: 'placeholder'
     };
 
     const performPreviewInsert = (fields: Field[], targetId?: string, fieldToMoveId?: string): Field[] => {
@@ -2450,7 +2508,19 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
       const findAndUpdate = (fields: Field[]): Field[] => {
         return fields.map(f => {
           if (f.id === fieldId) {
-            return { ...f, ...updates };
+            const newUpdates = { ...updates };
+            
+            // If label is changing and name hasn't been manually edited, auto-generate slug
+            if (updates.label !== undefined && !f.isNameManuallyEdited && updates.name === undefined) {
+              newUpdates.name = generateSlug(updates.label, layout, fieldId);
+            }
+            
+            // If name is being manually updated, mark it as manually edited
+            if (updates.name !== undefined) {
+              newUpdates.isNameManuallyEdited = true;
+            }
+            
+            return { ...f, ...newUpdates };
           }
           if (f.fields) {
             return { ...f, fields: findAndUpdate(f.fields) };
@@ -6765,6 +6835,86 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                         </div>
 
                         <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Subtitle Fields</label>
+                          <div className="space-y-2">
+                             <Reorder.Group 
+                               axis="y" 
+                               values={moduleSettings.subtitleFieldIds || []} 
+                               onReorder={(newIds) => setModuleSettings(prev => ({ ...prev, subtitleFieldIds: newIds }))}
+                               className="space-y-2"
+                             >
+                               {moduleSettings.subtitleFieldIds?.map((id) => {
+                                 const field = layout.find(f => f.id === id) || METADATA_FIELDS.find(f => f.id === id);
+                                 return (
+                                   <Reorder.Item 
+                                     key={id} 
+                                     value={id}
+                                     className="flex items-center gap-2 group"
+                                   >
+                                      <div className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white flex items-center justify-between">
+                                         <div className="flex items-center gap-2 min-w-0">
+                                           <GripVertical size={12} className="text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity" />
+                                           <span className="truncate text-[10px] font-medium">{field?.label || id}</span>
+                                         </div>
+                                         <button 
+                                           onClick={() => {
+                                             setModuleSettings(prev => ({ 
+                                               ...prev, 
+                                               subtitleFieldIds: prev.subtitleFieldIds.filter(sid => sid !== id) 
+                                             }));
+                                           }}
+                                           className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-rose-500 transition-all"
+                                         >
+                                           <X size={12} />
+                                         </button>
+                                      </div>
+                                   </Reorder.Item>
+                                 );
+                               })}
+                             </Reorder.Group>
+                             
+                             <button 
+                               onClick={() => setIsFieldSelectorOpen(true)}
+                               className="w-full bg-white dark:bg-zinc-950 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-500 hover:text-indigo-500 hover:border-indigo-500 transition-all flex items-center justify-center gap-2 group/add"
+                             >
+                               <Plus size={14} className="text-zinc-400 group-hover/add:text-indigo-500" />
+                               <span>Add Subtitle Field...</span>
+                             </button>
+
+                             <FieldSelectorModal 
+                               isOpen={isFieldSelectorOpen}
+                               onClose={() => setIsFieldSelectorOpen(false)}
+                               title="Nominate Subtitle Field"
+                               multi={true}
+                               onSelectMultiple={(fieldIds) => {
+                                 setModuleSettings(prev => ({ 
+                                   ...prev, 
+                                   subtitleFieldIds: [...(prev.subtitleFieldIds || []), ...fieldIds] 
+                                 }));
+                               }}
+                               onSelect={(fieldId) => {
+                                 setModuleSettings(prev => ({ 
+                                   ...prev, 
+                                   subtitleFieldIds: [...(prev.subtitleFieldIds || []), fieldId] 
+                                 }));
+                               }}
+                               fields={[
+                                 ...METADATA_FIELDS.map(f => f as any),
+                                 ...allFields.filter(f => !isContainerField(f.type) && !['button', 'spacer', 'heading', 'divider', 'alert', 'html'].includes(f.type))
+                               ]}
+                               tabs={[
+                                 { id: 'metadata', label: 'System Metadata' },
+                                 ...tabs
+                               ]}
+                               excludeFieldIds={moduleSettings.subtitleFieldIds}
+                             />
+                          </div>
+                          <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed">
+                            Nominate data points to appear in the record subtitle (separated by dots).
+                          </p>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
                           <IconPicker 
                             label="Module Icon"
                             value={moduleSettings.iconName || 'Box'}
@@ -7017,6 +7167,29 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                 className="w-full accent-indigo-600 cursor-pointer h-1.5"
                               />
                             </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Advanced Settings */}
+                      <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between px-1">
+                          <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Advanced Settings</h4>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Field Key (Slug)</label>
+                            <input 
+                              type="text" 
+                              value={selectedField.name || ''}
+                              onChange={(e) => updateField(selectedField.id, { name: e.target.value })}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-mono"
+                              placeholder="e.g. total_cost"
+                            />
+                            <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed italic">
+                              This key is used in formulas and API integrations. Changing it may require updates to existing logic.
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -8013,6 +8186,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                       id: `section-${Date.now()}`,
                                       type: 'group' as FieldType,
                                       label: `New Section ${ (selectedField.fields?.length || 0) + 1 }`,
+                                      name: `section_${Date.now()}`,
                                       fields: []
                                     };
                                     updateField(selectedField.id, { fields: [...(selectedField.fields || []), newSection] });
@@ -8151,6 +8325,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                       id: `nested-${Date.now()}`,
                                       type: 'text' as FieldType,
                                       label: 'New Element',
+                                      name: `nested_${Date.now()}`,
                                       required: false
                                     }];
                                     updateField(selectedField.id, { fields: newFields });
@@ -8168,6 +8343,40 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
                       {selectedField.type === 'calculation' && (
                         <div className="space-y-4">
+                          <div className="space-y-4 border-b border-zinc-100 dark:border-zinc-900 pb-4 mb-4">
+                            <div className="flex items-center justify-between px-1">
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Show as Currency</label>
+                              <button
+                                onClick={() => updateField(selectedField.id, { showAsCurrency: !selectedField.showAsCurrency })}
+                                className={cn(
+                                  "w-11 h-6 rounded-full transition-all relative flex items-center px-1",
+                                  selectedField.showAsCurrency ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                )}
+                              >
+                                <div className={cn(
+                                  "w-4 h-4 rounded-full bg-white shadow-sm transition-all",
+                                  selectedField.showAsCurrency ? "translate-x-5" : "translate-x-0"
+                                )} />
+                              </button>
+                            </div>
+
+                            {selectedField.showAsCurrency && (
+                              <div className="space-y-2 animate-in slide-in-from-top-2">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Currency Symbol</label>
+                                <select 
+                                  value={selectedField.currencySymbol || '$'}
+                                  onChange={(e) => updateField(selectedField.id, { currencySymbol: e.target.value })}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                >
+                                  <option value="$">USD ($)</option>
+                                  <option value="£">GBP (£)</option>
+                                  <option value="€">EUR (€)</option>
+                                  <option value="¥">JPY (¥)</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Calculation Logic</label>
                           <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
                             <div className="flex items-center gap-3">
@@ -8183,7 +8392,9 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                               onClick={() => setEditingCalculation({
                                 targetId: selectedField.id,
                                 logic: selectedField.calculationLogic,
-                                triggers: selectedField.calculationTriggers
+                                triggers: selectedField.calculationTriggers,
+                                showAsCurrency: selectedField.showAsCurrency,
+                                currencySymbol: selectedField.currencySymbol
                               })}
                               className="w-full py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[10px] font-bold text-indigo-500 hover:bg-indigo-500/5 transition-all uppercase tracking-widest"
                             >
@@ -9013,17 +9224,21 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
             <CalculatorModal 
               isOpen={!!editingCalculation}
               onClose={() => setEditingCalculation(null)}
-              onSave={(logic, triggers) => {
+              onSave={(logic, triggers, showAsCurrency, currencySymbol) => {
                 if (editingCalculation) {
                   updateField(editingCalculation.targetId, { 
                     calculationLogic: logic,
-                    calculationTriggers: triggers
+                    calculationTriggers: triggers,
+                    showAsCurrency,
+                    currencySymbol
                   });
                 }
                 setEditingCalculation(null);
               }}
               initialLogic={editingCalculation?.logic}
               initialTriggers={editingCalculation?.triggers}
+              showAsCurrency={editingCalculation?.showAsCurrency}
+              currencySymbol={editingCalculation?.currencySymbol}
               availableFields={availableFieldsForCalc}
               tabs={tabs}
               relatedFields={Object.fromEntries(

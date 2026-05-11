@@ -167,6 +167,10 @@ export interface ModuleField {
   columnWidth?: number;
   optionLayout?: 'vertical' | 'horizontal';
   isCollapsed?: boolean;
+
+  // Calculation formatting
+  showAsCurrency?: boolean;
+  currencySymbol?: string;
 }
 
 export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';
@@ -186,6 +190,7 @@ export interface Tab {
 
 export interface ModuleConfig {
   titleFieldId?: string;
+  subtitleFieldIds?: string[];
   [key: string]: any;
 }
 
@@ -317,4 +322,60 @@ export interface Invoice {
   amount: number;
   status: 'Paid' | 'Pending' | 'Overdue';
   downloadUrl: string;
+}
+
+export interface TenantMember {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Admin' | 'Lead' | 'Standard';
+  team: string;
+  teamId?: string;
+  status: 'Active' | 'Inactive' | 'Pending' | 'Offline';
+  isSynthetic: boolean;
+  positionId?: string;
+  position?: string;
+  positionNumber?: string;
+  avatarUrl?: string;
+  modelType?: string; // For agents
+  agentConfig?: any;
+  lastActive?: string;
+  createdAt: string;
+  updatedAt?: string;
+
+  // New Staff Details
+  firstName?: string;
+  otherName?: string;
+  familyName?: string;
+  personalEmail?: string;
+  homeAddress?: string;
+  workArrangements?: string;
+  emergencyContact?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  nationality?: string;
+  startDate?: string;
+  endDate?: string;
+
+  // Workforce Hub Enhancements
+  isContractor?: boolean;
+  licenceType?: string;
+  aiHumour?: number;
+  workEmail?: string;
+  signature?: string;
+
+  phoneNumbers?: { label: string; number: string }[];
+  certifications?: { name: string; issuer: string; dateObtained?: string; expiryDate?: string }[];
+  education?: { institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[];
+  skills?: { name: string; proficiencyLevel: string }[];
+  permissionGroups?: { id: string; name: string; description?: string }[];
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  memberCount: number;
+  agentCount: number;
+  avatar?: string;
 }

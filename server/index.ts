@@ -24,6 +24,8 @@ import http from 'http';
 import { initSocket } from './socket';
 
 dotenv.config();
+// Server restart trigger: 2026-05-11 15:40
+
 
 const app = express();
 const httpServer = http.createServer(app);

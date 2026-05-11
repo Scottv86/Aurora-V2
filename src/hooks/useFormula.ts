@@ -10,16 +10,21 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
   const [listDataCache, setListDataCache] = useState<Record<string, any[]>>({});
   const [isFetching, setIsFetching] = useState(false);
 
-  // Map labels to IDs for field resolution (case-insensitive & trimmed)
-  const labelMap = useMemo(() => {
-    const map: Record<string, string> = {};
+  // Map slugs and labels to IDs for field resolution (case-insensitive & trimmed)
+  const { slugMap, labelMap } = useMemo(() => {
+    const slugs: Record<string, string> = {};
+    const labels: Record<string, string> = {};
+    
     fields.forEach(f => {
+      if (f.name) {
+        slugs[f.name.toLowerCase().trim()] = f.id;
+      }
       if (f.label) {
-        const normalized = f.label.toLowerCase().trim();
-        map[normalized] = f.id;
+        labels[f.label.toLowerCase().trim()] = f.id;
       }
     });
-    return map;
+    
+    return { slugMap: slugs, labelMap: labels };
   }, [fields]);
 
   // 1. Detect VLOOKUP lists in formula
@@ -93,12 +98,24 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
 
     try {
       // Prepare executable expression (substitute variables)
-      let executable = formula.replace(/\{([^{}]+)\}/g, (_match, label) => {
-        const normalizedLabel = label.toLowerCase().trim();
-        const fieldId = labelMap[normalizedLabel] || label;
+      let executable = formula.replace(/\{([^{}]+)\}/g, (_match, identifier) => {
+        const normalized = identifier.toLowerCase().trim();
         
-        // Try to get value by ID, then by normalized label, then by raw label
-        const val = recordData[fieldId] ?? recordData[normalizedLabel] ?? recordData[label];
+        // Priority: Slug -> ID -> Label
+        let fieldId = slugMap[normalized];
+        if (!fieldId) {
+          const fieldById = fields.find(f => f.id === identifier);
+          if (fieldById) fieldId = fieldById.id;
+        }
+        if (!fieldId) {
+          fieldId = labelMap[normalized];
+        }
+        
+        // Fallback to original identifier if no match found
+        const targetId = fieldId || identifier;
+        
+        // Try to get value by ID, then by normalized identifier, then by raw identifier
+        const val = recordData[targetId] ?? recordData[normalized] ?? recordData[identifier];
         
         if (val === undefined || val === null) return 'null';
         return isNaN(Number(val)) ? `"${val.toString().replace(/"/g, '\\"')}"` : val;

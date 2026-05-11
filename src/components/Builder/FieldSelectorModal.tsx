@@ -36,11 +36,13 @@ interface FieldSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (fieldId: string) => void;
+  onSelectMultiple?: (fieldIds: string[]) => void;
   fields: Field[];
   tabs?: any[];
   title?: string;
   selectedFieldId?: string;
   excludeFieldIds?: string[];
+  multi?: boolean;
 }
 
 const getFieldIcon = (type: FieldType) => {
@@ -80,13 +82,23 @@ export const FieldSelectorModal = ({
   isOpen,
   onClose,
   onSelect,
+  onSelectMultiple,
   fields,
   tabs = [],
   title = "Select Field",
   selectedFieldId,
-  excludeFieldIds = []
+  excludeFieldIds = [],
+  multi = false
 }: FieldSelectorModalProps) => {
   const [search, setSearch] = useState('');
+  const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([]);
+
+  // Reset multi-selection when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      setMultiSelectedIds([]);
+    }
+  }, [isOpen]);
 
   const filteredFields = useMemo(() => {
     return fields.filter(f => {
@@ -207,14 +219,24 @@ export const FieldSelectorModal = ({
                         <div className="grid grid-cols-1 gap-2">
                           {tabFields.map(f => {
                             const Icon = getFieldIcon(f.type);
-                            const isSelected = f.id === selectedFieldId;
+                            const isSelected = multi 
+                              ? multiSelectedIds.includes(f.id)
+                              : f.id === selectedFieldId;
                             
                             return (
                               <button
                                 key={f.id}
                                 onClick={() => {
-                                  onSelect(f.id);
-                                  onClose();
+                                  if (multi) {
+                                    setMultiSelectedIds(prev => 
+                                      prev.includes(f.id) 
+                                        ? prev.filter(id => id !== f.id) 
+                                        : [...prev, f.id]
+                                    );
+                                  } else {
+                                    onSelect(f.id);
+                                    onClose();
+                                  }
                                 }}
                                 className={cn(
                                   "flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left group",
@@ -266,14 +288,38 @@ export const FieldSelectorModal = ({
             {/* Footer */}
             <div className="px-8 py-4 border-t border-zinc-100 dark:border-zinc-900/50 bg-zinc-50/50 dark:bg-zinc-900/50 flex justify-between items-center">
               <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                Showing {filteredFields.length} of {fields.length} available fields
+                {multi && multiSelectedIds.length > 0 
+                  ? `${multiSelectedIds.length} fields selected`
+                  : `Showing ${filteredFields.length} of ${fields.length} available fields`}
               </p>
-              <button 
-                onClick={onClose}
-                className="px-6 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-lg"
-              >
-                Close
-              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={onClose}
+                  className="px-6 py-2.5 bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all"
+                >
+                  Cancel
+                </button>
+                {multi && (
+                  <button 
+                    disabled={multiSelectedIds.length === 0}
+                    onClick={() => {
+                      if (onSelectMultiple) onSelectMultiple(multiSelectedIds);
+                      onClose();
+                    }}
+                    className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20"
+                  >
+                    Add {multiSelectedIds.length > 0 ? multiSelectedIds.length : ''} Fields
+                  </button>
+                )}
+                {!multi && (
+                  <button 
+                    onClick={onClose}
+                    className="px-6 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-lg"
+                  >
+                    Close
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         </div>

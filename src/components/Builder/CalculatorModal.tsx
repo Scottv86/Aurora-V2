@@ -60,9 +60,11 @@ interface LogicSnippet {
 interface CalculatorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (logic: string, triggers: string[]) => void;
+  onSave: (logic: string, triggers: string[], showAsCurrency?: boolean, currencySymbol?: string) => void;
   initialLogic?: string;
   initialTriggers?: string[];
+  showAsCurrency?: boolean;
+  currencySymbol?: string;
   availableFields: Field[];
   relatedFields?: Record<string, Field[]>;
   allModules?: any[];
@@ -530,6 +532,8 @@ export const CalculatorModal = ({
   onSave,
   initialLogic = '',
   initialTriggers,
+  showAsCurrency: initialShowAsCurrency = false,
+  currencySymbol: initialCurrencySymbol = '$',
   availableFields,
   relatedFields = {},
   allModules = [],
@@ -538,6 +542,8 @@ export const CalculatorModal = ({
 }: CalculatorModalProps) => {
   const [logic, setLogic] = useState(initialLogic);
   const [triggers, setTriggers] = useState<string[]>(initialTriggers || DEFAULT_TRIGGERS);
+  const [showAsCurrency, setShowAsCurrencyLocal] = useState(initialShowAsCurrency);
+  const [currencySymbol, setCurrencySymbolLocal] = useState(initialCurrencySymbol);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [activeTab, setActiveTab] = useState<'fields' | 'functions' | 'relationships'>('fields');
   const [drillPath, setDrillPath] = useState<string[]>([]);
@@ -599,7 +605,6 @@ export const CalculatorModal = ({
 
   // Global List Cache for VLOOKUP sandbox
   const [listDataCache, setListDataCache] = useState<Record<string, any[]>>({});
-  const [isFetchingLists, setIsFetchingLists] = useState(false);
 
   // Fetch Global Lists when tab selected
   useEffect(() => {
@@ -639,8 +644,6 @@ export const CalculatorModal = ({
       const missing = listNames.filter(name => !listDataCache[name]);
       
       if (missing.length === 0) return;
-
-      setIsFetchingLists(true);
       try {
         for (const name of missing) {
           const { data: lists } = await supabase
@@ -677,7 +680,6 @@ export const CalculatorModal = ({
       } catch (err) {
         console.error('[VLOOKUP] Fetch Error:', err);
       } finally {
-        setIsFetchingLists(false);
       }
     };
 
@@ -1126,7 +1128,7 @@ export const CalculatorModal = ({
           }
         }
       } else {
-        matches = [...systemFields, ...availableFields]
+        matches = [...SYSTEM_FIELDS, ...availableFields]
           .filter(f => f.label.toLowerCase().includes(q))
           .map(f => ({ 
             label: f.label, 
@@ -1146,7 +1148,7 @@ export const CalculatorModal = ({
         }));
     } else {
       // Universal search
-      const vMatches = [...systemFields, ...availableFields]
+      const vMatches = [...SYSTEM_FIELDS, ...availableFields]
         .filter(f => f.label.toLowerCase().includes(q))
         .map(f => ({ 
           label: f.label, 
@@ -1288,8 +1290,11 @@ export const CalculatorModal = ({
 
     const checkPathExists = (path: string, fields: Field[]): boolean => {
       const parts = path.split('.');
-      const parentLabel = parts[0];
-      const field = fields.find(f => f.label === parentLabel);
+      const identifier = parts[0].toLowerCase().trim();
+      const field = fields.find(f => 
+        (f.label && f.label.toLowerCase().trim() === identifier) || 
+        (f.name && f.name.toLowerCase().trim() === identifier)
+      );
       
       if (!field) return false;
       if (parts.length === 1) return true;
@@ -1339,11 +1344,14 @@ export const CalculatorModal = ({
         };
 
         allFields.forEach(f => {
-          if (!f?.label) return;
-          const d = distance(label.toLowerCase(), f.label.toLowerCase());
+          if (!f) return;
+          const labelDist = f.label ? distance(label.toLowerCase(), f.label.toLowerCase()) : 999;
+          const slugDist = f.name ? distance(label.toLowerCase(), f.name.toLowerCase()) : 999;
+          const d = Math.min(labelDist, slugDist);
+          
           if (d < minDistance) {
             minDistance = d;
-            bestSuggestion = f.label;
+            bestSuggestion = d === labelDist ? f.label : f.name;
           }
         });
 
@@ -1442,13 +1450,21 @@ export const CalculatorModal = ({
       let executable = logic.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
       
       // 1. Variable Substitution (with Array Support)
-      executable = executable.replace(/\{([^{}]+)\}/g, (_match, label) => {
-        const raw = mockValues[label];
+      executable = executable.replace(/\{([^{}]+)\}/g, (_match, identifier) => {
+        const normalized = identifier.toLowerCase().trim();
+        const raw = mockValues[identifier] ?? Object.values(mockValues).find((_, i) => {
+          const key = Object.keys(mockValues)[i].toLowerCase().trim();
+          return key === normalized;
+        });
         
         // Find field for type-aware substitution
         const getField = (path: string, fields: Field[]): Field | null => {
           const parts = path.split('.');
-          const f = fields.find(field => field.label === parts[0]);
+          const identifier = parts[0].toLowerCase().trim();
+          const f = fields.find(field => 
+            (field.label && field.label.toLowerCase().trim() === identifier) || 
+            (field.name && field.name.toLowerCase().trim() === identifier)
+          );
           if (!f) return null;
           if (parts.length === 1) return f;
           if (f.fields) return getField(parts.slice(1).join('.'), f.fields);
@@ -1457,12 +1473,13 @@ export const CalculatorModal = ({
           }
           return null;
         };
-        const field = getField(label, [...SYSTEM_FIELDS, ...availableFields]);
+        const field = getField(identifier, [...SYSTEM_FIELDS, ...availableFields]);
         const value = raw !== undefined ? raw : (field?.type === 'number' || field?.type === 'currency' ? '0' : '');
 
         // Handle comma-separated arrays
-        if (value.includes(',') && !value.startsWith('"')) {
-           const parts = value.split(',').map(v => v.trim());
+        const stringValue = String(value);
+        if (stringValue.includes(',') && !stringValue.startsWith('"')) {
+           const parts = stringValue.split(',').map(v => v.trim());
            const parsed = parts.map(v => {
               if (v.toLowerCase() === 'true') return true;
               if (v.toLowerCase() === 'false') return false;
@@ -1472,10 +1489,10 @@ export const CalculatorModal = ({
         }
 
         // Booleans
-        if (value.toLowerCase() === 'true' || value.toLowerCase() === 'false') {
+        if (stringValue.toLowerCase() === 'true' || stringValue.toLowerCase() === 'false') {
           // Only use literal booleans for checkbox fields
-          if (field?.type === 'checkbox') return value.toLowerCase();
-          return `"${value}"`;
+          if (field?.type === 'checkbox') return stringValue.toLowerCase();
+          return `"${stringValue}"`;
         }
 
         // Numbers vs Strings
@@ -1596,13 +1613,14 @@ export const CalculatorModal = ({
 
     const isExpanded = expandedFields.has(field.id);
     const hasChildren = field.fields && field.fields.length > 0;
-    const fullLabel = parentPath ? `${parentPath}.${field.label}` : field.label;
+    const identifier = field.name || field.label;
+    const fullPath = parentPath ? `${parentPath}.${identifier}` : identifier;
 
     return (
       <div key={field.id} className="space-y-1">
         <div
           draggable
-          onDragStart={(e) => handleDragStart(e, fullLabel)}
+          onDragStart={(e) => handleDragStart(e, fullPath)}
           className={cn(
             "w-full flex items-center gap-3 p-2.5 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] transition-all group text-left relative",
             depth > 0 && "ml-4 scale-[0.98] origin-left"
@@ -1634,20 +1652,20 @@ export const CalculatorModal = ({
               })()}
             </div>
           </div>
-
+          
           {!['group', 'fieldGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) && (
             <div className="hidden group-hover:flex items-center gap-1 animate-in fade-in zoom-in-95 duration-200">
               <button
                 type="button"
                 onClick={() => {
-                  if (!mockValues[fullLabel]) {
-                    setMockValues(prev => ({ ...prev, [fullLabel]: '' }));
+                  if (!mockValues[fullPath]) {
+                    setMockValues(prev => ({ ...prev, [fullPath]: '' }));
                   }
                   setRightActiveTab('sandbox');
                 }}
                 className={cn(
                   "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-                  mockValues[fullLabel] !== undefined
+                  mockValues[fullPath] !== undefined
                     ? "bg-amber-500/20 text-amber-500 shadow-inner"
                     : "text-zinc-300 hover:text-amber-500 hover:bg-amber-500/10"
                 )}
@@ -1658,7 +1676,7 @@ export const CalculatorModal = ({
               <div className="w-px h-3 bg-zinc-100 dark:bg-zinc-800 mx-0.5" />
               <button
                 type="button"
-                onClick={() => handleInsertField(fullLabel)}
+                onClick={() => handleInsertField(fullPath)}
                 className="w-7 h-7 flex items-center justify-center text-zinc-300 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-lg transition-all"
                 title="Add to Formula"
               >
@@ -1670,7 +1688,7 @@ export const CalculatorModal = ({
 
         {isExpanded && hasChildren && (
           <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
-            {field.fields?.map(f => renderField(f, depth + 1, fullLabel))}
+            {field.fields?.map(f => renderField(f, depth + 1, fullPath))}
           </div>
         )}
       </div>
@@ -2863,6 +2881,68 @@ export const CalculatorModal = ({
                         ))}
                       </div>
                     </div>
+
+                    <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Layout size={12} className="text-indigo-500" />
+                          <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Display Format</span>
+                        </div>
+                        <HelpTooltip text="Choose how the result of this calculation should be displayed in the interface." />
+                      </div>
+
+                      <div className="space-y-4">
+                         <button
+                           type="button"
+                           onClick={() => setShowAsCurrencyLocal(!showAsCurrency)}
+                           className={cn(
+                             "w-full flex items-center gap-4 p-4 rounded-[1.5rem] border transition-all text-left group",
+                             showAsCurrency
+                               ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400"
+                               : "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
+                           )}
+                         >
+                           <div className={cn(
+                             "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                             showAsCurrency ? "bg-indigo-500/20 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-800"
+                           )}>
+                             <Hash size={18} />
+                           </div>
+                           <div className="flex-1">
+                             <p className="text-[11px] font-black uppercase tracking-tight">Show as Currency</p>
+                             <p className="text-[9px] opacity-70 leading-tight mt-0.5">Format numbers with symbols and decimals</p>
+                           </div>
+                           {showAsCurrency && (
+                             <div className="w-6 h-6 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/40">
+                               <Check size={12} className="text-white" />
+                             </div>
+                           )}
+                         </button>
+
+                         {showAsCurrency && (
+                            <div className="space-y-2 px-1 animate-in slide-in-from-top-2">
+                               <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Currency Symbol</p>
+                               <div className="grid grid-cols-4 gap-2">
+                                  {['$', '£', '€', '¥'].map(symbol => (
+                                     <button
+                                        key={symbol}
+                                        type="button"
+                                        onClick={() => setCurrencySymbolLocal(symbol)}
+                                        className={cn(
+                                           "h-10 rounded-xl border text-sm font-bold transition-all",
+                                           currencySymbol === symbol
+                                              ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                              : "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
+                                        )}
+                                     >
+                                        {symbol}
+                                     </button>
+                                  ))}
+                               </div>
+                            </div>
+                         )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -3236,7 +3316,7 @@ export const CalculatorModal = ({
                 <button 
                   type="button"
                   disabled={validation.errors.length > 0}
-                  onClick={() => onSave(logic, triggers)}
+                  onClick={() => onSave(logic, triggers, showAsCurrency, currencySymbol)}
                   className={cn(
                     "px-10 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center gap-3",
                     validation.errors.length > 0 

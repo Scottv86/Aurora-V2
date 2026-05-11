@@ -9,6 +9,7 @@ export interface AuthRequest extends Request {
     name: string;
     isSuperAdmin: boolean;
     tenantIds: string[];
+    memberId?: string;
     roleId?: string;
   };
 }
@@ -105,6 +106,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       name: name || user.email,
       isSuperAdmin: user.isSuperAdmin,
       tenantIds: tenantIds,
+      memberId: membership?.id,
       roleId: user.memberships[0]?.roleId
     };
 
