@@ -1963,7 +1963,8 @@ export const ModuleEditor = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleSave]);
   
-  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'views' | 'preview'>('builder');
+  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'views' | 'preview'>('details');
+  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'localization' | 'dependencies' | 'assets'>('general');
   const [experienceSubTab, setExperienceSubTab] = useState<'master' | 'detail' | 'filters' | 'actions'>('master');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
   const [previewSelectedId, setPreviewSelectedId] = useState<string | null>(null);
@@ -2568,10 +2569,10 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
   return (
     <div className="h-full flex flex-col bg-white dark:bg-zinc-950 overflow-hidden">
       {/* Sub-Header / Toolbar */}
-      <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
+      <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {(['details', 'schema', 'builder', 'workflow', 'rules', 'views', 'experience', 'security', 'localization', 'map', 'assets', 'forms', 'deployment'] as const).map((tab) => (
+            {(['details', 'builder', 'forms', 'workflow', 'rules', 'views', 'security', 'deployment'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -3666,7 +3667,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                       </div>
                                     ) : block.type === 'chat' ? (
                                       <div className="h-80 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col overflow-hidden shadow-2xl">
-                                        <div className="h-14 border-b border-zinc-100 dark:border-zinc-900 flex items-center px-5 justify-between bg-white dark:bg-zinc-950">
+                                        <div className="h-[52px] border-b border-zinc-100 dark:border-zinc-900 flex items-center px-5 justify-between bg-white dark:bg-zinc-950">
                                           <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-indigo-500/20">A</div>
                                             <div>
@@ -3744,7 +3745,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                       </div>
                                     ) : block.type === 'tabs_nested' ? (
                                       <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
-                                        <div className="h-14 border-b border-zinc-100 dark:border-zinc-900 flex items-center px-2 bg-zinc-50/50 dark:bg-zinc-900/30">
+                                        <div className="h-[52px] border-b border-zinc-100 dark:border-zinc-900 flex items-center px-2 bg-zinc-50/50 dark:bg-zinc-900/30">
                                           {['Overview', 'History', 'Documents'].map((tab, i) => (
                                             <div key={i} className={cn(
                                               "h-10 px-6 flex items-center text-[10px] font-black uppercase tracking-widest cursor-default transition-all",
@@ -4049,7 +4050,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                     <div className="col-span-full h-32 pointer-events-none" />
 
                     {layout.filter(block => block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id)).length === 0 && !dragOverInfo && (
-                      <div className="col-span-full h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[32px] bg-white dark:bg-zinc-950/50">
+                      <div className="absolute inset-8 bottom-32 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[32px] bg-white dark:bg-zinc-950/50">
                         <GridIcon size={48} className="mb-4 text-zinc-200 dark:text-zinc-800" />
                         <p className="font-medium text-sm text-zinc-500 mb-6">Drag fields from the sidebar to start building</p>
                         <button 
@@ -4065,325 +4066,6 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                 </div>
               </div>
             </>
-          ) : activeTab === 'experience' ? (
-            <div className="flex h-full w-full overflow-hidden bg-white dark:bg-zinc-950">
-              {/* Experience Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-transparent">
-                <div className="p-8 pb-4">
-                  <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-6">Views & Experience</h3>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'master', label: 'Master View', icon: TableProperties, desc: 'Table & List config' },
-                      { id: 'detail', label: 'Detail View', icon: Layout, desc: 'Record page layout' },
-                      { id: 'filters', label: 'Filters & Search', icon: Filter, desc: 'Global search & facets' },
-                      { id: 'actions', label: 'Quick Actions', icon: MousePointerClick, desc: 'Buttons & Triggers' }
-                    ].map((st) => (
-                      <button 
-                        key={st.id}
-                        onClick={() => setExperienceSubTab(st.id as any)}
-                        className={cn(
-                          "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left transition-all group",
-                          experienceSubTab === st.id 
-                            ? "bg-white dark:bg-zinc-900 shadow-xl shadow-indigo-500/5 border border-zinc-100 dark:border-zinc-800 text-indigo-600 dark:text-indigo-400" 
-                            : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                          experienceSubTab === st.id ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300"
-                        )}>
-                          <st.icon size={18} />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs font-bold">{st.label}</p>
-                          <p className="text-[9px] font-medium opacity-60 truncate">{st.desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </aside>
-
-              {/* Experience Content */}
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                <div className="max-w-5xl mx-auto space-y-12 pb-20">
-                  {experienceSubTab === 'master' ? (
-                    <div className="space-y-12">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Master View Configuration</h2>
-                          <p className="text-zinc-500 text-sm">Define how records are displayed in the main table or list view.</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                           <select className="bg-zinc-100 dark:bg-zinc-900 border-none rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
-                             <option>Default Table View</option>
-                             <option>Kanban Board</option>
-                             <option>Calendar View</option>
-                           </select>
-                        </div>
-                      </div>
-
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-indigo-500/5">
-                        <table className="w-full text-left">
-                          <thead>
-                            <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest w-1/3">Field</th>
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Show in Table</th>
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Inline Edit</th>
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Column Width</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                            {layout.map((field) => (
-                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td className="px-8 py-5">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
-                                      {(() => {
-                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                        const Icon = fieldDef?.icon || Table;
-                                        return <Icon size={14} />;
-                                      })()}
-                                    </div>
-                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
-                                  </div>
-                                </td>
-                                <td className="px-8 py-5 text-center">
-                                  <button 
-                                    className={cn(
-                                      "w-10 h-6 rounded-full relative transition-all mx-auto",
-                                      field.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                    )}
-                                    onClick={() => updateField(field.id, { showInTable: field.showInTable === false })}
-                                  >
-                                    <div className={cn(
-                                      "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                      field.showInTable !== false ? "right-1" : "left-1"
-                                    )} />
-                                  </button>
-                                </td>
-                                <td className="px-8 py-5 text-center">
-                                  <button 
-                                    className={cn(
-                                      "w-10 h-6 rounded-full relative transition-all mx-auto",
-                                      field.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
-                                    )}
-                                    onClick={() => updateField(field.id, { inlineEdit: !field.inlineEdit })}
-                                  >
-                                    <div className={cn(
-                                      "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                      field.inlineEdit ? "right-1" : "left-1"
-                                    )} />
-                                  </button>
-                                </td>
-                                <td className="px-8 py-5">
-                                  <div className="flex items-center gap-3">
-                                    <input 
-                                      type="range" 
-                                      className="w-24 accent-indigo-500 h-1" 
-                                      min="50" max="500" step="10"
-                                      value={field.columnWidth || 200}
-                                      onChange={(e) => updateField(field.id, { columnWidth: parseInt(e.target.value) })}
-                                    />
-                                    <span className="text-[10px] font-mono text-zinc-400">{field.columnWidth || 200}px</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* View Options */}
-                      <div className="grid grid-cols-2 gap-8">
-                         <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6">
-                            <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Table Density</h3>
-                            <div className="grid grid-cols-3 gap-3">
-                              {['Compact', 'Standard', 'Spacious'].map(d => (
-                                <button key={d} className={cn(
-                                  "px-4 py-3 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
-                                  d === 'Standard' ? "bg-indigo-600 border-indigo-500 text-white shadow-lg" : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500"
-                                )}>{d}</button>
-                              ))}
-                            </div>
-                         </div>
-                         <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6">
-                            <div className="flex items-center justify-between">
-                               <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Pagination</h3>
-                               <button 
-                                 className={cn(
-                                   "w-10 h-6 rounded-full relative transition-all",
-                                   interfaceSettings.master.pagination?.enabled ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                 )}
-                                 onClick={() => setInterfaceSettings(prev => ({
-                                   ...prev,
-                                   master: {
-                                     ...prev.master,
-                                     pagination: { ...prev.master.pagination, enabled: !prev.master.pagination?.enabled }
-                                   }
-                                 }))}
-                               >
-                                 <div className={cn(
-                                   "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                   interfaceSettings.master.pagination?.enabled ? "right-1" : "left-1"
-                                 )} />
-                               </button>
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                               <div className="flex-1 space-y-2">
-                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Default Per Page</label>
-                                  <select 
-                                    value={interfaceSettings.master.pagination?.pageSize || 25}
-                                    onChange={(e) => setInterfaceSettings(prev => ({
-                                      ...prev,
-                                      master: {
-                                        ...prev.master,
-                                        pagination: { ...prev.master.pagination, pageSize: parseInt(e.target.value) }
-                                      }
-                                    }))}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[10px] font-bold text-zinc-600"
-                                  >
-                                    {[10, 25, 50, 100].map(size => (
-                                      <option key={size} value={size}>{size} records</option>
-                                    ))}
-                                  </select>
-                               </div>
-                               <div className="flex-1 space-y-2">
-                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Options</label>
-                                  <div className="flex items-center gap-2">
-                                     <div className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[9px] font-bold text-zinc-500">10, 25, 50...</div>
-                                     <button className="p-2 text-indigo-500 hover:bg-indigo-500/10 rounded-lg"><Settings2 size={14} /></button>
-                                  </div>
-                               </div>
-                            </div>
-                         </div>
-                      </div>
-                    </div>
-                  ) : experienceSubTab === 'filters' ? (
-                    <div className="space-y-12">
-                      <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Global Filters & Search</h2>
-                        <p className="text-zinc-500 text-sm">Configure the search experience and facets available to users.</p>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-8">
-                        <div className="col-span-2 space-y-6">
-                           <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Active Filters</h3>
-                           <div className="space-y-3">
-                             {layout.filter(f => f.type === 'select' || f.type === 'date' || f.type === 'boolean').map((field, i) => (
-                               <div key={i} className="flex items-center justify-between p-6 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] group hover:border-indigo-500/30 transition-all">
-                                 <div className="flex items-center gap-4">
-                                   <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                                     <Filter size={18} />
-                                   </div>
-                                   <div>
-                                     <p className="text-sm font-bold text-zinc-900 dark:text-white">{field.label}</p>
-                                     <p className="text-[10px] text-zinc-400 font-medium">Type: {field.type.toUpperCase()}</p>
-                                   </div>
-                                 </div>
-                                 <div className="flex items-center gap-6">
-                                   <div className="flex items-center gap-2">
-                                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Multi-select</span>
-                                     <button className="w-8 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-full relative">
-                                       <div className="absolute left-1 top-0.5 w-3 h-3 bg-white rounded-full" />
-                                     </button>
-                                   </div>
-                                   <button className="p-2 text-zinc-300 hover:text-rose-500 transition-colors"><Trash2 size={14} /></button>
-                                 </div>
-                               </div>
-                             ))}
-                             <button className="w-full py-4 border-2 border-dashed border-zinc-100 dark:border-zinc-900 rounded-[2rem] text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:border-indigo-500/50 hover:text-indigo-500 transition-all flex items-center justify-center gap-2">
-                               <Plus size={14} />
-                               Add Search Filter
-                             </button>
-                           </div>
-                        </div>
-
-                        <div className="space-y-8">
-                           <div className="p-8 bg-indigo-600 rounded-[2.5rem] text-white space-y-6 shadow-2xl shadow-indigo-500/20">
-                             <h4 className="text-xs font-black uppercase tracking-widest text-white/60">Search Logic</h4>
-                             <div className="space-y-4">
-                               <label className="flex items-center gap-3 cursor-pointer">
-                                 <div className="w-4 h-4 bg-white/20 border border-white/40 rounded flex items-center justify-center"><CheckSquare size={12} className="text-white" /></div>
-                                 <span className="text-xs font-bold">Enable Full-Text Search</span>
-                               </label>
-                               <label className="flex items-center gap-3 cursor-pointer">
-                                 <div className="w-4 h-4 bg-white/20 border border-white/40 rounded" />
-                                 <span className="text-xs font-bold text-white/60">Fuzzy Matching</span>
-                               </label>
-                             </div>
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : experienceSubTab === 'actions' ? (
-                    <div className="space-y-12">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Quick Actions & Commands</h2>
-                          <p className="text-zinc-500 text-sm">Define custom buttons and automated actions for users in the master view.</p>
-                        </div>
-                        <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                          + New Action
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-6">
-                        {interfaceSettings.actions.map((action) => (
-                          <div key={action.id} className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] group hover:border-indigo-500/50 transition-all">
-                             <div className="flex items-center justify-between mb-8">
-                                <div className="w-14 h-14 bg-zinc-50 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all">
-                                   <MousePointerClick size={24} />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"><Settings2 size={16} /></button>
-                                  <button className="p-2 text-zinc-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
-                                </div>
-                             </div>
-                             <div className="space-y-2">
-                               <p className="text-lg font-black text-zinc-900 dark:text-white tracking-tight">{action.label}</p>
-                               <p className="text-xs text-zinc-500">Trigger: Row Command • Scope: Single Record</p>
-                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-12">
-                      <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Detail View Experience</h2>
-                        <p className="text-zinc-500 text-sm">Configure how individual records are presented when opened.</p>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-8">
-                         {[
-                           { label: 'Tabbed Layout', desc: 'Standard hierarchical tabs for clean organization.', icon: Layers },
-                           { label: 'Split View', desc: 'Two-column layout with sidebar and main content.', icon: Layout },
-                           { label: 'Single Page', desc: 'Vertical scrolling view with distinct sections.', icon: AlignLeft }
-                         ].map((l, i) => (
-                           <div key={i} className={cn(
-                             "p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-4 cursor-pointer hover:border-indigo-500/50 transition-all group",
-                             i === 0 ? "border-indigo-500 shadow-xl shadow-indigo-500/5" : ""
-                           )}>
-                              <div className={cn(
-                                "w-12 h-12 rounded-2xl flex items-center justify-center mb-4",
-                                i === 0 ? "bg-indigo-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
-                              )}>
-                                <l.icon size={24} />
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-sm font-bold text-zinc-900 dark:text-white">{l.label}</p>
-                                <p className="text-[10px] text-zinc-500 leading-relaxed">{l.desc}</p>
-                              </div>
-                           </div>
-                         ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           ) : activeTab === 'preview' ? (
             <div className="w-full px-8 pb-20">
               <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl overflow-hidden min-h-[600px]">
@@ -4418,7 +4100,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
                 <div className="p-8">
                   {previewView === 'detail' ? (
-                    <div className="space-y-8 max-w-5xl mx-auto py-12">
+                    <div className="space-y-8 max-w-none mx-auto py-12">
                       <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-6">
                         <div className="flex items-center gap-4">
                           <button 
@@ -4898,116 +4580,40 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                   </AnimatePresence>
                 </div>
               </div>
-          ) : activeTab === 'schema' ? (
-            <div className="flex h-full w-full overflow-hidden">
-              {/* Schema Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Data Model</h3>
-                </div>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all text-left">
-                  <Table size={14} />
-                  Field Overview
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <GitCommit size={14} />
-                  Relationships
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <Database size={14} />
-                  Indices & Keys
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <UploadCloud size={14} />
-                  Data Import/Export
-                </button>
-              </aside>
-
-              {/* Schema Content */}
-              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
-                <div className="max-w-6xl mx-auto space-y-8 pb-20">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Data Schema</h2>
-                      <p className="text-zinc-500 text-sm">Review and manage the underlying data structure of this module.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all uppercase tracking-widest">
-                        <FileJson size={14} />
-                        Export JSON
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Schema Table */}
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Field Label</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Technical ID</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Data Type</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Validation</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Properties</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                        {layout.map((field) => (
-                          <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
-                                  {(() => {
-                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                    const Icon = fieldDef?.icon || GridIcon;
-                                    return <Icon size={14} />;
-                                  })()}
-                                </div>
-                                <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <code className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded text-[10px] text-zinc-500 font-mono">{field.id}</code>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md text-[9px] font-black uppercase tracking-widest">
-                                {field.type.toUpperCase()}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-xs text-zinc-500">
-                              {field.required ? 'Required' : 'Optional'}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                {field.visibilityRule && <div title="Has Visibility Rules"><Eye size={12} className="text-indigo-500" /></div>}
-                                {field.calculationLogic && <div title="Calculated Field"><Calculator size={12} className="text-emerald-500" /></div>}
-                                {field.options && <div title={`Has ${field.options.length} options`}><ListPlus size={12} className="text-amber-500" /></div>}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
           ) : activeTab === 'details' ? (
             <div className="flex h-full w-full overflow-hidden">
-              {/* Details Sidebar */}
               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Configuration</h3>
                 </div>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all text-left">
-                  <Settings2 size={14} />
-                  General Properties
-                </button>
+                {[
+                  { id: 'general', label: 'General Properties', icon: Settings2 },
+                  { id: 'schema', label: 'Schema', icon: Database },
+                  { id: 'localization', label: 'Localization', icon: Globe },
+                  { id: 'dependencies', label: 'Dependencies', icon: MapPin },
+                  { id: 'assets', label: 'Assets', icon: Image }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setDetailsTab(tab.id as any)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
+                      detailsTab === tab.id
+                        ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                    )}
+                  >
+                    <tab.icon size={14} />
+                    {tab.label}
+                  </button>
+                ))}
               </aside>
 
               {/* Details Content */}
-              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
-                <div className="max-w-6xl mx-auto space-y-12 pb-20">
+              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+                {detailsTab === 'general' && (
+                <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                  <div className="max-w-none mx-auto space-y-12 pb-20">
                   <div className="space-y-1">
                     <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Module Details</h2>
                     <p className="text-zinc-500 text-sm">Configure the core properties and identity of this module.</p>
@@ -5147,6 +4753,305 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                   </div>
                 </div>
               </div>
+                )}
+                {detailsTab === 'schema' && (
+                  <div className="h-full w-full">
+<div className="flex h-full w-full">
+              {/* Schema Sidebar */}
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
+                <div className="mb-6 px-2">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Data Model</h3>
+                </div>
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all text-left">
+                  <Table size={14} />
+                  Field Overview
+                </button>
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
+                  <GitCommit size={14} />
+                  Relationships
+                </button>
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
+                  <Database size={14} />
+                  Indices & Keys
+                </button>
+                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
+                  <UploadCloud size={14} />
+                  Data Import/Export
+                </button>
+              </aside>
+
+              {/* Schema Content */}
+              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
+                <div className="max-w-none mx-auto space-y-8 pb-20">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Data Schema</h2>
+                      <p className="text-zinc-500 text-sm">Review and manage the underlying data structure of this module.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all uppercase tracking-widest">
+                        <FileJson size={14} />
+                        Export JSON
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Schema Table */}
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Field Label</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Technical ID</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Data Type</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Validation</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Properties</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                        {layout.map((field) => (
+                          <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
+                                  {(() => {
+                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                    const Icon = fieldDef?.icon || GridIcon;
+                                    return <Icon size={14} />;
+                                  })()}
+                                </div>
+                                <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <code className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded text-[10px] text-zinc-500 font-mono">{field.id}</code>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md text-[9px] font-black uppercase tracking-widest">
+                                {field.type.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-zinc-500">
+                              {field.required ? 'Required' : 'Optional'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                {field.visibilityRule && <div title="Has Visibility Rules"><Eye size={12} className="text-indigo-500" /></div>}
+                                {field.calculationLogic && <div title="Calculated Field"><Calculator size={12} className="text-emerald-500" /></div>}
+                                {field.options && <div title={`Has ${field.options.length} options`}><ListPlus size={12} className="text-amber-500" /></div>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+                  </div>
+                )}
+                {detailsTab === 'localization' && (
+                  <div className="h-full w-full">
+<div className="flex h-full w-full bg-white dark:bg-zinc-950">
+              {/* Languages Sidebar */}
+              <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/50 dark:bg-transparent">
+                <div className="p-8 pb-4">
+                  <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-6">Target Languages</h3>
+                  <div className="space-y-2">
+                    {[
+                      { id: 'en', label: 'English (US)', flag: '🇺🇸', status: 'Source' },
+                      { id: 'es', label: 'Spanish', flag: '🇪🇸', status: '85%' },
+                      { id: 'fr', label: 'French', flag: '🇫🇷', status: '12%' },
+                      { id: 'de', label: 'German', flag: '🇩🇪', status: 'Empty' }
+                    ].map((lang) => (
+                      <button 
+                        key={lang.id}
+                        className={cn(
+                          "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left",
+                          lang.id === 'es' ? "bg-white dark:bg-zinc-900 shadow-xl shadow-indigo-500/5 border border-zinc-100 dark:border-zinc-800 text-zinc-900 dark:text-white" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span>{lang.flag}</span>
+                          {lang.label}
+                        </div>
+                        <span className="text-[9px] font-black text-zinc-400">{lang.status}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-auto p-8 pt-0">
+                  <button className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:border-indigo-500/50 hover:text-indigo-600 transition-all flex items-center justify-center gap-2">
+                    <Plus size={12} />
+                    Add Language
+                  </button>
+                </div>
+              </aside>
+
+              {/* Translation Content */}
+              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                <div className="max-w-none mx-auto space-y-12">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Localization Workbench</h2>
+                      <p className="text-zinc-500 text-sm">Translate your module's interface to reach a global audience.</p>
+                    </div>
+                    <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+                      <Sparkles size={12} />
+                      AI Translate
+                    </button>
+                  </div>
+
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Resource Key</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Source (EN)</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Spanish (ES)</th>
+                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                        {layout.map((field) => (
+                          <React.Fragment key={field.id}>
+                            <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                              <td className="px-6 py-4">
+                                <code className="text-[9px] font-mono text-zinc-400">{field.id}.label</code>
+                              </td>
+                              <td className="px-6 py-4 text-xs text-zinc-900 dark:text-white font-medium">{field.label}</td>
+                              <td className="px-6 py-4">
+                                <input 
+                                  type="text" 
+                                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
+                                  placeholder="Traducir..."
+                                />
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                              </td>
+                            </tr>
+                            {field.helperText && (
+                              <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors border-t border-zinc-50 dark:border-zinc-900/50">
+                                <td className="px-6 py-4">
+                                  <code className="text-[9px] font-mono text-zinc-400">{field.id}.helper</code>
+                                </td>
+                                <td className="px-6 py-4 text-[10px] text-zinc-500 italic">{field.helperText}</td>
+                                <td className="px-6 py-4">
+                                  <input 
+                                    type="text" 
+                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
+                                    placeholder="Traducir ayuda..."
+                                  />
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+                  </div>
+                )}
+                {detailsTab === 'dependencies' && (
+                  <div className="h-full w-full">
+<div className="h-full w-full bg-zinc-900 relative overflow-hidden flex items-center justify-center">
+              {/* Dependency Grid Background */}
+              {showGridlines && (
+                <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+                  style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
+                />
+              )}
+              
+              {/* Visual Map Content */}
+              <div className="relative z-10 space-y-12 flex flex-col items-center">
+                <div className="flex items-center gap-32">
+                  <div className="w-48 p-6 bg-zinc-800/50 border border-zinc-700 rounded-3xl backdrop-blur-xl space-y-4 text-center">
+                    <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto text-emerald-400">
+                      <Database size={24} />
+                    </div>
+                    <span className="block text-[10px] font-black text-white uppercase tracking-widest">Inventory Module</span>
+                  </div>
+                  
+                  <div className="w-64 p-8 bg-indigo-600 rounded-[2.5rem] shadow-2xl shadow-indigo-500/40 text-center space-y-4 ring-8 ring-indigo-500/10">
+                    <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center mx-auto text-white">
+                      <Box size={32} />
+                    </div>
+                    <span className="block text-xs font-black text-white uppercase tracking-[0.2em]">{moduleSettings.name}</span>
+                  </div>
+
+                  <div className="w-48 p-6 bg-zinc-800/50 border border-zinc-700 rounded-3xl backdrop-blur-xl space-y-4 text-center">
+                    <div className="w-12 h-12 bg-rose-500/20 rounded-2xl flex items-center justify-center mx-auto text-rose-400">
+                      <CreditCard size={24} />
+                    </div>
+                    <span className="block text-[10px] font-black text-white uppercase tracking-widest">Finance Module</span>
+                  </div>
+                </div>
+
+                <div className="max-w-md p-6 bg-zinc-950/50 border border-zinc-800 rounded-3xl text-center space-y-2">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Architect Insight</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    This module currently has 2 inbound lookups and 1 outbound data push. 
+                    Changes to the "Unit Price" field will impact the Finance reconciliation workflow.
+                  </p>
+                </div>
+              </div>
+              
+              {/* Animated Connection Lines (Simplified CSS) */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-[800px] h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent animate-pulse" />
+              </div>
+            </div>
+                  </div>
+                )}
+                {detailsTab === 'assets' && (
+                  <div className="h-full w-full">
+<div className="flex-1 overflow-y-auto p-12 bg-white dark:bg-zinc-950 custom-scrollbar">
+              <div className="max-w-none mx-auto space-y-12">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Asset Library</h2>
+                    <p className="text-zinc-500 text-sm">Manage images, custom icons, and brand assets used within this module.</p>
+                  </div>
+                  <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+                    <Upload size={14} />
+                    Upload Assets
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-4 gap-6">
+                  {[
+                    { name: 'Company Logo', type: 'PNG', size: '124 KB', icon: Image },
+                    { name: 'Header Illustration', type: 'SVG', size: '45 KB', icon: Palette },
+                    { name: 'Icon Set', type: 'ZIP', size: '2.1 MB', icon: Folder },
+                    { name: 'Custom Font', type: 'TTF', size: '890 KB', icon: Type }
+                  ].map((asset, i) => (
+                    <div key={i} className="group relative bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 overflow-hidden">
+                      <div className="aspect-square bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-zinc-300 group-hover:text-indigo-500 transition-colors mb-4">
+                        <asset.icon size={32} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{asset.name}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{asset.type}</span>
+                          <span className="text-[9px] font-bold text-zinc-500">{asset.size}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+                  </div>
+                )}
+              </div>
             </div>
           ) : activeTab === 'rules' ? (
             <div className="flex h-full w-full overflow-hidden">
@@ -5175,7 +5080,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
               {/* Rules Content */}
               <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
-                <div className="max-w-6xl mx-auto space-y-12 pb-20">
+                <div className="max-w-none mx-auto space-y-12 pb-20">
                   <div className="space-y-1">
                     <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Business Rules</h2>
                     <p className="text-zinc-500 text-sm">Define global validation, automation, and processing rules for this module.</p>
@@ -5256,7 +5161,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
               {/* Deployment Content */}
               <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
-                <div className="max-w-6xl mx-auto space-y-12 pb-20">
+                <div className="max-w-none mx-auto space-y-12 pb-20">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Deployment & Releases</h2>
@@ -5375,30 +5280,32 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
           ) : activeTab === 'security' ? (
             <div className="flex h-full w-full bg-white dark:bg-zinc-950">
               {/* Roles Sidebar */}
-              <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/50 dark:bg-transparent">
-                <div className="p-8 pb-4">
-                  <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-6">Access Roles</h3>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'admin', label: 'Administrator', icon: ShieldCheck, color: 'text-indigo-500' },
-                      { id: 'manager', label: 'Department Manager', icon: Settings, color: 'text-emerald-500' },
-                      { id: 'staff', label: 'Standard Staff', icon: Type, color: 'text-amber-500' },
-                      { id: 'guest', label: 'External Guest', icon: Globe, color: 'text-zinc-400' }
-                    ].map((role) => (
-                      <button 
-                        key={role.id}
-                        className={cn(
-                          "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left",
-                          role.id === 'admin' ? "bg-white dark:bg-zinc-900 shadow-xl shadow-indigo-500/5 border border-zinc-100 dark:border-zinc-800 text-zinc-900 dark:text-white" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                        )}
-                      >
-                        <role.icon size={14} className={role.color} />
-                        {role.label}
-                      </button>
-                    ))}
-                  </div>
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2 flex flex-col">
+                <div className="mb-6 px-2">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Access Roles</h3>
                 </div>
-                <div className="mt-auto p-8 pt-0">
+                <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+                  {[
+                    { id: 'admin', label: 'Administrator', icon: ShieldCheck },
+                    { id: 'manager', label: 'Department Manager', icon: Settings },
+                    { id: 'staff', label: 'Standard Staff', icon: Type },
+                    { id: 'guest', label: 'External Guest', icon: Globe }
+                  ].map((role) => (
+                    <button 
+                      key={role.id}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
+                        role.id === 'admin' 
+                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                      )}
+                    >
+                      <role.icon size={14} />
+                      {role.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-auto pt-4">
                   <button className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2">
                     <Plus size={12} />
                     New Role
@@ -5408,7 +5315,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
               {/* Permissions Content */}
               <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                <div className="max-w-5xl mx-auto space-y-12">
+                <div className="max-w-none mx-auto space-y-12">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Security & Governance</h2>
@@ -5497,272 +5404,81 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                 </div>
               </div>
             </div>
-          ) : activeTab === 'localization' ? (
-            <div className="flex h-full w-full bg-white dark:bg-zinc-950">
-              {/* Languages Sidebar */}
-              <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/50 dark:bg-transparent">
-                <div className="p-8 pb-4">
-                  <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-6">Target Languages</h3>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'en', label: 'English (US)', flag: '🇺🇸', status: 'Source' },
-                      { id: 'es', label: 'Spanish', flag: '🇪🇸', status: '85%' },
-                      { id: 'fr', label: 'French', flag: '🇫🇷', status: '12%' },
-                      { id: 'de', label: 'German', flag: '🇩🇪', status: 'Empty' }
-                    ].map((lang) => (
-                      <button 
-                        key={lang.id}
-                        className={cn(
-                          "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left",
-                          lang.id === 'es' ? "bg-white dark:bg-zinc-900 shadow-xl shadow-indigo-500/5 border border-zinc-100 dark:border-zinc-800 text-zinc-900 dark:text-white" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span>{lang.flag}</span>
-                          {lang.label}
-                        </div>
-                        <span className="text-[9px] font-black text-zinc-400">{lang.status}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-auto p-8 pt-0">
-                  <button className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:border-indigo-500/50 hover:text-indigo-600 transition-all flex items-center justify-center gap-2">
-                    <Plus size={12} />
-                    Add Language
-                  </button>
-                </div>
-              </aside>
-
-              {/* Translation Content */}
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                <div className="max-w-5xl mx-auto space-y-12">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Localization Workbench</h2>
-                      <p className="text-zinc-500 text-sm">Translate your module's interface to reach a global audience.</p>
-                    </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                      <Sparkles size={12} />
-                      AI Translate
-                    </button>
-                  </div>
-
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Resource Key</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Source (EN)</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Spanish (ES)</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                        {layout.map((field) => (
-                          <React.Fragment key={field.id}>
-                            <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                              <td className="px-6 py-4">
-                                <code className="text-[9px] font-mono text-zinc-400">{field.id}.label</code>
-                              </td>
-                              <td className="px-6 py-4 text-xs text-zinc-900 dark:text-white font-medium">{field.label}</td>
-                              <td className="px-6 py-4">
-                                <input 
-                                  type="text" 
-                                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
-                                  placeholder="Traducir..."
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                              </td>
-                            </tr>
-                            {field.helperText && (
-                              <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors border-t border-zinc-50 dark:border-zinc-900/50">
-                                <td className="px-6 py-4">
-                                  <code className="text-[9px] font-mono text-zinc-400">{field.id}.helper</code>
-                                </td>
-                                <td className="px-6 py-4 text-[10px] text-zinc-500 italic">{field.helperText}</td>
-                                <td className="px-6 py-4">
-                                  <input 
-                                    type="text" 
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
-                                    placeholder="Traducir ayuda..."
-                                  />
-                                </td>
-                                <td className="px-6 py-4">
-                                  <div className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'map' ? (
-            <div className="h-full w-full bg-zinc-900 relative overflow-hidden flex items-center justify-center">
-              {/* Dependency Grid Background */}
-              {showGridlines && (
-                <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-                  style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
-                />
-              )}
-              
-              {/* Visual Map Content */}
-              <div className="relative z-10 space-y-12 flex flex-col items-center">
-                <div className="flex items-center gap-32">
-                  <div className="w-48 p-6 bg-zinc-800/50 border border-zinc-700 rounded-3xl backdrop-blur-xl space-y-4 text-center">
-                    <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto text-emerald-400">
-                      <Database size={24} />
-                    </div>
-                    <span className="block text-[10px] font-black text-white uppercase tracking-widest">Inventory Module</span>
-                  </div>
-                  
-                  <div className="w-64 p-8 bg-indigo-600 rounded-[2.5rem] shadow-2xl shadow-indigo-500/40 text-center space-y-4 ring-8 ring-indigo-500/10">
-                    <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center mx-auto text-white">
-                      <Box size={32} />
-                    </div>
-                    <span className="block text-xs font-black text-white uppercase tracking-[0.2em]">{moduleSettings.name}</span>
-                  </div>
-
-                  <div className="w-48 p-6 bg-zinc-800/50 border border-zinc-700 rounded-3xl backdrop-blur-xl space-y-4 text-center">
-                    <div className="w-12 h-12 bg-rose-500/20 rounded-2xl flex items-center justify-center mx-auto text-rose-400">
-                      <CreditCard size={24} />
-                    </div>
-                    <span className="block text-[10px] font-black text-white uppercase tracking-widest">Finance Module</span>
-                  </div>
-                </div>
-
-                <div className="max-w-md p-6 bg-zinc-950/50 border border-zinc-800 rounded-3xl text-center space-y-2">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Architect Insight</p>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
-                    This module currently has 2 inbound lookups and 1 outbound data push. 
-                    Changes to the "Unit Price" field will impact the Finance reconciliation workflow.
-                  </p>
-                </div>
-              </div>
-              
-              {/* Animated Connection Lines (Simplified CSS) */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[800px] h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent animate-pulse" />
-              </div>
-            </div>
-          ) : activeTab === 'assets' ? (
-            <div className="flex-1 overflow-y-auto p-12 bg-white dark:bg-zinc-950 custom-scrollbar">
-              <div className="max-w-6xl mx-auto space-y-12">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Asset Library</h2>
-                    <p className="text-zinc-500 text-sm">Manage images, custom icons, and brand assets used within this module.</p>
-                  </div>
-                  <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                    <Upload size={14} />
-                    Upload Assets
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-4 gap-6">
-                  {[
-                    { name: 'Company Logo', type: 'PNG', size: '124 KB', icon: Image },
-                    { name: 'Header Illustration', type: 'SVG', size: '45 KB', icon: Palette },
-                    { name: 'Icon Set', type: 'ZIP', size: '2.1 MB', icon: Folder },
-                    { name: 'Custom Font', type: 'TTF', size: '890 KB', icon: Type }
-                  ].map((asset, i) => (
-                    <div key={i} className="group relative bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 overflow-hidden">
-                      <div className="aspect-square bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-zinc-300 group-hover:text-indigo-500 transition-colors mb-4">
-                        <asset.icon size={32} />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{asset.name}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{asset.type}</span>
-                          <span className="text-[9px] font-bold text-zinc-500">{asset.size}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           ) : activeTab === 'forms' ? (
             <div className="flex h-full w-full bg-white dark:bg-zinc-950 overflow-hidden">
                {/* Form Management Sidebar (Left) */}
-               <aside className="w-80 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/50 dark:bg-transparent">
-                <div className="p-8 pb-4">
-                    <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Module Forms</h3>
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                      <Zap size={10} />
-                      AI Build
-                    </div>
+               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2 flex flex-col">
+                <div className="mb-6 px-2 flex items-center justify-between">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Module Forms</h3>
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                    <Zap size={10} />
+                    AI Build
                   </div>
-                  <div className="flex-1 overflow-y-auto px-4 space-y-3">
-                    {forms.map((form) => (
-                      <div 
-                        key={form.id}
-                        onClick={() => {
-                          setSelectedFormId(form.id);
-                          setSelectedFieldInFormId(null);
-                        }}
-                        className={cn(
-                          "w-full p-5 rounded-3xl transition-all text-left border-2 group cursor-pointer",
-                          selectedFormId === form.id 
-                            ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-xl shadow-indigo-500/5" 
-                            : "bg-transparent border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-3">
+                </div>
+                <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
+                  {forms.map((form) => (
+                    <button 
+                      key={form.id}
+                      onClick={() => {
+                        setSelectedFormId(form.id);
+                        setSelectedFieldInFormId(null);
+                      }}
+                      className={cn(
+                        "w-full flex flex-col gap-1 px-4 py-2.5 rounded-xl text-left transition-all group",
+                        selectedFormId === form.id 
+                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
+                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                         <span className="text-xs font-bold truncate pr-2">{form.name}</span>
+                         <div className="flex items-center gap-2 flex-shrink-0">
                            <span className={cn(
-                             "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter",
-                             form.id === selectedFormId ? "bg-indigo-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                             "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tighter",
+                             form.id === selectedFormId ? "bg-indigo-500/20 text-indigo-600" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
                            )}>
                              {form.usage?.split('_')[1] || 'custom'}
                            </span>
-                           <button 
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               if (form.id === 'default-create') return;
-                               setForms(prev => prev.filter(f => f.id !== form.id));
-                               if (selectedFormId === form.id) setSelectedFormId('default-create');
-                             }}
-                             className="p-1.5 text-zinc-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-                           >
-                             <Trash2 size={12} />
-                           </button>
-                        </div>
-                        <p className={cn("text-xs font-bold", selectedFormId === form.id ? "text-zinc-900 dark:text-white" : "text-zinc-500")}>{form.name}</p>
-                        <div className="mt-2 flex items-center gap-2">
-                           <div className="flex items-center gap-1 text-[9px] font-medium text-zinc-400">
-                              <Layout size={10} className={form.id === selectedFormId ? "text-indigo-500" : ""} />
-                              {form.fields?.length || 0} Components
-                           </div>
-                        </div>
+                           {form.id !== 'default-create' && (
+                             <div 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setForms(prev => prev.filter(f => f.id !== form.id));
+                                 if (selectedFormId === form.id) setSelectedFormId('default-create');
+                               }}
+                               className="p-1 text-zinc-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                             >
+                               <Trash2 size={12} />
+                             </div>
+                           )}
+                         </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className="p-8 border-t border-zinc-100 dark:border-zinc-900">
-                    <button 
-                      onClick={() => {
-                        const newForm = {
-                          id: `form-${Date.now()}`,
-                          name: 'New Custom Form',
-                          type: 'custom',
-                          fields: [] as any[],
-                          settings: { requireLogin: true, submitLabel: 'Submit' }
-                        };
-                        setForms([...forms, newForm]);
-                        setSelectedFormId(newForm.id);
-                      }}
-                      className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-3 hover:bg-indigo-500 transition-all"
-                    >
-                      <Plus size={14} />
-                      Create New Form
+                      <p className={cn("text-[9px]", selectedFormId === form.id ? "text-indigo-500/70" : "text-zinc-400")}>
+                        {form.fields?.length || 0} {(form.fields?.length || 0) === 1 ? 'field' : 'fields'}
+                      </p>
                     </button>
-                  </div>
-               </aside>
+                  ))}
+                </div>
+                <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                  <button 
+                    onClick={() => {
+                      const newForm = {
+                        id: `form-${Date.now()}`,
+                        name: 'New Custom Form',
+                        type: 'custom',
+                        fields: [] as any[],
+                        settings: { requireLogin: true, submitLabel: 'Submit' }
+                      };
+                      setForms([...forms, newForm]);
+                      setSelectedFormId(newForm.id);
+                    }}
+                    className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
+                  >
+                    <Plus size={12} />
+                    New Form
+                  </button>
+                </div>
+              </aside>
 
                {/* Main Builder Area */}
                {selectedFormId ? (() => {
@@ -6599,61 +6315,316 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                )}
             </div>
             ) : activeTab === 'views' ? (
-              <div className="flex-1 overflow-y-auto p-12 bg-white dark:bg-zinc-950 custom-scrollbar">
-                <div className="max-w-6xl mx-auto space-y-12">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Interface Views</h2>
-                      <p className="text-zinc-500 text-sm">Configure how records are presented and interacted with across the workspace.</p>
-                    </div>
-                    <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                      <Plus size={14} />
-                      Create New View
+<div className="flex h-full w-full overflow-hidden bg-white dark:bg-zinc-950">
+              {/* Experience Sidebar */}
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
+                <div className="mb-6 px-2">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Views</h3>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { id: 'master', label: 'Master View', icon: TableProperties, desc: 'Table & List config' },
+                    { id: 'detail', label: 'Detail View', icon: Layout, desc: 'Record page layout' },
+                    { id: 'filters', label: 'Filters & Search', icon: Filter, desc: 'Global search & facets' },
+                    { id: 'actions', label: 'Quick Actions', icon: MousePointerClick, desc: 'Buttons & Triggers' }
+                  ].map((st) => (
+                    <button 
+                      key={st.id}
+                      onClick={() => setExperienceSubTab(st.id as any)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left group",
+                        experienceSubTab === st.id 
+                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                      )}
+                    >
+                      <st.icon size={14} className={experienceSubTab === st.id ? "" : "group-hover:text-zinc-600 dark:group-hover:text-zinc-300"} />
+                      {st.label}
                     </button>
-                  </div>
+                  ))}
+                </div>
+              </aside>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {[
-                      { title: 'Master Workspace', desc: 'The default grid view for all module records.', icon: LayoutGrid, count: 1, type: 'System' },
-                      { title: 'Kanban Board', desc: 'Track records through workflow stages visually.', icon: Columns, count: 0, type: 'Board' },
-                      { title: 'Calendar View', desc: 'Manage time-sensitive records on a schedule.', icon: Calendar, count: 0, type: 'Schedule' }
-                    ].map((view, i) => (
-                      <div key={i} className="group p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6 hover:border-indigo-500/50 transition-all">
-                        <div className="w-12 h-12 bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 transition-colors">
-                          <view.icon size={24} />
+              {/* Experience Content */}
+              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                <div className="max-w-none mx-auto space-y-12 pb-20">
+                  {experienceSubTab === 'master' ? (
+                    <div className="space-y-12">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Master View Configuration</h2>
+                          <p className="text-zinc-500 text-sm">Define how records are displayed in the main table or list view.</p>
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-zinc-900 dark:text-white">{view.title}</h4>
-                            <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-md border border-indigo-500/20">{view.type}</span>
-                          </div>
-                          <p className="text-xs text-zinc-500 leading-relaxed">{view.desc}</p>
-                        </div>
-                        <div className="pt-4 flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800">
-                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{view.count} Active</span>
-                          <button className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-400">Configure</button>
+                        <div className="flex items-center gap-3">
+                           <select className="bg-zinc-100 dark:bg-zinc-900 border-none rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
+                             <option>Default Table View</option>
+                             <option>Kanban Board</option>
+                             <option>Calendar View</option>
+                           </select>
                         </div>
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="bg-zinc-900 rounded-[2.5rem] p-10 relative overflow-hidden border border-zinc-800 shadow-2xl">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 blur-[100px] -mr-32 -mt-32" />
-                    <div className="relative z-10 flex items-center gap-10">
-                      <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
-                        <Monitor size={32} />
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-indigo-500/5">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
+                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest w-1/3">Field</th>
+                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Show in Table</th>
+                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Inline Edit</th>
+                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Column Width</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                            {layout.map((field) => (
+                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                                <td className="px-8 py-5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                                      {(() => {
+                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                        const Icon = fieldDef?.icon || Table;
+                                        return <Icon size={14} />;
+                                      })()}
+                                    </div>
+                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
+                                  </div>
+                                </td>
+                                <td className="px-8 py-5 text-center">
+                                  <button 
+                                    className={cn(
+                                      "w-10 h-6 rounded-full relative transition-all mx-auto",
+                                      field.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                    )}
+                                    onClick={() => updateField(field.id, { showInTable: field.showInTable === false })}
+                                  >
+                                    <div className={cn(
+                                      "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                                      field.showInTable !== false ? "right-1" : "left-1"
+                                    )} />
+                                  </button>
+                                </td>
+                                <td className="px-8 py-5 text-center">
+                                  <button 
+                                    className={cn(
+                                      "w-10 h-6 rounded-full relative transition-all mx-auto",
+                                      field.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
+                                    )}
+                                    onClick={() => updateField(field.id, { inlineEdit: !field.inlineEdit })}
+                                  >
+                                    <div className={cn(
+                                      "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                                      field.inlineEdit ? "right-1" : "left-1"
+                                    )} />
+                                  </button>
+                                </td>
+                                <td className="px-8 py-5">
+                                  <div className="flex items-center gap-3">
+                                    <input 
+                                      type="range" 
+                                      className="w-24 accent-indigo-500 h-1" 
+                                      min="50" max="500" step="10"
+                                      value={field.columnWidth || 200}
+                                      onChange={(e) => updateField(field.id, { columnWidth: parseInt(e.target.value) })}
+                                    />
+                                    <span className="text-[10px] font-mono text-zinc-400">{field.columnWidth || 200}px</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <div className="flex-1 space-y-2">
-                        <h3 className="text-xl font-bold text-white tracking-tight">External Portals</h3>
-                        <p className="text-zinc-400 text-sm max-w-xl">Create dedicated viewing environments for external clients or partners to interact with specific record subsets.</p>
+
+                      {/* View Options */}
+                      <div className="grid grid-cols-2 gap-8">
+                         <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6">
+                            <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Table Density</h3>
+                            <div className="grid grid-cols-3 gap-3">
+                              {['Compact', 'Standard', 'Spacious'].map(d => (
+                                <button key={d} className={cn(
+                                  "px-4 py-3 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                  d === 'Standard' ? "bg-indigo-600 border-indigo-500 text-white shadow-lg" : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500"
+                                )}>{d}</button>
+                              ))}
+                            </div>
+                         </div>
+                         <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6">
+                            <div className="flex items-center justify-between">
+                               <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Pagination</h3>
+                               <button 
+                                 className={cn(
+                                   "w-10 h-6 rounded-full relative transition-all",
+                                   interfaceSettings.master.pagination?.enabled ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                 )}
+                                 onClick={() => setInterfaceSettings(prev => ({
+                                   ...prev,
+                                   master: {
+                                     ...prev.master,
+                                     pagination: { ...prev.master.pagination, enabled: !prev.master.pagination?.enabled }
+                                   }
+                                 }))}
+                               >
+                                 <div className={cn(
+                                   "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                                   interfaceSettings.master.pagination?.enabled ? "right-1" : "left-1"
+                                 )} />
+                               </button>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                               <div className="flex-1 space-y-2">
+                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Default Per Page</label>
+                                  <select 
+                                    value={interfaceSettings.master.pagination?.pageSize || 25}
+                                    onChange={(e) => setInterfaceSettings(prev => ({
+                                      ...prev,
+                                      master: {
+                                        ...prev.master,
+                                        pagination: { ...prev.master.pagination, pageSize: parseInt(e.target.value) }
+                                      }
+                                    }))}
+                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[10px] font-bold text-zinc-600"
+                                  >
+                                    {[10, 25, 50, 100].map(size => (
+                                      <option key={size} value={size}>{size} records</option>
+                                    ))}
+                                  </select>
+                               </div>
+                               <div className="flex-1 space-y-2">
+                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Options</label>
+                                  <div className="flex items-center gap-2">
+                                     <div className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[9px] font-bold text-zinc-500">10, 25, 50...</div>
+                                     <button className="p-2 text-indigo-500 hover:bg-indigo-500/10 rounded-lg"><Settings2 size={14} /></button>
+                                  </div>
+                               </div>
+                            </div>
+                         </div>
                       </div>
-                      <button className="px-8 py-4 bg-white text-zinc-900 rounded-2xl font-bold text-[10px] uppercase tracking-widest hover:bg-zinc-100 transition-all shadow-xl">
-                        Explore Portals
-                      </button>
                     </div>
-                  </div>
+                  ) : experienceSubTab === 'filters' ? (
+                    <div className="space-y-12">
+                      <div className="space-y-1">
+                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Global Filters & Search</h2>
+                        <p className="text-zinc-500 text-sm">Configure the search experience and facets available to users.</p>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-8">
+                        <div className="col-span-2 space-y-6">
+                           <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Active Filters</h3>
+                           <div className="space-y-3">
+                             {layout.filter(f => f.type === 'select' || f.type === 'date' || f.type === 'boolean').map((field, i) => (
+                               <div key={i} className="flex items-center justify-between p-6 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] group hover:border-indigo-500/30 transition-all">
+                                 <div className="flex items-center gap-4">
+                                   <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                                     <Filter size={18} />
+                                   </div>
+                                   <div>
+                                     <p className="text-sm font-bold text-zinc-900 dark:text-white">{field.label}</p>
+                                     <p className="text-[10px] text-zinc-400 font-medium">Type: {field.type.toUpperCase()}</p>
+                                   </div>
+                                 </div>
+                                 <div className="flex items-center gap-6">
+                                   <div className="flex items-center gap-2">
+                                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Multi-select</span>
+                                     <button className="w-8 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-full relative">
+                                       <div className="absolute left-1 top-0.5 w-3 h-3 bg-white rounded-full" />
+                                     </button>
+                                   </div>
+                                   <button className="p-2 text-zinc-300 hover:text-rose-500 transition-colors"><Trash2 size={14} /></button>
+                                 </div>
+                               </div>
+                             ))}
+                             <button className="w-full py-4 border-2 border-dashed border-zinc-100 dark:border-zinc-900 rounded-[2rem] text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:border-indigo-500/50 hover:text-indigo-500 transition-all flex items-center justify-center gap-2">
+                               <Plus size={14} />
+                               Add Search Filter
+                             </button>
+                           </div>
+                        </div>
+
+                        <div className="space-y-8">
+                           <div className="p-8 bg-indigo-600 rounded-[2.5rem] text-white space-y-6 shadow-2xl shadow-indigo-500/20">
+                             <h4 className="text-xs font-black uppercase tracking-widest text-white/60">Search Logic</h4>
+                             <div className="space-y-4">
+                               <label className="flex items-center gap-3 cursor-pointer">
+                                 <div className="w-4 h-4 bg-white/20 border border-white/40 rounded flex items-center justify-center"><CheckSquare size={12} className="text-white" /></div>
+                                 <span className="text-xs font-bold">Enable Full-Text Search</span>
+                               </label>
+                               <label className="flex items-center gap-3 cursor-pointer">
+                                 <div className="w-4 h-4 bg-white/20 border border-white/40 rounded" />
+                                 <span className="text-xs font-bold text-white/60">Fuzzy Matching</span>
+                               </label>
+                             </div>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : experienceSubTab === 'actions' ? (
+                    <div className="space-y-12">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Quick Actions & Commands</h2>
+                          <p className="text-zinc-500 text-sm">Define custom buttons and automated actions for users in the master view.</p>
+                        </div>
+                        <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+                          + New Action
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-6">
+                        {interfaceSettings.actions.map((action) => (
+                          <div key={action.id} className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] group hover:border-indigo-500/50 transition-all">
+                             <div className="flex items-center justify-between mb-8">
+                                <div className="w-14 h-14 bg-zinc-50 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all">
+                                   <MousePointerClick size={24} />
+                                </div>
+                                <div className="flex gap-2">
+                                  <button className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"><Settings2 size={16} /></button>
+                                  <button className="p-2 text-zinc-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
+                                </div>
+                             </div>
+                             <div className="space-y-2">
+                               <p className="text-lg font-black text-zinc-900 dark:text-white tracking-tight">{action.label}</p>
+                               <p className="text-xs text-zinc-500">Trigger: Row Command • Scope: Single Record</p>
+                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-12">
+                      <div className="space-y-1">
+                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Detail View Experience</h2>
+                        <p className="text-zinc-500 text-sm">Configure how individual records are presented when opened.</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-8">
+                         {[
+                           { label: 'Tabbed Layout', desc: 'Standard hierarchical tabs for clean organization.', icon: Layers },
+                           { label: 'Split View', desc: 'Two-column layout with sidebar and main content.', icon: Layout },
+                           { label: 'Single Page', desc: 'Vertical scrolling view with distinct sections.', icon: AlignLeft }
+                         ].map((l, i) => (
+                           <div key={i} className={cn(
+                             "p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-4 cursor-pointer hover:border-indigo-500/50 transition-all group",
+                             i === 0 ? "border-indigo-500 shadow-xl shadow-indigo-500/5" : ""
+                           )}>
+                              <div className={cn(
+                                "w-12 h-12 rounded-2xl flex items-center justify-center mb-4",
+                                i === 0 ? "bg-indigo-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                              )}>
+                                <l.icon size={24} />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-sm font-bold text-zinc-900 dark:text-white">{l.label}</p>
+                                <p className="text-[10px] text-zinc-500 leading-relaxed">{l.desc}</p>
+                              </div>
+                           </div>
+                         ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
             ) : null}
           </div>
         </main>
