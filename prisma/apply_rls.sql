@@ -236,3 +236,61 @@ ALTER TABLE "leave_balances" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "leave_requests" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "timesheets" FORCE ROW LEVEL SECURITY;
 ALTER TABLE "timesheet_entries" FORCE ROW LEVEL SECURITY;
+
+-- 8. EXPLICIT GRANTS FOR DATA API (PostgREST)
+-- Required for projects after May 30, 2026
+
+-- Grant ALL to service_role (Full backend access)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
+
+-- Grant access to authenticated users
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE 
+    "users",
+    "tenants",
+    "workspaces",
+    "modules",
+    "records",
+    "tenant_members",
+    "document_templates",
+    "generated_documents",
+    "member_phone_numbers",
+    "member_certifications",
+    "member_education",
+    "member_skills",
+    "permission_groups",
+    "member_permission_groups",
+    "audit_logs",
+    "teams",
+    "agents",
+    "positions",
+    "member_successions",
+    "employment_contracts",
+    "remuneration_details",
+    "leave_balances",
+    "leave_requests",
+    "timesheets",
+    "timesheet_entries",
+    "parties",
+    "persons",
+    "organizations",
+    "party_relationships",
+    "taxonomies",
+    "global_lists",
+    "global_list_items",
+    "nexus_connectors",
+    "tenant_connectors",
+    "tenant_connector_secrets",
+    "usage_logs",
+    "industry_blueprints"
+TO authenticated;
+
+-- Grant limited access to anonymous users (for login/tenant lookup)
+GRANT SELECT ON TABLE 
+    "tenants",
+    "users"
+TO anon;
+
+-- Grant sequence usage for tables that might use them (Serial/Identity columns)
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
