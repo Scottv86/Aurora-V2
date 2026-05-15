@@ -64,6 +64,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/api/db-test', async (req, res) => {
+  try {
+    const { globalPrisma } = await import('./lib/prisma');
+    const count = await globalPrisma.tenant.count();
+    res.json({ status: 'ok', tenantCount: count });
+  } catch (err: any) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 // Registry & Auth Routes
 app.use('/api/auth', authRoutes);
 

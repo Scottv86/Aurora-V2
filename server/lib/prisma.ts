@@ -74,35 +74,40 @@ export const getScopedPrisma = (
           }
 
           // Start a transaction to set the PostgreSQL session variables
-          return await (client as any).$transaction(async (tx: any) => {
-            // Set session variables (SET LOCAL persists only for this transaction)
-            await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tId.replace(/'/g, "''")}'`);
-            await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${uId.replace(/'/g, "''")}'`);
-            await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${isAdmin}'`);
+          try {
+            return await (client as any).$transaction(async (tx: any) => {
+              // Set session variables (SET LOCAL persists only for this transaction)
+              await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tId.replace(/'/g, "''")}'`);
+              await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${uId.replace(/'/g, "''")}'`);
+              await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${isAdmin}'`);
 
-            // Inject app-level tenant filtering for isolation insurance
-            if (isScopedModel && tId) {
-              if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
-                a.where = { ...a.where, tenantId: tId };
+              // Inject app-level tenant filtering for isolation insurance
+              if (isScopedModel && tId) {
+                if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
+                  a.where = { ...a.where, tenantId: tId };
+                }
+                if (operation === 'create') {
+                  a.data = { ...a.data, tenantId: tId };
+                }
               }
-              if (operation === 'create') {
-                a.data = { ...a.data, tenantId: tId };
+
+              // Execute the operation on the transaction client
+              const modelName = model.charAt(0).toLowerCase() + model.slice(1);
+              const txModel = (tx as any)[modelName];
+              
+              if (txModel && typeof txModel[operation] === 'function') {
+                return txModel[operation]({ ...args, [RLS_CONTEXT]: true } as any);
               }
-            }
 
-            // Execute the operation on the transaction client
-            const modelName = model.charAt(0).toLowerCase() + model.slice(1);
-            const txModel = (tx as any)[modelName];
-            
-            if (txModel && typeof txModel[operation] === 'function') {
-              return txModel[operation]({ ...args, [RLS_CONTEXT]: true } as any);
-            }
-
-            // Fallback to standard query if dynamic resolution fails
-            return query({ ...args, [RLS_CONTEXT]: true } as any);
-          }, { 
-            timeout: 20000 // Increase timeout to 20s for complex staff detail updates
-          });
+              // Fallback to standard query if dynamic resolution fails
+              return query({ ...args, [RLS_CONTEXT]: true } as any);
+            }, { 
+              timeout: 20000 
+            });
+          } catch (err) {
+            console.error('[Prisma RLS Error]:', err);
+            throw err;
+          }
         },
       },
     },

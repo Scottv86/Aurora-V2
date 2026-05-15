@@ -551,7 +551,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const isAdminPath = location.pathname.startsWith('/admin');
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
-  const isNewBuilder = location.pathname === '/workspace/settings/builder/new';
+  const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
+                          location.pathname.includes('/workspace/settings/ai-builder');
 
   const lastPathname = useRef(location.pathname);
 
@@ -586,16 +587,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       if (changed) setOpenAccordions(newOpen);
     }
   }, [location.pathname, isSettingsMode, settingsSearchQuery, filteredSettingsGroups]);
-
-  // Automatically collapse sidebar ONLY when entering the module builder for a new module
-  // and expand it when leaving that specific page
-  useEffect(() => {
-    if (isNewBuilder) {
-      setIsSidebarOpen(false);
-    } else {
-      setIsSidebarOpen(true);
-    }
-  }, [isNewBuilder]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -774,7 +765,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       <div className="flex">
         <aside className={cn(
           "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl transition-all duration-300 z-40 overflow-y-auto overflow-x-hidden",
-          isSidebarOpen ? "w-64" : "w-16"
+          isModuleBuilder ? "w-0 opacity-0 pointer-events-none border-none" : (isSidebarOpen ? "w-64" : "w-16")
         )}>
           <div className={cn("flex flex-col h-full", isSidebarOpen ? "p-4" : "p-2")}>
             <div className="flex-1 space-y-6">
@@ -957,7 +948,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
         <main className={cn(
           "flex-1 h-[calc(100vh-4rem)] flex flex-col overflow-y-auto transition-all duration-300",
-          isSidebarOpen ? "ml-64" : "ml-16",
+          isModuleBuilder ? "ml-0" : (isSidebarOpen ? "ml-64" : "ml-16"),
           (isAIAssistantOpen || isChatOpen || isAppLauncherOpen || isNotificationsOpen) && "mr-96"
         )}>
           <div className={cn(

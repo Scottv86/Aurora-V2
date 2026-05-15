@@ -14,19 +14,21 @@ function UserPlus(props: any) {
 
 export const MODULES = [
   { 
-    id: 'contacts', 
-    name: 'Contacts', 
+    id: 'people_org', 
+    name: 'People & Organisation', 
     type: 'RECORD',
-    category: 'CRM & People & Organisations', 
+    category: 'Core', 
     icon: Users, 
     description: 'Manage people and relationships across your organization.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Full Name', label: 'Full Name', type: 'text', required: true, colSpan: 6, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Email', label: 'Email', type: 'text', required: true, colSpan: 6, startCol: 7, rowIndex: 0 },
       { id: 'f3', name: 'Company', label: 'Company', type: 'text', required: false, colSpan: 6, startCol: 1, rowIndex: 1 },
       { id: 'f4', name: 'Status', label: 'Status', type: 'select', options: ['Lead', 'Customer', 'Partner'], required: true, colSpan: 6, startCol: 7, rowIndex: 1 }
-    ]
+    ],
+    dependencies: []
   },
   { 
     id: 'service-requests', 
@@ -36,12 +38,14 @@ export const MODULES = [
     icon: FileText, 
     description: 'Handle external requests with automated triage and routing.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Subject', label: 'Subject', type: 'text', required: true, colSpan: 12, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Description', label: 'Description', type: 'longText', required: true, colSpan: 12, startCol: 1, rowIndex: 1 },
       { id: 'f3', name: 'Priority', label: 'Priority', type: 'select', options: ['Low', 'Medium', 'High'], required: true, colSpan: 6, startCol: 1, rowIndex: 2 },
       { id: 'f4', name: 'Status', label: 'Status', type: 'select', options: ['New', 'In Progress', 'Resolved'], required: true, colSpan: 6, startCol: 7, rowIndex: 2 }
-    ]
+    ],
+    dependencies: ['people_org']
   },
   { 
     id: 'invoicing', 
@@ -51,13 +55,15 @@ export const MODULES = [
     icon: CreditCard, 
     description: 'Generate, send, and track invoices and payments.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Invoice Number', label: 'Invoice Number', type: 'text', required: true, colSpan: 6, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Client', label: 'Client', type: 'text', required: true, colSpan: 6, startCol: 7, rowIndex: 0 },
       { id: 'f3', name: 'Amount', label: 'Amount', type: 'number', required: true, colSpan: 6, startCol: 1, rowIndex: 1 },
       { id: 'f4', name: 'Due Date', label: 'Due Date', type: 'date', required: true, colSpan: 6, startCol: 7, rowIndex: 1 },
       { id: 'f5', name: 'Status', label: 'Status', type: 'select', options: ['Draft', 'Sent', 'Paid', 'Overdue'], required: true, colSpan: 12, startCol: 1, rowIndex: 2 }
-    ]
+    ],
+    dependencies: ['people_org']
   },
   { 
     id: 'assets', 
@@ -67,6 +73,7 @@ export const MODULES = [
     icon: Database, 
     description: 'Track physical and digital assets with maintenance history.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Asset Name', label: 'Asset Name', type: 'text', required: true, colSpan: 6, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Serial Number', label: 'Serial Number', type: 'text', required: true, colSpan: 6, startCol: 7, rowIndex: 0 },
@@ -82,12 +89,14 @@ export const MODULES = [
     icon: UserPlus, 
     description: 'Streamline employee and contractor onboarding flows.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Employee Name', label: 'Employee Name', type: 'text', required: true, colSpan: 6, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Role', label: 'Role', type: 'text', required: true, colSpan: 6, startCol: 7, rowIndex: 0 },
       { id: 'f3', name: 'Start Date', label: 'Start Date', type: 'date', required: true, colSpan: 6, startCol: 1, rowIndex: 1 },
       { id: 'f4', name: 'Status', label: 'Status', type: 'select', options: ['Pending', 'In Progress', 'Completed'], required: true, colSpan: 6, startCol: 7, rowIndex: 1 }
-    ]
+    ],
+    dependencies: ['people_org']
   },
   { 
     id: 'risk-register', 
@@ -97,6 +106,7 @@ export const MODULES = [
     icon: ShieldCheck, 
     description: 'Identify, assess, and mitigate operational risks.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Risk Description', label: 'Risk Description', type: 'longText', required: true, colSpan: 12, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Impact', label: 'Impact', type: 'select', options: ['Low', 'Medium', 'High', 'Critical'], required: true, colSpan: 6, startCol: 1, rowIndex: 1 },
@@ -112,6 +122,7 @@ export const MODULES = [
     icon: ShoppingCart, 
     description: 'Process retail transactions and manage till sessions.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Transaction ID', label: 'Transaction ID', type: 'text', required: true, colSpan: 6, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Amount', label: 'Amount', type: 'number', required: true, colSpan: 6, startCol: 7, rowIndex: 0 },
@@ -127,12 +138,14 @@ export const MODULES = [
     icon: HeartHandshake, 
     description: 'End-to-end grant application and acquittal workflows.',
     enabled: true,
+    isTemplate: true,
     layout: [
       { id: 'f1', name: 'Grant Name', label: 'Grant Name', type: 'text', required: true, colSpan: 12, startCol: 1, rowIndex: 0 },
       { id: 'f2', name: 'Applicant', label: 'Applicant', type: 'text', required: true, colSpan: 6, startCol: 1, rowIndex: 1 },
       { id: 'f3', name: 'Amount Requested', label: 'Amount Requested', type: 'number', required: true, colSpan: 6, startCol: 7, rowIndex: 1 },
       { id: 'f4', name: 'Status', label: 'Status', type: 'select', options: ['Applied', 'Under Review', 'Approved', 'Declined'], required: true, colSpan: 12, startCol: 1, rowIndex: 2 }
-    ]
+    ],
+    dependencies: ['people_org']
   },
 ];
 
@@ -146,4 +159,3 @@ export const MODULE_CATEGORIES = [
   'Registry',
   'Custom'
 ];
-

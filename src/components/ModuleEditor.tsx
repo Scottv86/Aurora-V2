@@ -1183,7 +1183,7 @@ const generateMockData = (fields: Field[], count: number = 5) => {
   return mocks;
 };
 
-const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout }: any) => {
+const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestricted }: any) => {
   const {
     attributes,
     listeners,
@@ -1300,15 +1300,17 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout }: any) =
          >
            <GripVertical size={14} />
          </div>
-         <button 
-           onClick={(e) => {
-             e.stopPropagation();
-             onDelete(fObj.id);
-           }}
-           className="p-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-400 hover:text-rose-600"
-         >
-           <Trash2 size={12} />
-         </button>
+         {!isRestricted && (
+           <button 
+             onClick={(e) => {
+               e.stopPropagation();
+               onDelete(fObj.id);
+             }}
+             className="p-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-400 hover:text-rose-600"
+           >
+             <Trash2 size={12} />
+           </button>
+         )}
       </div>
     </div>
   );
@@ -1339,6 +1341,7 @@ export const ModuleEditor = () => {
   const { groups: permissionGroups } = usePermissionGroups();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRestricted, setIsRestricted] = useState(false);
   
   const [moduleSettings, setModuleSettings] = useState({
     name: 'New Custom Module',
@@ -1837,6 +1840,8 @@ export const ModuleEditor = () => {
           titleFieldId: data.config?.titleFieldId || '',
           subtitleFieldIds: data.config?.subtitleFieldIds || [],
         });
+        
+        setIsRestricted(!!data.isGlobal);
 
         setBreadcrumbOverride(id, data.name || 'Untitled Module');
 
@@ -2703,15 +2708,15 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
         {/* Left Sidebar - Discovery Panel */}
         {activeTab === 'builder' && (
           <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent">
-              <div className="relative">
+            <div className="h-[52px] px-4 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent flex items-center">
+              <div className="relative w-full">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input 
                   type="text" 
-                  placeholder="Search blocks..." 
                   value={sidebarSearch}
                   onChange={(e) => setSidebarSearch(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all"
+                  placeholder="Search blocks..."
+                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all"
                 />
               </div>
             </div>
@@ -2778,7 +2783,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
           {activeTab === 'builder' ? (
             <>
               {/* Unified Page Control Bar */}
-              <div className="sticky top-0 z-30 bg-zinc-100/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-8 py-3 flex items-center gap-6">
+              <div className="sticky top-0 z-30 bg-zinc-100/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 h-[52px] flex items-center gap-4">
                 {/* Left: Title & Settings */}
                 <div 
                   onClick={(e) => {
@@ -2786,7 +2791,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                     setSelectedId('page-header');
                   }}
                   className={cn(
-                    "flex items-center gap-3 cursor-pointer group px-3 py-1.5 rounded-xl transition-all flex-shrink-0",
+                    "flex items-center gap-3 cursor-pointer group px-2 py-0.5 rounded-xl transition-all flex-shrink-0",
                     selectedId === 'page-header' ? "bg-indigo-500/10 ring-1 ring-indigo-500/50" : "hover:bg-zinc-200 dark:hover:bg-zinc-800"
                   )}
                 >
@@ -2864,7 +2869,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                 }}
                                 onDoubleClick={() => setIsEditingTab(tab.id)}
                                 className={cn(
-                                  "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border whitespace-nowrap",
+                                  "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border whitespace-nowrap",
                                   currentTabId === tab.id
                                     ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
                                     : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
@@ -6004,6 +6009,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                                  isSelected={selectedFieldInFormId === fObj.id}
                                                  layout={layout}
                                                  onSelect={setSelectedFieldInFormId}
+                                                 isRestricted={isRestricted}
                                                  onDelete={(id: string) => {
                                                    setForms(prev => prev.map(f => {
                                                      if (f.id !== selectedFormId) return f;
@@ -6047,7 +6053,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                      </div>
 
                      {/* Inspector Sidebar (Right) */}
-                     <aside className="w-80 border-l border-zinc-100 dark:border-zinc-900 bg-white dark:bg-zinc-950 p-8 overflow-y-auto custom-scrollbar">
+                     <aside className="w-80 border-l border-zinc-100 dark:border-zinc-900 bg-white dark:bg-zinc-950 p-4 overflow-y-auto custom-scrollbar">
                         {selectedFieldInFormId ? (() => {
                             // Check if it's a Step selection
                             const selectedStep = selectedForm.isMultistep ? selectedForm.steps.find((s: any) => s.id === selectedFieldInFormId) : null;
@@ -6655,7 +6661,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
         {activeTab === 'builder' && (
           <aside className="w-85 flex-shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
             {/* Mode Switcher */}
-            <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 flex items-center p-1 bg-zinc-50/50 dark:bg-transparent">
+            <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 flex items-center p-1 bg-zinc-50/50 dark:bg-transparent">
               <div className="flex-1 grid grid-cols-2 gap-1 h-full">
                 <button 
                   onClick={() => setRightSidebarTab('inspector')}
@@ -6693,7 +6699,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 20 }}
-                      className="p-6 space-y-8"
+                      className="p-4 space-y-4"
                     >
                       {/* Bulk Header */}
                       <div className="flex items-center justify-between mb-2">
@@ -6789,7 +6795,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 20 }}
-                      className="p-6 space-y-8"
+                      className="p-4 space-y-4"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -6946,7 +6952,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 20 }}
-                      className="p-6 space-y-8"
+                      className="p-4 space-y-4"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -9071,7 +9077,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                     key="empty"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4"
+                    className="h-full flex flex-col items-center justify-center text-center p-4 space-y-4"
                   >
                     <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-indigo-500/5">
                       <Move size={20} className="text-zinc-500 dark:text-zinc-400" />
@@ -9091,7 +9097,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                 className="flex flex-col h-full overflow-hidden"
               >
                 {/* Agent Status */}
-                <div className="p-6 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent">
+                <div className="p-3 px-4 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent">
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">

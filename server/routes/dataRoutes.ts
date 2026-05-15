@@ -20,7 +20,8 @@ router.get('/modules', async (req: TenantRequest, res) => {
         iconName: m.icon,
         type: m.type,
         enabled: m.enabled,
-        templateId: config.id,
+        isGlobal: m.isGlobal,
+        templateId: m.templateId || config.id,
         status: m.enabled ? 'ACTIVE' : 'INACTIVE',
         createdAt: m.createdAt,
       };
@@ -50,6 +51,8 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
       iconName: module.icon,
       type: module.type,
       enabled: module.enabled,
+      isGlobal: module.isGlobal,
+      templateId: module.templateId || config.id,
       status: module.enabled ? 'ACTIVE' : 'INACTIVE',
       createdAt: module.createdAt,
     };
@@ -557,7 +560,7 @@ router.post('/modules', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { name, category, iconName, type, enabled: enabledBody, status, ...config } = req.body;
+    const { name, category, iconName, type, isGlobal, templateId, enabled: enabledBody, status, ...config } = req.body;
     const enabled = enabledBody !== undefined ? enabledBody : (status === 'ACTIVE');
     console.log(`[DataAPI] Creating module: "${name}" for tenant: ${tenantId}`);
 
@@ -582,6 +585,8 @@ router.post('/modules', async (req: TenantRequest, res) => {
         category: category || 'Custom',
         icon: iconName || 'Box',
         type: type || 'RECORD',
+        isGlobal: isGlobal || false,
+        templateId: templateId || null,
         enabled: enabled !== undefined ? enabled : true,
         config: config as any
       }
@@ -611,7 +616,7 @@ router.put('/modules/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, category, iconName, type, enabled: enabledBody, status, ...config } = req.body;
+    const { name, category, iconName, type, isGlobal, templateId, enabled: enabledBody, status, ...config } = req.body;
     const enabled = enabledBody !== undefined ? enabledBody : (status !== undefined ? status === 'ACTIVE' : undefined);
 
     const module = await db.module.update({
@@ -621,6 +626,8 @@ router.put('/modules/:id', async (req: TenantRequest, res) => {
         category,
         icon: iconName,
         type,
+        isGlobal,
+        templateId,
         enabled,
         config: config as any
       }

@@ -79,6 +79,10 @@ model Module {
   enabled     Boolean   @default(true)
   icon        String    @default("Box")
   type        String    @default("RECORD")
+  isGlobal    Boolean   @default(false) @map("is_global")
+  isTemplate  Boolean   @default(false) @map("is_template")
+  templateId  String?   @map("template_id")
+  blueprintId String?   @map("blueprint_id")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], map: "Module_workspaceId_fkey")
   records     Record[]
 
@@ -607,4 +611,17 @@ enum EntityStatus {
   PENDING_REVIEW
   ACTIVE
   INACTIVE
+}
+
+model IndustryBlueprint {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  industry    String
+  icon        String   @default("Briefcase")
+  config      Json     // Manifest of modules, lists, and links
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("industry_blueprints")
 }

@@ -203,6 +203,10 @@ export interface Module {
   category: string;
   enabled: boolean;
   isCustom?: boolean;
+  isGlobal?: boolean;
+  isTemplate?: boolean;
+  templateId?: string;
+  blueprintId?: string;
   layout: ModuleField[];
   fields?: ModuleField[]; // Deprecated: use layout instead
   tabs?: Tab[];
@@ -378,4 +382,19 @@ export interface Team {
   memberCount: number;
   agentCount: number;
   avatar?: string;
+}
+
+export interface IndustryBlueprint {
+  id: string;
+  name: string;
+  description: string;
+  industry: string;
+  icon: string;
+  config: {
+    modules: { templateId: string; category?: string }[];
+    lists?: string[];
+    connections?: { sourceModule: string; targetModule: string; type: string }[];
+  };
+  createdAt: string;
+  updatedAt: string;
 }
