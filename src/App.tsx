@@ -7,6 +7,18 @@ import { AuthProvider } from './context/AuthContext';
 import { PlatformProvider } from './context/PlatformContext';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { StackedModalManager } from './components/UI/StackedModal';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes
+      refetchOnWindowFocus: false,
+      retry: 1
+    }
+  }
+});
 
 // Components & Layout
 import { PlatformShell } from './components/Layout/PlatformShell';
@@ -80,7 +92,8 @@ const WorkspaceLayout = () => {
 const App = () => {
   return (
     <ThemeProvider>
-      <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
         <PlatformProvider>
           <ModalStackProvider>
             <Router>
@@ -199,7 +212,8 @@ const App = () => {
             </Router>
           </ModalStackProvider>
         </PlatformProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 };

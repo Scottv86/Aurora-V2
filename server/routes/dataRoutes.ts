@@ -59,6 +59,30 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
   }
 });
 
+// GET stats for dashboard
+router.get('/stats', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const totalRecords = await db.record.count();
+    const activeRecords = await db.record.count({
+      where: {
+        NOT: {
+          status: { in: ['Completed', 'Archived'] }
+        }
+      }
+    });
+
+    res.json({
+      totalRecords,
+      activeRecords,
+      health: '99.9%',
+      aiAutomations: Math.floor(totalRecords * 0.8)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET all cases/records
 router.get('/records', async (req: TenantRequest, res) => {
   try {
@@ -422,6 +446,90 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// PARTIAL UPDATE record
+router.patch('/records/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { moduleId, status, associations, path, ...data } = req.body;
+
+    const existing = await db.record.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Record not found' });
+
+    const updatedData = {
+      ...(existing.data as any),
+      ...data
+    };
+
+    // Minimal validation: only check fields provided in PATCH
+    const module = await db.module.findUnique({ where: { id: moduleId || existing.moduleId } });
+    if (module) {
+      const config = module.config as any;
+      const layout = config.layout || [];
+      
+      const flattenFields = (fields: any[]): any[] => {
+        const result: any[] = [];
+        fields.forEach(f => {
+          result.push(f);
+          if (f.fields) result.push(...flattenFields(f.fields));
+        });
+        return result;
+      };
+      
+      const allFields = flattenFields(layout);
+      const fieldsToValidate = allFields.filter(f => data[f.id] !== undefined && f.required);
+      
+      const missing = fieldsToValidate.filter(f => {
+        const val = data[f.id];
+        return val === null || val === undefined || (typeof val === 'string' && val.trim() === '');
+      });
+
+      if (missing.length > 0) {
+        return res.status(400).json({ 
+          error: `Validation failed: ${missing.map(f => f.label || f.id).join(', ')} is required` 
+        });
+      }
+    }
+
+    const updatePayload: any = {
+      data: updatedData,
+      status: status || existing.status,
+      associations: associations !== undefined ? associations : existing.associations,
+      path: path !== undefined ? path : existing.path
+    };
+
+    const record = await db.record.update({
+      where: { id },
+      data: updatePayload
+    });
+
+    const recordWithMember = await db.record.findUnique({
+      where: { id: record.id },
+      include: { createdByMember: true }
+    });
+
+    const formatted = {
+      id: record.id,
+      moduleId: record.moduleId,
+      status: record.status,
+      associations: record.associations,
+      path: record.path,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
+      ...(record.data as any),
+      workflowState: record.workflowState
+    };
+    emitTenantUpdate(tenantId, 'record_updated', formatted);
+
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // DELETE
 router.delete('/records/:id', async (req: TenantRequest, res) => {

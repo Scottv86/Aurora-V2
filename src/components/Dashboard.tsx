@@ -41,10 +41,10 @@ export const Dashboard = () => {
     const tenantId = tenant.id;
     let socket: any = null;
 
-    const fetchRecords = async () => {
+    const fetchStats = async () => {
       try {
         const token = session?.access_token;
-        const res = await fetch('http://localhost:3001/api/data/records', {
+        const res = await fetch('http://127.0.0.1:3001/api/data/stats', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'x-tenant-id': tenantId
@@ -52,36 +52,28 @@ export const Dashboard = () => {
         });
         if (res.ok) {
           const json = await res.json();
-          const allCases = json.records || json;
-          updateStats(allCases);
+          setStats(prev => [
+            { ...prev[0], value: json.activeRecords.toString() },
+            { ...prev[1], value: json.totalRecords.toString() },
+            { ...prev[2], value: json.aiAutomations.toString() },
+            { ...prev[3], value: json.health }
+          ]);
         }
       } catch (err) {
-        console.error('Failed to fetch records', err);
+        console.error('Failed to fetch stats', err);
       } finally {
         setLoadingStats(false);
       }
     };
 
-    const updateStats = (allCases: any[]) => {
-      const activeCases = allCases.filter((c: any) => c.status !== 'Completed' && c.status !== 'Archived').length;
-      const totalSubmissions = allCases.length;
-      
-      setStats(prev => [
-        { ...prev[0], value: activeCases.toString() },
-        { ...prev[1], value: totalSubmissions.toString() },
-        { ...prev[2], value: (totalSubmissions * 0.8).toFixed(0) },
-        prev[3]
-      ]);
-    };
-
     // Initial Fetch
-    fetchRecords();
+    fetchStats();
 
     // Setup Socket.IO for real-time updates
     if (session?.access_token) {
       const token = session.access_token;
       import('socket.io-client').then(({ io }) => {
-        socket = io('http://localhost:3001', {
+        socket = io('http://127.0.0.1:3001', {
           auth: { token }
         });
 
@@ -89,11 +81,9 @@ export const Dashboard = () => {
           socket.emit('join_tenant', tenantId);
         });
 
-        // For simplicity in this demo we re-fetch all records on any record change, 
-        // but normally we would incrementally patch the state.
-        socket.on('record_added', fetchRecords);
-        socket.on('record_updated', fetchRecords);
-        socket.on('record_deleted', fetchRecords);
+        socket.on('record_added', fetchStats);
+        socket.on('record_updated', fetchStats);
+        socket.on('record_deleted', fetchStats);
       });
     }
 

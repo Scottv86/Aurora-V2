@@ -36,7 +36,10 @@ const PeopleOrgCreateSchema = z.object({
 router.get('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
-    const { search, status } = req.query;
+    const { search, status, page = '1', limit = '50' } = req.query;
+    const p = parseInt(page as string);
+    const l = parseInt(limit as string);
+    const skip = (p - 1) * l;
     
     // Base query
     const where: any = {
@@ -49,6 +52,7 @@ router.get('/', async (req: TenantRequest, res) => {
     
     // If semantic search is implemented, we'd use pgvector here
     // For now, standard filter
+    const total = await db.party.count({ where });
     const parties = await db.party.findMany({
       where,
       include: {
@@ -56,9 +60,17 @@ router.get('/', async (req: TenantRequest, res) => {
         organization: true,
       },
       orderBy: { createdAt: 'desc' },
+      skip,
+      take: l
     });
     
-    res.json(parties);
+    res.json({
+      parties,
+      total,
+      page: p,
+      limit: l,
+      totalPages: Math.ceil(total / l)
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

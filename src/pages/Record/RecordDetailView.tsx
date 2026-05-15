@@ -33,6 +33,8 @@ import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
+import { supabase } from '../../lib/supabase';
+
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
@@ -84,8 +86,10 @@ export const RecordDetailView = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
-  const [lookupData] = useState<Record<string, any[]>>({});
+  const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const isSavingRef = useRef(false);
+
   
 
 
@@ -265,7 +269,7 @@ export const RecordDetailView = () => {
             }
           });
 
-          const withCalculations = evaluateCalculations(dataWithDefaults, currentFlatFields);
+          const withCalculations = evaluateCalculations(dataWithDefaults, currentFlatFields, lookupData);
           setEditData(withCalculations);
           
           if (recordId && recData._record_key) {
@@ -313,6 +317,82 @@ export const RecordDetailView = () => {
 
     fetchModAndRecord();
   }, [tenant?.id, moduleId, recordId, platformLoading, session?.access_token]);
+
+  // Memoize the list names required by calculations to avoid expensive regex scanning on every render/update
+  const requiredGlobalLists = useMemo(() => {
+    if (!allFields.length) return [];
+    const listNames = new Set<string>();
+    const regex = /VLOOKUP\s*\(\s*[\s\S]*?\s*,\s*['"]([^'"]+)['"]/gi;
+    
+    allFields.forEach(f => {
+      if (f.type === 'calculation' && f.calculationLogic) {
+        let match;
+        while ((match = regex.exec(f.calculationLogic)) !== null) {
+          listNames.add(match[1]);
+        }
+      }
+    });
+    return Array.from(listNames);
+  }, [allFields]);
+
+  // Fetch Global Lists for VLOOKUP support in evaluateCalculations
+  useEffect(() => {
+    if (!requiredGlobalLists.length || !tenant?.id) return;
+
+    const fetchLists = async () => {
+      const names = requiredGlobalLists.filter(name => !lookupData[name]);
+      if (names.length === 0) return;
+
+      const newLookupData = { ...lookupData };
+      let changed = false;
+
+      for (const name of names) {
+        try {
+          const { data: lists } = await supabase
+            .from('global_lists')
+            .select('id, columns')
+            .ilike('name', name);
+          
+          if (lists && lists.length > 0) {
+            const { data: items } = await supabase
+              .from('global_list_items')
+              .select('data')
+              .eq('list_id', lists[0].id)
+              .eq('is_active', true);
+            
+            if (items) {
+              const columns = lists[0].columns || [];
+              const idToName: Record<string, string> = {};
+              columns.forEach((c: any) => { idToName[c.id] = c.name; });
+
+              const transformed = items.map(i => {
+                const row: Record<string, any> = {};
+                const itemData = i.data || {};
+                Object.entries(itemData).forEach(([id, val]) => {
+                  const colName = idToName[id] || id;
+                  row[colName] = val;
+                });
+                return row;
+              });
+
+              newLookupData[name] = transformed;
+              changed = true;
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to fetch global list ${name}:`, err);
+        }
+      }
+
+      if (changed) {
+        setLookupData(newLookupData);
+        // Re-evaluate calculations with new data
+        setEditData(prev => evaluateCalculations(prev, allFields, newLookupData));
+      }
+    };
+
+    fetchLists();
+  }, [requiredGlobalLists, tenant?.id]);
   const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
     let updatedData = { ...editData };
     updatedData[fieldId] = val;
@@ -355,84 +435,127 @@ export const RecordDetailView = () => {
       }
     });
 
-    const withCalculations = evaluateCalculations(updatedData, allFields);
+    const withCalculations = evaluateCalculations(updatedData, allFields, lookupData);
+    
+    // We don't setEditData here if we're about to handleUpdateEntry, 
+    // to avoid an extra render cycle before the network request.
+    // However, for immediate UI feedback on calculations, we do it.
     setEditData(withCalculations);
     
     // For certain field types, we trigger an immediate save because they are discrete actions
-    // Note: multi-value fields (checkboxGroup, tag, duallist) are excluded to allow batch selection
     if (['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress'].includes(field?.type)) {
-      handleUpdateEntry(updatedData, fieldId);
+      handleUpdateEntry(withCalculations, fieldId, true);
     }
+
     
-    return updatedData;
+    return withCalculations;
   };
 
-  const handleUpdateEntry = async (dataToSave?: any, specificFieldId?: string) => {
+  const handleUpdateEntry = async (dataToSave?: any, specificFieldId?: string, silent: boolean = true) => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
     
-    // Guard to prevent concurrent saves which can cause race conditions and state reverts
-    if (savingFieldId && !dataToSave) return;
+    // Strict guard to prevent concurrent saves
+    if (isSavingRef.current) return;
     
     const fieldIdBeingSaved = specificFieldId || activeFieldId;
 
-    // Check if the value has actually changed before proceeding with save
-    if (record && fieldIdBeingSaved) {
-      const data = dataToSave || editData;
-      
-      const newValue = getFieldValue(data, fieldIdBeingSaved);
-      const oldValue = getFieldValue(record, fieldIdBeingSaved);
+    const currentData = dataToSave || editData;
 
-      // Deep compare using JSON.stringify for simplicity and reliability with arrays/objects
+    // 1. Validation Logic Optimization
+    // Only validate the field being saved to ensure snappiness
+    if (fieldIdBeingSaved) {
+      const field = allFields.find(f => f.id === fieldIdBeingSaved);
+      if (field?.required) {
+        // Check visibility (with parent chain cache)
+        const visibilityCache: Record<string, boolean> = {};
+        const isVisibleWithCache = (f: any): boolean => {
+          if (visibilityCache[f.id] !== undefined) return visibilityCache[f.id];
+          
+          const visible = isFieldVisible(f, currentData, visibilityContext);
+          if (!visible) {
+            visibilityCache[f.id] = false;
+            return false;
+          }
+          
+          let parentId = fieldToGroupMap[f.id];
+          if (parentId) {
+            const parent = allFields.find(p => p.id === parentId);
+            if (parent && !isVisibleWithCache(parent)) {
+              visibilityCache[f.id] = false;
+              return false;
+            }
+          }
+          
+          visibilityCache[f.id] = true;
+          return true;
+        };
+
+        if (isVisibleWithCache(field)) {
+          const val = getFieldValue(currentData, fieldIdBeingSaved);
+          if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) {
+            toast.error(`${field.label || 'Field'} is required`);
+            setSavingFieldId(null);
+            return;
+          }
+        }
+      }
+
+      // 2. Change Detection
+      const newValue = getFieldValue(currentData, fieldIdBeingSaved);
+      const oldValue = getFieldValue(record, fieldIdBeingSaved);
       if (JSON.stringify(newValue) === JSON.stringify(oldValue)) {
         setActiveFieldId(null);
         return;
       }
     }
 
-    // Client-side validation for required fields
-    const data = dataToSave || editData;
-    const missingFields = allFields.filter(f => {
-      if (!f.required) return false;
-      
-      // Check visibility of the field itself
-      if (!isFieldVisible(f, data, visibilityContext)) return false;
-      
-      // Check visibility of all parent containers
-      let currentParentId = fieldToGroupMap[f.id];
-      while (currentParentId) {
-        const parentField = allFields.find(p => p.id === currentParentId);
-        if (parentField && !isFieldVisible(parentField, data, visibilityContext)) return false;
-        currentParentId = fieldToGroupMap[currentParentId];
+    setSavingFieldId(fieldIdBeingSaved || 'global');
+    isSavingRef.current = true;
+    
+    // Capture previous state for potential reversion on failure
+    const previousRecord = { ...record };
+    const previousEditData = { ...editData };
+
+    try {
+      // 3. Selective Payload (PATCH)
+      const payload: any = { moduleId };
+      if (fieldIdBeingSaved) {
+        payload[fieldIdBeingSaved] = getFieldValue(currentData, fieldIdBeingSaved);
+        
+        allFields.forEach(f => {
+          if (f.id !== fieldIdBeingSaved && f.type === 'calculation') {
+            const newVal = currentData[f.id];
+            const oldVal = record[f.id];
+            if (newVal !== oldVal) {
+              payload[f.id] = newVal;
+            }
+          }
+        });
+      } else {
+        Object.assign(payload, currentData);
       }
 
-      const actualVal = getFieldValue(data, f.id);
-      return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
-    });
-
-    if (missingFields.length > 0) {
-      toast.error(`Please fill in required fields: ${missingFields.map(f => f.label).join(', ')}`);
-      setSavingFieldId(null);
-      return;
-    }
-
-    setSavingFieldId(fieldIdBeingSaved || 'global');
-    try {
-      let finalData = evaluateCalculations(dataToSave || editData, allFields);
+      // OPTIMISTIC UPDATE:
+      // Clear the saving indicator immediately if it's an individual field save
+      // so the UI feels "instant".
+      if (fieldIdBeingSaved) {
+        setSavingFieldId(null);
+        setActiveFieldId(null);
+        // We also update the 'record' state optimistically so other parts of the app see the change
+        setRecord(prev => ({ ...prev, ...payload }));
+      }
       
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const method = fieldIdBeingSaved ? 'PATCH' : 'PUT';
       
-      // Perform main save first
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
-        method: 'PUT',
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         },
-        body: JSON.stringify({
-          moduleId,
-          ...finalData
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
@@ -441,26 +564,33 @@ export const RecordDetailView = () => {
       }
 
       const updatedRecord = await res.json();
-      setRecord(updatedRecord);
       
-      // CRITICAL: Re-evaluate calculations on the fresh record from server
-      // to ensure visibility rules and other UI logic remain in sync.
-      const withCalculations = evaluateCalculations(updatedRecord, allFields);
-      setEditData(withCalculations);
+      // Final sync with server data
+      setRecord(updatedRecord);
+      setEditData(updatedRecord);
 
       if (recordId && updatedRecord._record_key) {
         setBreadcrumbOverride(recordId, updatedRecord._record_key);
       }
       setActiveFieldId(null);
-      toast.success("Record updated successfully");
+      if (!silent) {
+        toast.success("Record updated successfully");
+      }
     } catch (error: any) {
       console.error("Update Error:", error);
       toast.error(error.message || "Failed to update record");
+      
+      // REVERT on failure
+      setRecord(previousRecord);
+      setEditData(previousEditData);
     } finally {
       setSavingFieldId(null);
       setActiveFieldId(null);
+      isSavingRef.current = false;
     }
   };
+
+
 
   const handleStatusTransition = async (newStatus: string, transitionTo?: string) => {
     if (!tenant?.id || !moduleId || !recordId || !record || isTransitioning) return;
@@ -721,7 +851,7 @@ export const RecordDetailView = () => {
                 {recordTitle}
               </h1>
             </div>
-            <p className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-1.5 text-xs">
+            <div className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-1.5 text-xs">
               {(() => {
                 const config = moduleData.config || (moduleData as any).config;
                 const subtitleFieldIds = config?.subtitleFieldIds;
@@ -777,7 +907,7 @@ export const RecordDetailView = () => {
                   </div>
                 );
               })()}
-            </p>
+            </div>
           </div>
         </div>
         <div className="flex gap-4">

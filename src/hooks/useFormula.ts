@@ -6,9 +6,46 @@ import { createFormulaContext } from '../lib/formulaEngine';
  * Hook to evaluate formulas with support for Global List VLOOKUPs.
  * Used in FieldInput for live previews in record views.
  */
+// Global cache for global list data to share across hook instances
+const globalListCache = new Map<string, any[]>();
+const pendingListRequests = new Map<string, Promise<any[]>>();
+
+/**
+ * Hook to evaluate formulas with support for Global List VLOOKUPs.
+ * Used in FieldInput for live previews in record views.
+ */
 export const useFormula = (formula: string, recordData: Record<string, any>, fields: any[] = []) => {
-  const [listDataCache, setListDataCache] = useState<Record<string, any[]>>({});
+  const [localCache, setLocalCache] = useState<Record<string, any[]>>({});
   const [isFetching, setIsFetching] = useState(false);
+
+  // 1. Detect VLOOKUP lists in formula
+  const listNames = useMemo(() => {
+    const names = new Set<string>();
+    let match;
+    const regex = /VLOOKUP\s*\(\s*[\s\S]*?\s*,\s*['"]([^'"]+)['"]/gi;
+    while ((match = regex.exec(formula)) !== null) {
+      names.add(match[1]);
+    }
+    return Array.from(names);
+  }, [formula]);
+
+  // Sync local state with global cache periodically or when fetching finishes
+  useEffect(() => {
+    const syncWithGlobal = () => {
+      const newLocal: Record<string, any[]> = {};
+      let changed = false;
+      listNames.forEach(name => {
+        if (globalListCache.has(name) && localCache[name] !== globalListCache.get(name)) {
+          newLocal[name] = globalListCache.get(name)!;
+          changed = true;
+        } else if (localCache[name]) {
+          newLocal[name] = localCache[name];
+        }
+      });
+      if (changed) setLocalCache(newLocal);
+    };
+    syncWithGlobal();
+  }, [listNames.join(',')]);
 
   // Map slugs and labels to IDs for field resolution (case-insensitive & trimmed)
   const { slugMap, labelMap } = useMemo(() => {
@@ -27,57 +64,82 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
     return { slugMap: slugs, labelMap: labels };
   }, [fields]);
 
-  // 1. Detect VLOOKUP lists in formula
-  const listNames = useMemo(() => {
-    const names = new Set<string>();
-    let match;
-    const regex = /VLOOKUP\s*\(\s*[\s\S]*?\s*,\s*['"]([^'"]+)['"]/gi;
-    while ((match = regex.exec(formula)) !== null) {
-      names.add(match[1]);
-    }
-    return Array.from(names);
-  }, [formula]);
 
   // 2. Fetch missing lists
   useEffect(() => {
     const fetchMissing = async () => {
-      const missing = listNames.filter(name => !listDataCache[name]);
-      if (missing.length === 0) return;
+      const missing = listNames.filter(name => !globalListCache.has(name));
+      if (missing.length === 0) {
+        // Even if none are missing from global cache, they might be missing from local state
+        const needsSync = listNames.some(name => !localCache[name]);
+        if (needsSync) {
+          const newLocal: Record<string, any[]> = {};
+          listNames.forEach(name => {
+            if (globalListCache.has(name)) newLocal[name] = globalListCache.get(name)!;
+          });
+          setLocalCache(newLocal);
+        }
+        return;
+      }
 
       setIsFetching(true);
       try {
         for (const name of missing) {
-          const { data: lists } = await supabase
-            .from('global_lists')
-            .select('id, columns')
-            .ilike('name', name);
-          
-          if (lists && lists.length > 0) {
-            const { data: items } = await supabase
-              .from('global_list_items')
-              .select('data')
-              .eq('list_id', lists[0].id)
-              .eq('is_active', true);
-            
-            if (items) {
-              const columns = lists[0].columns || [];
-              const idToName: Record<string, string> = {};
-              columns.forEach((c: any) => { idToName[c.id] = c.name; });
-
-              const transformed = items.map(i => {
-                const row: Record<string, any> = {};
-                const itemData = i.data || {};
-                Object.entries(itemData).forEach(([id, val]) => {
-                  const colName = idToName[id] || id;
-                  row[colName] = val;
-                });
-                return row;
-              });
-
-              setListDataCache(prev => ({ ...prev, [name]: transformed }));
-            }
+          // Deduplicate concurrent requests
+          if (pendingListRequests.has(name)) {
+            await pendingListRequests.get(name);
+            continue;
           }
+
+          const fetchPromise = (async () => {
+            try {
+              const { data: lists } = await supabase
+                .from('global_lists')
+                .select('id, columns')
+                .ilike('name', name);
+              
+              if (lists && lists.length > 0) {
+                const { data: items } = await supabase
+                  .from('global_list_items')
+                  .select('data')
+                  .eq('list_id', lists[0].id)
+                  .eq('is_active', true);
+                
+                if (items) {
+                  const columns = lists[0].columns || [];
+                  const idToName: Record<string, string> = {};
+                  columns.forEach((c: any) => { idToName[c.id] = c.name; });
+
+                  const transformed = items.map(i => {
+                    const row: Record<string, any> = {};
+                    const itemData = i.data || {};
+                    Object.entries(itemData).forEach(([id, val]) => {
+                      const colName = idToName[id] || id;
+                      row[colName] = val;
+                    });
+                    return row;
+                  });
+
+                  globalListCache.set(name, transformed);
+                  return transformed;
+                }
+              }
+              return [];
+            } finally {
+              pendingListRequests.delete(name);
+            }
+          })();
+
+          pendingListRequests.set(name, fetchPromise);
+          await fetchPromise;
         }
+
+        // Final sync to local state
+        const finalLocal: Record<string, any[]> = {};
+        listNames.forEach(name => {
+          if (globalListCache.has(name)) finalLocal[name] = globalListCache.get(name)!;
+        });
+        setLocalCache(finalLocal);
       } catch (err) {
         console.error('[useFormula] Fetch Error:', err);
       } finally {
@@ -86,14 +148,14 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
     };
 
     fetchMissing();
-  }, [listNames, listDataCache]);
+  }, [listNames.join(','), localCache]);
 
   // 3. Evaluate Formula
   const result = useMemo(() => {
     if (!formula) return null;
     
     // Check if we have all needed lists in cache
-    const hasAllLists = listNames.every(name => !!listDataCache[name]);
+    const hasAllLists = listNames.every(name => !!localCache[name] || globalListCache.has(name));
     if (!hasAllLists) return null;
 
     try {
@@ -125,7 +187,7 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
       executable = executable.replace(/==/g, '===');
 
       const context = createFormulaContext({
-        getGlobalListItems: (name) => listDataCache[name] || []
+        getGlobalListItems: (name) => localCache[name] || globalListCache.get(name) || []
       });
 
       // eslint-disable-next-line no-new-func
@@ -137,11 +199,12 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
       console.error('[useFormula] Eval Error:', err);
       return null;
     }
-  }, [formula, recordData, listNames, listDataCache, labelMap]);
+  }, [formula, recordData, listNames, localCache, labelMap]);
 
   return {
     result,
     isFetching,
-    hasAllData: listNames.every(name => !!listDataCache[name])
+    hasAllData: listNames.every(name => !!localCache[name] || globalListCache.has(name))
   };
 };
+

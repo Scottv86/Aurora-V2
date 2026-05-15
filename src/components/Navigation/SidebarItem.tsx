@@ -1,4 +1,8 @@
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../hooks/useAuth';
+import { usePlatform } from '../../hooks/usePlatform';
+import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn } from '../../lib/utils';
 
 interface SidebarItemProps {
@@ -15,11 +19,42 @@ interface SidebarItemProps {
 
 export const SidebarItem = ({ icon: Icon, label, active, to, badge, nested, collapsed, onClick, className }: SidebarItemProps) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { session } = useAuth();
+  const { tenant, modules } = usePlatform();
   const isComingSoon = !to && !onClick;
+
+  const handleMouseEnter = () => {
+    // Only prefetch for module links
+    if (!to || !to.includes('/workspace/modules/') || !tenant?.id) return;
+    
+    // Extract moduleId from path
+    const moduleId = to.split('/').pop();
+    if (!moduleId) return;
+
+    // Ensure we have a token (dev or session)
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+    if (!token) return;
+
+    // Prefetch module definition
+    queryClient.prefetchQuery({
+      queryKey: ['module', tenant.id, moduleId],
+      queryFn: () => fetchModule(moduleId, tenant.id, token, modules),
+      staleTime: 1000 * 60 * 5,
+    });
+
+    // Prefetch records (page 1)
+    queryClient.prefetchQuery({
+      queryKey: ['records', tenant.id, moduleId, 1, 25],
+      queryFn: () => fetchRecords(moduleId, tenant.id, token, 1, 25),
+      staleTime: 1000 * 60 * 5,
+    });
+  };
 
   return (
     <button
       type="button"
+      onMouseEnter={handleMouseEnter}
       onClick={(e) => {
         e.preventDefault();
         if (onClick) {

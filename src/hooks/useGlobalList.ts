@@ -37,12 +37,29 @@ interface UseGlobalListOptions {
   showAllHistory?: boolean;
 }
 
+// Global cache for global lists to share data across hook instances
+const globalListDetailCache = new Map<string, GlobalList>();
+const globalListItemsCache = new Map<string, { items: GlobalListItem[], timestamp: number }>();
+const pendingDetailsRequests = new Map<string, Promise<GlobalList | null>>();
+const pendingItemsRequests = new Map<string, Promise<GlobalListItem[]>>();
+const LIST_CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+
 export const useGlobalList = (listId: string | null, options: UseGlobalListOptions = {}) => {
   const { tenant } = usePlatform();
-  const [list, setList] = useState<GlobalList | null>(null);
-  const [items, setItems] = useState<GlobalListItem[]>([]);
+  const [list, setList] = useState<GlobalList | null>(listId ? globalListDetailCache.get(listId) || null : null);
+  const [items, setItems] = useState<GlobalListItem[]>(listId ? globalListItemsCache.get(listId)?.items || [] : []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync with global cache when it changes elsewhere
+  useEffect(() => {
+    if (!listId) return;
+    const cachedList = globalListDetailCache.get(listId);
+    if (cachedList && cachedList !== list) setList(cachedList);
+    
+    const cachedItems = globalListItemsCache.get(listId);
+    if (cachedItems && cachedItems.items !== items) setItems(cachedItems.items);
+  }, [listId]);
 
   // Extract and memoize options
   const referenceDateValue = options.referenceDate?.getTime();
@@ -51,17 +68,41 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
 
   const fetchListDetails = useCallback(async () => {
     if (!listId || !tenant?.id) return;
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('global_lists')
-        .select('*')
-        .eq('id', listId)
-        .single();
-      if (fetchError) throw fetchError;
-      setList(data as GlobalList);
-    } catch (err: any) {
-      console.error('[useGlobalList] Fetch list error:', err);
+    
+    // Check cache
+    if (globalListDetailCache.has(listId)) {
+      setList(globalListDetailCache.get(listId)!);
+      return;
     }
+
+    // Check pending
+    if (pendingDetailsRequests.has(listId)) {
+      const data = await pendingDetailsRequests.get(listId);
+      if (data) setList(data);
+      return;
+    }
+
+    const promise = (async () => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('global_lists')
+          .select('*')
+          .eq('id', listId)
+          .single();
+        if (fetchError) throw fetchError;
+        globalListDetailCache.set(listId, data as GlobalList);
+        return data as GlobalList;
+      } catch (err: any) {
+        console.error('[useGlobalList] Fetch list error:', err);
+        return null;
+      } finally {
+        pendingDetailsRequests.delete(listId);
+      }
+    })();
+
+    pendingDetailsRequests.set(listId, promise);
+    const data = await promise;
+    if (data) setList(data);
   }, [listId, tenant?.id]);
 
   const fetchItems = useCallback(async () => {
@@ -70,59 +111,88 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
       return;
     }
 
-    setLoading(true);
-    try {
-      let query = supabase
-        .from('global_list_items')
-        .select('*')
-        .eq('list_id', listId)
-        .order('sort_order', { ascending: true });
-
-      if (showAllHistory) {
-        // Show everything, sorted by timeline
-        query = query.order('valid_from', { ascending: false });
-      } else if (referenceDateValue) {
-        // Point-in-time travel
-        const refIso = new Date(referenceDateValue).toISOString();
-        query = query
-          .lte('valid_from', refIso)
-          .or(`valid_to.is.null,valid_to.gt.${refIso}`);
-      } else {
-        // Default: Active records only (most reliable for real-time edits)
-        query = query.eq('is_active', true);
+    // Check cache (only for default active items, history/travel bypasses cache)
+    const isDefaultQuery = !showAllHistory && !referenceDateValue && !includeItemId;
+    if (isDefaultQuery) {
+      const cached = globalListItemsCache.get(listId);
+      if (cached && (Date.now() - cached.timestamp < LIST_CACHE_TTL)) {
+        setItems(cached.items);
+        return;
       }
+      
+      // Check pending
+      if (pendingItemsRequests.has(listId)) {
+        setLoading(true);
+        try {
+          const data = await pendingItemsRequests.get(listId)!;
+          setItems(data);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+    }
 
-      const { data, error: fetchError } = await query;
-
-      if (fetchError) throw fetchError;
-
-      let result = data as GlobalListItem[];
-
-      if (includeItemId && !result.find(item => item.id === includeItemId)) {
-        const { data: missingItem, error: missingError } = await supabase
+    setLoading(true);
+    
+    const promise = (async () => {
+      try {
+        let query = supabase
           .from('global_list_items')
           .select('*')
-          .eq('id', includeItemId)
-          .single();
+          .eq('list_id', listId)
+          .order('sort_order', { ascending: true });
 
-        if (!missingError && missingItem) {
-          result = [...result, missingItem as GlobalListItem];
+        if (showAllHistory) {
+          query = query.order('valid_from', { ascending: false });
+        } else if (referenceDateValue) {
+          const refIso = new Date(referenceDateValue).toISOString();
+          query = query.lte('valid_from', refIso).or(`valid_to.is.null,valid_to.gt.${refIso}`);
+        } else {
+          query = query.eq('is_active', true);
         }
-      }
 
-      setItems(result);
-    } catch (err: any) {
-      console.error('[useGlobalList] Fetch items error:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+        const { data, error: fetchError } = await query;
+        if (fetchError) throw fetchError;
+
+        let result = data as GlobalListItem[];
+
+        if (includeItemId && !result.find(item => item.id === includeItemId)) {
+          const { data: missingItem, error: missingError } = await supabase
+            .from('global_list_items')
+            .select('*')
+            .eq('id', includeItemId)
+            .single();
+          if (!missingError && missingItem) {
+            result = [...result, missingItem as GlobalListItem];
+          }
+        }
+
+        if (isDefaultQuery) {
+          globalListItemsCache.set(listId, { items: result, timestamp: Date.now() });
+        }
+        return result;
+      } catch (err: any) {
+        console.error('[useGlobalList] Fetch items error:', err);
+        setError(err.message);
+        return [];
+      } finally {
+        pendingItemsRequests.delete(listId);
+      }
+    })();
+
+    if (isDefaultQuery) pendingItemsRequests.set(listId, promise);
+    
+    const finalItems = await promise;
+    setItems(finalItems);
+    setLoading(false);
   }, [listId, tenant?.id, referenceDateValue, includeItemId, showAllHistory]);
 
   useEffect(() => {
     fetchListDetails();
     fetchItems();
   }, [fetchListDetails, fetchItems]);
+
 
   const addItem = async (data: Record<string, any>) => {
     if (!listId || !tenant?.id) return;

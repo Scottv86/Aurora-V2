@@ -42,7 +42,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:3001/api/auth/sync', {
+      console.log(`[AuthTrace] Attempting sync with backend...`);
+      const response = await fetch('http://127.0.0.1:3001/api/auth/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,12 +61,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastSyncedRef.current = { sessionId, timestamp: now };
         return sessionData;
       } else {
+        const status = response.status;
         const err = await response.json().catch(() => ({}));
-        console.error("Backend sync error:", err);
-        toast.error(`Registry Sync Failed: ${err.error || response.statusText}`);
+        console.error(`[AuthTrace] Backend sync error (Status: ${status}):`, err);
+        toast.error(`Registry Sync Failed (${status}): ${err.error || response.statusText}`);
       }
     } catch (e: any) {
-      console.error("Backend sync critical failure:", e);
+      console.error("[AuthTrace] Backend sync critical failure:", e);
       toast.error(`Platform Connection Error: ${e.message}`);
     }
   }, []);
@@ -134,10 +136,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-       redirectTo: 'http://localhost:3000/reset-password',
+       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) {
-      console.error("Password reset error:", error);
+      console.error("[Auth] Password reset error:", error);
       toast.error(error.message);
       throw error;
     } else {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Navigate, useNavigate, Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { 
   motion, 
@@ -21,6 +22,7 @@ import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
+import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
@@ -33,11 +35,13 @@ export const ModuleView = () => {
   const { moduleId } = useParams();
   const navigate = useNavigate();
   const { session, user } = useAuth();
-  const { tenant, isLoading: platformLoading } = usePlatform();
+  const { tenant, isLoading: platformLoading, modules } = usePlatform();
   useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use TanStack Query states instead
+  // const [loading, setLoading] = useState(true);
+  // const [recordsLoading, setRecordsLoading] = useState(true);
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
@@ -93,64 +97,88 @@ export const ModuleView = () => {
     return map;
   }, [moduleData]);
 
+  const queryClient = useQueryClient();
+  const { data: moduleResult, isLoading: moduleQueryLoading, error: moduleError } = useQuery({
+    queryKey: ['module', tenant?.id, moduleId],
+    queryFn: async () => {
+      if (!tenant?.id || !moduleId) return null;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      return fetchModule(moduleId, tenant.id, token, modules);
+    },
+    enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
+  });
+
+  const { data: recordsResult, isLoading: recordsQueryLoading, error: recordsError } = useQuery({
+    queryKey: ['records', tenant?.id, moduleId, page, pageSize],
+    queryFn: async () => {
+      if (!tenant?.id || !moduleId) return null;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      return fetchRecords(moduleId, tenant.id, token, page, pageSize);
+    },
+    enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
+  });
+
+  // Clear data when moduleId changes to prevent stale UI
   useEffect(() => {
-    if (platformLoading) return;
-    if (!tenant?.id || !moduleId) {
-      setLoading(false);
-      return;
+    setModuleData(null);
+    setRecords([]);
+    setPage(1);
+  }, [moduleId]);
+
+  useEffect(() => {
+    if (moduleResult) setModuleData(moduleResult);
+  }, [moduleResult]);
+
+  useEffect(() => {
+    if (recordsResult) {
+      setRecords(recordsResult.records);
+      setTotalRecords(recordsResult.total);
+      setTotalPages(recordsResult.totalPages);
     }
+  }, [recordsResult]);
 
-    // Guard: Don't re-fetch if we already have this module loaded
-    if (moduleData?.id === moduleId && records.length > 0) {
-      setLoading(false);
-      return;
-    }
+  // Combined loading state for progressive rendering
+  const isSessionReady = !!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN;
+  const loading = moduleQueryLoading || !isSessionReady;
+  const recordsLoading = recordsQueryLoading;
 
-    const fetchModAndRecords = async () => {
-      setLoading(true);
-      try {
-        const prebuilt = MODULES.find(m => m.id === moduleId);
-        if (prebuilt) {
-          setModuleData(prebuilt as any);
-        } else {
-          const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-          const res = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'x-tenant-id': tenant.id
-            }
-          });
-          
-          if (res.ok) {
-            const customMod = await res.json();
-            setModuleData(customMod);
-          }
-        }
-        
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const recordsRes = await fetch(`${DATA_API_URL}/records?moduleId=${moduleId}&page=${page}&limit=${pageSize}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-id': tenant.id
-          }
-        });
+  const createMutation = useMutation({
+    mutationFn: async (finalData: any) => {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({
+          moduleId: moduleId,
+          ...finalData
+        })
+      });
 
-        if (recordsRes.ok) {
-          const result = await recordsRes.json();
-          setRecords(result.records);
-          setTotalRecords(result.total);
-          setTotalPages(result.totalPages);
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        toast.error("Failed to load module data");
-      } finally {
-        setLoading(false);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to save record');
       }
-    };
 
-    fetchModAndRecords();
-  }, [tenant?.id, moduleId, platformLoading, session?.access_token, page, pageSize]);
+      return res.json();
+    },
+    onSuccess: (savedRecord) => {
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      // Optionally update records state directly for immediate UI feedback if needed, 
+      // but invalidateQueries is safer and cleaner with pagination.
+      // setRecords(prev => [savedRecord, ...prev]);
+      toast.success("Record created successfully");
+      setShowNewEntryModal(false);
+      setNewEntryData({});
+    },
+    onError: (error: any) => {
+      console.error("Save Error:", error);
+      toast.error(error.message || (editingRecord ? "Failed to update record" : "Failed to create record"));
+    }
+  });
 
   const handleCreateEntry = async () => {
     if (!tenant?.id || !moduleId || !moduleData) return;
@@ -168,36 +196,9 @@ export const ModuleView = () => {
         }
       }
 
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      
-      const res = await fetch(`${DATA_API_URL}/records`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          moduleId: moduleId,
-          ...finalData
-        })
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to save record');
-      }
-
-      const savedRecord = await res.json();
-      
-      setRecords(prev => [savedRecord, ...prev]);
-      toast.success("Record created successfully");
-      
-      setShowNewEntryModal(false);
-      setNewEntryData({});
+      await createMutation.mutateAsync(finalData);
     } catch (error: any) {
-      console.error("Save Error:", error);
-      toast.error(error.message || (editingRecord ? "Failed to update record" : "Failed to create record"));
+      // Error handled by mutation
     } finally {
       setIsSubmitting(false);
     }
@@ -274,16 +275,14 @@ export const ModuleView = () => {
     });
   };
 
-  const handleDeleteEntry = async (recordId: string) => {
-    if (!tenant?.id || !moduleId) return;
-
-    try {
+  const deleteMutation = useMutation({
+    mutationFn: async (recordId: string) => {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
+          'x-tenant-id': tenant?.id || ''
         }
       });
 
@@ -291,17 +290,25 @@ export const ModuleView = () => {
         const err = await res.json();
         throw new Error(err.error || 'Failed to delete record');
       }
-
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
       toast.success("Record deleted successfully");
-      setRecords(prev => prev.filter(r => r.id !== recordId));
       setRecordToDelete(null);
-    } catch (error: any) {
+    },
+    onError: (error: any) => {
       console.error("Delete Error:", error);
       toast.error(error.message || "Failed to delete record");
     }
+  });
+
+  const handleDeleteEntry = async (recordId: string) => {
+    if (!tenant?.id || !moduleId) return;
+    deleteMutation.mutate(recordId);
   };
 
-  if (loading || platformLoading) return (
+  if ((loading || platformLoading) && !moduleData) return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -324,13 +331,42 @@ export const ModuleView = () => {
     </div>
   );
 
-  if (!moduleData) return <Navigate to="/workspace" replace />;
+  if (!moduleData && !loading) {
+    if (moduleError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-8 space-y-4">
+          <LucideIcons.AlertCircle className="text-red-500" size={48} />
+          <h2 className="text-xl font-bold">Failed to load module</h2>
+          <p className="text-zinc-500">{(moduleError as any)?.message || "An unexpected error occurred"}</p>
+          <button 
+            onClick={() => navigate('/workspace')}
+            className="px-6 py-2 bg-zinc-900 text-white rounded-xl font-bold"
+          >
+            Go Back
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-8 space-y-4">
+        <LucideIcons.SearchX className="text-zinc-400" size={48} />
+        <h2 className="text-xl font-bold">Module not found</h2>
+        <p className="text-zinc-500">We couldn't find the module you're looking for ({moduleId}).</p>
+        <button 
+          onClick={() => navigate('/workspace')}
+          className="px-6 py-2 bg-zinc-900 text-white rounded-xl font-bold"
+        >
+          Go Back to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
       <PageHeader 
-        title={moduleData.name}
-        description={moduleData.description}
+        title={moduleData?.name || 'Loading...'}
+        description={moduleData?.description || ''}
         icon={Icon}
         iconClassName="bg-indigo-600 shadow-indigo-500/20"
         actions={
@@ -353,7 +389,7 @@ export const ModuleView = () => {
                 });
                 setNewEntryData(initialDefaults);
                 setEditingRecord(null);
-                if (moduleData.tabs && moduleData.tabs.length > 0) {
+                if (moduleData?.tabs && moduleData.tabs.length > 0) {
                   setActiveTabId(moduleData.tabs[0].id);
                 } else {
                   setActiveTabId(null);
@@ -371,7 +407,15 @@ export const ModuleView = () => {
 
 
 
-      {records.length > 0 ? (
+      {recordsLoading ? (
+        <div className="space-y-4 pt-6">
+          <div className="flex items-center gap-4">
+            <Skeleton width={200} height={40} variant="rounded" />
+            <Skeleton width={40} height={40} variant="rounded" />
+          </div>
+          <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
+        </div>
+      ) : records.length > 0 ? (
         <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
           <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1 max-w-md">
@@ -509,7 +553,7 @@ export const ModuleView = () => {
             <Icon size={24} className="text-zinc-400 dark:text-zinc-600" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">No data found in {moduleData.name}</h3>
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">No data found in {moduleData?.name || 'Module'}</h3>
             <p className="text-zinc-500 mt-1">Start by creating your first entry or importing data.</p>
           </div>
           <button 

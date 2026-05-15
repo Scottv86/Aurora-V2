@@ -362,7 +362,11 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
  * Safely evaluates calculation fields locally.
  * Supported syntax: {Field Label} or {{field_id}}
  */
-export const evaluateCalculations = (data: Record<string, any>, fields: ModuleField[]): Record<string, any> => {
+export const evaluateCalculations = (
+  data: Record<string, any>, 
+  fields: ModuleField[], 
+  globalListData: Record<string, any[]> = {}
+): Record<string, any> => {
   let newData = { ...data };
   
   // Perform up to 3 passes to handle calculations that depend on other calculations
@@ -416,7 +420,9 @@ export const evaluateCalculations = (data: Record<string, any>, fields: ModuleFi
           logic = logic.replace(/\{\{_record_key\}\}/g, `"${recordKey.replace(/"/g, '\\"')}"`);
           
           // Use centralized formula engine
-          const context = createFormulaContext();
+          const context = createFormulaContext({
+            getGlobalListItems: (name) => globalListData[name] || []
+          });
           
           // Evaluate the logic safely using Function
           // eslint-disable-next-line no-new-func
@@ -444,3 +450,4 @@ export const evaluateCalculations = (data: Record<string, any>, fields: ModuleFi
   
   return newData;
 };
+

@@ -24,15 +24,10 @@ import http from 'http';
 import { initSocket } from './socket';
 
 dotenv.config();
-// Server restart trigger: 2026-05-11 15:40
-
 
 const app = express();
 const httpServer = http.createServer(app);
 const PORT = 3001;
-
-// Initialize WebSockets
-initSocket(httpServer);
 
 // Middlewares
 app.use(cors({
@@ -44,18 +39,28 @@ app.use(cors({
     'http://localhost:4173',
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
+  credentials: true
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Request Logger
+app.use((req, res, next) => {
+  console.log(`[Server] ${req.method} ${req.url}`);
+  next();
+});
+
+// Initialize WebSockets
+initSocket(httpServer);
 
 // Public Health Check
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     server: 'Aurora Platform API',
-    v: '2026-04-11.1' // Version timestamp
+    v: '2026-05-15.1' 
   });
 });
 

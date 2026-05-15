@@ -23,7 +23,8 @@ import { Skeleton } from './UI/Skeleton';
 
 export const WorkQueue = () => {
   const { tenant, isLoading: platformLoading } = usePlatform();
-  const { data: cases, loading: casesLoading, mutate: mutateCases } = useData('records');
+  const [page, setPage] = useState(1);
+  const { data: cases, loading: casesLoading, hasMore, total } = useData('records', { page, limit: 20, append: true });
   const { data: modules, loading: modulesLoading } = useData('modules');
   
   const [selectedCase, setSelectedCase] = useState<any>(null);
@@ -32,19 +33,24 @@ export const WorkQueue = () => {
   const [activeTab, setActiveTab] = useState<'details' | 'documents'>('details');
   const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
 
-  const loading = casesLoading || modulesLoading;
+  const loading = (casesLoading && page === 1) || modulesLoading;
 
   useEffect(() => {
     if (!modules) return;
     const activeIds = new Set<string>();
     modules.forEach(m => {
-      // Assuming 'enabled' or 'status' check for modules depending on config
       if (m.enabled !== false) {
         activeIds.add(m.id);
       }
     });
     setActiveModuleIds(activeIds);
   }, [modules]);
+
+  const handleLoadMore = () => {
+    if (hasMore && !casesLoading) {
+      setPage(prev => prev + 1);
+    }
+  };
 
   const handleProcessCase = async () => {
     if (!tenant?.id || !selectedCase) return;
@@ -192,6 +198,18 @@ export const WorkQueue = () => {
           )) : (
             <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center">
               <p className="text-zinc-500">No active cases found in the queue.</p>
+            </div>
+          )}
+          
+          {hasMore && (
+            <div className="flex justify-center pt-4">
+              <button 
+                onClick={handleLoadMore}
+                disabled={casesLoading}
+                className="px-6 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all disabled:opacity-50"
+              >
+                {casesLoading ? 'Loading...' : 'Load More Cases'}
+              </button>
             </div>
           )}
         </div>

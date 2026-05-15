@@ -43,14 +43,19 @@ export const PeopleOrgDirectory = () => {
     origin: 'all' as 'all' | 'HUMAN' | 'SWARM'
   });
 
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+
   useEffect(() => {
-    fetchEntities();
+    fetchEntities(1, false);
   }, []);
 
-  const fetchEntities = async () => {
+  const fetchEntities = async (pageNum = 1, append = false) => {
     try {
+      setLoading(pageNum === 1 && !append);
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/people-organisations`, {
+      const res = await fetch(`${API_BASE_URL}/api/people-organisations?page=${pageNum}&limit=50`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant?.id || '' 
@@ -59,15 +64,29 @@ export const PeopleOrgDirectory = () => {
       const data = await res.json();
       if (!res.ok) {
         console.error('Failed to fetch entities:', data.error);
-        setEntities([]);
+        if (!append) setEntities([]);
       } else {
-        setEntities(data);
+        const newEntities = data.parties || data;
+        setEntities(prev => {
+          if (!append) return newEntities;
+          const existingIds = new Set(prev.map(e => e.id));
+          const uniqueNew = newEntities.filter((e: any) => !existingIds.has(e.id));
+          return [...prev, ...uniqueNew];
+        });
+        setTotal(data.total || newEntities.length);
+        setHasMore(data.total ? (entities.length + newEntities.length < data.total) : (newEntities.length >= 50));
       }
     } catch (err) {
       console.error('Failed to fetch entities:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchEntities(nextPage, true);
   };
 
   const filteredEntities = Array.isArray(entities) ? entities.filter(e => {
@@ -314,6 +333,18 @@ export const PeopleOrgDirectory = () => {
                   }
                 ]}
               />
+              
+              {hasMore && (
+                <div className="flex justify-center pt-8">
+                  <button 
+                    onClick={handleLoadMore}
+                    disabled={loading}
+                    className="px-8 py-3 bg-white dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-white/10 rounded-2xl text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-all disabled:opacity-50 shadow-lg"
+                  >
+                    {loading ? 'Loading...' : 'Load More Records'}
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
 
