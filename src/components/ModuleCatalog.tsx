@@ -6,16 +6,9 @@ import {
   ArrowRight,
   Loader2,
   Trash2,
-  XCircle,
   Settings2,
   LayoutGrid,
-  List as ListIcon,
-  Sparkles,
-  Database,
-  Users,
-  Briefcase,
-  ShieldCheck,
-  CreditCard
+  List as ListIcon
 } from 'lucide-react';
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -32,31 +25,22 @@ import { MODULES } from '../constants/modules';
 import { BLUEPRINTS } from '../constants/blueprints';
 import { DATA_API_URL } from '../config';
 import { DeleteModuleModal } from './DeleteModuleModal';
-import { ModuleType } from '../types/platform';
+import { ModuleType, Module } from '../types/platform';
 
-const CATEGORIES = [
-  { id: 'All', label: 'All Modules', icon: LucideIcons.Layers },
-  { id: 'CRM & People & Organisations', label: 'CRM & People', icon: Users },
-  { id: 'Intake & Requests', label: 'Intake', icon: LucideIcons.ClipboardList },
-  { id: 'Finance', label: 'Finance', icon: CreditCard },
-  { id: 'Platform', label: 'Platform', icon: Database },
-  { id: 'HR & People & Organisations', label: 'Workforce', icon: Briefcase },
-  { id: 'Risk & Compliance', label: 'Risk', icon: ShieldCheck },
-  { id: 'Registry', label: 'Registry', icon: LucideIcons.Book },
-  { id: 'Custom', label: 'Custom', icon: LucideIcons.Cpu }
-];
-
-const MODULE_TYPES: (ModuleType | 'All')[] = [
-  'All',
-  'RECORD',
-  'WORK_ITEM',
-  'REGISTRY',
-  'LOG',
-  'FINANCIAL'
-];
+// --- CONSTANTS REMOVED ---
 
 
 // Row renderer for the virtualized list view
+interface RowProps {
+  index?: number;
+  style?: React.CSSProperties;
+  ariaAttributes?: any;
+  filteredModules: Module[];
+  navigate: (path: string) => void;
+  handleEnable: (mod: Module) => void;
+  enabling: string | null;
+}
+
 const Row = ({ 
   index, 
   style, 
@@ -64,10 +48,8 @@ const Row = ({
   filteredModules, 
   navigate, 
   handleEnable, 
-  handleDisable, 
-  enabling,
-  setModuleToDelete
-}: any) => {
+  enabling
+}: RowProps) => {
   const mod = filteredModules[index];
   if (!mod) return null;
 
@@ -99,7 +81,7 @@ const Row = ({
               >
                 <Settings2 size={16} />
               </button>
-              {mod.isEnabled ? (
+              {mod.enabled ? (
                 <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 rounded-xl border border-emerald-500/20">
                   <CheckCircle2 size={12} />
                   <span className="text-[10px] font-black uppercase tracking-widest">Active</span>
@@ -130,9 +112,9 @@ export const ModuleCatalog = () => {
   const [activeTab, setActiveTab] = useState<'INSTALLED' | 'LIBRARY'>(
     (searchParams.get('tab')?.toUpperCase() as any) === 'LIBRARY' ? 'LIBRARY' : 'INSTALLED'
   );
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['All']);
-  const [selectedType, setSelectedType] = useState<ModuleType | 'All'>('All');
-  const [selectedStatus, setSelectedStatus] = useState<'All' | 'Installed' | 'Available'>('All');
+  const [selectedCategories] = useState<string[]>(['All']);
+  const [selectedType] = useState<ModuleType | 'All'>('All');
+  const [selectedStatus] = useState<'All' | 'Installed' | 'Available'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>(() => {
@@ -231,38 +213,6 @@ export const ModuleCatalog = () => {
     }
   };
 
-  const handleDisable = async (mod: any) => {
-    if (!tenant?.id) return;
-    setEnabling(mod.id);
-    
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      
-      // Soft disable for both standard and custom modules
-      const response = await fetch(`${DATA_API_URL}/modules/${mod.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          ...mod,
-          enabled: false,
-          status: 'INACTIVE'
-        })
-      });
-      if (!response.ok) throw new Error('Failed to disable module');
-      toast.success(`${mod.name} module disabled.`);
-      
-      await refreshModules();
-    } catch (error: any) {
-      toast.error(error.message || `Failed to disable ${mod.name}`);
-    } finally {
-      setEnabling(null);
-    }
-  };
-
   const handleDeleteCustom = async (mod: any) => {
     if (!tenant?.id || mod.isTemplate) return;
     
@@ -294,19 +244,19 @@ export const ModuleCatalog = () => {
     const combined = MODULES.map(m => ({
       ...m,
       isTemplate: true,
-      isEnabled: false, // Templates themselves aren't 'active' instances
+      enabled: false, // Templates themselves aren't 'active' instances
       isGlobal: m.id === 'people_org' // Core modules are global
     }));
 
     // 2. Add all installed instances from the database
-    modules.forEach(cm => {
+    modules.forEach((cm: any) => {
       const IconComponent = (LucideIcons as any)[cm.iconName] || (LucideIcons as any)[cm.icon] || LucideIcons.Layers;
       
       combined.push({
         ...cm,
         icon: IconComponent,
         isCustom: true, // All tenant-specific modules are deletable/custom
-        isEnabled: cm.status !== 'INACTIVE',
+        enabled: cm.status !== 'INACTIVE',
         isTemplate: false // This is an active instance
       });
     });
@@ -357,14 +307,14 @@ export const ModuleCatalog = () => {
   };
 
   const filteredModules = useMemo(() => {
-    return allModules.filter(m => {
+    return allModules.filter((m: Module) => {
       // Tab filtering
-      if (activeTab === 'INSTALLED' && !m.isEnabled) return false;
+      if (activeTab === 'INSTALLED' && !m.enabled) return false;
       if (activeTab === 'LIBRARY' && !m.isTemplate) return false;
 
-      const categoryMatch = selectedCategories.includes('All') || selectedCategories.includes(m.category);
+      const categoryMatch = selectedCategories.includes('All') || (m.category && selectedCategories.includes(m.category));
       const typeMatch = selectedType === 'All' || m.type === selectedType;
-      const statusMatch = selectedStatus === 'All' || (selectedStatus === 'Installed' ? m.isEnabled : !m.isEnabled);
+      const statusMatch = selectedStatus === 'All' || (selectedStatus === 'Installed' ? m.enabled : !m.enabled);
       const searchMatch = (m.name || '').toLowerCase().includes(debouncedQuery.toLowerCase()) || 
                          (m.description || '').toLowerCase().includes(debouncedQuery.toLowerCase());
 
@@ -376,10 +326,8 @@ export const ModuleCatalog = () => {
     filteredModules,
     navigate,
     handleEnable,
-    handleDisable,
-    enabling,
-    setModuleToDelete
-  }), [filteredModules, navigate, handleEnable, handleDisable, enabling]);
+    enabling
+  }), [filteredModules, navigate, handleEnable, enabling]);
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 relative">
@@ -603,7 +551,7 @@ export const ModuleCatalog = () => {
                              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{mod.category}</span>
 
                              <div className="flex items-center gap-2">
-                                {mod.isTemplate && !mod.isEnabled && (
+                                {mod.isTemplate && !mod.enabled && (
                                   <button
                                     onClick={() => setPreviewModule(mod)}
                                     className="text-[9px] font-black text-zinc-400 hover:text-indigo-600 uppercase tracking-widest transition-colors mr-1"
@@ -611,7 +559,7 @@ export const ModuleCatalog = () => {
                                     Preview
                                   </button>
                                 )}
-                                {mod.isEnabled ? (
+                                {mod.enabled ? (
                                   <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 text-emerald-600 rounded-lg border border-emerald-500/20">
                                     <CheckCircle2 size={10} />
                                     <span className="text-[9px] font-black uppercase tracking-tighter">Active</span>
@@ -701,7 +649,16 @@ export const ModuleCatalog = () => {
   );
 };
 
-const TemplatePreviewModal = ({ isOpen, module, modules, onClose, onInstall, isInstalling }: any) => {
+interface TemplatePreviewModalProps {
+  isOpen: boolean;
+  module: Module;
+  modules: Module[];
+  onClose: () => void;
+  onInstall: (deps: string[]) => void;
+  isInstalling: boolean;
+}
+
+const TemplatePreviewModal = ({ isOpen, module, modules, onClose, onInstall, isInstalling }: TemplatePreviewModalProps) => {
   if (!isOpen) return null;
 
   return (
@@ -851,7 +808,7 @@ const TemplatePreviewModal = ({ isOpen, module, modules, onClose, onInstall, isI
           <button
             onClick={() => {
               const missingDeps = module.dependencies?.filter((depId: string) => 
-                !modules.some(m => m.templateId === depId || m.id === depId)
+                !modules.some((m: Module) => m.templateId === depId || m.id === depId)
               ) || [];
               onInstall(missingDeps);
             }}
@@ -867,7 +824,16 @@ const TemplatePreviewModal = ({ isOpen, module, modules, onClose, onInstall, isI
   );
 };
 
-const BlueprintPreviewModal = ({ isOpen, blueprint, modules, onClose, onInstall, isInstalling }: any) => {
+interface BlueprintPreviewModalProps {
+  isOpen: boolean;
+  blueprint: any;
+  modules: Module[];
+  onClose: () => void;
+  onInstall: () => void;
+  isInstalling: boolean;
+}
+
+const BlueprintPreviewModal = ({ isOpen, blueprint, modules, onClose, onInstall, isInstalling }: BlueprintPreviewModalProps) => {
   if (!isOpen) return null;
 
   return (
@@ -953,7 +919,7 @@ const BlueprintPreviewModal = ({ isOpen, blueprint, modules, onClose, onInstall,
               <div className="space-y-2">
                 {blueprint.dependencies.map((depId: string) => {
                   const dep = MODULES.find(m => m.id === depId);
-                  const isInstalled = modules.some(m => m.templateId === depId || m.id === depId);
+                  const isInstalled = modules.some((m: Module) => m.templateId === depId || m.id === depId);
                   return (
                     <div 
                       key={depId}

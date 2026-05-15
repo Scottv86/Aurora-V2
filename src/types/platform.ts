@@ -207,6 +207,7 @@ export interface Module {
   isTemplate?: boolean;
   templateId?: string;
   blueprintId?: string;
+  dependencies?: string[];
   layout: ModuleField[];
   fields?: ModuleField[]; // Deprecated: use layout instead
   tabs?: Tab[];

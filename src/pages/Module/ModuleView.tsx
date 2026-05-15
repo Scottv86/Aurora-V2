@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Navigate, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { 
@@ -17,7 +17,6 @@ import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
-import { MODULES } from '../../constants/modules';
 import { DATA_API_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { Skeleton } from '../../components/UI/Skeleton';
@@ -108,7 +107,7 @@ export const ModuleView = () => {
     enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
   });
 
-  const { data: recordsResult, isLoading: recordsQueryLoading, error: recordsError } = useQuery({
+  const { data: recordsResult, isLoading: recordsQueryLoading } = useQuery({
     queryKey: ['records', tenant?.id, moduleId, page, pageSize],
     queryFn: async () => {
       if (!tenant?.id || !moduleId) return null;
@@ -165,7 +164,7 @@ export const ModuleView = () => {
 
       return res.json();
     },
-    onSuccess: (savedRecord) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
       // Optionally update records state directly for immediate UI feedback if needed, 
       // but invalidateQueries is safer and cleaner with pagination.
@@ -717,8 +716,6 @@ export const ModuleView = () => {
                                         field={nestedField}
                                         value={newEntryData[field.id]?.[nestedField.id] ?? calculateDefaultValue(nestedField, newEntryData[field.id] || {})}
                                         onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
-                                        usersData={[]}
-                                        lookupData={{}}
                                         recordData={newEntryData[field.id] || {}}
                                       />
                                     </div>
@@ -753,8 +750,6 @@ export const ModuleView = () => {
                                     field={field}
                                     value={newEntryData[field.id] ?? calculateDefaultValue(field, newEntryData)}
                                     onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
-                                    usersData={[]}
-                                    lookupData={{}}
                                     recordData={newEntryData}
                                   />
                                 {field.helperText && (

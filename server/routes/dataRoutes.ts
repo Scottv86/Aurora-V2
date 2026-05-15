@@ -45,7 +45,6 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
     const formatted = {
       ...config,
       id: module.id,
-      templateId: config.id,
       name: module.name,
       category: module.category,
       iconName: module.icon,

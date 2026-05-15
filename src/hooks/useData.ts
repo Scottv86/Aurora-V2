@@ -61,8 +61,8 @@ export const useData = (collectionName: 'records' | 'modules', options: { page?:
       setData(prev => {
         if (!append) return newItems;
         // Filter out items that already exist in the previous state to prevent duplicates
-        const existingIds = new Set(prev.map(item => item.id));
-        const uniqueNewItems = newItems.filter(item => !existingIds.has(item.id));
+        const existingIds = new Set(prev.map((item: any) => item.id));
+        const uniqueNewItems = newItems.filter((item: any) => !existingIds.has(item.id));
         return [...prev, ...uniqueNewItems];
       });
       

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import type { User, Tenant, Environment, BillingUsage, TenantMember, Team } from '../types/platform';
+import type { User, Tenant, Environment, BillingUsage, TenantMember, Team, Module } from '../types/platform';
 import { API_BASE_URL } from '../config';
 import { MenuConfig } from '../types/menu';
 import { systemDefaultMenuConfig } from '../config/menuDefaults';
@@ -15,7 +15,7 @@ interface PlatformContextType {
   refetchContext: () => Promise<void>;
   isDeveloper: boolean;
   capabilities: Set<string>;
-  modules: any[];
+  modules: Module[];
   modulesLoading: boolean;
   refreshModules: () => Promise<void>;
   menuConfig: MenuConfig | null;
@@ -105,7 +105,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data: Module[] = await res.json();
         setModules(data);
       }
     } catch (err) {

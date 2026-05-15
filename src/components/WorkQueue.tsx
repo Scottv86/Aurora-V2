@@ -24,7 +24,7 @@ import { Skeleton } from './UI/Skeleton';
 export const WorkQueue = () => {
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [page, setPage] = useState(1);
-  const { data: cases, loading: casesLoading, hasMore, total } = useData('records', { page, limit: 20, append: true });
+  const { data: cases, loading: casesLoading, hasMore, mutate: mutateCases } = useData('records', { page, limit: 20, append: true });
   const { data: modules, loading: modulesLoading } = useData('modules');
   
   const [selectedCase, setSelectedCase] = useState<any>(null);
