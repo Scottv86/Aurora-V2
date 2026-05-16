@@ -347,8 +347,12 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1",
           readonly && "pointer-events-none"
         )} 
-        tabIndex={-1} 
-        onBlur={onBlur}
+        tabIndex={0} 
+        onBlur={(e) => {
+          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
+            onBlur();
+          }
+        }}
       >
         {resolvedOptions?.map((opt: string, i: number) => (
           <label key={i} className={cn(
@@ -380,7 +384,15 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'checkboxGroup' || type === 'tag') {
     const currentValues = Array.isArray(value) ? value : [];
     return (
-      <div className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} tabIndex={-1} onBlur={onBlur}>
+      <div 
+        className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} 
+        tabIndex={0} 
+        onBlur={(e) => {
+          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
+            onBlur();
+          }
+        }}
+      >
         {type === 'tag' && (
           <div className="flex flex-wrap gap-2 p-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
             {currentValues.length === 0 ? (
@@ -390,7 +402,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500 text-white rounded-lg text-[10px] font-bold animate-in zoom-in-95 duration-200">
                   {v}
                   {!readonly && (
-                    <button onClick={() => onChange(currentValues.filter(val => val !== v))} className="hover:text-white/80 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); onChange(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
                       <XCircle size={12} />
                     </button>
                   )}
@@ -596,7 +608,15 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'duallist') {
     const currentValues = Array.isArray(value) ? value : [];
     return (
-      <div className={cn("flex gap-4 h-64", readonly && "pointer-events-none")}>
+      <div 
+        className={cn("flex gap-4 h-64 outline-none", readonly && "pointer-events-none")} 
+        tabIndex={0} 
+        onBlur={(e) => {
+          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
+            onBlur();
+          }
+        }}
+      >
         {/* Available Source */}
         <div className="flex-1 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-950 overflow-hidden">
           <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
@@ -607,6 +627,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             {(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).map((opt: string, i: number) => (
               <button 
                 key={i}
+                type="button"
                 disabled={readonly}
                 onClick={() => onChange([...currentValues, opt])}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 flex items-center justify-between group transition-all"
@@ -632,6 +653,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             {currentValues.map((v, i) => (
               <button 
                 key={i}
+                type="button"
                 disabled={readonly}
                 onClick={() => onChange(currentValues.filter(val => val !== v))}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center justify-between group animate-in slide-in-from-right-2 duration-200"
@@ -653,7 +675,15 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'buttonGroup') {
     return (
-      <div className={cn("flex flex-wrap gap-2", readonly && "pointer-events-none")}>
+      <div 
+        className={cn("flex flex-wrap gap-2 outline-none", readonly && "pointer-events-none")}
+        tabIndex={0}
+        onBlur={(e) => {
+          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
+            onBlur();
+          }
+        }}
+      >
         {resolvedOptions?.map((opt: string, i: number) => (
           <button
             key={i}

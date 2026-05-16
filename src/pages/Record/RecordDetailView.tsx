@@ -89,6 +89,7 @@ export const RecordDetailView = () => {
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const isSavingRef = useRef(false);
+  const pendingUpdateRef = useRef<{ data: any, fieldId: string | null } | null>(null);
 
   
 
@@ -443,7 +444,8 @@ export const RecordDetailView = () => {
     setEditData(withCalculations);
     
     // For certain field types, we trigger an immediate save because they are discrete actions
-    if (['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress'].includes(field?.type)) {
+    // However, if it's an array (multi-select), we wait for blur to allow multiple selections
+    if (!Array.isArray(newValue) && ['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress'].includes(field?.type)) {
       handleUpdateEntry(withCalculations, fieldId, true);
     }
 
@@ -455,7 +457,12 @@ export const RecordDetailView = () => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
     
     // Strict guard to prevent concurrent saves
-    if (isSavingRef.current) return;
+    if (isSavingRef.current) {
+      // If we're already saving, store this update as "pending"
+      // This ensures that the LAST change always gets persisted
+      pendingUpdateRef.current = { data: dataToSave || editData, fieldId: specificFieldId || activeFieldId };
+      return;
+    }
     
     const fieldIdBeingSaved = specificFieldId || activeFieldId;
 
@@ -495,6 +502,8 @@ export const RecordDetailView = () => {
           if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) {
             toast.error(`${field.label || 'Field'} is required`);
             setSavingFieldId(null);
+            // Clear pending since this one failed validation
+            pendingUpdateRef.current = null;
             return;
           }
         }
@@ -505,6 +514,13 @@ export const RecordDetailView = () => {
       const oldValue = getFieldValue(record, fieldIdBeingSaved);
       if (JSON.stringify(newValue) === JSON.stringify(oldValue)) {
         setActiveFieldId(null);
+        // Still check for pending updates if they exist
+        isSavingRef.current = false;
+        if (pendingUpdateRef.current) {
+          const next = pendingUpdateRef.current;
+          pendingUpdateRef.current = null;
+          handleUpdateEntry(next.data, next.fieldId || undefined, true);
+        }
         return;
       }
     }
@@ -589,6 +605,13 @@ export const RecordDetailView = () => {
       setSavingFieldId(null);
       setActiveFieldId(null);
       isSavingRef.current = false;
+      
+      // Check for PENDING updates
+      if (pendingUpdateRef.current) {
+        const next = pendingUpdateRef.current;
+        pendingUpdateRef.current = null;
+        handleUpdateEntry(next.data, next.fieldId || undefined, true);
+      }
     }
   };
 
@@ -784,7 +807,7 @@ export const RecordDetailView = () => {
             ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
               <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
             ) : (
-              !['datatable', 'duallist'].includes(nestedField.type) && (
+              !['datatable'].includes(nestedField.type) && (
                 <Edit2 size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-indigo-500" />
               )
             )
@@ -794,6 +817,7 @@ export const RecordDetailView = () => {
           field={nestedField}
           value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? calculateDefaultValue(nestedField, editData)}
           onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+          onBlur={() => handleUpdateEntry()}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleUpdateEntry();
             if (e.key === 'Escape') setActiveFieldId(null);
@@ -1015,14 +1039,14 @@ export const RecordDetailView = () => {
                             data-active-field={activeFieldId === field.id ? field.id : undefined}
                             className={cn(
                               "group/field transition-all relative min-w-0",
-                              !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) && "cursor-pointer"
+                              !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) && "cursor-pointer"
                             )}
                             style={{
                               gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                               gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                             }}
                             onClick={() => {
-                              if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type)) {
+                              if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type)) {
                                 setEditData(record);
                                 setActiveFieldId(field.id);
                               }
@@ -1032,7 +1056,7 @@ export const RecordDetailView = () => {
                             "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
                             activeFieldId === field.id 
                               ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                              : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'duallist'].includes(field.type) 
+                              : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) 
                                 ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
                                 : "border-transparent"
                           )}>
@@ -1087,8 +1111,9 @@ export const RecordDetailView = () => {
                             <CollapsibleFieldGroup field={field}>
                               <RepeatableGroupBlock 
                                  field={field}
-                                 value={record?.[field.id] || []}
-                                 onChange={(newVal) => handleUpdateEntry({ ...record, [field.id]: newVal })}
+                                 value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
+                                 onChange={(newVal) => handleFieldChange(field.id, newVal)}
+                                 onBlur={() => handleUpdateEntry()}
                                  hideHeader={true}
                               />
                             </CollapsibleFieldGroup>
@@ -1144,7 +1169,7 @@ export const RecordDetailView = () => {
                                   ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
                                     <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
                                   ) : (
-                                    !['datatable', 'duallist'].includes(field.type) && (
+                                    !['datatable'].includes(field.type) && (
                                       <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
                                     )
                                   )
@@ -1154,6 +1179,7 @@ export const RecordDetailView = () => {
                                 field={field}
                                 value={getFieldValue(editData, field.id) ?? getFieldValue(record, field.id) ?? calculateDefaultValue(field, editData)}
                                 onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                                onBlur={() => handleUpdateEntry()}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleUpdateEntry();
                                   if (e.key === 'Escape') setActiveFieldId(null);

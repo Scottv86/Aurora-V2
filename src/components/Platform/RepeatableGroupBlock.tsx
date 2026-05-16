@@ -10,6 +10,7 @@ interface RepeatableGroupBlockProps {
   onChange?: (newValue: any[]) => void;
   readOnly?: boolean;
   hideHeader?: boolean;
+  onBlur?: () => void;
 }
 
 export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
@@ -17,7 +18,8 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   value = [],
   onChange,
   readOnly = false,
-  hideHeader = false
+  hideHeader = false,
+  onBlur
 }) => {
   const { pushModal } = useModalStack();
   const handleAdd = () => {
@@ -60,7 +62,15 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   const displayMode = field.variant || 'table';
 
   return (
-    <div className="space-y-4">
+    <div 
+      className="space-y-4 outline-none" 
+      tabIndex={0} 
+      onBlur={(e) => {
+        if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
+          onBlur();
+        }
+      }}
+    >
       {!hideHeader && (
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
