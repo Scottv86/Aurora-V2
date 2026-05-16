@@ -53,24 +53,29 @@ export const getScopedPrisma = (
             'MemberPermissionGroup',
             'Party',
             'PartyRelationship',
-            'Taxonomy'
+            'Taxonomy',
+            'AuditLog',
+            'EmploymentContract',
+            'GlobalList',
+            'GlobalListItem',
+            'TenantConnector'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);
-          const a = args as any;
+          const a = (args || {}) as any;
 
           // If we are already inside our RLS transaction, just execute the query
           // But first, if it's a scoped model, inject the tenant filtering at the app level
           if (a[RLS_CONTEXT]) {
             if (isScopedModel && tId) {
               if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
-                a.where = { ...a.where, tenantId: tId };
+                a.where = { ...(a.where || {}), tenantId: tId };
               }
               if (operation === 'create') {
-                a.data = { ...a.data, tenantId: tId };
+                a.data = { ...(a.data || {}), tenantId: tId };
               }
             }
-            return query(args);
+            return query(a);
           }
 
           // Start a transaction to set the PostgreSQL session variables
@@ -84,10 +89,10 @@ export const getScopedPrisma = (
               // Inject app-level tenant filtering for isolation insurance
               if (isScopedModel && tId) {
                 if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
-                  a.where = { ...a.where, tenantId: tId };
+                  a.where = { ...(a.where || {}), tenantId: tId };
                 }
                 if (operation === 'create') {
-                  a.data = { ...a.data, tenantId: tId };
+                  a.data = { ...(a.data || {}), tenantId: tId };
                 }
               }
 
@@ -100,7 +105,7 @@ export const getScopedPrisma = (
               }
 
               // Fallback to standard query if dynamic resolution fails
-              return query({ ...args, [RLS_CONTEXT]: true } as any);
+              return query({ ...a, [RLS_CONTEXT]: true } as any);
             }, { 
               timeout: 20000 
             });

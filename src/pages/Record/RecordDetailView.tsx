@@ -520,12 +520,14 @@ export const RecordDetailView = () => {
       // 3. Selective Payload (PATCH)
       const payload: any = { moduleId };
       if (fieldIdBeingSaved) {
+        // Always include the primary field being saved
         payload[fieldIdBeingSaved] = getFieldValue(currentData, fieldIdBeingSaved);
         
+        // Also include any other fields that have changed (e.g. from lookup mappings or calculations)
         allFields.forEach(f => {
-          if (f.id !== fieldIdBeingSaved && f.type === 'calculation') {
-            const newVal = currentData[f.id];
-            const oldVal = record[f.id];
+          if (f.id !== fieldIdBeingSaved) {
+            const newVal = getFieldValue(currentData, f.id);
+            const oldVal = getFieldValue(record, f.id);
             if (newVal !== oldVal) {
               payload[f.id] = newVal;
             }

@@ -137,6 +137,20 @@ const SearchableLookup = ({
           className={cn(inputClasses, "pl-11 pr-10", readonly ? "cursor-pointer pointer-events-none" : "cursor-text")}
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {value && !readonly && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(null, null);
+                setLocalName('');
+                setSearch('');
+                setIsOpen(false);
+              }}
+              className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-zinc-600 transition-colors"
+            >
+              <XCircle size={14} />
+            </button>
+          )}
           {loading && <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />}
           <ChevronDown className={cn("text-zinc-400 transition-transform", isOpen && "rotate-180")} size={14} />
         </div>
@@ -220,7 +234,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   const minConstraint = (type === 'date' || type === 'time') ? resolveConstraint(field, 'min', recordData) : undefined;
   const maxConstraint = (type === 'date' || type === 'time') ? resolveConstraint(field, 'max', recordData) : undefined;
 
-  const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
+  const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(
+    (lookupSource || (optionsSource && optionsSource !== 'manual') || type === 'datatable') ? field : null
+  );
   const inputRef = React.useRef<any>(null);
 
   // Auto-focus when becoming editable
@@ -234,7 +250,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   const resolvedOptions = React.useMemo(() => {
     if (lookupSource || (optionsSource && optionsSource !== 'manual')) {
-      if (lookupLoading) return ['Loading options...'];
+      if (lookupLoading) return [];
       return lookupResults.map(r => r.name);
     }
     return options || [];
@@ -700,6 +716,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         onKeyDown={onKeyDown}
         readonly={readonly}
         inputClasses={inputClasses}
+        lookupResults={lookupResults}
+        lookupLoading={lookupLoading}
       />
     );
   }
@@ -786,8 +804,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   );
 };
 
-const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inputClasses }: any) => {
-  const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(field);
+const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inputClasses, lookupResults, lookupLoading }: any) => {
   const { lookupSource, connectorId, platformEntity } = field;
 
   if (lookupSource === 'connector') {

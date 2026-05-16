@@ -54,6 +54,7 @@ const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
 export const usePlatformLookup = (field: any) => {
   const { 
     lookupSource, 
+    optionsSource,
     platformEntity, 
     targetModuleId, 
     targetPlatformModuleId, 
@@ -78,13 +79,15 @@ export const usePlatformLookup = (field: any) => {
   const { teams, loading: teamsLoading } = useTeams(lookupSource === 'platform' && platformEntity === 'teams');
   const { positions, loading: positionsLoading } = usePositions(lookupSource === 'platform' && (platformEntity === 'roles' || platformEntity === 'positions'));
   const { groups: securityGroups, loading: groupsLoading } = usePermissionGroups(lookupSource === 'platform' && platformEntity === 'security_groups');
-  const { list: gList, items: gItems, loading: gLoading } = useGlobalList(lookupSource === 'global_list' ? globalListId : null);
+  
+  const effectiveSource = lookupSource || optionsSource;
+  const { list: gList, items: gItems, loading: gLoading } = useGlobalList(effectiveSource === 'global_list' ? globalListId : null);
   
   
   // Track the current source configuration to avoid redundant fetches
 
   const lastConfigRef = useRef<string>("");
-  const configKey = `${lookupSource}-${platformEntity}-${targetModuleId}-${targetPlatformModuleId}-${globalListId}-${tenant?.id}`;
+  const configKey = `${effectiveSource}-${platformEntity}-${targetModuleId}-${targetPlatformModuleId}-${globalListId}-${tenant?.id}`;
 
   // 1. Synchronous Data Source Resolver (Memoized)
   const syncData = useMemo<LookupItem[]>(() => {
@@ -120,9 +123,15 @@ export const usePlatformLookup = (field: any) => {
       }
     }
 
-    if (lookupSource === 'global_list') {
+    if (effectiveSource === 'global_list') {
       if (!gLoading && gItems && gList) {
-        const displayColId = gList.columns[0]?.id;
+        // If lookupDisplayField is set, try to find the corresponding column ID
+        let displayColId = gList.columns[0]?.id;
+        if (lookupDisplayField) {
+          const col = gList.columns.find(c => c.id === lookupDisplayField || c.name === lookupDisplayField);
+          if (col) displayColId = col.id;
+        }
+
         return gItems.map(item => ({ 
           id: item.id, 
           name: String(item.data[displayColId] || ''),
@@ -134,7 +143,7 @@ export const usePlatformLookup = (field: any) => {
 
     return [];
   }, [
-    lookupSource, platformEntity, lookupDisplayField, targetPlatformModuleId,
+    effectiveSource, lookupSource, optionsSource, platformEntity, lookupDisplayField, targetPlatformModuleId, globalListId,
     users, teams, positions, securityGroups, gItems, gList, gLoading
   ]);
 
@@ -147,16 +156,16 @@ export const usePlatformLookup = (field: any) => {
       if (entity === 'roles' || entity === 'positions') return positionsLoading;
       if (entity === 'security_groups') return groupsLoading;
     }
-    if (lookupSource === 'global_list') return gLoading;
+    if (effectiveSource === 'global_list') return gLoading;
     return false;
-  }, [lookupSource, platformEntity, usersLoading, teamsLoading, positionsLoading, groupsLoading, gLoading]);
+  }, [lookupSource, effectiveSource, platformEntity, usersLoading, teamsLoading, positionsLoading, groupsLoading, gLoading]);
 
   // 2. Async Data Source (State management for network fetches)
   const [asyncData, setAsyncData] = useState<LookupItem[]>([]);
   const [asyncLoading, setAsyncLoading] = useState(false);
   
-  const isAsync = (lookupSource === 'module_records' && targetModuleId) || 
-                  (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
+  const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
+                  (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
 
   // Determine final data and loading state
   const rawData = isAsync ? asyncData : syncData;
@@ -165,8 +174,8 @@ export const usePlatformLookup = (field: any) => {
 
   // 2. Async Effect: Handles Network-based fetches (Module Records & Platform Modules)
   useEffect(() => {
-    const isAsync = (lookupSource === 'module_records' && targetModuleId) || 
-                    (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
+    const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
+                    (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
 
     if (!isAsync) return;
 
@@ -230,7 +239,9 @@ export const usePlatformLookup = (field: any) => {
               });
               if (res.ok) {
                 const json = await res.json();
-                results = (Array.isArray(json) ? json : (json.records || [])).map((r: any) => {
+                console.log(`[usePlatformLookup] Platform module response:`, json);
+                const rawItems = Array.isArray(json) ? json : (json.records || json.parties || json.items || []);
+                results = rawItems.map((r: any) => {
                   let item = { ...r };
                   if (platformMod.id === 'people-organisations') {
                     const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : '';
@@ -263,7 +274,7 @@ export const usePlatformLookup = (field: any) => {
     };
 
     fetchData();
-  }, [configKey, session?.access_token, lookupDisplayField, lookupSource, targetModuleId, targetPlatformModuleId]);
+  }, [configKey, session?.access_token, lookupDisplayField, effectiveSource, lookupSource, optionsSource, targetModuleId, targetPlatformModuleId]);
 
 
 

@@ -60,7 +60,6 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // GET stats for dashboard
 router.get('/stats', async (req: TenantRequest, res) => {
   try {
@@ -81,15 +80,18 @@ router.get('/stats', async (req: TenantRequest, res) => {
       aiAutomations: Math.floor(totalRecords * 0.8)
     });
   } catch (err: any) {
+    console.error(`[DataAPI] Dashboard stats error: ${err.message}`, { tenantId: req.tenantId });
     res.status(500).json({ error: err.message });
   }
 });
+
+
 
 // GET all cases/records
 router.get('/records', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
-    const { moduleId, associationId, page = '1', limit = '100' } = req.query;
+    const { moduleId, platformModuleId, associationId, page = '1', limit = '100' } = req.query;
     const p = parseInt(page as string);
     const l = parseInt(limit as string);
     const skip = (p - 1) * l;
@@ -117,6 +119,36 @@ router.get('/records', async (req: TenantRequest, res) => {
         ORDER BY created_at DESC
         LIMIT ${l} OFFSET ${skip}
       `;
+    } else if (platformModuleId === 'people-organisations') {
+      total = await db.party.count({ where: {} });
+      records = await db.party.findMany({
+        where: {},
+        include: { person: true, organization: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: l
+      });
+      
+      const formatted = (records as any[]).map((p: any) => ({
+        id: p.id,
+        name: p.partyType === 'PERSON' 
+          ? `${p.person?.firstName || ''} ${p.person?.lastName || ''}`.trim()
+          : p.organization?.legalName || 'Unknown Org',
+        partyType: p.partyType,
+        firstName: p.person?.firstName,
+        lastName: p.person?.lastName,
+        legalName: p.organization?.legalName,
+        taxIdentifier: p.organization?.taxIdentifier,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt
+      }));
+
+      return res.json({
+        records: formatted,
+        total,
+        page: p,
+        limit: l
+      });
     } else {
       total = await db.record.count({ where: whereClause });
       records = await db.record.findMany({

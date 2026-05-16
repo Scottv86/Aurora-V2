@@ -48,7 +48,8 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
   const { tenant } = usePlatform();
   const [list, setList] = useState<GlobalList | null>(listId ? globalListDetailCache.get(listId) || null : null);
   const [items, setItems] = useState<GlobalListItem[]>(listId ? globalListItemsCache.get(listId)?.items || [] : []);
-  const [loading, setLoading] = useState(false);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sync with global cache when it changes elsewhere
@@ -77,10 +78,14 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
 
     // Check pending
     if (pendingDetailsRequests.has(listId)) {
+      setDetailLoading(true);
       const data = await pendingDetailsRequests.get(listId);
       if (data) setList(data);
+      setDetailLoading(false);
       return;
     }
+
+    setDetailLoading(true);
 
     const promise = (async () => {
       try {
@@ -103,6 +108,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
     pendingDetailsRequests.set(listId, promise);
     const data = await promise;
     if (data) setList(data);
+    setDetailLoading(false);
   }, [listId, tenant?.id]);
 
   const fetchItems = useCallback(async () => {
@@ -122,18 +128,18 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
       
       // Check pending
       if (pendingItemsRequests.has(listId)) {
-        setLoading(true);
+        setItemsLoading(true);
         try {
           const data = await pendingItemsRequests.get(listId)!;
           setItems(data);
         } finally {
-          setLoading(false);
+          setItemsLoading(false);
         }
         return;
       }
     }
 
-    setLoading(true);
+    setItemsLoading(true);
     
     const promise = (async () => {
       try {
@@ -185,7 +191,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
     
     const finalItems = await promise;
     setItems(finalItems);
-    setLoading(false);
+    setItemsLoading(false);
   }, [listId, tenant?.id, referenceDateValue, includeItemId, showAllHistory]);
 
   useEffect(() => {
@@ -300,7 +306,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
   return {
     list,
     items,
-    loading,
+    loading: itemsLoading || detailLoading,
     error,
     refetch: fetchItems,
     addItem,
