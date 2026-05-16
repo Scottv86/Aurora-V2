@@ -66,10 +66,8 @@ const RecordModal = ({
   const [moduleData, setModuleData] = useState<any>(null);
   const [record, setRecord] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
   const handleSave = async () => {
-    // Local save for virtual records
     if (entry.localData && entry.onSaveLocal) {
       entry.onSaveLocal(record);
       onPop();
@@ -101,15 +99,10 @@ const RecordModal = ({
     }
   };
 
-  // Depth effects
-  const depth = total - 1 - index;
-  const scale = 1 - (depth * 0.05);
-  const blur = depth * 4;
-  const opacity = 1 - (depth * 0.3);
+  const isActive = index === total - 1;
 
   useEffect(() => {
     const fetchData = async () => {
-      // Handle virtual/local records from Repeatable Groups
       if (entry.localData && entry.localSchema) {
         setRecord(entry.localData);
         setModuleData({
@@ -129,8 +122,6 @@ const RecordModal = ({
       setLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        
-        // Fetch Module
         const prebuilt = MODULES.find(m => m.id === entry.moduleId);
         let modData = prebuilt;
         if (!modData) {
@@ -141,7 +132,6 @@ const RecordModal = ({
         }
         setModuleData(modData);
 
-        // Fetch Record if recordId exists
         if (entry.recordId) {
           const recRes = await fetch(`${DATA_API_URL}/records/${entry.recordId}`, {
             headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id }
@@ -157,28 +147,21 @@ const RecordModal = ({
     fetchData();
   }, [tenant?.id, entry.moduleId, entry.recordId, entry.localData, entry.localSchema, session?.access_token]);
 
-  useEffect(() => {
-    if (moduleData?.tabs?.length > 0 && !activeTabId) {
-      setActiveTabId(moduleData.tabs[0].id);
-    }
-  }, [moduleData, activeTabId]);
-
   return (
     <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: 20 }}
       animate={{ 
-        opacity, 
-        scale, 
-        y: 0,
-        filter: `blur(${blur}px)`,
-        pointerEvents: depth === 0 ? 'auto' : 'none'
+        opacity: isActive ? 1 : 0, 
+        scale: isActive ? 1 : 0.95, 
+        y: isActive ? 0 : 20,
+        pointerEvents: isActive ? 'auto' : 'none'
       }}
-      exit={{ opacity: 0 }}
-      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-      className="absolute inset-0 flex items-center justify-center p-6 pointer-events-none"
+      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="fixed inset-0 z-[1001] flex items-center justify-center p-6 pointer-events-none"
     >
-      <div className="w-full max-w-4xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-[40px] shadow-2xl overflow-hidden flex flex-col pointer-events-auto h-[80vh]">
-        {/* Header */}
-        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0">
+      <div className="w-full max-w-4xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[40px] shadow-2xl overflow-hidden flex flex-col pointer-events-auto h-[80vh]">
+        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/50 shrink-0">
           <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
             <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
               <Layers size={20} />
@@ -190,15 +173,13 @@ const RecordModal = ({
           </button>
         </div>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           {loading ? (
             <div className="h-full flex items-center justify-center">
-              <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+              <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
             </div>
           ) : (
             <div className="w-full">
-               {/* Main Content Area */}
                <div className={cn(
                  "w-full space-y-12",
                  (entry.moduleId === 'virtual' || !moduleData?.nestedCollections?.length) ? "w-full" : "lg:grid lg:grid-cols-12 lg:gap-12"
@@ -269,10 +250,8 @@ const RecordModal = ({
                     )}
                   </div>
 
-                  {/* Right: Nested Collections & Context (Only if not virtual and has collections) */}
                   {entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length && (
                     <div className="lg:col-span-4 space-y-10">
-                        {/* Record Context / Mirror Badges */}
                         {record?.associations?.length > 0 && (
                           <div className="space-y-3">
                             <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Mirrored In</h3>
@@ -287,7 +266,6 @@ const RecordModal = ({
                           </div>
                         )}
 
-                        {/* Recursive Collections */}
                         <div className="space-y-8">
                           {(moduleData?.nestedCollections || []).map((coll: any, idx: number) => (
                             <RecursiveCollectionBlock 
@@ -305,7 +283,6 @@ const RecordModal = ({
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-6 border-t border-zinc-100 dark:border-zinc-800 shrink-0 flex justify-end gap-3">
           <button 
             onClick={onClose}
@@ -328,34 +305,35 @@ const RecordModal = ({
 };
 
 export const StackedModalManager = () => {
-  const { stack, popModal, clearStack, popToId } = useModalStack();
-
-  if (stack.length === 0) return null;
+  const { stack, clearStack, popModal } = useModalStack();
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={clearStack}
-        className="absolute inset-0 bg-zinc-950/40 backdrop-blur-md"
-      />
-      
-      <div className="relative w-full h-full max-w-6xl mx-auto flex items-center justify-center">
-        <AnimatePresence mode="popLayout">
-          {stack.map((entry, index) => (
-            <RecordModal 
-              key={entry.id}
-              entry={entry}
-              index={index}
-              total={stack.length}
-              onClose={clearStack}
-              onPop={popModal}
-            />
-          ))}
-        </AnimatePresence>
-      </div>
-    </div>
+    <>
+      <AnimatePresence>
+        {stack.length > 0 && (
+          <motion.div 
+            key="modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={clearStack}
+            className="fixed inset-0 z-[1000] bg-zinc-950/40 backdrop-blur-sm"
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {stack.map((entry, index) => (
+          <RecordModal 
+            key={entry.id}
+            entry={entry}
+            index={index}
+            total={stack.length}
+            onClose={clearStack}
+            onPop={popModal}
+          />
+        ))}
+      </AnimatePresence>
+    </>
   );
 };
