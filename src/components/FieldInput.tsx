@@ -185,14 +185,16 @@ const SearchableLookup = ({
                     onMouseEnter={() => setActiveIndex(idx)}
                     className={cn(
                       "w-full text-left px-4 py-2.5 rounded-xl text-xs transition-all flex items-center justify-between group",
-                      (value === item.id || activeIndex === idx)
+                      value === item.id
                         ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                        : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        : activeIndex === idx
+                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                          : "text-zinc-600 dark:text-zinc-300"
                     )}
                   >
                     <span className="truncate">{item.name}</span>
                     {value === item.id && <Check size={14} />}
-                    {(value !== item.id && activeIndex === idx) && <ArrowRight size={12} className="translate-x-0 transition-all text-white/50" />}
+                    {(value !== item.id && activeIndex === idx) && <ArrowRight size={12} className="translate-x-0 transition-all text-zinc-400" />}
                   </button>
                 ))
               )}
