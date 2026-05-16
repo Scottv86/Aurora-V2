@@ -217,43 +217,46 @@ export const ModuleView = () => {
       // Execute Lookup Output Mappings
       const field = allFields.find(f => f.id === fieldId);
       if (field?.type === 'lookup' && field.lookupOutputMappings?.length) {
-        // First, null out all target fields to clear any previously mapped values
-        field.lookupOutputMappings.forEach(mapping => {
-          if (mapping.targetFieldId) {
-            const targetFieldId = mapping.targetFieldId;
-            const targetGroupId = fieldToGroupMap[targetFieldId];
-            
-            if (targetGroupId) {
-              updatedData[targetGroupId] = { 
-                ...(updatedData[targetGroupId] || {}), 
-                [targetFieldId]: null 
-              };
-            } else {
-              updatedData[targetFieldId] = null;
-            }
-          }
-        });
-
-        // Then, map the new values from metadata if available
-        if (metadata) {
+        // ONLY clear and populate if the lookup value itself has changed.
+        if (val !== prev[fieldId]) {
+          // First, null out all target fields to clear any previously mapped values
           field.lookupOutputMappings.forEach(mapping => {
-            if (mapping.sourceFieldId && mapping.targetFieldId) {
-              const sourceValue = metadata[mapping.sourceFieldId];
-              if (sourceValue !== undefined) {
-                const targetFieldId = mapping.targetFieldId;
-                const targetGroupId = fieldToGroupMap[targetFieldId];
-                
-                if (targetGroupId) {
-                  updatedData[targetGroupId] = { 
-                    ...(updatedData[targetGroupId] || {}), 
-                    [targetFieldId]: sourceValue 
-                  };
-                } else {
-                  updatedData[targetFieldId] = sourceValue;
-                }
+            if (mapping.targetFieldId) {
+              const targetFieldId = mapping.targetFieldId;
+              const targetGroupId = fieldToGroupMap[targetFieldId];
+              
+              if (targetGroupId) {
+                updatedData[targetGroupId] = { 
+                  ...(updatedData[targetGroupId] || {}), 
+                  [targetFieldId]: null 
+                };
+              } else {
+                updatedData[targetFieldId] = null;
               }
             }
           });
+
+          // Then, map the new values from metadata if available
+          if (metadata && typeof metadata === 'object') {
+            field.lookupOutputMappings.forEach(mapping => {
+              if (mapping.sourceFieldId && mapping.targetFieldId) {
+                const sourceValue = metadata[mapping.sourceFieldId];
+                if (sourceValue !== undefined) {
+                  const targetFieldId = mapping.targetFieldId;
+                  const targetGroupId = fieldToGroupMap[targetFieldId];
+                  
+                  if (targetGroupId) {
+                    updatedData[targetGroupId] = { 
+                      ...(updatedData[targetGroupId] || {}), 
+                      [targetFieldId]: sourceValue 
+                    };
+                  } else {
+                    updatedData[targetFieldId] = sourceValue;
+                  }
+                }
+              }
+            });
+          }
         }
       }
       
@@ -714,7 +717,11 @@ export const ModuleView = () => {
                                       </label>
                                       <FieldInput 
                                         field={nestedField}
-                                        value={newEntryData[field.id]?.[nestedField.id] ?? calculateDefaultValue(nestedField, newEntryData[field.id] || {})}
+                                        value={(() => {
+                                          const val = newEntryData[field.id]?.[nestedField.id];
+                                          if (val !== undefined) return val;
+                                          return calculateDefaultValue(nestedField, newEntryData[field.id] || {});
+                                        })()}
                                         onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                         recordData={newEntryData[field.id] || {}}
                                       />
@@ -748,7 +755,11 @@ export const ModuleView = () => {
                                 </label>
                                   <FieldInput 
                                     field={field}
-                                    value={newEntryData[field.id] ?? calculateDefaultValue(field, newEntryData)}
+                                    value={(() => {
+                                    const val = newEntryData[field.id];
+                                    if (val !== undefined) return val;
+                                    return calculateDefaultValue(field, newEntryData);
+                                  })()}
                                     onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                     recordData={newEntryData}
                                   />

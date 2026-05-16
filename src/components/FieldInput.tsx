@@ -95,6 +95,7 @@ const SearchableLookup = ({
           onChange(item.id, item);
           setIsOpen(false);
           setSearch('');
+          if (inputRef.current) inputRef.current.blur();
           onBlur?.();
         }
         break;
@@ -177,11 +178,16 @@ const SearchableLookup = ({
                 filteredResults.map((item: any, idx: number) => (
                   <button
                     key={item.id}
-                    onClick={() => {
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevent input blur before click registers
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Stop bubbling to wrapper
                       setLocalName(item.name);
                       onChange(item.id, item);
                       setIsOpen(false);
                       setSearch('');
+                      if (inputRef.current) inputRef.current.blur();
                       onBlur?.();
                     }}
                     onMouseEnter={() => setActiveIndex(idx)}
@@ -219,6 +225,7 @@ interface FieldInputProps {
   recordData?: Record<string, any>;
   allFields?: any[];
   lookupData?: any;
+  autoFocus?: boolean;
 }
 
 export const FieldInput: React.FC<FieldInputProps> = ({ 
@@ -230,7 +237,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   onBlur,
   onKeyDown,
   recordData = {},
-  allFields = []
+  allFields = [],
+  autoFocus = false
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
 
@@ -243,18 +251,24 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   );
   const inputRef = React.useRef<any>(null);
 
-  // Auto-focus when becoming editable
+  // Auto-focus logic
   React.useEffect(() => {
-    if (!readonly && inputRef.current) {
+    if (autoFocus && inputRef.current) {
       if (typeof inputRef.current.focus === 'function') {
         inputRef.current.focus();
       }
     }
-  }, [readonly]);
+  }, [autoFocus]);
 
   const [localValue, setLocalValue] = React.useState(value);
+  const localValueRef = React.useRef(value);
   const [isFocused, setIsFocused] = React.useState(false);
   const lastSentValueRef = React.useRef<any>(null);
+
+  const updateLocalValue = (val: any) => {
+    localValueRef.current = val;
+    setLocalValue(val);
+  };
 
   // Sync with external value prop when not actively focused/editing
   React.useEffect(() => {
@@ -267,15 +281,17 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       // Only overwrite local value if we aren't waiting for a sync 
       // or if the external value is actually different from our last sent value
       if (lastSentValueRef.current === null) {
-        setLocalValue(value);
+        updateLocalValue(value);
       }
     }
   }, [value, isFocused]);
 
-  const triggerSave = (val: any = localValue) => {
+  const triggerSave = (val: any = localValueRef.current, metadata?: any) => {
+    if (JSON.stringify(val) === JSON.stringify(lastSentValueRef.current)) return;
+    
     if (JSON.stringify(val) !== JSON.stringify(value)) {
       lastSentValueRef.current = val;
-      onChange(val);
+      onChange(val, metadata);
     }
   };
 
@@ -385,10 +401,10 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           ref={inputRef}
           value={localValue || ''}
           disabled={readonly}
-          onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }}
+          onChange={(e) => { setIsFocused(true); updateLocalValue(e.target.value); }}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          autoFocus={!readonly}
+          autoFocus={autoFocus}
           className={cn(inputClasses, "appearance-none")}
         >
           <option value="">Select...</option>
@@ -431,7 +447,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               className="hidden" 
               checked={localValue === opt} 
               disabled={readonly}
-              onChange={() => setLocalValue(opt)} 
+              onChange={() => updateLocalValue(opt)} 
             />
             <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
           </label>
@@ -458,7 +474,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500 text-white rounded-lg text-[10px] font-bold animate-in zoom-in-95 duration-200">
                   {v}
                   {!readonly && (
-                    <button onClick={(e) => { e.stopPropagation(); setLocalValue(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); updateLocalValue(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
                       <XCircle size={12} />
                     </button>
                   )}
@@ -493,7 +509,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                   const newValues = e.target.checked 
                     ? [...currentValues, opt]
                     : currentValues.filter(v => v !== opt);
-                  setLocalValue(newValues);
+                  updateLocalValue(newValues);
                 }} 
               />
               <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
@@ -509,7 +525,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <button
         onClick={() => {
           const newVal = !localValue;
-          setLocalValue(newVal);
+          updateLocalValue(newVal);
           setIsFocused(true);
           // onChange(newVal); // Remove immediate save
         }}
@@ -541,7 +557,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => setLocalValue(parseInt(e.target.value))}
+          onChange={(e) => updateLocalValue(parseInt(e.target.value))}
           className="w-full accent-indigo-600"
         />
         <div className="flex justify-between text-[10px] font-black text-zinc-400 uppercase tracking-widest">
@@ -554,11 +570,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'richtext') {
-    return <RichTextEditor value={localValue || ''} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} placeholder={placeholder} readonly={readonly} onBlur={handleBlur} />;
+    return <RichTextEditor value={localValue || ''} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} placeholder={placeholder} readonly={readonly} onBlur={handleBlur} />;
   }
 
   if (type === 'signature_pad') {
-    return <SignaturePad value={localValue || ''} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} onBlur={handleBlur} />;
+    return <SignaturePad value={localValue || ''} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} onBlur={handleBlur} />;
   }
 
   if (type === 'rating') {
@@ -573,7 +589,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           <button 
             key={i} 
             disabled={readonly}
-            onClick={() => setLocalValue(i)}
+            onClick={() => updateLocalValue(i)}
             className={cn(
               "p-2 rounded-xl transition-all",
               (localValue || 0) >= i ? "text-amber-500 bg-amber-500/10" : "text-zinc-300 hover:text-zinc-400 bg-zinc-100 dark:bg-zinc-900"
@@ -595,7 +611,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => setLocalValue(e.target.value)}
+          onChange={(e) => updateLocalValue(e.target.value)}
           className="w-12 h-12 rounded-2xl border-none p-0 overflow-hidden cursor-pointer bg-transparent"
         />
         <input 
@@ -604,7 +620,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => setLocalValue(e.target.value)}
+          onChange={(e) => updateLocalValue(e.target.value)}
           className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs font-mono uppercase"
         />
       </div>
@@ -700,7 +716,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 key={i}
                 type="button"
                 disabled={readonly}
-                onClick={() => setLocalValue([...currentValues, opt])}
+                onClick={() => updateLocalValue([...currentValues, opt])}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 flex items-center justify-between group transition-all"
               >
                 {opt}
@@ -726,7 +742,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 key={i}
                 type="button"
                 disabled={readonly}
-                onClick={() => setLocalValue(currentValues.filter(val => val !== v))}
+                onClick={() => updateLocalValue(currentValues.filter(val => val !== v))}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center justify-between group animate-in slide-in-from-right-2 duration-200"
               >
                 {v}
@@ -757,7 +773,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             key={i}
             type="button"
             disabled={readonly}
-            onClick={() => setLocalValue(opt)}
+            onClick={() => updateLocalValue(opt)}
             className={cn(
               "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
               localValue === opt 
@@ -773,8 +789,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <DatePicker value={localValue} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} dateFormat={field.dateFormat} excludeWeekends={field.excludeWeekends} min={minConstraint} max={maxConstraint} />;
-  if (type === 'time') return <TimePicker value={localValue} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} timeFormat={field.timeFormat} minuteStep={field.minuteStep} min={minConstraint} max={maxConstraint} />;
+  if (type === 'date') return <DatePicker value={localValue} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} dateFormat={field.dateFormat} excludeWeekends={field.excludeWeekends} min={minConstraint} max={maxConstraint} />;
+  if (type === 'time') return <TimePicker value={localValue} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} timeFormat={field.timeFormat} minuteStep={field.minuteStep} min={minConstraint} max={maxConstraint} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
@@ -782,25 +798,24 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         ref={inputRef}
         type="number" 
         value={localValue || ''} 
-        onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }} 
+        onChange={(e) => { setIsFocused(true); updateLocalValue(e.target.value); }}
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        autoFocus={!readonly}
+        autoFocus={autoFocus}
         readOnly={readonly}
         className={cn(inputClasses, "appearance-none", type === 'currency' ? "pl-8 pr-4" : "px-4")} 
       />
     </div>
   );
 
-  if (type === 'longText') return <textarea ref={inputRef} value={localValue || ''} onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }} onFocus={() => setIsFocused(true)} onBlur={handleBlur} onKeyDown={handleKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'longText') return <textarea ref={inputRef} value={localValue || ''} onChange={(e) => { setIsFocused(true); updateLocalValue(e.target.value); }} onFocus={() => setIsFocused(true)} onBlur={handleBlur} onKeyDown={handleKeyDown} autoFocus={autoFocus} readOnly={readonly} className={inputClasses} />;
 
-  // User & Lookup
   if (type === 'user') {
     return (
       <UserSelector 
         value={localValue}
-        onChange={(id) => { setLocalValue(id); setIsFocused(true); }}
+        onChange={(id) => { updateLocalValue(id); setIsFocused(true); triggerSave(id); }}
         placeholder={placeholder || "Select User..."}
         readonly={readonly}
         onBlur={handleBlur}
@@ -813,7 +828,10 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <LookupInput 
         field={field}
         value={localValue}
-        onChange={(val: any) => { setLocalValue(val); }}
+        onChange={(val: any, metadata?: any) => { 
+          updateLocalValue(val); 
+          triggerSave(val, metadata);
+        }}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         readonly={readonly}
@@ -866,7 +884,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             onFocus={() => setIsFocused(true)}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
-            onChange={(e) => setLocalValue(e.target.value)}
+            onChange={(e) => updateLocalValue(e.target.value)}
             className={cn(inputClasses, isGoogleMaps && "pl-10")}
           />
           {isGoogleMaps && (
@@ -881,7 +899,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             <button 
               onClick={() => {
                 const newVal = `${localValue}, Mock City, MC 12345`;
-                setLocalValue(newVal);
+                updateLocalValue(newVal);
                 setIsFocused(true);
                 // triggerSave(newVal); // Let blur handle it
               }}
@@ -907,7 +925,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       onFocus={() => setIsFocused(true)}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
-      onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }}
+      onChange={(e) => { setIsFocused(true); updateLocalValue(e.target.value); }}
       autoFocus={!readonly}
       readOnly={readonly}
       className={inputClasses}

@@ -34,12 +34,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user]);
 
   const syncUser = useCallback(async (token: string, sessionId: string) => {
-    // Prevent syncing the same session twice within a short window
     const now = Date.now();
-    if (lastSyncedRef.current?.sessionId === sessionId && (now - lastSyncedRef.current.timestamp) < 2000) {
-      console.log(`[AuthTrace] Skipping redundant sync for session: ${sessionId}`);
+    // Use a unique combination of userId and timestamp window to prevent loops
+    const syncKey = `${sessionId}`;
+    
+    if (lastSyncedRef.current?.sessionId === syncKey && (now - lastSyncedRef.current.timestamp) < 5000) {
+      console.log(`[AuthTrace] Skipping redundant sync for session key: ${syncKey}`);
       return;
     }
+
+    // Set ref IMMEDIATELY to prevent overlapping syncs while this one is in flight
+    lastSyncedRef.current = { sessionId: syncKey, timestamp: now };
 
     try {
       console.log(`[AuthTrace] Attempting sync with backend...`);
@@ -58,7 +63,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setTenantIds(sessionData.tenantIds || []);
         setCurrentRoleId(sessionData.roleId || null);
         
-        lastSyncedRef.current = { sessionId, timestamp: now };
+        
+        // Update timestamp on success to maintain the debounce window
+        if (lastSyncedRef.current) {
+          lastSyncedRef.current.timestamp = Date.now();
+        }
         return sessionData;
       } else {
         const status = response.status;

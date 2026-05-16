@@ -1,14 +1,15 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useModalStack, ModalEntry } from '../../context/ModalStackContext';
-import { X, ChevronRight, Home, ArrowLeft } from 'lucide-react';
+import { X, ChevronRight, Home, ArrowLeft, Loader2, Layers } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL } from '../../config';
 import { MODULES } from '../../constants/modules';
 import { FieldInput } from '../FieldInput';
-import { flattenFields, isFieldVisible } from '../../lib/utils';
+import { flattenFields, isFieldVisible, calculateHeight } from '../../lib/utils';
+import { compactLayout } from '../../lib/layoutEngine';
 import { evaluateCalculations } from '../../services/aiService';
 import { toast } from 'sonner';
 import { RecursiveCollectionBlock } from '../Platform/RecursiveCollectionBlock';
@@ -71,7 +72,6 @@ const RecordModal = ({
     // Local save for virtual records
     if (entry.localData && entry.onSaveLocal) {
       entry.onSaveLocal(record);
-      toast.success("Local changes applied");
       onPop();
       return;
     }
@@ -114,7 +114,12 @@ const RecordModal = ({
         setRecord(entry.localData);
         setModuleData({
           name: entry.title || "Record Detail",
-          layout: (entry.localSchema || []).map((f, i) => ({ ...f, rowIndex: i, startCol: 1, colSpan: 12 }))
+          layout: (entry.localSchema || []).map((f: any, i: number) => ({ 
+            ...f, 
+            rowIndex: f.rowIndex !== undefined ? f.rowIndex : i,
+            startCol: f.startCol !== undefined ? f.startCol : 1,
+            colSpan: f.colSpan !== undefined ? f.colSpan : 12
+          }))
         });
         setLoading(false);
         return;
@@ -173,32 +178,16 @@ const RecordModal = ({
     >
       <div className="w-full max-w-4xl bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-[40px] shadow-2xl overflow-hidden flex flex-col pointer-events-auto h-[80vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-8 py-6 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-          <div className="flex items-center gap-4">
-            <button onClick={onPop} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
-              <ArrowLeft size={20} />
-            </button>
-            <div>
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
-                {record?.name || record?.title || moduleData?.name || 'Loading...'}
-              </h2>
-              {record?.status && (
-                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{record.status}</span>
-              )}
-          </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
-            >
-              {isSaving ? "Saving..." : "Save Changes"}
-            </button>
-            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all">
-              <X size={24} />
-            </button>
-          </div>
+        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0">
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
+            <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+              <Layers size={20} />
+            </div>
+            {record?.name || record?.title || moduleData?.name || 'Loading...'}
+          </h2>
+          <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
+            <X size={24} />
+          </button>
         </div>
 
         {/* Content Area */}
@@ -208,94 +197,130 @@ const RecordModal = ({
               <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-               {/* Left: Fields */}
-               <div className="lg:col-span-8 space-y-12">
-                  <div className="grid grid-cols-12 gap-8">
+            <div className="w-full">
+               {/* Main Content Area */}
+               <div className={cn(
+                 "w-full space-y-12",
+                 (entry.moduleId === 'virtual' || !moduleData?.nestedCollections?.length) ? "w-full" : "lg:grid lg:grid-cols-12 lg:gap-12"
+               )}>
+                  <div className={cn(
+                    "grid grid-cols-12 gap-x-4 gap-y-6 w-full",
+                    (entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length) && "lg:col-span-8"
+                  )}>
                     {moduleData?.layout ? (
-                      (moduleData.layout || [])
-                        .sort((a: any, b: any) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
-                        .map((field: any) => {
-                          if (!isFieldVisible(field, record, { user })) return null;
-                          
-                          return (
-                            <div 
-                              key={field.id} 
-                              className={cn("space-y-2", (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6")}
-                              style={{
-                                gridColumn: `span ${field.colSpan || 12}`,
-                                gridColumnStart: field.startCol || 'auto',
-                                gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
-                              }}
-                            >
-                               {field.type === 'sub_module' ? (
-                                 <RecursiveCollectionBlock 
-                                   parentRecordId={entry.recordId!}
-                                   moduleId={field.targetModuleId}
-                                   label={field.label}
-                                 />
-                               ) : field.type === 'repeatableGroup' ? (
-                                 <RepeatableGroupBlock 
-                                    field={field}
-                                    value={record?.[field.id] || []}
-                                    onChange={(newVal) => setRecord({ ...record, [field.id]: newVal })}
-                                 />
-                               ) : (
-                                 <div className="space-y-1.5">
-                                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</label>
-                                   {entry.type === 'edit' ? (
-                                     <FieldInput 
-                                       field={field}
-                                       value={record?.[field.id] || ''}
-                                       onChange={(val) => setRecord({ ...record, [field.id]: val })}
-                                     />
-                                   ) : (
-                                     <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem]">
-                                        {record?.[field.id] || '-'}
-                                     </div>
-                                   )}
-                                 </div>
-                               )}
+                      (() => {
+                        const visibleFields = compactLayout(
+                          (moduleData.layout || []).filter((f: any) => isFieldVisible(f, record, { user }))
+                        );
+
+                        return visibleFields.map((field: any, idx: number) => (
+                          <div 
+                            key={field.id} 
+                            className={cn(
+                              "group/field transition-all relative min-w-0 w-full",
+                              (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6"
+                            )}
+                            style={{
+                              gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                              gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                            }}
+                          >
+                            <div className="w-full transition-all duration-300 rounded-2xl p-4 -m-4 border-2 border-transparent hover:bg-zinc-500/5 hover:border-zinc-500/10 relative">
+                              {field.type === 'sub_module' ? (
+                                <RecursiveCollectionBlock 
+                                  parentRecordId={entry.recordId!}
+                                  moduleId={field.targetModuleId}
+                                  label={field.label}
+                                />
+                              ) : field.type === 'repeatableGroup' ? (
+                                <RepeatableGroupBlock 
+                                   field={field}
+                                   value={record?.[field.id] || []}
+                                   onChange={(newVal) => setRecord({ ...record, [field.id]: newVal })}
+                                />
+                              ) : (
+                                <div className="space-y-1 w-full">
+                                  <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                                    {field.label}
+                                    {field.required && <span className="text-rose-500">*</span>}
+                                  </label>
+                                  <div className="w-full">
+                                    {entry.type !== 'view' && (entry.type === 'edit' || entry.moduleId === 'virtual') ? (
+                                      <FieldInput 
+                                        field={field}
+                                        value={record?.[field.id] ?? ''}
+                                        onChange={(val) => setRecord({ ...record, [field.id]: val })}
+                                        autoFocus={idx === 0}
+                                      />
+                                    ) : (
+                                      <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem] px-1">
+                                         {record?.[field.id] || '-'}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          );
-                        })
+                          </div>
+                        ));
+                      })()
                     ) : (
                       <p className="text-zinc-500 italic">No layout defined for this module.</p>
                     )}
                   </div>
-               </div>
 
-               {/* Right: Nested Collections & Context */}
-               <div className="lg:col-span-4 space-y-10">
-                  {/* Record Context / Mirror Badges */}
-                  {record?.associations?.length > 0 && (
-                    <div className="space-y-3">
-                       <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Mirrored In</h3>
-                       <div className="flex flex-wrap gap-2">
-                          {record.associations.map((assoc: any, idx: number) => (
-                            <div key={idx} className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2">
-                               <Layers size={10} className="text-indigo-400" />
-                               <span className="text-[10px] font-bold text-indigo-400">{assoc.role || 'Parent'}</span>
+                  {/* Right: Nested Collections & Context (Only if not virtual and has collections) */}
+                  {entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length && (
+                    <div className="lg:col-span-4 space-y-10">
+                        {/* Record Context / Mirror Badges */}
+                        {record?.associations?.length > 0 && (
+                          <div className="space-y-3">
+                            <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Mirrored In</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {record.associations.map((assoc: any, idx: number) => (
+                                  <div key={idx} className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2">
+                                    <Layers size={10} className="text-indigo-400" />
+                                    <span className="text-[10px] font-bold text-indigo-400">{assoc.role || 'Parent'}</span>
+                                  </div>
+                                ))}
                             </div>
+                          </div>
+                        )}
+
+                        {/* Recursive Collections */}
+                        <div className="space-y-8">
+                          {(moduleData?.nestedCollections || []).map((coll: any, idx: number) => (
+                            <RecursiveCollectionBlock 
+                                key={idx}
+                                parentRecordId={entry.recordId!}
+                                moduleId={coll.targetModuleId}
+                                label={coll.label}
+                            />
                           ))}
-                       </div>
+                        </div>
                     </div>
                   )}
-
-                  {/* Recursive Collections */}
-                  <div className="space-y-8">
-                     {(moduleData?.nestedCollections || []).map((coll: any, idx: number) => (
-                       <RecursiveCollectionBlock 
-                          key={idx}
-                          parentRecordId={entry.recordId!}
-                          moduleId={coll.targetModuleId}
-                          label={coll.label}
-                       />
-                     ))}
-                  </div>
                </div>
             </div>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-zinc-100 dark:border-zinc-800 shrink-0 flex justify-end gap-3">
+          <button 
+            onClick={onClose}
+            className="px-8 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white rounded-xl font-bold text-xs hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave}
+            disabled={isSaving}
+            className="px-8 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isSaving && <Loader2 size={16} className="animate-spin" />}
+            {isSaving ? "Saving..." : "Save"}
+          </button>
         </div>
       </div>
     </motion.div>
@@ -330,13 +355,6 @@ export const StackedModalManager = () => {
             />
           ))}
         </AnimatePresence>
-      </div>
-      
-      {/* Global Breadcrumbs (Overlay on top of stack) */}
-      <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[1100]">
-        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden">
-          <Breadcrumbs stack={stack} onNavigate={popToId} />
-        </div>
       </div>
     </div>
   );

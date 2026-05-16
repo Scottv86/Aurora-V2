@@ -7,12 +7,17 @@ import { Pool } from 'pg';
  * Global shared connection pool and adapter for the Registry.
  * Prisma 7 requires explicit adapters for database connectivity.
  */
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  max: 50, // Increase pool size from default 10 to 50
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 const adapter = new PrismaPg(pool);
 
 export const globalPrisma = new PrismaClient({ adapter });
 
-const RLS_CONTEXT = Symbol('RLS_CONTEXT');
+export const RLS_CONTEXT = Symbol('RLS_CONTEXT');
 
 /**
  * Returns a Prisma client scoped to a specific tenant using PostgreSQL RLS context.
@@ -107,7 +112,7 @@ export const getScopedPrisma = (
               // Fallback to standard query if dynamic resolution fails
               return query({ ...a, [RLS_CONTEXT]: true } as any);
             }, { 
-              timeout: 20000 
+              timeout: 30000 
             });
           } catch (err) {
             console.error('[Prisma RLS Error]:', err);

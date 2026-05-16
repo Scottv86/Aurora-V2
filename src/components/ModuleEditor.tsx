@@ -634,7 +634,7 @@ export const FIELD_CATEGORIES = [
       { id: 'timeline', label: 'Timeline View', icon: GitCommit, defaultSpan: 6 },
       { id: 'group', label: 'Group Container', icon: Layers, defaultSpan: 6 },
       { id: 'fieldGroup', label: 'Field Section', icon: Folder, defaultSpan: 6 },
-      { id: 'repeatableGroup', label: 'Repeatable List', icon: ListPlus, defaultSpan: 6 },
+      { id: 'repeatableGroup', label: 'Collection', icon: ListPlus, defaultSpan: 6 },
     ]
   },
   {
@@ -8238,7 +8238,9 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                           ) : (
                             <div className="space-y-4">
                               <div className="flex items-center justify-between px-1">
-                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Nested Elements</label>
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                                  {selectedField.type === 'repeatableGroup' ? 'Collection Properties' : 'Nested Elements'}
+                                </label>
                                 {selectedField.type === 'repeatableGroup' && (
                                   <div className="flex items-center gap-2">
                                     <span className="text-[9px] font-bold text-zinc-400 uppercase">View:</span>

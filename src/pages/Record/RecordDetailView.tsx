@@ -407,25 +407,28 @@ export const RecordDetailView = () => {
     // Execute Lookup Output Mappings
     const field = allFields.find(f => f.id === fieldId);
     if (field?.type === 'lookup' && field.lookupOutputMappings?.length) {
-      // First, null out all target fields to clear any previously mapped values
-      field.lookupOutputMappings.forEach(mapping => {
-        if (mapping.targetFieldId) {
-          const targetFieldId = mapping.targetFieldId;
-          updatedData[targetFieldId] = null;
-        }
-      });
-
-      // Then, map the new values from metadata if available
-      if (metadata) {
+      // ONLY clear and populate if the lookup value itself has changed.
+      // This prevents wiping mapped fields on simple auto-saves (blur events)
+      // while ensuring old values are cleared when a new record is selected.
+      if (val !== editData[fieldId]) {
+        // First, null out all target fields to clear any previously mapped values
         field.lookupOutputMappings.forEach(mapping => {
-          if (mapping.sourceFieldId && mapping.targetFieldId) {
-            const sourceValue = metadata[mapping.sourceFieldId];
-            if (sourceValue !== undefined) {
-              const targetFieldId = mapping.targetFieldId;
-              updatedData[targetFieldId] = sourceValue;
-            }
+          if (mapping.targetFieldId) {
+            updatedData[mapping.targetFieldId] = null;
           }
         });
+
+        // Then, map the new values from metadata if available
+        if (metadata && typeof metadata === 'object') {
+          field.lookupOutputMappings.forEach(mapping => {
+            if (mapping.sourceFieldId && mapping.targetFieldId) {
+              const sourceValue = metadata[mapping.sourceFieldId];
+              if (sourceValue !== undefined) {
+                updatedData[mapping.targetFieldId] = sourceValue;
+              }
+            }
+          });
+        }
       }
     }
     
@@ -820,7 +823,13 @@ export const RecordDetailView = () => {
         </label>
         <FieldInput 
           field={nestedField}
-          value={getFieldValue(editData, nestedField.id) ?? getFieldValue(record, nestedField.id) ?? calculateDefaultValue(nestedField, editData)}
+          value={(() => {
+            const edited = getFieldValue(editData, nestedField.id);
+            if (edited !== undefined) return edited;
+            const original = getFieldValue(record, nestedField.id);
+            if (original !== undefined) return original;
+            return calculateDefaultValue(nestedField, editData);
+          })()}
           onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
           onBlur={() => handleUpdateEntry()}
           onKeyDown={(e) => {
@@ -1112,15 +1121,13 @@ export const RecordDetailView = () => {
                               </div>
                             </CollapsibleFieldGroup>
                           ) : field.type === 'repeatableGroup' ? (
-                            <CollapsibleFieldGroup field={field}>
-                              <RepeatableGroupBlock 
-                                 field={field}
-                                 value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
-                                 onChange={(newVal) => handleFieldChange(field.id, newVal)}
-                                 onBlur={() => handleUpdateEntry()}
-                                 hideHeader={true}
-                              />
-                            </CollapsibleFieldGroup>
+                            <RepeatableGroupBlock 
+                               field={field}
+                               value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
+                               onChange={(newVal) => handleFieldChange(field.id, newVal)}
+                               onBlur={() => handleUpdateEntry()}
+                               hideHeader={true}
+                            />
                           ) : field.type === 'connector' ? (
                             <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
                               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
@@ -1181,7 +1188,13 @@ export const RecordDetailView = () => {
                               </label>
                               <FieldInput 
                                 field={field}
-                                value={getFieldValue(editData, field.id) ?? getFieldValue(record, field.id) ?? calculateDefaultValue(field, editData)}
+                                value={(() => {
+                                  const edited = getFieldValue(editData, field.id);
+                                  if (edited !== undefined) return edited;
+                                  const original = getFieldValue(record, field.id);
+                                  if (original !== undefined) return original;
+                                  return calculateDefaultValue(field, editData);
+                                })()}
                                 onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                 onBlur={() => handleUpdateEntry()}
                                 onKeyDown={(e) => {
