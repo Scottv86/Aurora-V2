@@ -1059,7 +1059,7 @@ export const RecordDetailView = () => {
                                 {savingFieldId === field.id ? 'Saving' : 'Editing'}
                               </div>
                             )}
-                            {activeFieldId === field.id && !savingFieldId && (
+                            {activeFieldId === field.id && !savingFieldId && !['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress', 'datatable', 'duallist'].includes(field.type) && (
                               <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
