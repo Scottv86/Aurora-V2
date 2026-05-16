@@ -20,6 +20,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { Table } from './UI/Table';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -269,92 +270,95 @@ export const SuperAdmin = () => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-zinc-100 dark:border-zinc-800">
-                <th className="pb-6 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] px-4">Instance Entity</th>
-                <th className="pb-6 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] px-4">Access Layer</th>
-                <th className="pb-6 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] px-4">Cloud Status</th>
-                <th className="pb-6 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] px-4">Isolation</th>
-                <th className="pb-6 text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] px-4 text-right">Ops</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
-              <AnimatePresence mode='popLayout'>
-                {tenants
-                  .filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.subdomain.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((tenant, idx) => (
-                  <motion.tr 
-                    key={tenant.id} 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className="group hover:bg-zinc-50 dark:hover:bg-indigo-500/[0.03] transition-colors"
+        <Table 
+          data={tenants.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.subdomain.toLowerCase().includes(searchQuery.toLowerCase()))}
+          className="bg-transparent dark:bg-transparent border-none shadow-none"
+          noContainer={true}
+          columns={[
+            {
+              header: 'Instance Entity',
+              sortable: true,
+              accessor: (tenant: any) => (
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shadow-sm overflow-hidden relative">
+                     {tenant.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{tenant.name}</p>
+                    <p className="text-[10px] font-mono text-zinc-500 flex items-center gap-1.5 uppercase tracking-widest mt-0.5">
+                      {tenant.subdomain}.aurora.app
+                    </p>
+                  </div>
+                </div>
+              ),
+              sortKey: 'name'
+            },
+            {
+              header: 'Access Layer',
+              sortable: true,
+              accessor: (tenant: any) => (
+                <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider w-fit inline-flex items-center gap-1.5 shadow-sm", 
+                  tenant.planTier === 'enterprise' ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20" :
+                  tenant.planTier === 'growth' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20" :
+                  "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700"
+                )}>
+                  <Zap size={10} />
+                  {tenant.planTier}
+                </span>
+              ),
+              sortKey: 'planTier'
+            },
+            {
+              header: 'Cloud Status',
+              sortable: true,
+              accessor: (tenant: any) => (
+                <div className="flex items-center gap-3">
+                  <div className={cn("w-2 h-2 rounded-full", 
+                    tenant.status === 'active' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)] animate-pulse" : "bg-rose-500"
+                  )} />
+                  <div>
+                    <p className="text-xs font-bold text-zinc-900 dark:text-zinc-200 capitalize">{tenant.status}</p>
+                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Stable</p>
+                  </div>
+                </div>
+              ),
+              sortKey: 'status'
+            },
+            {
+              header: 'Isolation',
+              sortable: true,
+              accessor: (tenant: any) => (
+                <div className="flex items-center gap-2">
+                  {tenant.dbConnectionString ? <ShieldCheck size={14} className="text-purple-500" /> : <Layers size={14} className="text-zinc-400" />}
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">
+                    {tenant.dbConnectionString ? 'DEDICATED_CELL' : 'LOGICAL_SLICE'}
+                  </span>
+                </div>
+              ),
+              sortKey: 'dbConnectionString'
+            },
+            {
+              header: '',
+              className: 'text-right',
+              accessor: (tenant: any) => (
+                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-1 group-hover:translate-x-0">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/admin/tenants/${tenant.id}`);
+                    }}
+                    className="p-2 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
-                    <td className="py-5 px-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shadow-sm overflow-hidden relative">
-                           {tenant.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{tenant.name}</p>
-                          <p className="text-[10px] font-mono text-zinc-500 flex items-center gap-1.5 uppercase tracking-widest mt-0.5">
-                            {tenant.subdomain}.aurora.app
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-5 px-4">
-                      <div className="flex flex-col gap-1">
-                        <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider w-fit inline-flex items-center gap-1.5 shadow-sm", 
-                          tenant.planTier === 'enterprise' ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20" :
-                          tenant.planTier === 'growth' ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20" :
-                          "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700"
-                        )}>
-                          <Zap size={10} />
-                          {tenant.planTier}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-5 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("w-2 h-2 rounded-full", 
-                          tenant.status === 'active' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)] animate-pulse" : "bg-rose-500"
-                        )} />
-                        <div>
-                          <p className="text-xs font-bold text-zinc-900 dark:text-zinc-200 capitalize">{tenant.status}</p>
-                          <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Stable</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-5 px-4">
-                      <div className="flex items-center gap-2">
-                        {tenant.dbConnectionString ? <ShieldCheck size={14} className="text-purple-500" /> : <Layers size={14} className="text-zinc-400" />}
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">
-                          {tenant.dbConnectionString ? 'DEDICATED_CELL' : 'LOGICAL_SLICE'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-1 group-hover:translate-x-0">
-                        <button 
-                          onClick={() => navigate(`/admin/tenants/${tenant.id}`)}
-                          className="p-2 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                        >
-                           <ChevronRight size={18} />
-                        </button>
-                        <button className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
-                          <MoreVertical size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </AnimatePresence>
-            </tbody>
-          </table>
-        </div>
+                     <ChevronRight size={18} />
+                  </button>
+                  <button className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                    <MoreVertical size={18} />
+                  </button>
+                </div>
+              )
+            }
+          ]}
+        />
       </motion.div>
 
       {/* 🔮 Registry Provisioning Modal (Adaptive Theme Style) */}

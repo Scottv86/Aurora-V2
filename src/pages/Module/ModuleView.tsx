@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Table } from '../../components/UI/Table';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { 
@@ -418,91 +419,102 @@ export const ModuleView = () => {
           <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
         </div>
       ) : records.length > 0 ? (
-        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
-          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
+        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1 max-w-md">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                 <input 
                   type="text" 
                   placeholder="Search records..." 
-                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
-              <button className="p-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-xl">
+              <button className="p-2 bg-transparent border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-xl">
                 <Filter size={18} />
               </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/30">
-                  <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Key</th>
-                  {displayFields.slice(0, 4).map((field: any, i: number) => (
-                    <th key={i} className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label || field.name}</th>
-                  ))}
-                  <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Created</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/50">
-                {records.map((record) => (
-                  <tr 
-                    key={record.id} 
-                    onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-800/20 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-6 py-4 text-sm font-bold text-indigo-500">
-                      {record._record_key || '-'}
-                    </td>
-                    {displayFields.slice(0, 4).map((field: any, j: number) => (
-                      <td key={j} className="px-6 py-4 text-sm text-zinc-600 dark:text-zinc-300">
-                        {(() => {
-                          const val = record[field.id] || record[field.name];
-                          if (field.type === 'checkbox') return val ? 'Yes' : 'No';
-                          if (Array.isArray(val)) {
-                            if (val.length === 0) return '-';
-                            return (
-                              <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                {val.map((v: string, k: number) => (
-                                  <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase">
-                                    {v}
-                                  </span>
-                                ))}
-                              </div>
-                            );
-                          }
-                          return val || '-';
-                        })()}
-                      </td>
-                    ))}
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
-                        {record.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-zinc-500">
-                      {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
-                    </td>
-                    <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => setRecordToDelete(record.id)}
-                          className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+          
+          <Table 
+            data={records}
+            onRowClick={(record) => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+            className="bg-transparent dark:bg-transparent border-none shadow-none"
+            noContainer={true}
+            pagination={false}
+            columns={[
+              {
+                header: 'Key',
+                sortable: true,
+                sortKey: '_record_key',
+                accessor: (record: any) => (
+                  <span className="text-sm font-bold text-indigo-500">
+                    {record._record_key || '-'}
+                  </span>
+                )
+              },
+              ...displayFields.slice(0, 4).map((field: any) => ({
+                header: field.label || field.name,
+                sortable: true,
+                sortKey: field.id || field.name,
+                accessor: (record: any) => {
+                  const val = record[field.id] || record[field.name];
+                  if (field.type === 'checkbox') return val ? 'Yes' : 'No';
+                  if (Array.isArray(val)) {
+                    if (val.length === 0) return '-';
+                    return (
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {val.map((v: string, k: number) => (
+                          <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase">
+                            {v}
+                          </span>
+                        ))}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    );
+                  }
+                  return val || '-';
+                }
+              })),
+              {
+                header: 'Status',
+                sortable: true,
+                sortKey: 'status',
+                accessor: (record: any) => (
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+                    {record.status}
+                  </span>
+                )
+              },
+              {
+                header: 'Created',
+                sortable: true,
+                sortKey: 'createdAt',
+                accessor: (record: any) => (
+                  <span className="text-sm text-zinc-500">
+                    {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
+                  </span>
+                )
+              },
+              {
+                header: '',
+                className: 'text-right',
+                accessor: (record: any) => (
+                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRecordToDelete(record.id);
+                      }}
+                      className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )
+              }
+            ]}
+          />
 
-          {/* Pagination UI */}
           <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-950/30 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
               Showing <span className="text-zinc-900 dark:text-white">{totalRecords > 0 ? (page - 1) * pageSize + 1 : 0}</span> to <span className="text-zinc-900 dark:text-white">{Math.min(page * pageSize, totalRecords)}</span> of <span className="text-zinc-900 dark:text-white">{totalRecords}</span> records
@@ -518,7 +530,6 @@ export const ModuleView = () => {
               <div className="flex items-center gap-1">
                 {totalPages > 0 && [...Array(totalPages)].map((_, i) => {
                   const pNum = i + 1;
-                  // Only show first 3, last 3, and current +- 1 if many pages
                   if (totalPages > 7 && pNum > 2 && pNum < totalPages - 1 && Math.abs(pNum - page) > 1) {
                     if (pNum === 3 || pNum === totalPages - 2) return <span key={pNum} className="text-zinc-400 px-1">...</span>;
                     return null;

@@ -242,14 +242,21 @@ export const PeopleOrgDirectory = () => {
               </div>
 
               <Table 
-                data={filteredEntities}
+                data={filteredEntities.map(e => ({
+                  ...e,
+                  displayName: e.partyType === 'PERSON' 
+                    ? `${e.person?.firstName} ${e.person?.lastName}`
+                    : e.organization?.legalName
+                }))}
                 loading={loading}
                 onRowClick={(entity) => navigate(`/workspace/platform/people-organisations/${entity.id}`)}
                 className="bg-transparent dark:bg-transparent border-none shadow-none"
                 columns={[
                   {
                     header: 'Name',
-                    accessor: (entity) => (
+                    sortable: true,
+                    sortKey: 'displayName',
+                    accessor: (entity: any) => (
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${
                           entity.partyType === 'PERSON' 
@@ -260,9 +267,7 @@ export const PeopleOrgDirectory = () => {
                         </div>
                         <div>
                           <p className="text-sm font-bold text-zinc-900 dark:text-white">
-                            {entity.partyType === 'PERSON' 
-                              ? `${entity.person?.firstName} ${entity.person?.lastName}`
-                              : entity.organization?.legalName}
+                            {entity.displayName}
                           </p>
                           <p className="text-xs text-zinc-500 mt-0.5">
                             {entity.partyType === 'PERSON' 
@@ -275,6 +280,8 @@ export const PeopleOrgDirectory = () => {
                   },
                   {
                     header: 'Type',
+                    sortable: true,
+                    sortKey: 'partyType',
                     accessor: (entity) => (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                         {entity.partyType}
@@ -283,6 +290,8 @@ export const PeopleOrgDirectory = () => {
                   },
                   {
                     header: 'Status',
+                    sortable: true,
+                    sortKey: 'status',
                     accessor: (entity) => (
                       <div className="flex items-center gap-2">
                         <div className={`w-1.5 h-1.5 rounded-full ${

@@ -27,6 +27,7 @@ const VARIABLES = [
 
 import { usePlatform } from '../hooks/usePlatform';
 import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
+import { Table } from './UI/Table';
 
 export const LogicBuilder = () => {
   const { tenant } = usePlatform();
@@ -198,43 +199,50 @@ export const LogicBuilder = () => {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            <div className="p-6 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm dark:shadow-none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-zinc-100 dark:border-zinc-800">
-                      <th className="pb-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-4">Variable Name</th>
-                      <th className="pb-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-4">Value</th>
-                      <th className="pb-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-4">Type</th>
-                      <th className="pb-4 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-4"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
-                    {VARIABLES.map((v, i) => (
-                      <tr key={i} className="group hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-3">
-                            <Variable size={16} className="text-indigo-600 dark:text-indigo-400" />
-                            <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">{v.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className="text-sm text-zinc-600 dark:text-zinc-300 font-mono">{v.value}</span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                            {v.type}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 text-right">
-                          <button className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">Edit</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <Table 
+              data={VARIABLES.map((v, i) => ({ ...v, id: i }))}
+              pagination={false}
+              noContainer={true}
+              className="bg-transparent dark:bg-transparent border-none p-0"
+              columns={[
+                {
+                  header: 'Variable Name',
+                  sortable: true,
+                  accessor: (v: any) => (
+                    <div className="flex items-center gap-3">
+                      <Variable size={16} className="text-indigo-600 dark:text-indigo-400" />
+                      <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">{v.name}</span>
+                    </div>
+                  ),
+                  sortKey: 'name'
+                },
+                {
+                  header: 'Value',
+                  sortable: true,
+                  accessor: (v: any) => (
+                    <span className="text-sm text-zinc-600 dark:text-zinc-300 font-mono">{v.value}</span>
+                  ),
+                  sortKey: 'value'
+                },
+                {
+                  header: 'Type',
+                  sortable: true,
+                  accessor: (v: any) => (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                      {v.type}
+                    </span>
+                  ),
+                  sortKey: 'type'
+                },
+                {
+                  header: '',
+                  className: 'text-right',
+                  accessor: () => (
+                    <button className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">Edit</button>
+                  )
+                }
+              ]}
+            />
           </motion.div>
         )}
       </AnimatePresence>

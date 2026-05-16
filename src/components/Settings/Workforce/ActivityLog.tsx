@@ -69,6 +69,8 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', onSearchChange, 
   const columns = [
     {
       header: 'Action',
+      sortable: true,
+      sortKey: 'action',
       accessor: (l: any) => (
         <div className="flex items-center gap-3 py-1">
            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-900/5">
@@ -87,6 +89,8 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', onSearchChange, 
     },
     {
       header: 'User',
+      sortable: true,
+      sortKey: 'actorId',
       accessor: (l: any) => (
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-full bg-zinc-200 dark:bg-zinc-800" />
@@ -106,6 +110,8 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', onSearchChange, 
     },
     {
       header: 'Time',
+      sortable: true,
+      sortKey: 'timestamp',
       accessor: (l: any) => (
         <div className="flex items-center gap-1.5 text-xs text-zinc-400">
            <Clock size={12} /> 

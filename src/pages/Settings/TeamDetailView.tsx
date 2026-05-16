@@ -213,14 +213,19 @@ export const TeamDetailView = () => {
                  columns={[
                    {
                      header: 'Member Name',
+                     sortable: true,
+                     sortKey: 'name',
                      accessor: (m) => <div className="font-semibold text-zinc-900 dark:text-zinc-100">{m.name}</div>
                    },
                    {
                      header: 'Role / Type',
+                     sortable: true,
+                     sortKey: 'isSynthetic',
                      accessor: (m) => <Badge variant={m.isSynthetic ? "purple" : "zinc"}>{m.isSynthetic ? "Agent" : "Human"}</Badge>
                    },
                    {
                      header: 'Action',
+                     className: 'text-right',
                      accessor: (m) => (
                        <Button 
                          variant="ghost" 

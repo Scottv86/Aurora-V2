@@ -101,6 +101,8 @@ export const BillingPage = () => {
   const licenseColumns = [
     {
       header: 'Member',
+      sortable: true,
+      sortKey: 'name',
       accessor: (member: TenantMember) => (
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-white/5 overflow-hidden border border-zinc-200 dark:border-zinc-700">
@@ -121,6 +123,8 @@ export const BillingPage = () => {
     },
     {
       header: 'Type',
+      sortable: true,
+      sortKey: 'isSynthetic',
       accessor: (member: TenantMember) => (
         <Badge variant={member.isSynthetic ? 'purple' : 'zinc'} className="text-[8px] font-black tracking-[0.1em] uppercase px-2">
           {member.isSynthetic ? 'AI Agent' : 'Human'}
@@ -129,6 +133,8 @@ export const BillingPage = () => {
     },
     {
       header: 'Current Licence',
+      sortable: true,
+      sortKey: 'licenceType',
       accessor: (member: TenantMember) => (
         <Badge 
           variant={member.licenceType === 'Developer' ? 'blue' : member.licenceType === 'Standard' ? 'purple' : 'zinc'} 
@@ -175,18 +181,22 @@ export const BillingPage = () => {
   const invoiceColumns = [
     {
       header: 'Invoice ID',
+      sortable: true,
       accessor: (inv: Invoice) => <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{inv.id}</span>
     },
     {
       header: 'Date',
+      sortable: true,
       accessor: (inv: Invoice) => <span className="text-sm font-medium text-zinc-500">{new Date(inv.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
     },
     {
       header: 'Amount',
+      sortable: true,
       accessor: (inv: Invoice) => <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">${inv.amount.toFixed(2)}</span>
     },
     {
       header: 'Status',
+      sortable: true,
       accessor: (inv: Invoice) => (
         <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
           <CheckCircle2 size={12} /> {inv.status}

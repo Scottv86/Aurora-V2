@@ -15,6 +15,7 @@ import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { Table } from './UI/Table';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -156,43 +157,56 @@ export const TenantOverview = () => {
                <TrendingUp className="text-indigo-500" size={24} />
             </div>
             {/* Table of logs */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-zinc-100 dark:border-zinc-800">
-                    <th className="pb-4 text-[9px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Execution ID</th>
-                    <th className="pb-4 text-[9px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Compute Type</th>
-                    <th className="pb-4 text-[9px] font-bold text-zinc-400 uppercase tracking-[0.2em]">Amount</th>
-                    <th className="pb-4 text-[9px] font-bold text-zinc-400 uppercase tracking-[0.2em] text-right">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/50">
-                  {tenant.usageLogs.map((log: any) => (
-                    <tr key={log.id} className="group hover:bg-zinc-50 dark:hover:bg-indigo-500/[0.03] transition-colors">
-                      <td className="py-4 text-[10px] font-mono text-zinc-500 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors uppercase">
-                        {log.id.slice(0, 12)}...
-                      </td>
-                      <td className="py-4 px-2">
-                        <span className="text-[9px] font-black px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-md uppercase tracking-wider border border-indigo-500/20">
-                          {log.type}
-                        </span>
-                      </td>
-                      <td className="py-4 text-xs font-bold text-zinc-900 dark:text-white">
-                        {log.amount.toLocaleString()}
-                      </td>
-                      <td className="py-4 text-right text-[10px] font-mono text-zinc-400">
-                        {new Date(log.timestamp).toLocaleTimeString()}
-                      </td>
-                    </tr>
-                  ))}
-                  {tenant.usageLogs.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="py-10 text-center text-xs text-zinc-500 italic uppercase">No swarm active in 24h cycle</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <Table 
+              data={tenant.usageLogs}
+              pagination={false}
+              className="bg-transparent dark:bg-transparent border-none shadow-none"
+              noContainer={true}
+              columns={[
+                {
+                  header: 'Execution ID',
+                  sortable: true,
+                  accessor: (log: any) => (
+                    <span className="text-[10px] font-mono text-zinc-500 group-hover:text-zinc-700 dark:group-hover:text-zinc-300 transition-colors uppercase">
+                      {log.id.slice(0, 12)}...
+                    </span>
+                  ),
+                  sortKey: 'id'
+                },
+                {
+                  header: 'Compute Type',
+                  sortable: true,
+                  accessor: (log: any) => (
+                    <span className="text-[9px] font-black px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-md uppercase tracking-wider border border-indigo-500/20">
+                      {log.type}
+                    </span>
+                  ),
+                  sortKey: 'type'
+                },
+                {
+                  header: 'Amount',
+                  sortable: true,
+                  accessor: (log: any) => (
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white">
+                      {log.amount.toLocaleString()}
+                    </span>
+                  ),
+                  sortKey: 'amount'
+                },
+                {
+                  header: 'Timestamp',
+                  className: 'text-right',
+                  sortable: true,
+                  accessor: (log: any) => (
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
+                  ),
+                  sortKey: 'timestamp'
+                }
+              ]}
+              emptyMessage="No swarm active in 24h cycle"
+            />
           </div>
         </div>
 

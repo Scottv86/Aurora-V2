@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit2, Eye, Layers, Check, X, ChevronRight, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Eye, Layers, ChevronRight, AlertCircle, Search } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { FieldInput } from '../FieldInput';
 import { useModalStack } from '../../context/ModalStackContext';
+import { Table } from '../UI/Table';
 
 interface RepeatableGroupBlockProps {
   field: any; // The field definition from the layout
@@ -24,14 +24,9 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
 }) => {
   const { pushModal } = useModalStack();
   const [localRows, setLocalRows] = useState(value);
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
-  const totalPages = Math.ceil(localRows.length / pageSize);
-
-  const paginatedRows = localRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Sync with external value prop
   React.useEffect(() => {
@@ -80,13 +75,6 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
     setDeletingIndex(null);
   };
 
-  const handleUpdateRow = (index: number, rowUpdates: any) => {
-    if (readOnly) return;
-    const newRows = [...localRows];
-    newRows[index] = { ...newRows[index], ...rowUpdates };
-    setLocalRows(newRows);
-  };
-
   const handleDrillDown = (index: number, isReadOnly: boolean = false) => {
     const row = localRows[index];
     pushModal({
@@ -103,6 +91,83 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       }
     });
   };
+
+  // Ensure all rows have a stable ID for the Table component
+  const rowsWithIds = useMemo(() => {
+    let filtered = localRows.map((row, index) => ({
+      ...row,
+      id: row.id || `row-${index}`,
+      _originalIndex: index
+    }));
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(row => {
+        // Search in all fields defined for this group
+        return field.fields.some((f: any) => {
+          const val = row[f.id];
+          return val && String(val).toLowerCase().includes(q);
+        });
+      });
+    }
+
+    return filtered;
+  }, [localRows, searchQuery, field.fields]);
+
+  const columns = useMemo(() => [
+    ...(field.fields || []).map((subField: any) => ({
+      header: subField.label,
+      accessor: (row: any) => (
+        <div className="text-sm text-zinc-700 dark:text-zinc-300 font-semibold tracking-tight">
+          {row[subField.id] ? String(row[subField.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
+        </div>
+      ),
+      sortable: true,
+      sortKey: subField.id
+    })),
+    {
+      header: '',
+      className: 'text-right',
+      accessor: (row: any) => (
+        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDrillDown(row._originalIndex, true);
+            }} 
+            className="p-2.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all"
+            title="View"
+          >
+            <Eye size={16} />
+          </button>
+          {!readOnly && (
+            <>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDrillDown(row._originalIndex);
+                }} 
+                className="p-2.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all"
+                title="Edit"
+              >
+                <Edit2 size={16} />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemove(row._originalIndex);
+                }} 
+                className="p-2.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all"
+                title="Remove"
+              >
+                <Trash2 size={16} />
+              </button>
+            </>
+          )}
+        </div>
+      )
+    }
+  ], [field.fields, readOnly, localRows]);
 
   // Default to table if not specified
   const displayMode = field.variant || 'table';
@@ -149,7 +214,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
                   <div key={f.id} className="min-w-0">
                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest truncate">{f.label}</p>
                     <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate mt-1">
-                      {row[f.id] ? String(row[f.id]) : <span className="text-zinc-300 dark:text-zinc-800">—</span>}
+                      {row[f.id] ? String(row[f.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
                     </p>
                   </div>
                 ))}
@@ -183,148 +248,36 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
           )}
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-950/30 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden overflow-x-auto shadow-sm">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800">
-                {(field.fields || []).map((subField: any) => (
-                  <th key={subField.id} className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-[0.15em]">
-                    {subField.label}
-                  </th>
-                ))}
-                {!readOnly && (
-                  <th className="px-8 py-5 text-right">
-                    <button 
-                      onClick={handleAdd}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
-                    >
-                      <Plus size={14} />
-                      Add
-                    </button>
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-              {localRows.length === 0 ? (
-                <tr>
-                  <td colSpan={(field.fields?.length || 0) + (readOnly ? 0 : 1)} className="px-8 py-20 text-center">
-                    <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                      <Layers size={20} className="text-zinc-300" />
-                    </div>
-                    <p className="text-xs font-black text-zinc-400 uppercase tracking-widest">Empty Collection</p>
-                    {!readOnly && (
-                      <button 
-                        onClick={handleAdd}
-                        className="mt-6 px-6 py-2.5 bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 rounded-xl text-[10px] font-bold hover:bg-indigo-500 hover:text-white transition-all uppercase tracking-widest"
-                      >
-                        Create your first record
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                paginatedRows.map((row, idx) => {
-                  const actualIndex = (currentPage - 1) * pageSize + idx;
-                  return (
-                    <tr 
-                      key={actualIndex} 
-                      onClick={() => handleDrillDown(actualIndex)}
-                      className="group cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors"
-                    >
-                      {field.fields.map((subField: any) => (
-                        <td key={subField.id} className="px-8 py-5">
-                          <div className="text-sm text-zinc-700 dark:text-zinc-300 font-semibold tracking-tight">
-                            {row[subField.id] ? String(row[subField.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
-                          </div>
-                        </td>
-                      ))}
-                      {!readOnly && (
-                        <td className="px-8 py-5 text-right">
-                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDrillDown(actualIndex, true);
-                              }} 
-                              className="p-2.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all"
-                              title="View"
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDrillDown(actualIndex);
-                              }} 
-                              className="p-2.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all"
-                              title="Edit"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemove(actualIndex);
-                              }} 
-                              className="p-2.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all"
-                              title="Remove"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          {/* Pagination Footer */}
-          {localRows.length > 0 && (
-            <div className="px-8 py-5 bg-zinc-50/50 dark:bg-zinc-950/30 border-t border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between">
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
-                Showing <span className="text-zinc-900 dark:text-white">{(currentPage - 1) * pageSize + 1}</span> to <span className="text-zinc-900 dark:text-white">{Math.min(currentPage * pageSize, localRows.length)}</span> of <span className="text-zinc-900 dark:text-white">{localRows.length}</span> items
-              </p>
-              
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                >
-                  Prev
-                </button>
-                
-                <div className="flex items-center gap-1.5">
-                  {[...Array(totalPages)].map((_, i) => (
-                    <button
-                      key={i + 1}
-                      onClick={() => setCurrentPage(i + 1)}
-                      className={cn(
-                        "w-8 h-8 rounded-lg text-[10px] font-bold transition-all",
-                        currentPage === i + 1 
-                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      )}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                </div>
-
-                <button 
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages || totalPages === 0}
-                  className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-30 transition-all shadow-sm"
-                >
-                  Next
-                </button>
-              </div>
+        <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner">
+          <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white/5 gap-4">
+            <div className="flex-1 max-w-xs relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+              <input 
+                type="text"
+                placeholder={`Search ${field.label}...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+              />
             </div>
-          )}
+            {!readOnly && (
+              <button 
+                onClick={handleAdd}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-500/20 transition-all active:scale-95"
+              >
+                <Plus size={14} />
+                Add Item
+              </button>
+            )}
+          </div>
+          <Table 
+            data={rowsWithIds}
+            columns={columns}
+            onRowClick={(row) => handleDrillDown(row._originalIndex)}
+            emptyMessage={searchQuery ? 'No items match your search.' : `Empty Collection. ${!readOnly ? 'Create your first record to begin.' : ''}`}
+            className="bg-transparent dark:bg-transparent border-none"
+            noContainer={true}
+          />
         </div>
       )}
 
