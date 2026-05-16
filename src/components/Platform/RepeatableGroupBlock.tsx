@@ -20,18 +20,11 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   hideHeader = false
 }) => {
   const { pushModal } = useModalStack();
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editBuffer, setEditBuffer] = useState<any>(null);
-
-  // Default to table if not specified
-  const displayMode = field.variant || 'table';
-
   const handleAdd = () => {
     if (readOnly) return;
     const newRow = {};
     const newValue = [...value, newRow];
-    setEditBuffer(newRow);
-    setEditingIndex(newValue.length - 1);
+    onChange?.(newValue);
   };
 
   const handleRemove = (index: number) => {
@@ -40,24 +33,11 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
     onChange?.(newValue);
   };
 
-  const handleEdit = (index: number) => {
+  const handleUpdateRow = (index: number, rowUpdates: any) => {
     if (readOnly) return;
-    setEditingIndex(index);
-    setEditBuffer({ ...value[index] });
-  };
-
-  const handleSaveRow = () => {
-    if (editingIndex === null) return;
     const newValue = [...value];
-    newValue[editingIndex] = editBuffer;
+    newValue[index] = { ...newValue[index], ...rowUpdates };
     onChange?.(newValue);
-    setEditingIndex(null);
-    setEditBuffer(null);
-  };
-
-  const handleCancelRow = () => {
-    setEditingIndex(null);
-    setEditBuffer(null);
   };
 
   const handleDrillDown = (index: number) => {
@@ -75,6 +55,9 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       }
     });
   };
+
+  // Default to table if not specified
+  const displayMode = field.variant || 'table';
 
   return (
     <div className="space-y-4">
@@ -144,7 +127,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-              {value.length === 0 && editingIndex === null ? (
+              {value.length === 0 ? (
                 <tr>
                   <td colSpan={(field.fields?.length || 0) + (readOnly ? 0 : 1)} className="px-4 py-12 text-center">
                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">No Records Yet</p>
@@ -154,48 +137,32 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
               ) : (
                 value.map((row, idx) => (
                   <tr key={idx} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
-                    {editingIndex === idx ? (
-                      <>
-                        {field.fields.map((subField: any) => (
-                          <td key={subField.id} className="px-3 py-2">
-                            <FieldInput 
-                              field={subField}
-                              value={editBuffer[subField.id]}
-                              onChange={(val) => setEditBuffer({ ...editBuffer, [subField.id]: val })}
-                            />
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right">
-                          <div className="flex justify-end gap-1">
-                            <button onClick={handleSaveRow} className="p-1.5 text-emerald-500 hover:bg-emerald-500/10 rounded-lg">
-                              <Check size={14} />
-                            </button>
-                            <button onClick={handleCancelRow} className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-lg">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        {field.fields.map((subField: any) => (
-                          <td key={subField.id} className="px-4 py-4 text-sm text-zinc-700 dark:text-zinc-300">
+                    {field.fields.map((subField: any) => (
+                      <td key={subField.id} className="px-3 py-2">
+                        {readOnly ? (
+                          <div className="px-1 py-1.5 text-sm text-zinc-700 dark:text-zinc-300">
                             {String(row[subField.id] || '-')}
-                          </td>
-                        ))}
-                        {!readOnly && (
-                          <td className="px-4 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="flex justify-end gap-1">
-                              <button onClick={() => handleEdit(idx)} className="p-1.5 text-zinc-400 hover:text-indigo-500 rounded-lg transition-colors">
-                                <Edit2 size={14} />
-                              </button>
-                              <button onClick={() => handleRemove(idx)} className="p-1.5 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors">
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
+                          </div>
+                        ) : (
+                          <FieldInput 
+                            field={subField}
+                            value={row[subField.id]}
+                            onChange={(val) => handleUpdateRow(idx, { [subField.id]: val })}
+                          />
                         )}
-                      </>
+                      </td>
+                    ))}
+                    {!readOnly && (
+                      <td className="px-4 py-2 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => handleDrillDown(idx)} className="p-1.5 text-zinc-400 hover:text-indigo-500 rounded-lg transition-colors" title="Detailed View">
+                            <Edit2 size={14} />
+                          </button>
+                          <button onClick={() => handleRemove(idx)} className="p-1.5 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors" title="Remove Row">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                     )}
                   </tr>
                 ))

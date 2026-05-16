@@ -761,30 +761,13 @@ export const RecordDetailView = () => {
           }
         }}
       >
-        {activeFieldId === nestedField.id && (
+        {activeFieldId === nestedField.id && savingFieldId === nestedField.id && (
           <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
-            {savingFieldId === nestedField.id && <Loader2 size={10} className="animate-spin" />}
-            {savingFieldId === nestedField.id ? 'Saving' : 'Editing'}
+            <Loader2 size={10} className="animate-spin" />
+            Saving
           </div>
         )}
-        {activeFieldId === nestedField.id && !savingFieldId && (
-          <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
-              className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-500 transition-all hover:scale-110 active:scale-95"
-              title="Confirm Changes"
-            >
-              <Check size={12} />
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
-              className="p-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-full shadow-lg border border-zinc-800 transition-all hover:scale-110 active:scale-95"
-              title="Cancel Changes"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
+
         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
           {nestedField.label}
           {nestedField.required && <span className="text-rose-500">*</span>}
@@ -1053,30 +1036,13 @@ export const RecordDetailView = () => {
                                 ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
                                 : "border-transparent"
                           )}>
-                            {activeFieldId === field.id && (
+                            {activeFieldId === field.id && savingFieldId === field.id && (
                               <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
-                                {savingFieldId === field.id && <Loader2 size={10} className="animate-spin" />}
-                                {savingFieldId === field.id ? 'Saving' : 'Editing'}
+                                <Loader2 size={10} className="animate-spin" />
+                                Saving
                               </div>
                             )}
-                            {activeFieldId === field.id && !savingFieldId && !['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress', 'datatable', 'duallist'].includes(field.type) && (
-                              <div className="absolute -bottom-3 right-6 flex items-center gap-2 z-20 animate-in slide-in-from-bottom-2 duration-300">
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleUpdateEntry(); }}
-                                  className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-500 transition-all hover:scale-110 active:scale-95"
-                                  title="Confirm Changes"
-                                >
-                                  <Check size={12} />
-                                </button>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
-                                  className="p-1.5 bg-zinc-900 text-zinc-400 hover:text-white rounded-full shadow-lg border border-zinc-800 transition-all hover:scale-110 active:scale-95"
-                                  title="Cancel Changes"
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
-                            )}
+
                           {field.type === 'heading' ? (
                             <h4 className={cn(
                               "font-bold text-zinc-900 dark:text-white mt-4",

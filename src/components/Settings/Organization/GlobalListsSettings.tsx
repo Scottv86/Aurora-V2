@@ -161,7 +161,12 @@ export const GlobalListsSettings = () => {
     try { const newList = await createList(newListData.name, newListData.description); setIsCreatingList(false); setNewListData({ name: '', description: '' }); if (newList) setSelectedListId(newList.id); } catch (err) { }
   };
 
-  const handleSaveMetadata = async () => { if (!metadataForm.name) return; await updateMetadata(metadataForm.name, metadataForm.description); await refetchLists(); setIsEditingMetadata(false); };
+  const handleUpdateMetadata = async () => { 
+    if (!metadataForm.name || (metadataForm.name === activeList?.name && metadataForm.description === activeList?.description)) return; 
+    await updateMetadata(metadataForm.name, metadataForm.description); 
+    await refetchLists(); 
+  };
+
   
   const handleCellChange = async (item: GlobalListItem, columnId: string, newValue: any) => {
     const saveKey = `${item.id}-${columnId}`;
@@ -300,9 +305,24 @@ export const GlobalListsSettings = () => {
                   <div className="space-y-1 group">
                     {isEditingMetadata ? (
                       <div className="flex flex-col gap-2">
-                        <input autoFocus value={metadataForm.name} onChange={(e) => setMetadataForm({ ...metadataForm, name: e.target.value })} className="text-2xl font-black bg-indigo-500/10 border-b border-indigo-500 text-indigo-600 dark:text-indigo-400 outline-none px-2" placeholder="List Name" />
-                        <input value={metadataForm.description} onChange={(e) => setMetadataForm({ ...metadataForm, description: e.target.value })} className="text-xs font-bold text-zinc-500 bg-transparent border-b border-zinc-800 outline-none px-2" placeholder="Description (optional)" />
-                        <div className="flex gap-2 mt-2"><button onClick={handleSaveMetadata} className="flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase"><Check size={12} /> Save</button><button onClick={() => setIsEditingMetadata(false)} className="flex items-center gap-1 px-3 py-1 bg-zinc-800 text-zinc-400 rounded-lg text-[10px] font-black uppercase"><X size={12} /> Cancel</button></div>
+                        <input 
+                          autoFocus 
+                          value={metadataForm.name} 
+                          onChange={(e) => setMetadataForm({ ...metadataForm, name: e.target.value })} 
+                          onBlur={handleUpdateMetadata}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateMetadata()}
+                          className="text-2xl font-black bg-indigo-500/10 border-b border-indigo-500 text-indigo-600 dark:text-indigo-400 outline-none px-2" 
+                          placeholder="List Name" 
+                        />
+                        <input 
+                          value={metadataForm.description} 
+                          onChange={(e) => setMetadataForm({ ...metadataForm, description: e.target.value })} 
+                          onBlur={handleUpdateMetadata}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateMetadata()}
+                          className="text-xs font-bold text-zinc-500 bg-transparent border-b border-zinc-800 outline-none px-2" 
+                          placeholder="Description (optional)" 
+                        />
+
                       </div>
                     ) : (
                       <div className="flex flex-col cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 p-2 -m-2 rounded-xl transition-all" onClick={() => setIsEditingMetadata(true)}>
