@@ -90,6 +90,12 @@ export const RecordDetailView = () => {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const isSavingRef = useRef(false);
   const pendingUpdateRef = useRef<{ data: any, fieldId: string | null } | null>(null);
+  const editDataRef = useRef<Record<string, any>>({});
+
+  // Keep ref in sync for use in handlers that shouldn't wait for re-renders
+  useEffect(() => {
+    editDataRef.current = editData;
+  }, [editData]);
 
   
 
@@ -438,17 +444,9 @@ export const RecordDetailView = () => {
 
     const withCalculations = evaluateCalculations(updatedData, allFields, lookupData);
     
-    // We don't setEditData here if we're about to handleUpdateEntry, 
-    // to avoid an extra render cycle before the network request.
-    // However, for immediate UI feedback on calculations, we do it.
+    // Update ref immediately so concurrent calls to handleUpdateEntry get fresh data
+    editDataRef.current = withCalculations;
     setEditData(withCalculations);
-    
-    // For certain field types, we trigger an immediate save because they are discrete actions
-    // However, if it's an array (multi-select), we wait for blur to allow multiple selections
-    if (!Array.isArray(newValue) && ['lookup', 'radio', 'toggle', 'rating', 'select', 'buttonGroup', 'progress'].includes(field?.type)) {
-      handleUpdateEntry(withCalculations, fieldId, true);
-    }
-
     
     return withCalculations;
   };
@@ -456,17 +454,23 @@ export const RecordDetailView = () => {
   const handleUpdateEntry = async (dataToSave?: any, specificFieldId?: string, silent: boolean = true) => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
     
+    // Use the latest data from ref if not provided
+    const currentData = dataToSave || editDataRef.current;
+    
     // Strict guard to prevent concurrent saves
     if (isSavingRef.current) {
       // If we're already saving, store this update as "pending"
       // This ensures that the LAST change always gets persisted
-      pendingUpdateRef.current = { data: dataToSave || editData, fieldId: specificFieldId || activeFieldId };
+      pendingUpdateRef.current = { data: currentData, fieldId: specificFieldId || activeFieldId };
       return;
     }
     
     const fieldIdBeingSaved = specificFieldId || activeFieldId;
 
-    const currentData = dataToSave || editData;
+    // Instant Lock: Clear active field immediately so the UI feels responsive
+    if (fieldIdBeingSaved) {
+      setActiveFieldId(null);
+    }
 
     // 1. Validation Logic Optimization
     // Only validate the field being saved to ensure snappiness
@@ -513,7 +517,7 @@ export const RecordDetailView = () => {
       const newValue = getFieldValue(currentData, fieldIdBeingSaved);
       const oldValue = getFieldValue(record, fieldIdBeingSaved);
       if (JSON.stringify(newValue) === JSON.stringify(oldValue)) {
-        setActiveFieldId(null);
+        setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
         // Still check for pending updates if they exist
         isSavingRef.current = false;
         if (pendingUpdateRef.current) {
@@ -558,9 +562,11 @@ export const RecordDetailView = () => {
       // so the UI feels "instant".
       if (fieldIdBeingSaved) {
         setSavingFieldId(null);
-        setActiveFieldId(null);
+        setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
         // We also update the 'record' state optimistically so other parts of the app see the change
         setRecord(prev => ({ ...prev, ...payload }));
+        setEditData(prev => ({ ...prev, ...payload }));
+        editDataRef.current = { ...editDataRef.current, ...payload };
       }
       
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
@@ -583,14 +589,14 @@ export const RecordDetailView = () => {
 
       const updatedRecord = await res.json();
       
-      // Final sync with server data
+      // Final sync with server data - merge with current local state to preserve in-flight edits
       setRecord(updatedRecord);
-      setEditData(updatedRecord);
+      setEditData(prev => ({ ...updatedRecord, ...prev }));
 
       if (recordId && updatedRecord._record_key) {
         setBreadcrumbOverride(recordId, updatedRecord._record_key);
       }
-      setActiveFieldId(null);
+      setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
       if (!silent) {
         toast.success("Record updated successfully");
       }
@@ -603,7 +609,7 @@ export const RecordDetailView = () => {
       setEditData(previousEditData);
     } finally {
       setSavingFieldId(null);
-      setActiveFieldId(null);
+      setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
       isSavingRef.current = false;
       
       // Check for PENDING updates
@@ -777,9 +783,8 @@ export const RecordDetailView = () => {
         data-field-id={nestedField.id}
         data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
         onClick={(e) => {
-          if (!activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
+          if (activeFieldId !== nestedField.id && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
             e.stopPropagation();
-            setEditData(record);
             setActiveFieldId(nestedField.id);
           }
         }}
@@ -1046,8 +1051,7 @@ export const RecordDetailView = () => {
                               gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                             }}
                             onClick={() => {
-                              if (!activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type)) {
-                                setEditData(record);
+                              if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type)) {
                                 setActiveFieldId(field.id);
                               }
                             }}

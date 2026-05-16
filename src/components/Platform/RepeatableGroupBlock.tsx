@@ -22,28 +22,42 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   onBlur
 }) => {
   const { pushModal } = useModalStack();
+  const [localRows, setLocalRows] = useState(value);
+
+  // Sync with external value prop
+  React.useEffect(() => {
+    setLocalRows(value);
+  }, [value]);
+
+  const triggerBlockSave = (newRows: any[]) => {
+    if (JSON.stringify(newRows) !== JSON.stringify(value)) {
+      onChange?.(newRows);
+    }
+  };
+
   const handleAdd = () => {
     if (readOnly) return;
     const newRow = {};
-    const newValue = [...value, newRow];
-    onChange?.(newValue);
+    const newRows = [...localRows, newRow];
+    setLocalRows(newRows);
   };
 
   const handleRemove = (index: number) => {
     if (readOnly) return;
-    const newValue = value.filter((_, i) => i !== index);
-    onChange?.(newValue);
+    const newRows = localRows.filter((_, i) => i !== index);
+    setLocalRows(newRows);
+    triggerBlockSave(newRows); // Explicit actions like delete should probably save immediately
   };
 
   const handleUpdateRow = (index: number, rowUpdates: any) => {
     if (readOnly) return;
-    const newValue = [...value];
-    newValue[index] = { ...newValue[index], ...rowUpdates };
-    onChange?.(newValue);
+    const newRows = [...localRows];
+    newRows[index] = { ...newRows[index], ...rowUpdates };
+    setLocalRows(newRows);
   };
 
   const handleDrillDown = (index: number) => {
-    const row = value[index];
+    const row = localRows[index];
     pushModal({
       moduleId: 'virtual',
       type: 'edit',
@@ -51,9 +65,10 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       localData: row,
       localSchema: field.fields,
       onSaveLocal: (updatedRow) => {
-        const newValue = [...value];
-        newValue[index] = updatedRow;
-        onChange?.(newValue);
+        const newRows = [...localRows];
+        newRows[index] = updatedRow;
+        setLocalRows(newRows);
+        triggerBlockSave(newRows);
       }
     });
   };
@@ -66,8 +81,9 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       className="space-y-4 outline-none" 
       tabIndex={0} 
       onBlur={(e) => {
-        if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
-          onBlur();
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          triggerBlockSave(localRows);
+          onBlur?.();
         }
       }}
     >
@@ -79,7 +95,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
             </div>
             <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{field.label}</h3>
             <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-[9px] font-bold text-zinc-400">
-              {value.length}
+              {localRows.length}
             </span>
           </div>
           {!readOnly && (
@@ -96,7 +112,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
 
       {displayMode === 'list' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {value.map((row, idx) => (
+          {localRows.map((row, idx) => (
             <button
               key={idx}
               onClick={() => handleDrillDown(idx)}
@@ -117,7 +133,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
               <ChevronRight size={14} className="text-zinc-300 group-hover:text-indigo-500 transition-all transform group-hover:translate-x-0.5" />
             </button>
           ))}
-          {value.length === 0 && (
+          {localRows.length === 0 && (
             <div className="col-span-full py-12 text-center border-2 border-dashed border-zinc-100 dark:border-zinc-800/50 rounded-[32px]">
               <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">No Items</p>
             </div>
@@ -137,7 +153,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-              {value.length === 0 ? (
+              {localRows.length === 0 ? (
                 <tr>
                   <td colSpan={(field.fields?.length || 0) + (readOnly ? 0 : 1)} className="px-4 py-12 text-center">
                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">No Records Yet</p>
@@ -145,7 +161,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
                   </td>
                 </tr>
               ) : (
-                value.map((row, idx) => (
+                localRows.map((row, idx) => (
                   <tr key={idx} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
                     {field.fields.map((subField: any) => (
                       <td key={subField.id} className="px-3 py-2">

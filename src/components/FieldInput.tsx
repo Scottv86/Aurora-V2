@@ -95,6 +95,7 @@ const SearchableLookup = ({
           onChange(item.id, item);
           setIsOpen(false);
           setSearch('');
+          onBlur?.();
         }
         break;
       case 'Escape':
@@ -181,6 +182,7 @@ const SearchableLookup = ({
                       onChange(item.id, item);
                       setIsOpen(false);
                       setSearch('');
+                      onBlur?.();
                     }}
                     onMouseEnter={() => setActiveIndex(idx)}
                     className={cn(
@@ -249,6 +251,66 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       }
     }
   }, [readonly]);
+
+  const [localValue, setLocalValue] = React.useState(value);
+  const [isFocused, setIsFocused] = React.useState(false);
+  const lastSentValueRef = React.useRef<any>(null);
+
+  // Sync with external value prop when not actively focused/editing
+  React.useEffect(() => {
+    if (!isFocused) {
+      // If the incoming value matches what we just sent, we are in sync
+      if (JSON.stringify(value) === JSON.stringify(lastSentValueRef.current)) {
+        lastSentValueRef.current = null;
+      }
+      
+      // Only overwrite local value if we aren't waiting for a sync 
+      // or if the external value is actually different from our last sent value
+      if (lastSentValueRef.current === null) {
+        setLocalValue(value);
+      }
+    }
+  }, [value, isFocused]);
+
+  const triggerSave = (val: any = localValue) => {
+    if (JSON.stringify(val) !== JSON.stringify(value)) {
+      lastSentValueRef.current = val;
+      onChange(val);
+    }
+  };
+
+  const handleBlur = (e?: React.FocusEvent) => {
+    // If we're clicking inside a group (like radio buttons), don't blur yet
+    if (e?.currentTarget && e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    
+    triggerSave();
+    setIsFocused(false);
+    onBlur?.();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      // For textarea, Enter should still allow newlines unless Ctrl/Cmd is pressed
+      if (type === 'longText' && !e.ctrlKey && !e.metaKey) return;
+      
+      e.preventDefault();
+      e.stopPropagation();
+      triggerSave();
+      
+      // Force blur to ensure visual lock
+      if (inputRef.current) {
+        inputRef.current.blur();
+      }
+      
+      onKeyDown?.(e);
+    }
+    if (e.key === 'Escape') {
+      setIsFocused(false);
+      onKeyDown?.(e);
+    }
+  };
 
   const resolvedOptions = React.useMemo(() => {
     if (lookupSource || (optionsSource && optionsSource !== 'manual')) {
@@ -321,11 +383,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <div className="relative w-full">
         <select 
           ref={inputRef}
-          value={value || ''}
+          value={localValue || ''}
           disabled={readonly}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          onKeyDown={onKeyDown}
+          onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
           autoFocus={!readonly}
           className={cn(inputClasses, "appearance-none")}
         >
@@ -348,31 +410,28 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           readonly && "pointer-events-none"
         )} 
         tabIndex={0} 
-        onBlur={(e) => {
-          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
-            onBlur();
-          }
-        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
       >
         {resolvedOptions?.map((opt: string, i: number) => (
           <label key={i} className={cn(
             "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
-            value === opt 
+            localValue === opt 
               ? "border-transparent" 
               : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
           )}>
             <div className={cn(
               "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-              value === opt ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
+              localValue === opt ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
             )}>
-              {value === opt && <div className="w-2 h-2 rounded-full bg-white" />}
+              {localValue === opt && <div className="w-2 h-2 rounded-full bg-white" />}
             </div>
             <input 
               type="radio" 
               className="hidden" 
-              checked={value === opt} 
+              checked={localValue === opt} 
               disabled={readonly}
-              onChange={() => onChange(opt)} 
+              onChange={() => setLocalValue(opt)} 
             />
             <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
           </label>
@@ -382,16 +441,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'checkboxGroup' || type === 'tag') {
-    const currentValues = Array.isArray(value) ? value : [];
+    const currentValues = Array.isArray(localValue) ? localValue : [];
     return (
       <div 
         className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} 
         tabIndex={0} 
-        onBlur={(e) => {
-          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
-            onBlur();
-          }
-        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
       >
         {type === 'tag' && (
           <div className="flex flex-wrap gap-2 p-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl mb-4">
@@ -402,7 +458,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500 text-white rounded-lg text-[10px] font-bold animate-in zoom-in-95 duration-200">
                   {v}
                   {!readonly && (
-                    <button onClick={(e) => { e.stopPropagation(); onChange(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); setLocalValue(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
                       <XCircle size={12} />
                     </button>
                   )}
@@ -437,7 +493,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                   const newValues = e.target.checked 
                     ? [...currentValues, opt]
                     : currentValues.filter(v => v !== opt);
-                  onChange(newValues);
+                  setLocalValue(newValues);
                 }} 
               />
               <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
@@ -451,17 +507,24 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'toggle') {
     return (
       <button
-        onClick={() => onChange(!value)}
+        onClick={() => {
+          const newVal = !localValue;
+          setLocalValue(newVal);
+          setIsFocused(true);
+          // onChange(newVal); // Remove immediate save
+        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
         disabled={readonly}
         className={cn(
           "w-11 h-6 rounded-full transition-all relative flex items-center px-1",
-          value ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800",
+          localValue ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800",
           readonly && "cursor-pointer pointer-events-none"
         )}
       >
         <div className={cn(
           "w-4 h-4 rounded-full bg-white shadow-sm transition-all",
-          value ? "translate-x-5" : "translate-x-0"
+          localValue ? "translate-x-5" : "translate-x-0"
         )} />
       </button>
     );
@@ -474,14 +537,16 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           type="range" 
           min={min || 0} 
           max={max || 100} 
-          value={value || 0}
+          value={localValue || 0}
           disabled={readonly}
-          onChange={(e) => onChange(parseInt(e.target.value))}
+          onFocus={() => setIsFocused(true)}
+          onBlur={handleBlur}
+          onChange={(e) => setLocalValue(parseInt(e.target.value))}
           className="w-full accent-indigo-600"
         />
         <div className="flex justify-between text-[10px] font-black text-zinc-400 uppercase tracking-widest">
           <span>{min || 0}</span>
-          <span className="text-indigo-500">{value || 0}</span>
+          <span className="text-indigo-500">{localValue || 0}</span>
           <span>{max || 100}</span>
         </div>
       </div>
@@ -489,27 +554,32 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'richtext') {
-    return <RichTextEditor value={value || ''} onChange={onChange} placeholder={placeholder} readonly={readonly} />;
+    return <RichTextEditor value={localValue || ''} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} placeholder={placeholder} readonly={readonly} onBlur={handleBlur} />;
   }
 
   if (type === 'signature_pad') {
-    return <SignaturePad value={value || ''} onChange={onChange} />;
+    return <SignaturePad value={localValue || ''} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} onBlur={handleBlur} />;
   }
 
   if (type === 'rating') {
     return (
-      <div className={cn("flex gap-2", readonly && "pointer-events-none")}>
+      <div 
+        className={cn("flex gap-2 outline-none", readonly && "pointer-events-none")}
+        tabIndex={0}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
+      >
         {[1, 2, 3, 4, 5].map(i => (
           <button 
             key={i} 
             disabled={readonly}
-            onClick={() => onChange(i)}
+            onClick={() => setLocalValue(i)}
             className={cn(
               "p-2 rounded-xl transition-all",
-              (value || 0) >= i ? "text-amber-500 bg-amber-500/10" : "text-zinc-300 hover:text-zinc-400 bg-zinc-100 dark:bg-zinc-900"
+              (localValue || 0) >= i ? "text-amber-500 bg-amber-500/10" : "text-zinc-300 hover:text-zinc-400 bg-zinc-100 dark:bg-zinc-900"
             )}
           >
-            <Star size={20} fill={(value || 0) >= i ? "currentColor" : "none"} />
+            <Star size={20} fill={(localValue || 0) >= i ? "currentColor" : "none"} />
           </button>
         ))}
       </div>
@@ -521,16 +591,20 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <div className={cn("flex items-center gap-4", readonly && "pointer-events-none")}>
         <input 
           type="color" 
-          value={value || '#6366f1'} 
+          value={localValue || '#6366f1'} 
           disabled={readonly}
-          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={handleBlur}
+          onChange={(e) => setLocalValue(e.target.value)}
           className="w-12 h-12 rounded-2xl border-none p-0 overflow-hidden cursor-pointer bg-transparent"
         />
         <input 
           type="text" 
-          value={value || '#6366f1'} 
+          value={localValue || '#6366f1'} 
           disabled={readonly}
-          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={handleBlur}
+          onChange={(e) => setLocalValue(e.target.value)}
           className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs font-mono uppercase"
         />
       </div>
@@ -606,16 +680,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'duallist') {
-    const currentValues = Array.isArray(value) ? value : [];
+    const currentValues = Array.isArray(localValue) ? localValue : [];
     return (
       <div 
         className={cn("flex gap-4 h-64 outline-none", readonly && "pointer-events-none")} 
         tabIndex={0} 
-        onBlur={(e) => {
-          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
-            onBlur();
-          }
-        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
       >
         {/* Available Source */}
         <div className="flex-1 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-950 overflow-hidden">
@@ -629,7 +700,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 key={i}
                 type="button"
                 disabled={readonly}
-                onClick={() => onChange([...currentValues, opt])}
+                onClick={() => setLocalValue([...currentValues, opt])}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 flex items-center justify-between group transition-all"
               >
                 {opt}
@@ -655,7 +726,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 key={i}
                 type="button"
                 disabled={readonly}
-                onClick={() => onChange(currentValues.filter(val => val !== v))}
+                onClick={() => setLocalValue(currentValues.filter(val => val !== v))}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center justify-between group animate-in slide-in-from-right-2 duration-200"
               >
                 {v}
@@ -678,21 +749,18 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <div 
         className={cn("flex flex-wrap gap-2 outline-none", readonly && "pointer-events-none")}
         tabIndex={0}
-        onBlur={(e) => {
-          if (onBlur && !e.currentTarget.contains(e.relatedTarget as Node)) {
-            onBlur();
-          }
-        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
       >
         {resolvedOptions?.map((opt: string, i: number) => (
           <button
             key={i}
             type="button"
             disabled={readonly}
-            onClick={() => onChange(opt)}
+            onClick={() => setLocalValue(opt)}
             className={cn(
               "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
-              value === opt 
+              localValue === opt 
                 ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
                 : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
             )}
@@ -705,18 +773,19 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <DatePicker value={value} onChange={onChange} readonly={readonly} onBlur={onBlur} dateFormat={field.dateFormat} excludeWeekends={field.excludeWeekends} min={minConstraint} max={maxConstraint} />;
-  if (type === 'time') return <TimePicker value={value} onChange={onChange} readonly={readonly} onBlur={onBlur} timeFormat={field.timeFormat} minuteStep={field.minuteStep} min={minConstraint} max={maxConstraint} />;
+  if (type === 'date') return <DatePicker value={localValue} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} dateFormat={field.dateFormat} excludeWeekends={field.excludeWeekends} min={minConstraint} max={maxConstraint} />;
+  if (type === 'time') return <TimePicker value={localValue} onChange={(val) => { setLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} timeFormat={field.timeFormat} minuteStep={field.minuteStep} min={minConstraint} max={maxConstraint} />;
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}
       <input 
         ref={inputRef}
         type="number" 
-        value={value || ''} 
-        onChange={(e) => onChange(e.target.value)} 
-        onBlur={onBlur}
-        onKeyDown={onKeyDown}
+        value={localValue || ''} 
+        onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }} 
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         autoFocus={!readonly}
         readOnly={readonly}
         className={cn(inputClasses, "appearance-none", type === 'currency' ? "pl-8 pr-4" : "px-4")} 
@@ -724,16 +793,17 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     </div>
   );
 
-  if (type === 'longText') return <textarea ref={inputRef} value={value || ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} onKeyDown={onKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
+  if (type === 'longText') return <textarea ref={inputRef} value={localValue || ''} onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }} onFocus={() => setIsFocused(true)} onBlur={handleBlur} onKeyDown={handleKeyDown} autoFocus={!readonly} readOnly={readonly} className={inputClasses} />;
 
   // User & Lookup
   if (type === 'user') {
     return (
       <UserSelector 
-        value={value}
-        onChange={(id) => onChange(id)}
+        value={localValue}
+        onChange={(id) => { setLocalValue(id); setIsFocused(true); }}
         placeholder={placeholder || "Select User..."}
         readonly={readonly}
+        onBlur={handleBlur}
       />
     );
   }
@@ -742,10 +812,10 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     return (
       <LookupInput 
         field={field}
-        value={value}
-        onChange={onChange}
-        onBlur={onBlur}
-        onKeyDown={onKeyDown}
+        value={localValue}
+        onChange={(val: any) => { setLocalValue(val); }}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         readonly={readonly}
         inputClasses={inputClasses}
         lookupResults={lookupResults}
@@ -792,8 +862,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           <input 
             type="text"
             placeholder={placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
+            value={localValue || ''}
+            onFocus={() => setIsFocused(true)}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            onChange={(e) => setLocalValue(e.target.value)}
             className={cn(inputClasses, isGoogleMaps && "pl-10")}
           />
           {isGoogleMaps && (
@@ -802,15 +875,20 @@ export const FieldInput: React.FC<FieldInputProps> = ({
             </div>
           )}
         </div>
-        {isGoogleMaps && value && value.length > 3 && (
+        {isGoogleMaps && localValue && localValue.length > 3 && (
           <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 animate-in fade-in slide-in-from-top-2">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Nexus Suggestions</p>
             <button 
-              onClick={() => onChange(`${value}, Mock City, MC 12345`)}
+              onClick={() => {
+                const newVal = `${localValue}, Mock City, MC 12345`;
+                setLocalValue(newVal);
+                setIsFocused(true);
+                // triggerSave(newVal); // Let blur handle it
+              }}
               className="w-full text-left p-2 hover:bg-white dark:hover:bg-zinc-950 rounded-lg text-xs transition-colors flex items-center gap-2 group"
             >
               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-              <span className="flex-1 truncate">{value}, Mock City, MC 12345</span>
+              <span className="flex-1 truncate">{localValue}, Mock City, MC 12345</span>
               <ArrowRight size={12} className="text-zinc-300 group-hover:text-indigo-500 transition-colors" />
             </button>
           </div>
@@ -825,10 +903,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       ref={inputRef}
       type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : 'text'}
       placeholder={placeholder || `Enter ${(label || 'value').toLowerCase()}...`}
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onBlur}
-      onKeyDown={onKeyDown}
+      value={localValue || ''}
+      onFocus={() => setIsFocused(true)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      onChange={(e) => { setIsFocused(true); setLocalValue(e.target.value); }}
       autoFocus={!readonly}
       readOnly={readonly}
       className={inputClasses}
@@ -848,7 +927,10 @@ const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inpu
           type="text"
           placeholder={field.placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
           value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            // This is inside LookupInput, but LookupInput is wrapped by FieldInput which provides onChange
+            onChange(e.target.value);
+          }}
           onBlur={onBlur}
           onKeyDown={onKeyDown}
           readOnly={readonly}
