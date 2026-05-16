@@ -14,6 +14,8 @@ import { evaluateCalculations } from '../../services/aiService';
 import { toast } from 'sonner';
 import { RecursiveCollectionBlock } from '../Platform/RecursiveCollectionBlock';
 import { RepeatableGroupBlock } from '../Platform/RepeatableGroupBlock';
+import { RecordModalSkeleton } from '../Platform/RecordModalSkeleton';
+
 
 // --- Components ---
 
@@ -175,10 +177,9 @@ const RecordModal = ({
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
           {loading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-            </div>
+            <RecordModalSkeleton />
           ) : (
+
             <div className="w-full">
                <div className={cn(
                  "w-full space-y-12",

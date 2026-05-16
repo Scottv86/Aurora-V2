@@ -42,6 +42,8 @@ import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
+import { RecordDetailSkeleton } from '../../components/Platform/RecordDetailSkeleton';
+
 
 interface WorkflowState {
   currentNodeId: string;
@@ -847,11 +849,8 @@ export const RecordDetailView = () => {
     );
   };
 
-  if (loading || platformLoading) return (
-    <div className="h-64 flex items-center justify-center">
-      <Loader2 className="animate-spin text-indigo-500" size={32} />
-    </div>
-  );
+  if (loading || platformLoading) return <RecordDetailSkeleton />;
+
 
   if (!moduleData || !record) return <Navigate to="/workspace" replace />;
 
