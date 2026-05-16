@@ -375,121 +375,93 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     const { id } = req.params;
     const { moduleId, status, associations, path, transitionTo, ...data } = req.body;
 
-    const result = await db.$transaction(async (tx) => {
-      // 1. Manually set RLS session variables for this transaction
-      const tId = (tenantId || '').replace(/'/g, "''");
-      const uId = ((req as any).user?.uid || '').replace(/'/g, "''");
-      const isAdmin = (req as any).user?.isSuperAdmin ? 'true' : 'false';
+    // 1. Fetch existing (using scoped client, extension handles RLS)
+    const existing = await db.record.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Record not found' });
 
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tId}'`);
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${uId}'`);
-      await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${isAdmin}'`);
+    const updatedData = {
+      ...(existing.data as any),
+      ...data
+    };
 
-      // 2. Fetch existing (use RLS_CONTEXT to skip extension's auto-transaction)
-      const existing = await tx.record.findUnique({ 
-        where: { id },
-        [RLS_CONTEXT]: true 
-      } as any);
-      
-      if (!existing) throw new Error('Record not found');
-
-      const updatedData = {
-        ...(existing.data as any),
-        ...data
-      };
-
-      // 3. Validation for required fields
-      const module = await tx.module.findUnique({ 
-        where: { id: moduleId || existing.moduleId },
-        [RLS_CONTEXT]: true
-      } as any);
-      
-      if (module) {
-        const config = module.config as any;
-        const layout = config.layout || [];
-        const flattenFields = (fields: any[]): any[] => {
-          const result: any[] = [];
-          fields.forEach(f => {
-            result.push(f);
-            // Do not flatten sub-fields of repeatableGroup or sub_module for top-level validation
-            if (f.fields && f.type !== 'repeatableGroup' && f.type !== 'sub_module') {
-              result.push(...flattenFields(f.fields));
-            }
-          });
-          return result;
-        };
-        const allFields = flattenFields(layout);
-        const requiredFields = allFields.filter((f: any) => f.required);
-
-        const missingFields = requiredFields.filter((f: any) => {
-          let actualVal = updatedData[f.id];
-          if (actualVal === undefined || actualVal === null) {
-            const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
-            const group = layout.find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
-            if (group) {
-              actualVal = updatedData[group.id]?.[f.id];
-            }
+    // 2. Validation for required fields
+    const module = await db.module.findUnique({ 
+      where: { id: moduleId || existing.moduleId }
+    });
+    
+    if (module) {
+      const config = module.config as any;
+      const layout = config.layout || [];
+      const flattenFields = (fields: any[]): any[] => {
+        const result: any[] = [];
+        fields.forEach(f => {
+          result.push(f);
+          if (f.fields && f.type !== 'repeatableGroup' && f.type !== 'sub_module') {
+            result.push(...flattenFields(f.fields));
           }
-          return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
         });
-
-        if (missingFields.length > 0) {
-          throw new Error(`Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}`);
-        }
-      }
-
-      const updatePayload: any = {
-        data: updatedData,
-        status: status || existing.status,
-        associations: associations !== undefined ? associations : existing.associations,
-        path: path !== undefined ? path : existing.path
+        return result;
       };
+      const allFields = flattenFields(layout);
+      const requiredFields = allFields.filter((f: any) => f.required);
 
-      if (transitionTo) {
-        const module = await tx.module.findUnique({ 
-          where: { id: moduleId || existing.moduleId },
-          [RLS_CONTEXT]: true
-        } as any);
-        const config = module?.config as any;
-        const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
-        
-        if (workflow) {
-          const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
-          if (targetNode) {
-            const currentWorkflowState = (existing.workflowState as any) || { history: [] };
-            updatePayload.workflowState = {
-              currentNodeId: targetNode.id,
-              history: [
-                ...currentWorkflowState.history,
-                {
-                  nodeId: targetNode.id,
-                  timestamp: new Date().toISOString(),
-                  action: 'Transitioned',
-                  triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
-                }
-              ]
-            };
-            updatePayload.status = targetNode.name;
+      const missingFields = requiredFields.filter((f: any) => {
+        let actualVal = updatedData[f.id];
+        if (actualVal === undefined || actualVal === null) {
+          const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
+          const group = layout.find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
+          if (group) {
+            actualVal = updatedData[group.id]?.[f.id];
           }
         }
+        return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
+      });
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({ error: `Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}` });
       }
+    }
 
-      const record = await tx.record.update({
-        where: { id },
-        data: updatePayload,
-        [RLS_CONTEXT]: true
-      } as any);
+    const updatePayload: any = {
+      data: updatedData,
+      status: status || existing.status,
+      associations: associations !== undefined ? associations : existing.associations,
+      path: path !== undefined ? path : existing.path
+    };
 
-      const recordWithMember = await tx.record.findUnique({
-        where: { id: record.id },
-        include: { createdByMember: true },
-        [RLS_CONTEXT]: true
-      } as any);
+    if (transitionTo && module) {
+      const config = module.config as any;
+      const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+      
+      if (workflow) {
+        const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
+        if (targetNode) {
+          const currentWorkflowState = (existing.workflowState as any) || { history: [] };
+          updatePayload.workflowState = {
+            currentNodeId: targetNode.id,
+            history: [
+              ...currentWorkflowState.history,
+              {
+                nodeId: targetNode.id,
+                timestamp: new Date().toISOString(),
+                action: 'Transitioned',
+                triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+              }
+            ]
+          };
+          updatePayload.status = targetNode.name;
+        }
+      }
+    }
 
-      return { record, recordWithMember };
-    }, { timeout: 30000 });
+    // 3. Perform update (using scoped client, handles RLS and returns included data in one transaction)
+    const recordWithMember = await db.record.update({
+      where: { id },
+      data: updatePayload,
+      include: { createdByMember: true }
+    });
 
-    const { record, recordWithMember } = result;
+    const record = recordWithMember; // For compatibility with rest of handler
 
     const formatted = {
       id: record.id,
@@ -519,86 +491,62 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     const { id } = req.params;
     const { moduleId, status, associations, path, ...data } = req.body;
 
-    const result = await db.$transaction(async (tx) => {
-      // 1. Manually set RLS session variables for this transaction
-      const tId = (tenantId || '').replace(/'/g, "''");
-      const uId = ((req as any).user?.uid || '').replace(/'/g, "''");
-      const isAdmin = (req as any).user?.isSuperAdmin ? 'true' : 'false';
+    // 1. Fetch existing (using scoped client, handles RLS)
+    const existing = await db.record.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Record not found' });
 
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tId}'`);
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${uId}'`);
-      await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${isAdmin}'`);
+    const updatedData = {
+      ...(existing.data as any),
+      ...data
+    };
 
-      const existing = await tx.record.findUnique({ 
-        where: { id },
-        [RLS_CONTEXT]: true 
-      } as any);
+    // 2. Validation (Minimal check for fields provided in PATCH)
+    const module = await db.module.findUnique({ 
+      where: { id: moduleId || existing.moduleId }
+    });
 
-      if (!existing) throw new Error('Record not found');
-
-      const updatedData = {
-        ...(existing.data as any),
-        ...data
-      };
-
-      // Minimal validation: only check fields provided in PATCH
-      const module = await tx.module.findUnique({ 
-        where: { id: moduleId || existing.moduleId },
-        [RLS_CONTEXT]: true
-      } as any);
-
-      if (module) {
-        const config = module.config as any;
-        const layout = config.layout || [];
-        
-        const flattenFields = (fields: any[]): any[] => {
-          const result: any[] = [];
-          fields.forEach(f => {
-            result.push(f);
-            // Do not flatten sub-fields of repeatableGroup or sub_module for top-level validation
-            if (f.fields && f.type !== 'repeatableGroup' && f.type !== 'sub_module') {
-              result.push(...flattenFields(f.fields));
-            }
-          });
-          return result;
-        };
-        
-        const allFields = flattenFields(layout);
-        const fieldsToValidate = allFields.filter(f => data[f.id] !== undefined && f.required);
-        
-        const missing = fieldsToValidate.filter(f => {
-          const val = data[f.id];
-          return val === null || val === undefined || (typeof val === 'string' && val.trim() === '');
+    if (module) {
+      const config = module.config as any;
+      const layout = config.layout || [];
+      const flattenFields = (fields: any[]): any[] => {
+        const result: any[] = [];
+        fields.forEach(f => {
+          result.push(f);
+          if (f.fields && f.type !== 'repeatableGroup' && f.type !== 'sub_module') {
+            result.push(...flattenFields(f.fields));
+          }
         });
-
-        if (missing.length > 0) {
-          throw new Error(`Validation failed: ${missing.map(f => f.label || f.id).join(', ')} is required`);
-        }
-      }
-
-      const updatePayload: any = {
-        data: updatedData,
-        status: status || existing.status,
-        associations: associations !== undefined ? associations : existing.associations,
-        path: path !== undefined ? path : existing.path
+        return result;
       };
+      const allFields = flattenFields(layout);
+      const fieldsToValidate = allFields.filter(f => data[f.id] !== undefined && f.required);
+      
+      const missing = fieldsToValidate.filter(f => {
+        const val = data[f.id];
+        return val === null || val === undefined || (typeof val === 'string' && val.trim() === '');
+      });
 
-      const record = await tx.record.update({
-        where: { id },
-        data: updatePayload,
-        [RLS_CONTEXT]: true
-      } as any);
+      if (missing.length > 0) {
+        return res.status(400).json({ error: `Validation failed: ${missing.map(f => f.label || f.id).join(', ')} is required` });
+      }
+    }
 
-      const recordWithMember = await tx.record.findUnique({
-        where: { id: record.id },
-        include: { createdByMember: true },
-        [RLS_CONTEXT]: true
-      } as any);
+    const updatePayload: any = {
+      data: updatedData,
+      status: status || existing.status,
+      associations: associations !== undefined ? associations : existing.associations,
+      path: path !== undefined ? path : existing.path
+    };
 
-      return { record, recordWithMember };
-    }, { timeout: 30000 });
+    // 3. Perform update (using scoped client, handles RLS and returns included data)
+    const recordWithMember = await db.record.update({
+      where: { id },
+      data: updatePayload,
+      include: { createdByMember: true }
+    });
 
-    const { record, recordWithMember } = result;
+    const record = recordWithMember; // For compatibility
+
 
     const formatted = {
       id: record.id,
