@@ -35,7 +35,7 @@ export const ModuleView = () => {
   const { moduleId } = useParams();
   const navigate = useNavigate();
   const { session, user } = useAuth();
-  const { tenant, isLoading: platformLoading, modules } = usePlatform();
+  const { tenant, isLoading: platformLoading, modules, members } = usePlatform();
   useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
@@ -48,7 +48,9 @@ export const ModuleView = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const pageSize = useMemo(() => {
+    return (moduleData as any)?.interfaceSettings?.master?.pagination?.pageSize || 25;
+  }, [moduleData]);
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -85,7 +87,7 @@ export const ModuleView = () => {
 
   const displayFields = useMemo(() => {
     return allFields.filter((f: ModuleField) => 
-      !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup'].includes(f.type)
+      !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)
     );
   }, [allFields]);
 
@@ -289,6 +291,64 @@ export const ModuleView = () => {
     });
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  const interfaceSettings = useMemo(() => {
+    return (moduleData as any)?.interfaceSettings || {
+      master: {
+        layoutType: 'table',
+        density: 'standard',
+        pagination: { enabled: true, pageSize: 25 }
+      },
+      detail: {
+        layoutType: 'tabs'
+      },
+      actions: []
+    };
+  }, [moduleData]);
+
+  const filteredRecords = useMemo(() => {
+    if (!searchQuery.trim()) return records;
+    const query = searchQuery.toLowerCase();
+    return records.filter(record => {
+      return Object.entries(record).some(([key, val]) => {
+        if (key.startsWith('_') || val === null || val === undefined) return false;
+        if (typeof val === 'object') return false;
+        return String(val).toLowerCase().includes(query);
+      });
+    });
+  }, [records, searchQuery]);
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ recordId, data }: { recordId: string; data: any }) => {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to update record');
+      }
+
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      toast.success("Record updated successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update record");
+    }
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (recordId: string) => {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
@@ -320,6 +380,569 @@ export const ModuleView = () => {
   const handleDeleteEntry = async (recordId: string) => {
     if (!tenant?.id || !moduleId) return;
     deleteMutation.mutate(recordId);
+  };
+
+  const kanbanConfig = useMemo(() => {
+    const statusField = allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status');
+    const stages = statusField?.options || ['Todo', 'In Progress', 'Done'];
+    const fieldId = statusField?.id || 'status';
+
+    const grouped: Record<string, any[]> = {};
+    stages.forEach(stage => {
+      grouped[stage] = [];
+    });
+
+    filteredRecords.forEach(record => {
+      const val = record[fieldId] || record.status || 'Todo';
+      if (grouped[val]) {
+        grouped[val].push(record);
+      } else {
+        if (grouped[stages[0]]) grouped[stages[0]].push(record);
+      }
+    });
+
+    return { stages, fieldId, grouped };
+  }, [allFields, filteredRecords]);
+
+  const handleMoveCard = (recordId: string, newStage: string) => {
+    const fieldId = kanbanConfig.fieldId;
+    updateMutation.mutate({
+      recordId,
+      data: {
+        [fieldId]: newStage,
+        status: newStage
+      }
+    });
+  };
+
+  const calendarConfig = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const numDays = new Date(year, month + 1, 0).getDate();
+    const dateField = allFields.find(f => f.type === 'date') || { id: 'createdAt' };
+    return { year, month, firstDayIndex, numDays, dateFieldId: dateField.id };
+  }, [allFields, currentDate]);
+
+  const dateToRecordsMap = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    const { year, month, dateFieldId } = calendarConfig;
+
+    filteredRecords.forEach(record => {
+      const rawDate = record[dateFieldId] || record.createdAt;
+      if (!rawDate) return;
+      const dateObj = new Date(rawDate);
+      if (dateObj.getFullYear() === year && dateObj.getMonth() === month) {
+        const day = dateObj.getDate();
+        if (!map[day]) map[day] = [];
+        map[day].push(record);
+      }
+    });
+
+    return map;
+  }, [filteredRecords, calendarConfig]);
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June", 
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const renderKanbanView = () => {
+    const { stages, grouped } = kanbanConfig;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Filter cards..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 overflow-x-auto pb-4">
+          {stages.map((stage: string) => {
+            const cards = grouped[stage] || [];
+            return (
+              <div 
+                key={stage}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  const rId = e.dataTransfer.getData('text/plain');
+                  if (rId) handleMoveCard(rId, stage);
+                }}
+                className="bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-800/60 rounded-[2rem] p-6 flex flex-col min-h-[500px]"
+              >
+                <div className="flex items-center justify-between mb-6 pb-3 border-b border-zinc-200/50 dark:border-zinc-800/50">
+                  <span className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                    {stage}
+                  </span>
+                  <span className="px-2 py-0.5 bg-zinc-200/50 dark:bg-zinc-800/50 rounded-full text-[10px] font-bold text-zinc-500">
+                    {cards.length}
+                  </span>
+                </div>
+
+                <div className="flex-1 space-y-4 overflow-y-auto max-h-[600px] pr-1.5 custom-scrollbar">
+                  {cards.map(record => (
+                    <div 
+                      key={record.id}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
+                      onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                      className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-indigo-500/50 hover:shadow-lg transition-all group relative space-y-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
+                          {record._record_key || 'Key'}
+                        </span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRecordToDelete(record.id);
+                            }}
+                            className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-zinc-900 dark:text-white leading-relaxed">
+                          {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled Record'}
+                        </p>
+                        {displayFields.slice(1, 3).map((f: any) => {
+                          const val = record[f.id] || record[f.name];
+                          if (val === undefined || val === null || val === '') return null;
+                          
+                          if (f.type === 'user') {
+                            const resolvedUser = members?.find((m: any) => m.id === val);
+                            return (
+                              <div key={f.id} className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-medium truncate">
+                                <span className="font-bold text-zinc-500">{f.label}:</span>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  {resolvedUser ? (
+                                    <>
+                                      <div className={cn(
+                                        "w-4 h-4 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200/50 dark:border-zinc-800/50",
+                                        resolvedUser.isSynthetic 
+                                          ? "bg-indigo-500/10 text-indigo-600" 
+                                          : "bg-zinc-100 text-zinc-600"
+                                      )}>
+                                        {resolvedUser.avatarUrl ? (
+                                          <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          resolvedUser.isSynthetic ? <LucideIcons.Bot size={8} /> : <LucideIcons.User size={8} />
+                                        )}
+                                      </div>
+                                      <span className="text-zinc-700 dark:text-zinc-300 font-bold truncate">{resolvedUser.name}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-zinc-500 truncate">{val}</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <p key={f.id} className="text-[10px] text-zinc-400 font-medium truncate">
+                              <span className="font-bold text-zinc-500">{f.label}:</span> {val}
+                            </p>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex justify-end gap-1.5 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
+                        {stages.indexOf(stage) > 0 && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const prevStage = stages[stages.indexOf(stage) - 1];
+                              handleMoveCard(record.id, prevStage);
+                            }}
+                            className="p-1 text-[10px] font-black text-zinc-400 hover:text-indigo-500 uppercase"
+                            title="Move Left"
+                          >
+                            ←
+                          </button>
+                        )}
+                        {stages.indexOf(stage) < stages.length - 1 && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nextStage = stages[stages.indexOf(stage) + 1];
+                              handleMoveCard(record.id, nextStage);
+                            }}
+                            className="p-1 text-[10px] font-black text-zinc-400 hover:text-indigo-500 uppercase"
+                            title="Move Right"
+                          >
+                            →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {cards.length === 0 && (
+                    <div className="h-28 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 text-[10px] font-bold uppercase">
+                      Empty column
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCalendarView = () => {
+    const { year, month, firstDayIndex, numDays, dateFieldId } = calendarConfig;
+    const daysInWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    
+    const cells = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      cells.push(null);
+    }
+    for (let d = 1; d <= numDays; d++) {
+      cells.push(d);
+    }
+
+    const prevMonth = () => {
+      setCurrentDate(new Date(year, month - 1, 1));
+    };
+
+    const nextMonth = () => {
+      setCurrentDate(new Date(year, month + 1, 1));
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={prevMonth}
+              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              <LucideIcons.ChevronLeft size={16} />
+            </button>
+            <h3 className="text-base font-black uppercase tracking-wider text-zinc-900 dark:text-white min-w-[150px] text-center">
+              {monthNames[month]} {year}
+            </h3>
+            <button 
+              onClick={nextMonth}
+              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              <LucideIcons.ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+            Date source: <span className="text-indigo-500 font-black">{allFields.find(f => f.id === dateFieldId)?.label || 'Created Date'}</span>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            {daysInWeek.map(day => (
+              <div key={day} className="py-4 text-center text-[10px] font-black text-zinc-400 uppercase tracking-wider">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 divide-x divide-y divide-zinc-200 dark:divide-zinc-800">
+            {cells.map((day, idx) => {
+              const dayRecords = day ? (dateToRecordsMap[day] || []) : [];
+              return (
+                <div 
+                  key={idx} 
+                  className={cn(
+                    "min-h-[120px] p-3 flex flex-col space-y-2 transition-colors",
+                    !day ? "bg-zinc-50/30 dark:bg-zinc-950/10" : "bg-white dark:bg-zinc-900"
+                  )}
+                >
+                  {day && (
+                    <div className="flex items-center justify-between">
+                      <span className={cn(
+                        "text-xs font-bold font-mono",
+                        new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
+                          ? "w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center"
+                          : "text-zinc-500"
+                      )}>
+                        {day}
+                      </span>
+                      {dayRecords.length > 0 && (
+                        <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-full">
+                          {dayRecords.length}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[80px] custom-scrollbar pr-0.5">
+                    {dayRecords.map(record => (
+                      <div 
+                        key={record.id}
+                        onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                        className="px-2 py-1 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-lg text-[9px] font-bold text-indigo-600 dark:text-indigo-400 truncate cursor-pointer transition-all flex items-center justify-between group"
+                      >
+                        <span className="truncate">{record._record_key || 'Record'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTableView = () => {
+    const densityClass = (() => {
+      const d = interfaceSettings.master.density || 'standard';
+      if (d === 'compact') return 'px-4 py-2 text-[11px] leading-normal font-medium';
+      if (d === 'spacious') return 'px-8 py-5 text-sm leading-relaxed';
+      return 'px-6 py-4 text-sm';
+    })();
+
+    const hasStatusField = displayFields.some((f: any) => f.id === 'status' || f.name?.toLowerCase() === 'status');
+
+    const tableColumns = [
+      {
+        header: 'Key',
+        sortable: true,
+        sortKey: '_record_key',
+        className: densityClass,
+        accessor: (record: any) => (
+          <span className="text-sm font-bold text-indigo-500">
+            {record._record_key || '-'}
+          </span>
+        )
+      },
+      ...displayFields
+        .filter((field: any) => field.showInTable !== false)
+        .map((field: any) => ({
+          header: field.label || field.name,
+          sortable: true,
+          sortKey: field.id || field.name,
+          className: densityClass,
+          style: field.columnWidth ? { width: `${field.columnWidth}px`, minWidth: `${field.columnWidth}px` } : undefined,
+          accessor: (record: any) => {
+            const val = record[field.id] || record[field.name];
+            if (field.type === 'checkbox') return val ? 'Yes' : 'No';
+            
+            if (field.type === 'user') {
+              if (!val) return '-';
+              const resolvedUser = members?.find((m: any) => m.id === val);
+              if (resolvedUser) {
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
+                      resolvedUser.isSynthetic 
+                        ? "bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
+                        : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
+                    )}>
+                      {resolvedUser.avatarUrl ? (
+                        <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
+                      ) : (
+                        resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                      {resolvedUser.name}
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-white/10 flex items-center justify-center overflow-hidden shrink-0 text-zinc-400 border border-zinc-200 dark:border-zinc-800">
+                    <LucideIcons.User size={12} />
+                  </div>
+                  <span className="text-xs font-medium text-zinc-500 truncate">
+                    {val}
+                  </span>
+                </div>
+              );
+            }
+            
+            if (field.type === 'repeatableGroup' || field.type === 'collection') {
+              const count = Array.isArray(val) ? val.length : 0;
+              return (
+                <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider rounded-full border border-indigo-100 dark:border-indigo-500/20">
+                  {count} {count === 1 ? 'Item' : 'Items'}
+                </span>
+              );
+            }
+
+            if (Array.isArray(val)) {
+              if (val.length === 0) return '-';
+              return (
+                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                  {val.map((v: any, k: number) => {
+                    let displayStr = '';
+                    if (v && typeof v === 'object') {
+                      const stringValues = Object.values(v).map(String).filter(s => s && s !== '[object Object]');
+                      displayStr = stringValues[0] || 'Item';
+                    } else {
+                      displayStr = String(v);
+                    }
+                    return (
+                      <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase truncate max-w-[120px]" title={displayStr}>
+                        {displayStr}
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            if (val && typeof val === 'object') {
+              return <span className="text-zinc-400 italic text-[11px]">Complex Data</span>;
+            }
+
+            // Render Status fields using the premium badge styling
+            if (field.id === 'status' || field.name?.toLowerCase() === 'status') {
+              return (
+                <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+                  {val || record.status || '-'}
+                </span>
+              );
+            }
+
+            return val || '-';
+          }
+        })),
+      ...(hasStatusField ? [] : [{
+        header: 'Status',
+        sortable: true,
+        sortKey: 'status',
+        className: densityClass,
+        accessor: (record: any) => (
+          <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+            {record.status}
+          </span>
+        )
+      }]),
+      {
+        header: 'Created',
+        sortable: true,
+        sortKey: 'createdAt',
+        className: densityClass,
+        accessor: (record: any) => (
+          <span className="text-sm text-zinc-500">
+            {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
+          </span>
+        )
+      },
+      {
+        header: '',
+        className: cn('text-right', densityClass),
+        accessor: (record: any) => (
+          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setRecordToDelete(record.id);
+              }}
+              className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )
+      }
+    ];
+
+    return (
+      <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search records..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+            <button className="p-2 bg-transparent border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-xl">
+              <Filter size={18} />
+            </button>
+          </div>
+        </div>
+        
+        <Table 
+          data={filteredRecords}
+          onRowClick={(record) => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+          className="bg-transparent dark:bg-transparent border-none shadow-none"
+          noContainer={true}
+          pagination={false}
+          columns={tableColumns}
+        />
+
+        {interfaceSettings.master.pagination?.enabled !== false && totalRecords > 0 && (
+          <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-950/30 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              Showing <span className="text-zinc-900 dark:text-white">{totalRecords > 0 ? (page - 1) * pageSize + 1 : 0}</span> to <span className="text-zinc-900 dark:text-white">{Math.min(page * pageSize, totalRecords)}</span> of <span className="text-zinc-900 dark:text-white">{totalRecords}</span> records
+            </p>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-1">
+                {totalPages > 0 && [...Array(totalPages)].map((_, i) => {
+                  const pNum = i + 1;
+                  if (totalPages > 7 && pNum > 2 && pNum < totalPages - 1 && Math.abs(pNum - page) > 1) {
+                    if (pNum === 3 || pNum === totalPages - 2) return <span key={pNum} className="text-zinc-400 px-1">...</span>;
+                    return null;
+                  }
+                  return (
+                    <button
+                      key={pNum}
+                      onClick={() => setPage(pNum)}
+                      className={cn(
+                        "w-8 h-8 rounded-lg text-[10px] font-bold transition-all",
+                        page === pNum 
+                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
+                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {pNum}
+                    </button>
+                  );
+                })}
+              </div>
+              <button 
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || totalPages === 0}
+                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   if ((loading || platformLoading) && !moduleData) return (
@@ -430,147 +1053,13 @@ export const ModuleView = () => {
           <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
         </div>
       ) : records.length > 0 ? (
-        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            <div className="flex items-center gap-4 flex-1 max-w-md">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                <input 
-                  type="text" 
-                  placeholder="Search records..." 
-                  className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-              <button className="p-2 bg-transparent border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-xl">
-                <Filter size={18} />
-              </button>
-            </div>
-          </div>
-          
-          <Table 
-            data={records}
-            onRowClick={(record) => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
-            className="bg-transparent dark:bg-transparent border-none shadow-none"
-            noContainer={true}
-            pagination={false}
-            columns={[
-              {
-                header: 'Key',
-                sortable: true,
-                sortKey: '_record_key',
-                accessor: (record: any) => (
-                  <span className="text-sm font-bold text-indigo-500">
-                    {record._record_key || '-'}
-                  </span>
-                )
-              },
-              ...displayFields.slice(0, 4).map((field: any) => ({
-                header: field.label || field.name,
-                sortable: true,
-                sortKey: field.id || field.name,
-                accessor: (record: any) => {
-                  const val = record[field.id] || record[field.name];
-                  if (field.type === 'checkbox') return val ? 'Yes' : 'No';
-                  if (Array.isArray(val)) {
-                    if (val.length === 0) return '-';
-                    return (
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {val.map((v: string, k: number) => (
-                          <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase">
-                            {v}
-                          </span>
-                        ))}
-                      </div>
-                    );
-                  }
-                  return val || '-';
-                }
-              })),
-              {
-                header: 'Status',
-                sortable: true,
-                sortKey: 'status',
-                accessor: (record: any) => (
-                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
-                    {record.status}
-                  </span>
-                )
-              },
-              {
-                header: 'Created',
-                sortable: true,
-                sortKey: 'createdAt',
-                accessor: (record: any) => (
-                  <span className="text-sm text-zinc-500">
-                    {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
-                  </span>
-                )
-              },
-              {
-                header: '',
-                className: 'text-right',
-                accessor: (record: any) => (
-                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRecordToDelete(record.id);
-                      }}
-                      className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )
-              }
-            ]}
-          />
-
-          <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-950/30 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-              Showing <span className="text-zinc-900 dark:text-white">{totalRecords > 0 ? (page - 1) * pageSize + 1 : 0}</span> to <span className="text-zinc-900 dark:text-white">{Math.min(page * pageSize, totalRecords)}</span> of <span className="text-zinc-900 dark:text-white">{totalRecords}</span> records
-            </p>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
-              >
-                Previous
-              </button>
-              <div className="flex items-center gap-1">
-                {totalPages > 0 && [...Array(totalPages)].map((_, i) => {
-                  const pNum = i + 1;
-                  if (totalPages > 7 && pNum > 2 && pNum < totalPages - 1 && Math.abs(pNum - page) > 1) {
-                    if (pNum === 3 || pNum === totalPages - 2) return <span key={pNum} className="text-zinc-400 px-1">...</span>;
-                    return null;
-                  }
-                  return (
-                    <button
-                      key={pNum}
-                      onClick={() => setPage(pNum)}
-                      className={cn(
-                        "w-8 h-8 rounded-lg text-[10px] font-bold transition-all",
-                        page === pNum 
-                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      )}
-                    >
-                      {pNum}
-                    </button>
-                  );
-                })}
-              </div>
-              <button 
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages || totalPages === 0}
-                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
+        interfaceSettings.master.layoutType === 'kanban' ? (
+          renderKanbanView()
+        ) : interfaceSettings.master.layoutType === 'calendar' ? (
+          renderCalendarView()
+        ) : (
+          renderTableView()
+        )
       ) : (
         <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center space-y-4">
           <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center mx-auto border border-zinc-200 dark:border-zinc-800">

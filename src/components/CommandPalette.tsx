@@ -22,7 +22,7 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs,
   
   const existingFields = layout.map(f => ({
     id: f.id,
-    label: f.label,
+    label: f.label || f.name || 'Untitled Field',
     icon: FIELD_CATEGORIES.flatMap(c => c.fields).find(def => def.id === f.type)?.icon || Command,
     category: 'Existing Field',
     type: 'existing_field'
@@ -55,7 +55,7 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs,
     ...existingFields,
     ...blockTypes
   ].filter(item => 
-    item.label.toLowerCase().includes(search.toLowerCase()) || 
+    (item.label || '').toLowerCase().includes(search.toLowerCase()) || 
     (item.category && item.category.toLowerCase().includes(search.toLowerCase()))
   );
 

@@ -9,6 +9,7 @@ interface Column<T> {
   sortable?: boolean;
   sortKey?: keyof T;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 interface TableProps<T> {
@@ -101,6 +102,7 @@ export function Table<T extends { id: string | number }>({
                       isSortable && 'cursor-pointer hover:bg-white/10 dark:hover:bg-white/5 select-none',
                       col.className
                     )}
+                    style={col.style}
                     onClick={() => isSortable && handleSort(col)}
                   >
                     <div className="flex items-center gap-2">
@@ -154,7 +156,7 @@ export function Table<T extends { id: string | number }>({
                   )}
                 >
                   {columns.map((col, idx) => (
-                    <td key={idx} className={cn('px-6 py-4 text-zinc-700 dark:text-zinc-300', col.className)}>
+                    <td key={idx} className={cn('px-6 py-4 text-zinc-700 dark:text-zinc-300', col.className)} style={col.style}>
                       {typeof col.accessor === 'function'
                         ? col.accessor(item)
                         : (item[col.accessor] as React.ReactNode)}

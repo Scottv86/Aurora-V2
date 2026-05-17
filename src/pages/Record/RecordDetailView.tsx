@@ -849,6 +849,231 @@ export const RecordDetailView = () => {
     );
   };
 
+  const interfaceSettings = useMemo(() => {
+    return (moduleData as any)?.interfaceSettings || {
+      master: {
+        layoutType: 'table',
+        density: 'standard',
+        pagination: { enabled: true, pageSize: 25 }
+      },
+      detail: {
+        layoutType: 'tabs'
+      },
+      actions: []
+    };
+  }, [moduleData]);
+
+  const renderFieldsGrid = (tabId: string) => {
+    if (!moduleData) return null;
+    const visibleFields = compactLayout(
+      (moduleData.layout || [])
+        .filter((field: ModuleField) => {
+          const isVisible = isFieldVisible(field, editData || record || {}, visibilityContext);
+          const firstVisibleTabId = visibleTabs[0]?.id;
+          const fieldTabId = field.tabId || firstVisibleTabId;
+          return fieldTabId === tabId && isVisible;
+        })
+        .map((field: ModuleField) => ({
+          ...field,
+          isCollapsed: collapsedGroups[field.id] ?? field.defaultCollapsed ?? false
+        }))
+    );
+
+    if (visibleFields.length === 0) {
+      return (
+        <div className="col-span-12 text-center py-12 text-xs font-bold uppercase tracking-widest text-zinc-400">
+          No fields configured for this section
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        className="grid grid-cols-12 w-full gap-x-4 gap-y-6"
+      >
+        <AnimatePresence mode="popLayout">
+          {visibleFields.map((field: ModuleField) => (
+            <motion.div 
+              key={field.id} 
+              layout
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ 
+                type: "spring",
+                stiffness: 300,
+                damping: 30,
+                layout: { duration: 0.3 }
+              }}
+              data-field-id={field.id}
+              data-active-field={activeFieldId === field.id ? field.id : undefined}
+              className={cn(
+                "group/field transition-all relative min-w-0",
+                !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) && "cursor-pointer"
+              )}
+              style={{
+                gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
+              }}
+              onClick={() => {
+                if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type)) {
+                  setActiveFieldId(field.id);
+                }
+              }}
+            >
+            <div className={cn(
+              "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
+              activeFieldId === field.id 
+                ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
+                : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) 
+                  ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
+                  : "border-transparent"
+            )}>
+              {activeFieldId === field.id && savingFieldId === field.id && (
+                <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
+                  <Loader2 size={10} className="animate-spin" />
+                  Saving
+                </div>
+              )}
+
+            {field.type === 'heading' ? (
+              <h4 className={cn(
+                "font-bold text-zinc-900 dark:text-white mt-4",
+                field.options?.[0] === 'h1' ? "text-2xl" :
+                field.options?.[0] === 'h3' ? "text-lg" :
+                field.options?.[0] === 'h4' ? "text-base" : "text-xl"
+              )}>{field.label}</h4>
+            ) : field.type === 'divider' ? (
+              <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
+            ) : field.type === 'spacer' ? (
+              <div className="w-full h-8" />
+            ) : field.type === 'alert' ? (
+              <div className={cn(
+                "p-4 rounded-xl border text-sm",
+                field.options?.[0] === 'success' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" :
+                field.options?.[0] === 'warning' ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400" :
+                field.options?.[0] === 'error' ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" :
+                "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+              )}>
+                {field.label}
+              </div>
+            ) : field.type === 'accordion' ? (
+              <AccordionContainer 
+                field={field}
+                renderContent={(section) => (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {(section.fields || []).map(renderNestedField)}
+                  </div>
+                )}
+              />
+            ) : ['fieldGroup', 'group', 'card', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (
+              <CollapsibleFieldGroup 
+                field={field}
+                isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
+                onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {(field.fields || []).map(renderNestedField)}
+                </div>
+              </CollapsibleFieldGroup>
+            ) : field.type === 'repeatableGroup' ? (
+              <RepeatableGroupBlock 
+                 field={field}
+                 value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
+                 onChange={(newVal) => handleFieldChange(field.id, newVal)}
+                 onBlur={() => handleUpdateEntry()}
+                 hideHeader={true}
+              />
+            ) : field.type === 'connector' ? (
+              <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
+                <div className="flex items-center justify-between relative z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white dark:bg-zinc-900 rounded-2xl flex items-center justify-center text-indigo-500 shadow-xl shadow-indigo-500/10 border border-indigo-500/20">
+                      <Zap size={24} />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{field.label}</h5>
+                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Nexus Connector Active</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSyncConnector(field);
+                    }}
+                    disabled={syncingConnectors[field.id]}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                  >
+                    {syncingConnectors[field.id] ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={14} />
+                    )}
+                    {syncingConnectors[field.id] ? 'Syncing...' : 'Sync Data'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/50 dark:bg-black/20 rounded-lg border border-zinc-100 dark:border-white/5 w-fit">
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Reshaping Engine Engaged</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                  {field.label}
+                  {field.required && <span className="text-rose-500">*</span>}
+                  {field.tooltip && (
+                    <div className="relative cursor-help">
+                      <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                        {field.tooltip}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                      </div>
+                    </div>
+                  )}
+                  {!activeFieldId && (
+                    ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
+                      <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                    ) : (
+                      !['datatable'].includes(field.type) && (
+                        <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                      )
+                    )
+                  )}
+                </label>
+                <FieldInput 
+                  field={field}
+                  value={(() => {
+                    const edited = getFieldValue(editData, field.id);
+                    if (edited !== undefined) return edited;
+                    const original = getFieldValue(record, field.id);
+                    if (original !== undefined) return original;
+                    return calculateDefaultValue(field, editData);
+                  })()}
+                  onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                  onBlur={() => handleUpdateEntry()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleUpdateEntry();
+                    if (e.key === 'Escape') setActiveFieldId(null);
+                  }}
+                  readonly={savingFieldId === field.id || activeFieldId !== field.id}
+                  recordData={editData}
+                  allFields={allFields}
+                />
+                {field.helperText && (
+                  <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>
+                )}
+              </div>
+            )}
+            </div>
+          </motion.div>
+        ))}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   if (loading || platformLoading) return <RecordDetailSkeleton />;
 
 
@@ -945,284 +1170,128 @@ export const RecordDetailView = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
-            {moduleData?.tabs && moduleData.tabs.length > 0 && (
-              <div className="relative group/tabs overflow-hidden rounded-t-[31px]">
-                <AnimatePresence>
-                  {showLeftScroll && (
-                    <motion.div 
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
-                    >
-                      <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                        <button 
-                          onClick={() => handleScroll('left')}
-                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
-                        >
-                          <ChevronLeft size={18} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div 
-                  ref={tabContainerRef}
-                  onScroll={checkScroll}
-                  className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
-                >
-                  {visibleTabs.map((tab: any) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTabId(tab.id)}
-                      className={cn(
-                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                        activeTabId === tab.id
-                          ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
-                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                      )}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <AnimatePresence>
-                  {showRightScroll && (
-                    <motion.div 
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
-                    >
-                      <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                        <button 
-                          onClick={() => handleScroll('right')}
-                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
-                        >
-                          <ChevronRight size={18} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-
-            <div className="p-8">
-              {moduleData?.layout ? (
-                <div 
-                  className="grid grid-cols-12 w-full"
-                  style={{ gap: '24px 16px' }}
-                >
-                  {(() => {
-                    const visibleFields = compactLayout(
-                      (moduleData.layout || [])
-                        .filter((field: ModuleField) => {
-                          const isVisible = isFieldVisible(field, editData || record || {}, visibilityContext);
-                          if (visibleTabs.length === 0) return isVisible;
-                          const firstVisibleTabId = visibleTabs[0]?.id;
-                          const fieldTabId = field.tabId || firstVisibleTabId;
-                          return fieldTabId === activeTabId && isVisible;
-                        })
-                        .map((field: ModuleField) => ({
-                          ...field,
-                          isCollapsed: collapsedGroups[field.id] ?? field.defaultCollapsed ?? false
-                        }))
-                    );
-
+          {interfaceSettings.detail?.layoutType === 'split' ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+              {/* Left Navigation Menu */}
+              <div className="md:col-span-1 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
+                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
+                <div className="space-y-1">
+                  {visibleTabs.map((tab: any) => {
+                    const isActive = activeTabId === tab.id;
                     return (
-                      <AnimatePresence mode="popLayout">
-                        {visibleFields.map((field: ModuleField) => (
-                          <motion.div 
-                            key={field.id} 
-                            layout
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ 
-                              type: "spring",
-                              stiffness: 300,
-                              damping: 30,
-                              layout: { duration: 0.3 }
-                            }}
-                            data-field-id={field.id}
-                            data-active-field={activeFieldId === field.id ? field.id : undefined}
-                            className={cn(
-                              "group/field transition-all relative min-w-0",
-                              !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) && "cursor-pointer"
-                            )}
-                            style={{
-                              gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
-                              gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
-                            }}
-                            onClick={() => {
-                              if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type)) {
-                                setActiveFieldId(field.id);
-                              }
-                            }}
-                          >
-                          <div className={cn(
-                            "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
-                            activeFieldId === field.id 
-                              ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                              : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) 
-                                ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
-                                : "border-transparent"
-                          )}>
-                            {activeFieldId === field.id && savingFieldId === field.id && (
-                              <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
-                                <Loader2 size={10} className="animate-spin" />
-                                Saving
-                              </div>
-                            )}
-
-                          {field.type === 'heading' ? (
-                            <h4 className={cn(
-                              "font-bold text-zinc-900 dark:text-white mt-4",
-                              field.options?.[0] === 'h1' ? "text-2xl" :
-                              field.options?.[0] === 'h3' ? "text-lg" :
-                              field.options?.[0] === 'h4' ? "text-base" : "text-xl"
-                            )}>{field.label}</h4>
-                          ) : field.type === 'divider' ? (
-                            <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
-                          ) : field.type === 'spacer' ? (
-                            <div className="w-full h-8" />
-                          ) : field.type === 'alert' ? (
-                            <div className={cn(
-                              "p-4 rounded-xl border text-sm",
-                              field.options?.[0] === 'success' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" :
-                              field.options?.[0] === 'warning' ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400" :
-                              field.options?.[0] === 'error' ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" :
-                              "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
-                            )}>
-                              {field.label}
-                            </div>
-                          ) : field.type === 'accordion' ? (
-                            <AccordionContainer 
-                              field={field}
-                              renderContent={(section) => (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                  {(section.fields || []).map(renderNestedField)}
-                                </div>
-                              )}
-                            />
-                          ) : ['fieldGroup', 'group', 'card', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (
-                            <CollapsibleFieldGroup 
-                              field={field}
-                              isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
-                              onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
-                            >
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {(field.fields || []).map(renderNestedField)}
-                              </div>
-                            </CollapsibleFieldGroup>
-                          ) : field.type === 'repeatableGroup' ? (
-                            <RepeatableGroupBlock 
-                               field={field}
-                               value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
-                               onChange={(newVal) => handleFieldChange(field.id, newVal)}
-                               onBlur={() => handleUpdateEntry()}
-                               hideHeader={true}
-                            />
-                          ) : field.type === 'connector' ? (
-                            <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
-                              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
-                              <div className="flex items-center justify-between relative z-10">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-12 h-12 bg-white dark:bg-zinc-900 rounded-2xl flex items-center justify-center text-indigo-500 shadow-xl shadow-indigo-500/10 border border-indigo-500/20">
-                                    <Zap size={24} />
-                                  </div>
-                                  <div>
-                                    <h5 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{field.label}</h5>
-                                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Nexus Connector Active</p>
-                                  </div>
-                                </div>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSyncConnector(field);
-                                  }}
-                                  disabled={syncingConnectors[field.id]}
-                                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
-                                >
-                                  {syncingConnectors[field.id] ? (
-                                    <RefreshCw size={14} className="animate-spin" />
-                                  ) : (
-                                    <RefreshCw size={14} />
-                                  )}
-                                  {syncingConnectors[field.id] ? 'Syncing...' : 'Sync Data'}
-                                </button>
-                              </div>
-                              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/50 dark:bg-black/20 rounded-lg border border-zinc-100 dark:border-white/5 w-fit">
-                                <CheckCircle2 size={12} className="text-emerald-500" />
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Reshaping Engine Engaged</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                                {field.label}
-                                {field.required && <span className="text-rose-500">*</span>}
-                                {field.tooltip && (
-                                  <div className="relative cursor-help">
-                                    <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                      {field.tooltip}
-                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
-                                    </div>
-                                  </div>
-                                )}
-                                {!activeFieldId && (
-                                  ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
-                                    <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
-                                  ) : (
-                                    !['datatable'].includes(field.type) && (
-                                      <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
-                                    )
-                                  )
-                                )}
-                              </label>
-                              <FieldInput 
-                                field={field}
-                                value={(() => {
-                                  const edited = getFieldValue(editData, field.id);
-                                  if (edited !== undefined) return edited;
-                                  const original = getFieldValue(record, field.id);
-                                  if (original !== undefined) return original;
-                                  return calculateDefaultValue(field, editData);
-                                })()}
-                                onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
-                                onBlur={() => handleUpdateEntry()}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleUpdateEntry();
-                                  if (e.key === 'Escape') setActiveFieldId(null);
-                                }}
-                                readonly={savingFieldId === field.id || activeFieldId !== field.id}
-                                recordData={editData}
-                                allFields={allFields}
-                              />
-                              {field.helperText && (
-                                <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>
-                              )}
-                            </div>
-                          )}
-                          </div>
-                        </motion.div>
-                      ))}
-                      </AnimatePresence>
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTabId(tab.id)}
+                        className={cn(
+                          "w-full text-left px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between group",
+                          isActive
+                            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                        )}
+                      >
+                        <span className="truncate">{tab.label}</span>
+                        <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
+                      </button>
                     );
-                  })()}
+                  })}
                 </div>
-              ) : (
-                <div className="text-zinc-500 text-sm">
-                  Layout configuration is missing for this module.
+              </div>
+
+              {/* Right Field Cards Container */}
+              <div className="md:col-span-3 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
+                {activeTabId ? renderFieldsGrid(activeTabId) : (
+                  <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
+                )}
+              </div>
+            </div>
+          ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
+            <div className="space-y-8">
+              {visibleTabs.map((tab: any) => (
+                <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
+                  <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                  </div>
+                  {renderFieldsGrid(tab.id)}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
+              {moduleData?.tabs && moduleData.tabs.length > 0 && (
+                <div className="relative group/tabs overflow-hidden rounded-t-[31px]">
+                  <AnimatePresence>
+                    {showLeftScroll && (
+                      <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
+                      >
+                        <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                          <button 
+                            onClick={() => handleScroll('left')}
+                            className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
+                          >
+                            <ChevronLeft size={18} />
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div 
+                    ref={tabContainerRef}
+                    onScroll={checkScroll}
+                    className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
+                  >
+                    {visibleTabs.map((tab: any) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTabId(tab.id)}
+                        className={cn(
+                          "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                          activeTabId === tab.id
+                            ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
+                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                        )}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <AnimatePresence>
+                    {showRightScroll && (
+                      <motion.div 
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
+                      >
+                        <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                          <button 
+                            onClick={() => handleScroll('right')}
+                            className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
+                          >
+                            <ChevronRight size={18} />
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
+
+              <div className="p-8">
+                {activeTabId ? renderFieldsGrid(activeTabId) : (
+                  <div className="text-zinc-500 text-sm">
+                    Select a section
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="space-y-8">

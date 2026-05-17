@@ -1360,6 +1360,9 @@ export const ModuleEditor = () => {
   
   const [layout, setLayout] = useState<Layout>([]);
   const allFields = React.useMemo(() => flattenFields(layout), [layout]);
+  const displayFields = React.useMemo(() => {
+    return allFields.filter(f => !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type));
+  }, [allFields]);
   const [viewportSize, setViewportSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
   const [tabs, setTabs] = useState<Tab[]>([
@@ -1841,6 +1844,10 @@ export const ModuleEditor = () => {
           subtitleFieldIds: data.config?.subtitleFieldIds || [],
         });
         
+        if (data.interfaceSettings) {
+          setInterfaceSettings(data.interfaceSettings);
+        }
+        
         setIsRestricted(!!data.isGlobal);
 
         setBreadcrumbOverride(id, data.name || 'Untitled Module');
@@ -1907,7 +1914,8 @@ export const ModuleEditor = () => {
         tabs,
         forms,
         connectorMappings,
-        workflows: workflow ? [workflow] : []
+        workflows: workflow ? [workflow] : [],
+        interfaceSettings
       };
 
       const url = isNew 
@@ -1963,7 +1971,8 @@ export const ModuleEditor = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleSave]);
   
-  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'views' | 'preview'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
+  const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
   const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'localization' | 'dependencies' | 'assets'>('general');
   const [experienceSubTab, setExperienceSubTab] = useState<'master' | 'detail' | 'filters' | 'actions'>('master');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
@@ -2572,7 +2581,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
       <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {(['details', 'builder', 'forms', 'workflow', 'rules', 'views', 'security', 'deployment'] as const).map((tab) => (
+            {(['details', 'builder', 'forms', 'workflow', 'rules', 'security', 'deployment'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -2588,7 +2597,80 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
             ))}
           </div>
 
-          </div>
+          {activeTab === 'builder' && (
+            <div className="flex items-center gap-4 pl-4 border-l border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800 animate-in fade-in duration-300">
+                <button
+                  onClick={() => setActiveViewMode('master')}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all uppercase tracking-widest",
+                    activeViewMode === 'master'
+                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                  )}
+                >
+                  <TableProperties size={12} />
+                  <span>Master View</span>
+                </button>
+                <button
+                  onClick={() => setActiveViewMode('detail')}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all uppercase tracking-widest",
+                    activeViewMode === 'detail'
+                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                  )}
+                >
+                  <Layout size={12} />
+                  <span>Detail View</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 animate-in fade-in duration-300">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Layout</span>
+                <select
+                  value={
+                    activeViewMode === 'master'
+                      ? interfaceSettings.master.layoutType || 'table'
+                      : interfaceSettings.detail.layoutType || 'tabs'
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setInterfaceSettings(prev => {
+                      if (activeViewMode === 'master') {
+                        return {
+                          ...prev,
+                          master: { ...prev.master, layoutType: val as any }
+                        };
+                      } else {
+                        return {
+                          ...prev,
+                          detail: { ...prev.detail, layoutType: val as any }
+                        };
+                      }
+                    });
+                    toast.success(`Layout preset set to ${val.toUpperCase()}`);
+                  }}
+                  className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors uppercase tracking-wider focus:outline-none"
+                >
+                  {activeViewMode === 'master' ? (
+                    <>
+                      <option value="table">Table View</option>
+                      <option value="kanban">Kanban Board</option>
+                      <option value="calendar">Calendar View</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="tabs">Tabbed Layout</option>
+                      <option value="split">Split View</option>
+                      <option value="sidebar">Single Page</option>
+                    </>
+                  )}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-3">
           {activeTab === 'workflow' && (
@@ -2782,8 +2864,216 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
             }}
           >
           {activeTab === 'builder' ? (
-            <>
-              {/* Unified Page Control Bar */}
+            activeViewMode === 'master' ? (
+              <div className="flex-1 flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 p-8 custom-scrollbar overflow-y-auto">
+                <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
+                  {/* Dashboard Header */}
+                  <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-6">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <TableProperties className="text-indigo-500" size={24} />
+                        <span>Master View Configuration</span>
+                      </h2>
+                      <p className="text-zinc-500 text-sm">Configure how records in this module are presented in the main table, list, kanban, or calendar.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Active Preset: {interfaceSettings.master.layoutType?.toUpperCase() || 'TABLE'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unified Configuration Content */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Columns grid settings */}
+                    <div className="lg:col-span-2 space-y-8">
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
+                        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
+                          <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Available Fields & Table Columns</span>
+                          <span className="text-[10px] text-zinc-400 font-bold uppercase">{displayFields.length} Fields Defined</span>
+                        </div>
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/20">
+                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest w-1/3">Field Label</th>
+                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-center w-24">Show in Table</th>
+                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-center w-24">Inline Edit</th>
+                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Column Width</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
+                            {displayFields.map((field) => (
+                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                                      {(() => {
+                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                        const IconComponent = fieldDef?.icon || Table;
+                                        return <IconComponent size={13} />;
+                                      })()}
+                                    </div>
+                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  <button 
+                                    className={cn(
+                                      "w-8 h-5 rounded-full relative transition-all mx-auto",
+                                      field.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                                    )}
+                                    onClick={() => updateField(field.id, { showInTable: field.showInTable === false })}
+                                  >
+                                    <div className={cn(
+                                      "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                                      field.showInTable !== false ? "right-0.5" : "left-0.5"
+                                    )} />
+                                  </button>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  <button 
+                                    className={cn(
+                                      "w-8 h-5 rounded-full relative transition-all mx-auto",
+                                      field.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
+                                    )}
+                                    onClick={() => updateField(field.id, { inlineEdit: !field.inlineEdit })}
+                                  >
+                                    <div className={cn(
+                                      "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                                      field.inlineEdit ? "right-0.5" : "left-0.5"
+                                    )} />
+                                  </button>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <input 
+                                      type="range" 
+                                      className="w-20 accent-indigo-500 h-1 cursor-pointer" 
+                                      min="80" max="500" step="10"
+                                      value={field.columnWidth || 200}
+                                      onChange={(e) => updateField(field.id, { columnWidth: parseInt(e.target.value) })}
+                                    />
+                                    <span className="text-[10px] font-mono text-zinc-400 min-w-[35px]">{field.columnWidth || 200}px</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Table Density & Options side column */}
+                    <div className="space-y-8">
+                      {/* Density Control Panel */}
+                      <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
+                        <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Table Density</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['compact', 'standard', 'spacious'] as const).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: { ...prev.master, density: d }
+                              }))}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                interfaceSettings.master.density === d 
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                              )}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Pagination Control Panel */}
+                      <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Pagination</span>
+                          <button 
+                            className={cn(
+                              "w-8 h-5 rounded-full relative transition-all",
+                              interfaceSettings.master.pagination?.enabled ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                            )}
+                            onClick={() => setInterfaceSettings(prev => ({
+                              ...prev,
+                              master: {
+                                ...prev.master,
+                                pagination: { ...prev.master.pagination, enabled: !prev.master.pagination?.enabled }
+                              }
+                            }))}
+                          >
+                            <div className={cn(
+                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                              interfaceSettings.master.pagination?.enabled ? "right-0.5" : "left-0.5"
+                            )} />
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Default Per Page</label>
+                          <select 
+                            value={interfaceSettings.master.pagination?.pageSize || 25}
+                            onChange={(e) => setInterfaceSettings(prev => ({
+                              ...prev,
+                              master: {
+                                ...prev.master,
+                                pagination: { ...prev.master.pagination, pageSize: parseInt(e.target.value) }
+                              }
+                            }))}
+                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
+                          >
+                            {[10, 25, 50, 100].map(size => (
+                              <option key={size} value={size}>{size} records</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Quick actions panel */}
+                      <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
+                        <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Quick Actions</span>
+                        <div className="space-y-2">
+                          {interfaceSettings.actions.map((act) => (
+                            <div key={act.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{act.label}</span>
+                              <button 
+                                onClick={() => setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  actions: prev.actions.filter(a => a.id !== act.id)
+                                }))}
+                                className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => {
+                              const label = prompt("Enter action label:");
+                              if (label) {
+                                setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  actions: [...prev.actions, { id: `act-${Date.now()}`, label, icon: 'FileText' }]
+                                }));
+                              }
+                            }}
+                            className="w-full py-2 border border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-xl text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-indigo-500 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Plus size={10} /> Add Quick Action
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Unified Page Control Bar */}
               <div className="sticky top-0 z-30 bg-zinc-100/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 h-[52px] flex items-center gap-4">
                 {isLoading ? (
                   <>
@@ -4066,7 +4356,8 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                   </div>
                 </div>
               </div>
-            </>
+              </>
+            )
           ) : activeTab === 'preview' ? (
             <div className="w-full px-8 pb-20">
               <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl overflow-hidden min-h-[600px]">
@@ -4240,7 +4531,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                             <thead>
                               <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
                                 <th className="px-6 py-4 w-12 text-center text-[10px] font-black text-zinc-400 uppercase tracking-widest">#</th>
-                                {layout.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
+                                {displayFields.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
                                   <th key={f.id} style={{ minWidth: f.columnWidth || 150 }} className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
                                     {f.label}
                                   </th>
@@ -4261,7 +4552,7 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                                   className="group hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-all cursor-pointer"
                                 >
                                   <td className="px-6 py-4 text-center text-[10px] font-mono text-zinc-400">{idx + 1}</td>
-                                  {layout.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
+                                  {displayFields.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
                                     <td key={f.id} className="px-6 py-4">
                                       <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
                                         {f.type === 'boolean' ? (record[f.id] ? 'Yes' : 'No') : String(record[f.id])}
@@ -6314,317 +6605,6 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                     </div>
                  </div>
                )}
-            </div>
-            ) : activeTab === 'views' ? (
-<div className="flex h-full w-full overflow-hidden bg-white dark:bg-zinc-950">
-              {/* Experience Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Views</h3>
-                </div>
-                <div className="space-y-2">
-                  {[
-                    { id: 'master', label: 'Master View', icon: TableProperties, desc: 'Table & List config' },
-                    { id: 'detail', label: 'Detail View', icon: Layout, desc: 'Record page layout' },
-                    { id: 'filters', label: 'Filters & Search', icon: Filter, desc: 'Global search & facets' },
-                    { id: 'actions', label: 'Quick Actions', icon: MousePointerClick, desc: 'Buttons & Triggers' }
-                  ].map((st) => (
-                    <button 
-                      key={st.id}
-                      onClick={() => setExperienceSubTab(st.id as any)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left group",
-                        experienceSubTab === st.id 
-                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                      )}
-                    >
-                      <st.icon size={14} className={experienceSubTab === st.id ? "" : "group-hover:text-zinc-600 dark:group-hover:text-zinc-300"} />
-                      {st.label}
-                    </button>
-                  ))}
-                </div>
-              </aside>
-
-              {/* Experience Content */}
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                <div className="max-w-none mx-auto space-y-12 pb-20">
-                  {experienceSubTab === 'master' ? (
-                    <div className="space-y-12">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Master View Configuration</h2>
-                          <p className="text-zinc-500 text-sm">Define how records are displayed in the main table or list view.</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                           <select className="bg-zinc-100 dark:bg-zinc-900 border-none rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
-                             <option>Default Table View</option>
-                             <option>Kanban Board</option>
-                             <option>Calendar View</option>
-                           </select>
-                        </div>
-                      </div>
-
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-indigo-500/5">
-                        <table className="w-full text-left">
-                          <thead>
-                            <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest w-1/3">Field</th>
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Show in Table</th>
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Inline Edit</th>
-                              <th className="px-8 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Column Width</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                            {layout.map((field) => (
-                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td className="px-8 py-5">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
-                                      {(() => {
-                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                        const Icon = fieldDef?.icon || Table;
-                                        return <Icon size={14} />;
-                                      })()}
-                                    </div>
-                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
-                                  </div>
-                                </td>
-                                <td className="px-8 py-5 text-center">
-                                  <button 
-                                    className={cn(
-                                      "w-10 h-6 rounded-full relative transition-all mx-auto",
-                                      field.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                    )}
-                                    onClick={() => updateField(field.id, { showInTable: field.showInTable === false })}
-                                  >
-                                    <div className={cn(
-                                      "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                      field.showInTable !== false ? "right-1" : "left-1"
-                                    )} />
-                                  </button>
-                                </td>
-                                <td className="px-8 py-5 text-center">
-                                  <button 
-                                    className={cn(
-                                      "w-10 h-6 rounded-full relative transition-all mx-auto",
-                                      field.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
-                                    )}
-                                    onClick={() => updateField(field.id, { inlineEdit: !field.inlineEdit })}
-                                  >
-                                    <div className={cn(
-                                      "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                      field.inlineEdit ? "right-1" : "left-1"
-                                    )} />
-                                  </button>
-                                </td>
-                                <td className="px-8 py-5">
-                                  <div className="flex items-center gap-3">
-                                    <input 
-                                      type="range" 
-                                      className="w-24 accent-indigo-500 h-1" 
-                                      min="50" max="500" step="10"
-                                      value={field.columnWidth || 200}
-                                      onChange={(e) => updateField(field.id, { columnWidth: parseInt(e.target.value) })}
-                                    />
-                                    <span className="text-[10px] font-mono text-zinc-400">{field.columnWidth || 200}px</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* View Options */}
-                      <div className="grid grid-cols-2 gap-8">
-                         <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6">
-                            <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Table Density</h3>
-                            <div className="grid grid-cols-3 gap-3">
-                              {['Compact', 'Standard', 'Spacious'].map(d => (
-                                <button key={d} className={cn(
-                                  "px-4 py-3 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
-                                  d === 'Standard' ? "bg-indigo-600 border-indigo-500 text-white shadow-lg" : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500"
-                                )}>{d}</button>
-                              ))}
-                            </div>
-                         </div>
-                         <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-6">
-                            <div className="flex items-center justify-between">
-                               <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Pagination</h3>
-                               <button 
-                                 className={cn(
-                                   "w-10 h-6 rounded-full relative transition-all",
-                                   interfaceSettings.master.pagination?.enabled ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                 )}
-                                 onClick={() => setInterfaceSettings(prev => ({
-                                   ...prev,
-                                   master: {
-                                     ...prev.master,
-                                     pagination: { ...prev.master.pagination, enabled: !prev.master.pagination?.enabled }
-                                   }
-                                 }))}
-                               >
-                                 <div className={cn(
-                                   "absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                   interfaceSettings.master.pagination?.enabled ? "right-1" : "left-1"
-                                 )} />
-                               </button>
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                               <div className="flex-1 space-y-2">
-                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Default Per Page</label>
-                                  <select 
-                                    value={interfaceSettings.master.pagination?.pageSize || 25}
-                                    onChange={(e) => setInterfaceSettings(prev => ({
-                                      ...prev,
-                                      master: {
-                                        ...prev.master,
-                                        pagination: { ...prev.master.pagination, pageSize: parseInt(e.target.value) }
-                                      }
-                                    }))}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[10px] font-bold text-zinc-600"
-                                  >
-                                    {[10, 25, 50, 100].map(size => (
-                                      <option key={size} value={size}>{size} records</option>
-                                    ))}
-                                  </select>
-                               </div>
-                               <div className="flex-1 space-y-2">
-                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Options</label>
-                                  <div className="flex items-center gap-2">
-                                     <div className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[9px] font-bold text-zinc-500">10, 25, 50...</div>
-                                     <button className="p-2 text-indigo-500 hover:bg-indigo-500/10 rounded-lg"><Settings2 size={14} /></button>
-                                  </div>
-                               </div>
-                            </div>
-                         </div>
-                      </div>
-                    </div>
-                  ) : experienceSubTab === 'filters' ? (
-                    <div className="space-y-12">
-                      <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Global Filters & Search</h2>
-                        <p className="text-zinc-500 text-sm">Configure the search experience and facets available to users.</p>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-8">
-                        <div className="col-span-2 space-y-6">
-                           <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Active Filters</h3>
-                           <div className="space-y-3">
-                             {layout.filter(f => f.type === 'select' || f.type === 'date' || f.type === 'boolean').map((field, i) => (
-                               <div key={i} className="flex items-center justify-between p-6 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-[2rem] group hover:border-indigo-500/30 transition-all">
-                                 <div className="flex items-center gap-4">
-                                   <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                                     <Filter size={18} />
-                                   </div>
-                                   <div>
-                                     <p className="text-sm font-bold text-zinc-900 dark:text-white">{field.label}</p>
-                                     <p className="text-[10px] text-zinc-400 font-medium">Type: {field.type.toUpperCase()}</p>
-                                   </div>
-                                 </div>
-                                 <div className="flex items-center gap-6">
-                                   <div className="flex items-center gap-2">
-                                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Multi-select</span>
-                                     <button className="w-8 h-4 bg-zinc-200 dark:bg-zinc-800 rounded-full relative">
-                                       <div className="absolute left-1 top-0.5 w-3 h-3 bg-white rounded-full" />
-                                     </button>
-                                   </div>
-                                   <button className="p-2 text-zinc-300 hover:text-rose-500 transition-colors"><Trash2 size={14} /></button>
-                                 </div>
-                               </div>
-                             ))}
-                             <button className="w-full py-4 border-2 border-dashed border-zinc-100 dark:border-zinc-900 rounded-[2rem] text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] hover:border-indigo-500/50 hover:text-indigo-500 transition-all flex items-center justify-center gap-2">
-                               <Plus size={14} />
-                               Add Search Filter
-                             </button>
-                           </div>
-                        </div>
-
-                        <div className="space-y-8">
-                           <div className="p-8 bg-indigo-600 rounded-[2.5rem] text-white space-y-6 shadow-2xl shadow-indigo-500/20">
-                             <h4 className="text-xs font-black uppercase tracking-widest text-white/60">Search Logic</h4>
-                             <div className="space-y-4">
-                               <label className="flex items-center gap-3 cursor-pointer">
-                                 <div className="w-4 h-4 bg-white/20 border border-white/40 rounded flex items-center justify-center"><CheckSquare size={12} className="text-white" /></div>
-                                 <span className="text-xs font-bold">Enable Full-Text Search</span>
-                               </label>
-                               <label className="flex items-center gap-3 cursor-pointer">
-                                 <div className="w-4 h-4 bg-white/20 border border-white/40 rounded" />
-                                 <span className="text-xs font-bold text-white/60">Fuzzy Matching</span>
-                               </label>
-                             </div>
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : experienceSubTab === 'actions' ? (
-                    <div className="space-y-12">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Quick Actions & Commands</h2>
-                          <p className="text-zinc-500 text-sm">Define custom buttons and automated actions for users in the master view.</p>
-                        </div>
-                        <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                          + New Action
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-6">
-                        {interfaceSettings.actions.map((action) => (
-                          <div key={action.id} className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] group hover:border-indigo-500/50 transition-all">
-                             <div className="flex items-center justify-between mb-8">
-                                <div className="w-14 h-14 bg-zinc-50 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all">
-                                   <MousePointerClick size={24} />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"><Settings2 size={16} /></button>
-                                  <button className="p-2 text-zinc-400 hover:text-rose-500 transition-colors"><Trash2 size={16} /></button>
-                                </div>
-                             </div>
-                             <div className="space-y-2">
-                               <p className="text-lg font-black text-zinc-900 dark:text-white tracking-tight">{action.label}</p>
-                               <p className="text-xs text-zinc-500">Trigger: Row Command • Scope: Single Record</p>
-                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-12">
-                      <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Detail View Experience</h2>
-                        <p className="text-zinc-500 text-sm">Configure how individual records are presented when opened.</p>
-                      </div>
-                      
-                      <div className="grid grid-cols-3 gap-8">
-                         {[
-                           { label: 'Tabbed Layout', desc: 'Standard hierarchical tabs for clean organization.', icon: Layers },
-                           { label: 'Split View', desc: 'Two-column layout with sidebar and main content.', icon: Layout },
-                           { label: 'Single Page', desc: 'Vertical scrolling view with distinct sections.', icon: AlignLeft }
-                         ].map((l, i) => (
-                           <div key={i} className={cn(
-                             "p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] space-y-4 cursor-pointer hover:border-indigo-500/50 transition-all group",
-                             i === 0 ? "border-indigo-500 shadow-xl shadow-indigo-500/5" : ""
-                           )}>
-                              <div className={cn(
-                                "w-12 h-12 rounded-2xl flex items-center justify-center mb-4",
-                                i === 0 ? "bg-indigo-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
-                              )}>
-                                <l.icon size={24} />
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-sm font-bold text-zinc-900 dark:text-white">{l.label}</p>
-                                <p className="text-[10px] text-zinc-500 leading-relaxed">{l.desc}</p>
-                              </div>
-                           </div>
-                         ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
             ) : null}
           </div>
