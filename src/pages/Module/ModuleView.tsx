@@ -53,6 +53,17 @@ export const ModuleView = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
+  const visibleTabs = useMemo(() => {
+    if (!moduleData?.tabs) return [];
+    return moduleData.tabs.filter(tab => isFieldVisible(tab, newEntryData, { user }));
+  }, [moduleData?.tabs, newEntryData, user]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find(t => t.id === activeTabId))) {
+      setActiveTabId(visibleTabs[0].id);
+    }
+  }, [visibleTabs, activeTabId]);
+
   const Icon = useMemo(() => {
     if (!moduleData) return LucideIcons.Layers;
     const iconSource = (moduleData as any).iconName || (moduleData as any).icon;
@@ -633,9 +644,9 @@ export const ModuleView = () => {
                 </button>
               </div>
               <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
-                {moduleData?.tabs && moduleData.tabs.length > 0 && (
+                {visibleTabs && visibleTabs.length > 0 && (
                   <div className="flex gap-2 mb-8 p-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-2xl overflow-x-auto no-scrollbar">
-                    {(moduleData.tabs || []).map((tab: any) => (
+                    {visibleTabs.map((tab: any) => (
                       <button
                         key={tab.id}
                         onClick={() => setActiveTabId(tab.id)}
@@ -655,8 +666,8 @@ export const ModuleView = () => {
                   <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full">
                     {(moduleData.layout || [])
                       .filter((field: ModuleField) => {
-                        if (!moduleData.tabs || moduleData.tabs.length === 0) return true;
-                        const firstTabId = moduleData.tabs[0]?.id;
+                        if (visibleTabs.length === 0) return true;
+                        const firstTabId = visibleTabs[0]?.id;
                         const fieldTabId = field.tabId || firstTabId;
                         return fieldTabId === activeTabId;
                       })

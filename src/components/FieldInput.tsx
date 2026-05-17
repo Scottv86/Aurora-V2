@@ -270,6 +270,12 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     setLocalValue(val);
   };
 
+  const triggerImmediateChange = (val: any, metadata?: any) => {
+    updateLocalValue(val);
+    lastSentValueRef.current = val;
+    onChange(val, metadata);
+  };
+
   // Sync with external value prop when not actively focused/editing
   React.useEffect(() => {
     if (!isFocused) {
@@ -401,7 +407,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           ref={inputRef}
           value={localValue || ''}
           disabled={readonly}
-          onChange={(e) => { setIsFocused(true); updateLocalValue(e.target.value); }}
+          onChange={(e) => { setIsFocused(true); triggerImmediateChange(e.target.value); }}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
@@ -447,7 +453,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               className="hidden" 
               checked={localValue === opt} 
               disabled={readonly}
-              onChange={() => updateLocalValue(opt)} 
+              onChange={() => triggerImmediateChange(opt)} 
             />
             <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
           </label>
@@ -474,7 +480,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 <div key={i} className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500 text-white rounded-lg text-[10px] font-bold animate-in zoom-in-95 duration-200">
                   {v}
                   {!readonly && (
-                    <button onClick={(e) => { e.stopPropagation(); updateLocalValue(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); triggerImmediateChange(currentValues.filter(val => val !== v)); }} className="hover:text-white/80 transition-colors">
                       <XCircle size={12} />
                     </button>
                   )}
@@ -509,7 +515,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                   const newValues = e.target.checked 
                     ? [...currentValues, opt]
                     : currentValues.filter(v => v !== opt);
-                  updateLocalValue(newValues);
+                  triggerImmediateChange(newValues);
                 }} 
               />
               <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
@@ -525,9 +531,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <button
         onClick={() => {
           const newVal = !localValue;
-          updateLocalValue(newVal);
           setIsFocused(true);
-          // onChange(newVal); // Remove immediate save
+          triggerImmediateChange(newVal);
         }}
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
@@ -557,7 +562,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => updateLocalValue(parseInt(e.target.value))}
+          onChange={(e) => triggerImmediateChange(parseInt(e.target.value))}
           className="w-full accent-indigo-600"
         />
         <div className="flex justify-between text-[10px] font-black text-zinc-400 uppercase tracking-widest">
@@ -589,7 +594,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           <button 
             key={i} 
             disabled={readonly}
-            onClick={() => updateLocalValue(i)}
+            onClick={() => triggerImmediateChange(i)}
             className={cn(
               "p-2 rounded-xl transition-all",
               (localValue || 0) >= i ? "text-amber-500 bg-amber-500/10" : "text-zinc-300 hover:text-zinc-400 bg-zinc-100 dark:bg-zinc-900"
@@ -611,7 +616,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => updateLocalValue(e.target.value)}
+          onChange={(e) => triggerImmediateChange(e.target.value)}
           className="w-12 h-12 rounded-2xl border-none p-0 overflow-hidden cursor-pointer bg-transparent"
         />
         <input 
@@ -620,7 +625,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => updateLocalValue(e.target.value)}
+          onChange={(e) => triggerImmediateChange(e.target.value)}
           className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs font-mono uppercase"
         />
       </div>
@@ -716,7 +721,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 key={i}
                 type="button"
                 disabled={readonly}
-                onClick={() => updateLocalValue([...currentValues, opt])}
+                onClick={() => triggerImmediateChange([...currentValues, opt])}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 flex items-center justify-between group transition-all"
               >
                 {opt}
@@ -742,7 +747,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 key={i}
                 type="button"
                 disabled={readonly}
-                onClick={() => updateLocalValue(currentValues.filter(val => val !== v))}
+                onClick={() => triggerImmediateChange(currentValues.filter(val => val !== v))}
                 className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center justify-between group animate-in slide-in-from-right-2 duration-200"
               >
                 {v}

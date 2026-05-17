@@ -169,7 +169,7 @@ export function Table<T extends { id: string | number }>({
       </div>
 
       {pagination && totalItems > 0 && (
-        <div className="flex items-center justify-between border-t border-white/10 bg-white/5 px-6 py-4 dark:border-zinc-800 dark:bg-white/5">
+        <div className="flex items-center justify-between border-t border-white/10 px-6 py-4 dark:border-zinc-800">
           <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
             Showing <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}</span> to <span className="text-zinc-900 dark:text-zinc-100">{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span> results
           </div>
