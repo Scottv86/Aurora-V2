@@ -718,135 +718,235 @@ export const ModuleView = () => {
 
     const hasStatusField = displayFields.some((f: any) => f.id === 'status' || f.name?.toLowerCase() === 'status');
 
-    const tableColumns = [
-      {
-        header: 'Key',
-        sortable: true,
-        sortKey: '_record_key',
-        className: densityClass,
-        accessor: (record: any) => (
-          <span className="text-sm font-bold text-indigo-500">
-            {record._record_key || '-'}
-          </span>
-        )
-      },
-      ...displayFields
-        .filter((field: any) => field.showInTable !== false)
-        .map((field: any) => ({
-          header: field.label || field.name,
-          sortable: true,
-          sortKey: field.id || field.name,
-          className: densityClass,
-          style: field.columnWidth ? { width: `${field.columnWidth}px`, minWidth: `${field.columnWidth}px` } : undefined,
-          accessor: (record: any) => {
-            const val = record[field.id] || record[field.name];
-            if (field.type === 'checkbox') return val ? 'Yes' : 'No';
-            
-            if (field.type === 'user') {
-              if (!val) return '-';
-              const resolvedUser = members?.find((m: any) => m.id === val);
-              if (resolvedUser) {
-                return (
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
-                      resolvedUser.isSynthetic 
-                        ? "bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
-                        : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
-                    )}>
-                      {resolvedUser.avatarUrl ? (
-                        <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
-                      ) : (
-                        resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
-                      )}
-                    </div>
-                    <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                      {resolvedUser.name}
-                    </span>
-                  </div>
-                );
-              }
-              return (
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-white/10 flex items-center justify-center overflow-hidden shrink-0 text-zinc-400 border border-zinc-200 dark:border-zinc-800">
-                    <LucideIcons.User size={12} />
-                  </div>
-                  <span className="text-xs font-medium text-zinc-500 truncate">
-                    {val}
-                  </span>
+    // Define the custom column accessor mapper
+    const mapCustomFieldToColumn = (field: any) => ({
+      header: field.label || field.name,
+      sortable: true,
+      sortKey: field.id || field.name,
+      className: densityClass,
+      style: field.columnWidth ? { width: `${field.columnWidth}px`, minWidth: `${field.columnWidth}px` } : undefined,
+      accessor: (record: any) => {
+        const val = record[field.id] || record[field.name];
+        if (field.type === 'checkbox') return val ? 'Yes' : 'No';
+        
+        if (field.type === 'user') {
+          if (!val) return '-';
+          const resolvedUser = members?.find((m: any) => m.id === val);
+          if (resolvedUser) {
+            return (
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
+                  resolvedUser.isSynthetic 
+                    ? "bg-indigo-50/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
+                    : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
+                )}>
+                  {resolvedUser.avatarUrl ? (
+                    <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
+                  )}
                 </div>
-              );
-            }
-            
-            if (field.type === 'repeatableGroup' || field.type === 'collection') {
-              const count = Array.isArray(val) ? val.length : 0;
-              return (
-                <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider rounded-full border border-indigo-100 dark:border-indigo-500/20">
-                  {count} {count === 1 ? 'Item' : 'Items'}
+                <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                  {resolvedUser.name}
                 </span>
-              );
-            }
-
-            if (Array.isArray(val)) {
-              if (val.length === 0) return '-';
-              return (
-                <div className="flex flex-wrap gap-1 max-w-[200px]">
-                  {val.map((v: any, k: number) => {
-                    let displayStr = '';
-                    if (v && typeof v === 'object') {
-                      const stringValues = Object.values(v).map(String).filter(s => s && s !== '[object Object]');
-                      displayStr = stringValues[0] || 'Item';
-                    } else {
-                      displayStr = String(v);
-                    }
-                    return (
-                      <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase truncate max-w-[120px]" title={displayStr}>
-                        {displayStr}
-                      </span>
-                    );
-                  })}
-                </div>
-              );
-            }
-
-            if (val && typeof val === 'object') {
-              return <span className="text-zinc-400 italic text-[11px]">Complex Data</span>;
-            }
-
-            // Render Status fields using the premium badge styling
-            if (field.id === 'status' || field.name?.toLowerCase() === 'status') {
-              return (
-                <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
-                  {val || record.status || '-'}
-                </span>
-              );
-            }
-
-            return val || '-';
+              </div>
+            );
           }
-        })),
-      ...(hasStatusField ? [] : [{
-        header: 'Status',
-        sortable: true,
-        sortKey: 'status',
-        className: densityClass,
-        accessor: (record: any) => (
-          <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
-            {record.status}
-          </span>
-        )
-      }]),
-      {
+          return (
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-white/10 flex items-center justify-center overflow-hidden shrink-0 text-zinc-400 border border-zinc-200 dark:border-zinc-800">
+                <LucideIcons.User size={12} />
+              </div>
+              <span className="text-xs font-medium text-zinc-500 truncate">
+                {val}
+              </span>
+            </div>
+          );
+        }
+        
+        if (field.type === 'repeatableGroup' || field.type === 'collection') {
+          const count = Array.isArray(val) ? val.length : 0;
+          return (
+            <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-wider rounded-full border border-indigo-100 dark:border-indigo-500/20">
+              {count} {count === 1 ? 'Item' : 'Items'}
+            </span>
+          );
+        }
+
+        if (Array.isArray(val)) {
+          if (val.length === 0) return '-';
+          return (
+            <div className="flex flex-wrap gap-1 max-w-[200px]">
+              {val.map((v: any, k: number) => {
+                let displayStr = '';
+                if (v && typeof v === 'object') {
+                  const stringValues = Object.values(v).map(String).filter(s => s && s !== '[object Object]');
+                  displayStr = stringValues[0] || 'Item';
+                } else {
+                  displayStr = String(v);
+                }
+                return (
+                  <span key={k} className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold rounded border border-zinc-200 dark:border-zinc-700 uppercase truncate max-w-[120px]" title={displayStr}>
+                    {displayStr}
+                  </span>
+                );
+              })}
+            </div>
+          );
+        }
+
+        if (val && typeof val === 'object') {
+          return <span className="text-zinc-400 italic text-[11px]">Complex Data</span>;
+        }
+
+        // Render Status fields using the premium badge styling
+        if (field.id === 'status' || field.name?.toLowerCase() === 'status') {
+          return (
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+              {val || record.status || '-'}
+            </span>
+          );
+        }
+
+        return val || '-';
+      }
+    });
+
+    // Define System fields columns
+    const systemColumnsMap: Record<string, any> = {
+      createdAt: {
         header: 'Created',
         sortable: true,
         sortKey: 'createdAt',
         className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'createdAt')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdAt').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdAt').width}px` } 
+          : undefined,
         accessor: (record: any) => (
           <span className="text-sm text-zinc-500">
             {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
           </span>
         )
       },
+      createdBy: {
+        header: 'Created By',
+        sortable: true,
+        sortKey: 'createdBy',
+        className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'createdBy')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdBy').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdBy').width}px` } 
+          : undefined,
+        accessor: (record: any) => {
+          const val = record.createdBy;
+          if (!val) return '-';
+          const resolvedUser = members?.find((m: any) => m.id === val);
+          if (resolvedUser) {
+            return (
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
+                  resolvedUser.isSynthetic 
+                    ? "bg-indigo-50/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
+                    : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
+                )}>
+                  {resolvedUser.avatarUrl ? (
+                    <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
+                  )}
+                </div>
+                <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                  {resolvedUser.name}
+                </span>
+              </div>
+            );
+          }
+          return '-';
+        }
+      },
+      updatedAt: {
+        header: 'Updated',
+        sortable: true,
+        sortKey: 'updatedAt',
+        className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'updatedAt')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'updatedAt').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'updatedAt').width}px` } 
+          : undefined,
+        accessor: (record: any) => (
+          <span className="text-sm text-zinc-500">
+            {record.updatedAt ? new Date(record.updatedAt).toLocaleDateString() : 'Just now'}
+          </span>
+        )
+      },
+      status: {
+        header: 'Status',
+        sortable: true,
+        sortKey: 'status',
+        className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'status')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'status').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'status').width}px` } 
+          : undefined,
+        accessor: (record: any) => (
+          <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+            {record.status || '-'}
+          </span>
+        )
+      }
+    };
+
+    // Sort displayColumns based on configured order in interfaceSettings
+    const activeCustomFields = displayFields.filter((field: any) => field.showInTable !== false);
+    const configured = interfaceSettings.master.columns || [];
+
+    const builtColumns: any[] = [];
+    if (configured.length > 0) {
+      configured.forEach((c: any) => {
+        if (c.visible === false) return;
+        
+        // Is it a custom field?
+        const customField = activeCustomFields.find(f => f.id === c.fieldId);
+        if (customField) {
+          builtColumns.push(mapCustomFieldToColumn(customField));
+        } else if (systemColumnsMap[c.fieldId]) {
+          // Is it a configured system field?
+          builtColumns.push(systemColumnsMap[c.fieldId]);
+        }
+      });
+
+      // Append any custom fields that are marked showInTable but weren't in configured
+      activeCustomFields.forEach((field: any) => {
+        if (!configured.some((c: any) => c.fieldId === field.id)) {
+          builtColumns.push(mapCustomFieldToColumn(field));
+        }
+      });
+    } else {
+      // Fallback: Default ordering (Custom fields first, then default status & createdAt)
+      activeCustomFields.forEach((field: any) => {
+        builtColumns.push(mapCustomFieldToColumn(field));
+      });
+      if (!activeCustomFields.some(f => f.id === 'status' || f.name?.toLowerCase() === 'status')) {
+        builtColumns.push(systemColumnsMap.status);
+      }
+      builtColumns.push(systemColumnsMap.createdAt);
+    }
+
+    const tableColumns = [
+      {
+        header: interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key',
+        sortable: true,
+        sortKey: '_record_key',
+        className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === '_record_key').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === '_record_key').width}px` } 
+          : undefined,
+        accessor: (record: any) => (
+          <span className="text-sm font-bold text-indigo-500">
+            {record._record_key || '-'}
+          </span>
+        )
+      },
+      ...builtColumns,
       {
         header: '',
         className: cn('text-right', densityClass),
@@ -887,7 +987,7 @@ export const ModuleView = () => {
         </div>
         
         <Table 
-          data={filteredRecords}
+          data={filteredRecords as any}
           onRowClick={(record) => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
           className="bg-transparent dark:bg-transparent border-none shadow-none"
           noContainer={true}

@@ -84,17 +84,14 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronLeft,
-  MousePointerClick,
-  Filter,
   TableProperties,
   ArrowRight,
   Check,
   Command,
   Info,
-  LayoutGrid,
-  Columns,
   ChevronRight,
-  Copy
+  Copy,
+  Key
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow, FieldType, Tab, VisibilityRule } from '../types/platform';
@@ -1369,6 +1366,26 @@ export const ModuleEditor = () => {
     { id: 'default-tab', label: 'General' }
   ]);
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
+  const [interfaceSettings, setInterfaceSettings] = useState({
+    master: {
+      layoutType: 'table' as 'table' | 'kanban' | 'calendar',
+      columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number }[],
+      density: 'standard' as 'compact' | 'standard' | 'spacious',
+      pagination: {
+        enabled: true,
+        pageSize: 25,
+        showSizeChanger: true
+      }
+    },
+    detail: {
+      layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar',
+    },
+    filters: [] as { fieldId: string, type: string }[],
+    actions: [
+      { id: 'act-1', label: 'Export PDF', icon: 'FileText' },
+      { id: 'act-2', label: 'Archive', icon: 'Trash2' }
+    ]
+  });
   const [connectorMappings, setConnectorMappings] = useState<Record<string, Record<string, string>>>({});
   const [isEditingTab, setIsEditingTab] = useState<string | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
@@ -1953,7 +1970,7 @@ export const ModuleEditor = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, session?.access_token, navigate, refreshModules]);
+  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, interfaceSettings, session?.access_token, navigate, refreshModules]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -1974,7 +1991,6 @@ export const ModuleEditor = () => {
   const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
   const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'localization' | 'dependencies' | 'assets'>('general');
-  const [experienceSubTab, setExperienceSubTab] = useState<'master' | 'detail' | 'filters' | 'actions'>('master');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
   const [previewSelectedId, setPreviewSelectedId] = useState<string | null>(null);
   const [previewStepId, setPreviewStepId] = useState<string | null>(null);
@@ -2015,29 +2031,61 @@ export const ModuleEditor = () => {
     }
   }, [activeTab, moduleState, tabs, currentTabId]);
 
-  const [interfaceSettings, setInterfaceSettings] = useState({
-    master: {
-      columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number }[],
-      density: 'standard' as 'compact' | 'standard' | 'spacious',
-      pagination: {
-        enabled: true,
-        pageSize: 25,
-        showSizeChanger: true
-      }
-    },
-    detail: {
-      layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar',
-    },
-    filters: [] as { fieldId: string, type: string }[],
-    actions: [
-      { id: 'act-1', label: 'Export PDF', icon: 'FileText' },
-      { id: 'act-2', label: 'Archive', icon: 'Trash2' }
-    ]
-  });
-
   // Helper for single selection
   const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
-const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
+  const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
+
+  // Master View column reordering and system fields selection helper states & memos
+  const [draggingColumnIndex, setDraggingColumnIndex] = useState<number | null>(null);
+
+  const selectedSystemField = React.useMemo(() => {
+    if (!selectedId) return null;
+    const keyCol = interfaceSettings.master.columns?.find(c => c.fieldId === '_record_key');
+    const systemFieldsDef = [
+      { id: '_record_key', label: keyCol?.label || 'Record Key', type: 'text' },
+      { id: 'createdAt', label: 'Created Date', type: 'date' },
+      { id: 'createdBy', label: 'Created By', type: 'user' },
+      { id: 'updatedAt', label: 'Updated Date', type: 'date' },
+      { id: 'status', label: 'Status', type: 'select' }
+    ];
+    return systemFieldsDef.find(sf => sf.id === selectedId) || null;
+  }, [selectedId, interfaceSettings.master.columns]);
+
+  const activeColumns = React.useMemo(() => {
+    const systemFieldsDef = [
+      { id: 'createdAt', label: 'Created Date', type: 'date' },
+      { id: 'createdBy', label: 'Created By', type: 'user' },
+      { id: 'updatedAt', label: 'Updated Date', type: 'date' },
+      { id: 'status', label: 'Status', type: 'select' }
+    ];
+
+    const activeCustom = displayFields.filter(f => f.showInTable !== false);
+    const configured = interfaceSettings.master.columns || [];
+
+    // Combine custom fields and system fields that are marked visible/enabled
+    const allAvailable = [
+      ...activeCustom,
+      ...systemFieldsDef.filter(sf => 
+        configured.some(c => c.fieldId === sf.id && c.visible !== false) &&
+        !activeCustom.some(df => df.id === sf.id)
+      )
+    ];
+
+    if (configured.length > 0) {
+      const sorted = [...allAvailable].sort((a, b) => {
+        const indexA = configured.findIndex(c => c.fieldId === a.id);
+        const indexB = configured.findIndex(c => c.fieldId === b.id);
+        if (indexA === -1 && indexB === -1) return 0;
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+      return sorted;
+    }
+    
+    return allAvailable;
+  }, [displayFields, interfaceSettings.master.columns]);
+
 
   // --- Helpers ---
   
@@ -2222,6 +2270,139 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
     setActiveDragItem(null);
     setDragOverInfo(null);
     setPreviewLayout(null);
+  };
+
+  const handleColumnDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingColumnIndex(index);
+  };
+
+  const handleColumnDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleColumnDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndexStr = e.dataTransfer.getData('text/plain');
+    if (!sourceIndexStr) return;
+    const sourceIndex = parseInt(sourceIndexStr, 10);
+    if (isNaN(sourceIndex) || sourceIndex === targetIndex) return;
+
+    const sourceCol = activeColumns[sourceIndex];
+    const targetCol = activeColumns[targetIndex];
+    if (!sourceCol || !targetCol) return;
+
+    setInterfaceSettings(prev => {
+      const cols = [...(prev.master.columns || [])];
+      
+      // If cols is empty, populate it first from activeColumns + _record_key!
+      let currentCols = cols.length > 0 ? cols : [
+        { fieldId: '_record_key', visible: true, inlineEdit: false, width: 120 },
+        ...activeColumns.map(ac => ({
+          fieldId: ac.id,
+          visible: true,
+          inlineEdit: ac.inlineEdit || false,
+          width: ac.columnWidth || 200
+        }))
+      ];
+
+      // Ensure all active columns are present in currentCols
+      activeColumns.forEach(ac => {
+        if (!currentCols.some(c => c.fieldId === ac.id)) {
+          currentCols.push({
+            fieldId: ac.id,
+            visible: true,
+            inlineEdit: false,
+            width: 200
+          });
+        }
+      });
+
+      // Find the exact positions of the source and target columns inside the full columns array
+      const fullSourceIdx = currentCols.findIndex(c => c.fieldId === sourceCol.id);
+      const fullTargetIdx = currentCols.findIndex(c => c.fieldId === targetCol.id);
+
+      if (fullSourceIdx !== -1 && fullTargetIdx !== -1) {
+        const moved = arrayMove(currentCols, fullSourceIdx, fullTargetIdx);
+        return {
+          ...prev,
+          master: {
+            ...prev.master,
+            columns: moved
+          }
+        };
+      }
+      return prev;
+    });
+
+    setDraggingColumnIndex(null);
+  };
+
+  const handleTableDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    try {
+      const jsonStr = e.dataTransfer.getData('application/json');
+      if (!jsonStr) return;
+      const data = JSON.parse(jsonStr);
+      if (data.type === 'master-column-add') {
+        const { fieldId, isSystem } = data;
+        
+        if (isSystem) {
+          setInterfaceSettings(prev => {
+            const cols = prev.master.columns || [];
+            if (cols.some(c => c.fieldId === fieldId)) {
+              return {
+                ...prev,
+                master: {
+                  ...prev.master,
+                  columns: cols.map(c => c.fieldId === fieldId ? { ...c, visible: true } : c)
+                }
+              };
+            }
+            return {
+              ...prev,
+              master: {
+                ...prev.master,
+                columns: [...cols, { fieldId, visible: true, inlineEdit: false, width: 120 }]
+              }
+            };
+          });
+          setSelectedId(fieldId);
+          toast.success("System column added to table!");
+          return;
+        }
+
+        // Mark field as showInTable = true
+        updateField(fieldId, { showInTable: true });
+
+        // Update interfaceSettings
+        setInterfaceSettings(prev => {
+          const cols = prev.master.columns || [];
+          if (cols.some(c => c.fieldId === fieldId)) {
+            return {
+              ...prev,
+              master: {
+                ...prev.master,
+                columns: cols.map(c => c.fieldId === fieldId ? { ...c, visible: true } : c)
+              }
+            };
+          }
+          return {
+            ...prev,
+            master: {
+              ...prev.master,
+              columns: [...cols, { fieldId, visible: true, inlineEdit: false, width: 200 }]
+            }
+          };
+        });
+
+        setSelectedId(fieldId);
+        toast.success("Column added to table view!");
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // DnD Handlers updated for flat grid system
@@ -2805,41 +2986,274 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-              {FIELD_CATEGORIES.map((category) => {
-                const filteredFields = category.fields.filter(f => 
-                  f.label?.toLowerCase().includes(sidebarSearch.toLowerCase())
-                );
-                
-                if (filteredFields.length === 0) return null;
+              {activeViewMode === 'master' ? (
+                (() => {
+                  const filtered = displayFields.filter(f => 
+                    (f.label || f.name || '').toLowerCase().includes(sidebarSearch.toLowerCase())
+                  );
 
-                return (
-                  <div key={category.id} className="space-y-4">
-                    <div className="flex items-center justify-between px-1">
-                      <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">{category.label}</h4>
-                      <span className="text-[8px] font-bold text-zinc-300 dark:text-zinc-800">{filteredFields.length}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      {filteredFields.map((field) => (
-                        <div
-                          key={field.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, { type: 'field', fieldType: field.id })}
-                          onDragEnd={handleDragEnd}
-                          className="group cursor-grab active:cursor-grabbing space-y-2"
-                        >
-                          <BlockThumbnail type={field.id} />
-                          <div className="flex items-center gap-2 px-1">
-                            <field.icon size={12} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                            <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors truncate">{field.label}</span>
+                  const sortedFiltered = [...filtered].sort((a, b) => {
+                    const tabIdxA = tabs.findIndex(t => t.id === a.tabId);
+                    const tabIdxB = tabs.findIndex(t => t.id === b.tabId);
+                    
+                    const aTab = tabIdxA === -1 ? 9999 : tabIdxA;
+                    const bTab = tabIdxB === -1 ? 9999 : tabIdxB;
+                    
+                    if (aTab !== bTab) return aTab - bTab;
+                    
+                    const rowA = typeof a.rowIndex === 'number' ? a.rowIndex : 0;
+                    const rowB = typeof b.rowIndex === 'number' ? b.rowIndex : 0;
+                    if (rowA !== rowB) return rowA - rowB;
+                    
+                    const colA = typeof a.startCol === 'number' ? a.startCol : 0;
+                    const colB = typeof b.startCol === 'number' ? b.startCol : 0;
+                    return colA - colB;
+                  });
+
+                  const groups: { tabLabel: string; fields: any[] }[] = [];
+                  tabs.forEach(tab => {
+                    const fieldsInTab = sortedFiltered.filter(f => f.tabId === tab.id);
+                    if (fieldsInTab.length > 0) {
+                      groups.push({
+                        tabLabel: tab.label,
+                        fields: fieldsInTab
+                      });
+                    }
+                  });
+
+                  const unassignedFields = sortedFiltered.filter(f => !tabs.some(t => t.id === f.tabId));
+                  if (unassignedFields.length > 0) {
+                    groups.push({
+                      tabLabel: 'Other Fields',
+                      fields: unassignedFields
+                    });
+                  }
+
+                  const keyCol = interfaceSettings.master.columns?.find(c => c.fieldId === '_record_key');
+                  // Also include metadata/system fields
+                  const systemFields = [
+                    { id: '_record_key', label: keyCol?.label || 'Record Key', type: 'text' },
+                    { id: 'createdAt', label: 'Created Date', type: 'date' },
+                    { id: 'createdBy', label: 'Created By', type: 'user' },
+                    { id: 'updatedAt', label: 'Updated Date', type: 'date' },
+                    { id: 'status', label: 'Status', type: 'select' }
+                  ].filter(sf => 
+                    sf.label.toLowerCase().includes(sidebarSearch.toLowerCase()) && 
+                    !displayFields.some(df => df.id === sf.id) // Avoid duplicates
+                  );
+
+                  return (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                      {/* Section: Custom Fields */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between px-1">
+                          <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Available Fields</h4>
+                          <span className="text-[8px] font-bold text-zinc-300 dark:text-zinc-800">{filtered.length}</span>
+                        </div>
+                        
+                        {sortedFiltered.length === 0 ? (
+                          <p className="text-[11px] text-zinc-400 dark:text-zinc-600 italic px-1">No custom fields found</p>
+                        ) : (
+                          <div className="space-y-5">
+                            {groups.map((group) => (
+                              <div key={group.tabLabel} className="space-y-2">
+                                <div className="flex items-center gap-2 px-1 border-b border-zinc-100/50 dark:border-zinc-900/50 pb-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500/40" />
+                                  <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">{group.tabLabel}</span>
+                                </div>
+                                <div className="space-y-2">
+                                  {group.fields.map((field) => {
+                                    const isAlreadyActive = field.showInTable !== false;
+                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                    const Icon = fieldDef?.icon || TableProperties;
+                                    
+                                    return (
+                                      <div
+                                        key={field.id}
+                                        draggable
+                                        onDragStart={(e) => {
+                                          handleDragStart(e, { type: 'master-column-add', fieldId: field.id });
+                                        }}
+                                        onDragEnd={handleDragEnd}
+                                        onClick={() => {
+                                          if (!isAlreadyActive) {
+                                            updateField(field.id, { showInTable: true });
+                                            setInterfaceSettings(prev => {
+                                              const cols = prev.master.columns || [];
+                                              if (cols.some(c => c.fieldId === field.id)) {
+                                                return {
+                                                  ...prev,
+                                                  master: {
+                                                    ...prev.master,
+                                                    columns: cols.map(c => c.fieldId === field.id ? { ...c, visible: true } : c)
+                                                  }
+                                                };
+                                              }
+                                              return {
+                                                ...prev,
+                                                master: {
+                                                  ...prev.master,
+                                                  columns: [...cols, { fieldId: field.id, visible: true, inlineEdit: false, width: 200 }]
+                                                }
+                                              };
+                                            });
+                                          }
+                                          setSelectedId(field.id);
+                                        }}
+                                        className={cn(
+                                          "flex items-center justify-between p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing hover:shadow-sm group",
+                                          isAlreadyActive 
+                                            ? "bg-zinc-50/50 dark:bg-zinc-900/20 border-indigo-500/20 text-zinc-500" 
+                                            : "bg-white dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-900 dark:text-zinc-200"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                          <div className={cn(
+                                            "w-7 h-7 rounded-lg flex items-center justify-center border transition-colors",
+                                            isAlreadyActive 
+                                              ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400" 
+                                              : "bg-indigo-500/5 border-indigo-500/10 text-indigo-500"
+                                          )}>
+                                            <Icon size={13} />
+                                          </div>
+                                          <div className="min-w-0 leading-tight">
+                                            <p className="text-[11px] font-bold truncate">{field.label || field.name}</p>
+                                            <p className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider">{field.type}</p>
+                                          </div>
+                                        </div>
+                                        
+                                        {isAlreadyActive ? (
+                                          <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest rounded">Active</span>
+                                        ) : (
+                                          <span className="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 text-[8px] font-bold uppercase tracking-widest rounded border border-zinc-200 dark:border-zinc-700 transition-opacity">Add</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Section: System Metadata Fields */}
+                      {systemFields.length > 0 && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                          <div className="flex items-center justify-between px-1">
+                            <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">System Metadata</h4>
+                            <span className="text-[8px] font-bold text-zinc-300 dark:text-zinc-800">{systemFields.length}</span>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            {systemFields.map((field) => {
+                              const isAlreadyActive = field.id === '_record_key' || interfaceSettings.master.columns?.some(c => c.fieldId === field.id && c.visible !== false);
+                              const Icon = field.id === '_record_key' ? Key : field.type === 'user' ? Users : Calendar;
+                              
+                              return (
+                                <div
+                                  key={field.id}
+                                  draggable={field.id !== '_record_key'}
+                                  onDragStart={(e) => {
+                                    if (field.id === '_record_key') return;
+                                    handleDragStart(e, { type: 'master-column-add', fieldId: field.id, isSystem: true });
+                                  }}
+                                  onDragEnd={handleDragEnd}
+                                  onClick={() => {
+                                    if (field.id !== '_record_key' && !isAlreadyActive) {
+                                      setInterfaceSettings(prev => {
+                                        const cols = prev.master.columns || [];
+                                        if (cols.some(c => c.fieldId === field.id)) {
+                                          return {
+                                            ...prev,
+                                            master: {
+                                              ...prev.master,
+                                              columns: cols.map(c => c.fieldId === field.id ? { ...c, visible: true } : c)
+                                            }
+                                          };
+                                        }
+                                        return {
+                                          ...prev,
+                                          master: {
+                                            ...prev.master,
+                                            columns: [...cols, { fieldId: field.id, visible: true, inlineEdit: false, width: 120 }]
+                                          }
+                                        };
+                                      });
+                                    }
+                                    setSelectedId(field.id);
+                                  }}
+                                  className={cn(
+                                    "flex items-center justify-between p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing hover:shadow-sm group",
+                                    isAlreadyActive 
+                                      ? "bg-zinc-50/50 dark:bg-zinc-900/20 border-indigo-500/20 text-zinc-500" 
+                                      : "bg-white dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-900 dark:text-zinc-200"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className={cn(
+                                      "w-7 h-7 rounded-lg flex items-center justify-center border transition-colors",
+                                      isAlreadyActive 
+                                        ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400" 
+                                        : "bg-amber-500/5 border-amber-500/10 text-amber-500"
+                                    )}>
+                                      <Icon size={13} />
+                                    </div>
+                                    <div className="min-w-0 leading-tight">
+                                      <p className="text-[11px] font-bold truncate">{field.label}</p>
+                                      <p className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider">system</p>
+                                    </div>
+                                  </div>
+                                  
+                                  {isAlreadyActive ? (
+                                    <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest rounded">Active</span>
+                                  ) : (
+                                    <span className="opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 text-[8px] font-bold uppercase tracking-widest rounded border border-zinc-200 dark:border-zinc-700 transition-opacity">Add</span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                );
-              })}
-
-
+                  );
+                })()
+              ) : (
+                  FIELD_CATEGORIES.map((category) => {
+                  const filteredFields = category.fields.filter(f => 
+                    f.label?.toLowerCase().includes(sidebarSearch.toLowerCase())
+                  );
+                  
+                  if (filteredFields.length === 0) return null;
+  
+                  return (
+                    <div key={category.id} className="space-y-4">
+                      <div className="flex items-center justify-between px-1">
+                        <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">{category.label}</h4>
+                        <span className="text-[8px] font-bold text-zinc-300 dark:text-zinc-800">{filteredFields.length}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {filteredFields.map((field) => (
+                          <div
+                            key={field.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, { type: 'field', fieldType: field.id })}
+                            onDragEnd={handleDragEnd}
+                            className="group cursor-grab active:cursor-grabbing space-y-2"
+                          >
+                            <BlockThumbnail type={field.id} />
+                            <div className="flex items-center gap-2 px-1">
+                              <field.icon size={12} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                              <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors truncate">{field.label}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </aside>
         )}
@@ -2847,7 +3261,9 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
         {/* Canvas / Preview */}
         <main className={cn(
           "flex-1 relative flex flex-col overflow-hidden",
-          activeTab === 'builder' ? "bg-zinc-100 dark:bg-zinc-900" : "bg-zinc-50 dark:bg-zinc-950"
+          activeTab === 'builder' 
+            ? (activeViewMode === 'master' ? "bg-zinc-50 dark:bg-zinc-950" : "bg-zinc-100 dark:bg-zinc-900")
+            : "bg-zinc-50 dark:bg-zinc-950"
         )}>
           {/* Main Tab Content Area */}
           <div 
@@ -2865,207 +3281,187 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
           >
           {activeTab === 'builder' ? (
             activeViewMode === 'master' ? (
-              <div className="flex-1 flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 p-8 custom-scrollbar overflow-y-auto">
+              <div className="flex-1 flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 p-8 custom-scrollbar overflow-y-auto min-h-full">
                 <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
-                  {/* Dashboard Header */}
-                  <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-6">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2">
-                        <TableProperties className="text-indigo-500" size={24} />
-                        <span>Master View Configuration</span>
-                      </h2>
-                      <p className="text-zinc-500 text-sm">Configure how records in this module are presented in the main table, list, kanban, or calendar.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
-                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Active Preset: {interfaceSettings.master.layoutType?.toUpperCase() || 'TABLE'}</span>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Unified Configuration Content */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="space-y-8 animate-in fade-in duration-300">
                     {/* Columns grid settings */}
-                    <div className="lg:col-span-2 space-y-8">
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
+                    <div className="space-y-8" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm transition-all">
                         <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
-                          <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Available Fields & Table Columns</span>
-                          <span className="text-[10px] text-zinc-400 font-bold uppercase">{displayFields.length} Fields Defined</span>
-                        </div>
-                        <table className="w-full text-left">
-                          <thead>
-                            <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/20">
-                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest w-1/3">Field Label</th>
-                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-center w-24">Show in Table</th>
-                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-center w-24">Inline Edit</th>
-                              <th className="px-6 py-3.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Column Width</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                            {displayFields.map((field) => (
-                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                                <td className="px-6 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 transition-colors">
-                                      {(() => {
-                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                        const IconComponent = fieldDef?.icon || Table;
-                                        return <IconComponent size={13} />;
-                                      })()}
-                                    </div>
-                                    <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                  <button 
-                                    className={cn(
-                                      "w-8 h-5 rounded-full relative transition-all mx-auto",
-                                      field.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                    )}
-                                    onClick={() => updateField(field.id, { showInTable: field.showInTable === false })}
-                                  >
-                                    <div className={cn(
-                                      "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                      field.showInTable !== false ? "right-0.5" : "left-0.5"
-                                    )} />
-                                  </button>
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                  <button 
-                                    className={cn(
-                                      "w-8 h-5 rounded-full relative transition-all mx-auto",
-                                      field.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
-                                    )}
-                                    onClick={() => updateField(field.id, { inlineEdit: !field.inlineEdit })}
-                                  >
-                                    <div className={cn(
-                                      "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                                      field.inlineEdit ? "right-0.5" : "left-0.5"
-                                    )} />
-                                  </button>
-                                </td>
-                                <td className="px-6 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <input 
-                                      type="range" 
-                                      className="w-20 accent-indigo-500 h-1 cursor-pointer" 
-                                      min="80" max="500" step="10"
-                                      value={field.columnWidth || 200}
-                                      onChange={(e) => updateField(field.id, { columnWidth: parseInt(e.target.value) })}
-                                    />
-                                    <span className="text-[10px] font-mono text-zinc-400 min-w-[35px]">{field.columnWidth || 200}px</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Table Density & Options side column */}
-                    <div className="space-y-8">
-                      {/* Density Control Panel */}
-                      <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
-                        <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Table Density</span>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(['compact', 'standard', 'spacious'] as const).map(d => (
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Active Table Columns</span>
+                            <p className="text-[9px] text-zinc-400 font-bold uppercase">Drag & Drop headers to reorder • Click header to edit settings</p>
+                          </div>
+                          <div className="flex items-center gap-3">
                             <button
-                              key={d}
-                              onClick={() => setInterfaceSettings(prev => ({
-                                ...prev,
-                                master: { ...prev.master, density: d }
-                              }))}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedId('__table_settings');
+                              }}
                               className={cn(
-                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
-                                interfaceSettings.master.density === d 
-                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
-                                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                                selectedId === '__table_settings'
+                                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                               )}
                             >
-                              {d}
+                              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+                              Table Settings
                             </button>
-                          ))}
+                            <span className="text-[10px] text-indigo-500 font-black bg-indigo-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                              {activeColumns.length} Active Columns
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Pagination Control Panel */}
-                      <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Pagination</span>
-                          <button 
-                            className={cn(
-                              "w-8 h-5 rounded-full relative transition-all",
-                              interfaceSettings.master.pagination?.enabled ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                            )}
-                            onClick={() => setInterfaceSettings(prev => ({
-                              ...prev,
-                              master: {
-                                ...prev.master,
-                                pagination: { ...prev.master.pagination, enabled: !prev.master.pagination?.enabled }
-                              }
-                            }))}
-                          >
-                            <div className={cn(
-                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
-                              interfaceSettings.master.pagination?.enabled ? "right-0.5" : "left-0.5"
-                            )} />
-                          </button>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Default Per Page</label>
-                          <select 
-                            value={interfaceSettings.master.pagination?.pageSize || 25}
-                            onChange={(e) => setInterfaceSettings(prev => ({
-                              ...prev,
-                              master: {
-                                ...prev.master,
-                                pagination: { ...prev.master.pagination, pageSize: parseInt(e.target.value) }
-                              }
-                            }))}
-                            className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
-                          >
-                            {[10, 25, 50, 100].map(size => (
-                              <option key={size} value={size}>{size} records</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Quick actions panel */}
-                      <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 shadow-sm">
-                        <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Quick Actions</span>
-                        <div className="space-y-2">
-                          {interfaceSettings.actions.map((act) => (
-                            <div key={act.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
-                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{act.label}</span>
-                              <button 
-                                onClick={() => setInterfaceSettings(prev => ({
-                                  ...prev,
-                                  actions: prev.actions.filter(a => a.id !== act.id)
-                                }))}
-                                className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded"
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                        {activeColumns.length === 0 ? (
+                          <div className="py-24 text-center space-y-4 px-6 animate-in fade-in duration-300">
+                            <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-100 dark:border-zinc-800">
+                              <TableProperties size={28} />
                             </div>
-                          ))}
-                          <button
-                            onClick={() => {
-                              const label = prompt("Enter action label:");
-                              if (label) {
-                                setInterfaceSettings(prev => ({
-                                  ...prev,
-                                  actions: [...prev.actions, { id: `act-${Date.now()}`, label, icon: 'FileText' }]
-                                }));
-                              }
-                            }}
-                            className="w-full py-2 border border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-xl text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-indigo-500 transition-colors flex items-center justify-center gap-1.5"
-                          >
-                            <Plus size={10} /> Add Quick Action
-                          </button>
-                        </div>
+                            <div className="space-y-1">
+                              <p className="text-sm font-bold text-zinc-900 dark:text-white">Your table is empty</p>
+                              <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                                Drag and drop fields from the **Available Fields** palette on the left directly into this workspace to build your table columns!
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left table-fixed">
+                              <thead>
+                                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/10">
+                                  {/* Lead Key Column (Fixed, always first) */}
+                                  <th 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedId('_record_key');
+                                    }}
+                                    style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
+                                    className={cn(
+                                      "px-6 py-4 text-[10px] font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all select-none border-r border-zinc-100 dark:border-zinc-800/50",
+                                      selectedId === '_record_key' 
+                                        ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
+                                        : "text-zinc-400"
+                                    )}
+                                  >
+                                    {interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}
+                                  </th>
+
+                                  {/* Draggable Column Headers */}
+                                  {activeColumns.map((col, idx) => {
+                                    const isSelected = selectedId === col.id;
+                                    const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id) ? 120 : 200);
+                                    const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id);
+
+                                    return (
+                                      <th 
+                                        key={col.id}
+                                        style={{ width: `${width}px` }}
+                                        draggable
+                                        onDragStart={(e) => handleColumnDragStart(e, idx)}
+                                        onDragOver={(e) => handleColumnDragOver(e, idx)}
+                                        onDrop={(e) => handleColumnDrop(e, idx)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedId(col.id);
+                                        }}
+                                        className={cn(
+                                          "px-4 py-4 text-[10px] font-bold uppercase tracking-widest cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
+                                          isSelected 
+                                            ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
+                                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                                        )}
+                                      >
+                                        <div className="flex items-center justify-between gap-1">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <GripVertical size={11} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                            <span className="truncate">{col.label || col.name}</span>
+                                          </div>
+                                          
+                                          {/* Remove Header Button */}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (!isSystem) {
+                                                updateField(col.id, { showInTable: false });
+                                              }
+                                              setInterfaceSettings(prev => {
+                                                const cols = prev.master.columns || [];
+                                                return {
+                                                  ...prev,
+                                                  master: {
+                                                    ...prev.master,
+                                                    columns: cols.map(c => c.fieldId === col.id ? { ...c, visible: false } : c)
+                                                  }
+                                                };
+                                              });
+                                              if (selectedId === col.id) setSelectedId(null);
+                                              toast.success("Column removed");
+                                            }}
+                                            className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                          >
+                                            <X size={10} />
+                                          </button>
+                                        </div>
+                                      </th>
+                                    );
+                                  })}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 select-none">
+                                {/* Renders dummy/mock rows */}
+                                {mockData.slice(0, 3).map((row, rIdx) => (
+                                  <tr key={rIdx} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-900/10 transition-colors">
+                                    {/* Lead ID column */}
+                                    <td className="px-6 py-4 text-xs font-bold text-indigo-500/80 font-mono">
+                                      {moduleSettings.recordKeyPrefix || 'KEY'}-{100 + rIdx}
+                                    </td>
+                                    
+                                    {/* Active columns data cells */}
+                                    {activeColumns.map((col) => {
+                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id) ? 120 : 200);
+                                      let cellValue = row[col.id] || row[col.name] || '-';
+                                      
+                                      // Custom user display
+                                      if (col.type === 'user' || col.id === 'createdBy') {
+                                        cellValue = (
+                                          <div className="flex items-center gap-1.5">
+                                            <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-500 border border-zinc-300 dark:border-zinc-700">
+                                              U
+                                            </div>
+                                            <span className="text-zinc-600 dark:text-zinc-400 truncate">Mock User</span>
+                                          </div>
+                                        );
+                                      } else if (col.type === 'date' || col.id === 'createdAt' || col.id === 'updatedAt') {
+                                        cellValue = new Date().toLocaleDateString();
+                                      } else if (col.id === 'status') {
+                                        cellValue = (
+                                          <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+                                            Active
+                                          </span>
+                                        );
+                                      } else if (typeof cellValue === 'object') {
+                                        cellValue = 'Complex Data';
+                                      }
+
+                                      return (
+                                        <td 
+                                          key={col.id} 
+                                          style={{ width: `${width}px` }}
+                                          className="px-4 py-4 text-xs text-zinc-500 dark:text-zinc-400 truncate border-l border-zinc-100/50 dark:border-zinc-800/30"
+                                        >
+                                          {cellValue}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -6898,14 +7294,484 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                         </div>
                       </div>
                     </motion.div>
-                  ) : selectedField ? (
+                  ) : selectedId === '__table_settings' && activeViewMode === 'master' ? (
                     <motion.div 
-                      key={selectedField.id}
+                      key="table-settings-inspector"
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 20 }}
-                      className="p-4 space-y-4"
+                      className="p-4 space-y-6"
                     >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                          <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                            Table Settings
+                          </h3>
+                        </div>
+                        <button 
+                          onClick={() => setSelectedId(null)}
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      {/* Description block */}
+                      <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                        <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed italic">
+                          Configure layout presets, record pagination density, and default quick action presets for the master records list.
+                        </p>
+                      </div>
+
+                      {/* Density Control Panel */}
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Table Density</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['compact', 'standard', 'spacious'] as const).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: { ...prev.master, density: d }
+                              }))}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                interfaceSettings.master.density === d 
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                                  : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                              )}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Pagination Control Panel */}
+                      <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Pagination</label>
+                          <button 
+                            className={cn(
+                              "w-8 h-5 rounded-full relative transition-all",
+                              interfaceSettings.master.pagination?.enabled ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                            )}
+                            onClick={() => setInterfaceSettings(prev => ({
+                              ...prev,
+                              master: {
+                                ...prev.master,
+                                pagination: { ...prev.master.pagination, enabled: !prev.master.pagination?.enabled }
+                              }
+                            }))}
+                          >
+                            <div className={cn(
+                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                              interfaceSettings.master.pagination?.enabled ? "right-0.5" : "left-0.5"
+                            )} />
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Default Per Page</label>
+                          <select 
+                            value={interfaceSettings.master.pagination?.pageSize || 25}
+                            onChange={(e) => setInterfaceSettings(prev => ({
+                              ...prev,
+                              master: {
+                                ...prev.master,
+                                pagination: { ...prev.master.pagination, pageSize: parseInt(e.target.value) }
+                              }
+                            }))}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                          >
+                            {[10, 25, 50, 100].map(size => (
+                              <option key={size} value={size}>{size} records</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Quick Actions Panel */}
+                      <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 font-black">Quick Actions</label>
+                        <div className="space-y-2">
+                          {interfaceSettings.actions.map((act) => (
+                            <div key={act.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 animate-in fade-in duration-200">
+                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{act.label}</span>
+                              <button 
+                                onClick={() => setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  actions: prev.actions.filter(a => a.id !== act.id)
+                                }))}
+                                className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded transition-colors"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => {
+                              const label = prompt("Enter action label:");
+                              if (label) {
+                                setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  actions: [...prev.actions, { id: `act-${Date.now()}`, label, icon: 'FileText' }]
+                                }));
+                              }
+                            }}
+                            className="w-full py-2.5 border border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-xl text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-indigo-500 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Plus size={10} /> Add Quick Action
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : selectedSystemField && activeViewMode === 'master' ? (
+                    <motion.div 
+                      key={`system-${selectedSystemField.id}`}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="p-4 space-y-6"
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                          <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                            System Column
+                          </h3>
+                        </div>
+                        <button 
+                          onClick={() => setSelectedId(null)}
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      {/* Description block */}
+                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
+                        <p className="text-[10px] text-amber-600 dark:text-amber-500 font-medium leading-relaxed italic">
+                          Configure how the system "{selectedSystemField.label}" field behaves as a table column.
+                        </p>
+                      </div>
+
+                      {/* Column Label */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Column Header Label</label>
+                        <input 
+                          type="text" 
+                          value={interfaceSettings.master.columns?.find(c => c.fieldId === selectedSystemField.id)?.label || selectedSystemField.label}
+                          onChange={(e) => {
+                            const newLabel = e.target.value;
+                            setInterfaceSettings(prev => {
+                              const cols = prev.master.columns || [];
+                              const exists = cols.some(c => c.fieldId === selectedSystemField.id);
+                              if (!exists) {
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: [...cols, { fieldId: selectedSystemField.id, visible: true, inlineEdit: false, label: newLabel }]
+                                  }
+                                };
+                              }
+                              return {
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  columns: cols.map(c => c.fieldId === selectedSystemField.id ? { ...c, label: newLabel } : c)
+                                }
+                              };
+                            });
+                          }}
+                          className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all"
+                          placeholder={selectedSystemField.id === '_record_key' ? 'Key' : selectedSystemField.label}
+                        />
+                      </div>
+
+                      {/* Show In Table Toggle */}
+                      {selectedSystemField.id === '_record_key' ? (
+                        <div className="pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                          <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex gap-3">
+                            <div className="w-8 h-8 bg-indigo-500/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                              <Sparkles size={14} className="text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-bold text-indigo-900 dark:text-indigo-100 uppercase tracking-tight">Record Key Column</p>
+                              <p className="text-[9px] text-zinc-500 leading-relaxed font-medium">
+                                The unique Record Key is statically fixed at column index 0 and cannot be hidden.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pt-4 border-t border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Show in Table</p>
+                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Display as active column</p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                const isCurrentlyShow = cols.some(c => c.fieldId === selectedSystemField.id && c.visible !== false);
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: cols.map(c => c.fieldId === selectedSystemField.id ? { ...c, visible: !isCurrentlyShow } : c)
+                                  }
+                                };
+                              });
+                              setSelectedId(null);
+                            }}
+                            className={cn(
+                              "w-10 h-6 rounded-full relative transition-all",
+                              interfaceSettings.master.columns?.some(c => c.fieldId === selectedSystemField.id && c.visible !== false) ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                            )}
+                          >
+                            <div className={cn(
+                              "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
+                              interfaceSettings.master.columns?.some(c => c.fieldId === selectedSystemField.id && c.visible !== false) ? "right-1" : "left-1"
+                            )} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Column Width Slider */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between px-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Column Width</label>
+                          <span className="text-[10px] font-mono text-indigo-500 font-black">
+                            {interfaceSettings.master.columns?.find(c => c.fieldId === selectedSystemField.id)?.width || 120}px
+                          </span>
+                        </div>
+                        <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center">
+                          <input 
+                            type="range" 
+                            min="80" 
+                            max="500" 
+                            step="10"
+                            value={interfaceSettings.master.columns?.find(c => c.fieldId === selectedSystemField.id)?.width || 120}
+                            onChange={(e) => {
+                              const newWidth = parseInt(e.target.value, 10);
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: cols.map(c => c.fieldId === selectedSystemField.id ? { ...c, width: newWidth } : c)
+                                  }
+                                };
+                              });
+                            }}
+                            className="w-full accent-indigo-500 cursor-pointer h-1.5"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Remove Button */}
+                      <div className="pt-8 border-t border-zinc-100 dark:border-zinc-900">
+                        <button 
+                          onClick={() => {
+                            setInterfaceSettings(prev => {
+                              const cols = prev.master.columns || [];
+                              return {
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  columns: cols.map(c => c.fieldId === selectedSystemField.id ? { ...c, visible: false } : c)
+                                }
+                              };
+                            });
+                            setSelectedId(null);
+                            toast.success("System column removed");
+                          }}
+                          className="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                        >
+                          Remove Column
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : selectedField && activeViewMode === 'master' ? (
+                      <motion.div 
+                        key={`column-${selectedField.id}`}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        className="p-4 space-y-6"
+                      >
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                            <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                              Column Settings
+                            </h3>
+                          </div>
+                          <button 
+                            onClick={() => setSelectedId(null)}
+                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        {/* Description block */}
+                        <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                          <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed italic">
+                            Configure how the "{selectedField.label || selectedField.name}" field behaves as a table column.
+                          </p>
+                        </div>
+
+                        {/* Column Label Override */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Column Header Label</label>
+                          <input 
+                            type="text" 
+                            value={selectedField.label}
+                            onChange={(e) => updateField(selectedField.id, { label: e.target.value })}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            placeholder="e.g. Serial Number"
+                          />
+                        </div>
+
+                        {/* Inline Edit Toggle */}
+                        <div className="pt-4 border-t border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Inline Edit</p>
+                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Allow editing in Table</p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              const newInlineEdit = !selectedField.inlineEdit;
+                              updateField(selectedField.id, { inlineEdit: newInlineEdit });
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, inlineEdit: newInlineEdit } : c)
+                                  }
+                                };
+                              });
+                            }}
+                            className={cn(
+                              "w-10 h-6 rounded-full relative transition-all",
+                              selectedField.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
+                            )}
+                          >
+                            <div className={cn(
+                              "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
+                              selectedField.inlineEdit ? "right-1" : "left-1"
+                            )} />
+                          </button>
+                        </div>
+
+                        {/* Show In Table Toggle */}
+                        <div className="pt-4 border-t border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Show in Table</p>
+                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Display as active column</p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              const newShow = selectedField.showInTable === false;
+                              updateField(selectedField.id, { showInTable: newShow });
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, visible: newShow } : c)
+                                  }
+                                };
+                              });
+                              if (!newShow) setSelectedId(null);
+                            }}
+                            className={cn(
+                              "w-10 h-6 rounded-full relative transition-all",
+                              selectedField.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                            )}
+                          >
+                            <div className={cn(
+                              "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
+                              selectedField.showInTable !== false ? "right-1" : "left-1"
+                            )} />
+                          </button>
+                        </div>
+
+                        {/* Column Width Slider */}
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                          <div className="flex items-center justify-between px-1">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Column Width</label>
+                            <span className="text-[10px] font-mono text-indigo-500 font-black">{selectedField.columnWidth || 200}px</span>
+                          </div>
+                          <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center">
+                            <input 
+                              type="range" 
+                              min="80" 
+                              max="500" 
+                              step="10"
+                              value={selectedField.columnWidth || 200}
+                              onChange={(e) => {
+                                const newWidth = parseInt(e.target.value, 10);
+                                updateField(selectedField.id, { columnWidth: newWidth });
+                                setInterfaceSettings(prev => {
+                                  const cols = prev.master.columns || [];
+                                  return {
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, width: newWidth } : c)
+                                    }
+                                  };
+                                });
+                              }}
+                              className="w-full accent-indigo-500 cursor-pointer h-1.5"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="pt-8 border-t border-zinc-100 dark:border-zinc-900">
+                          <button 
+                            onClick={() => {
+                              updateField(selectedField.id, { showInTable: false });
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, visible: false } : c)
+                                  }
+                                };
+                              });
+                              setSelectedId(null);
+                              toast.success("Column removed from table");
+                            }}
+                            className="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                          >
+                            Remove Column
+                          </button>
+                        </div>
+                      </motion.div>
+                    ) : selectedField ? (
+                      <motion.div 
+                        key={selectedField.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        className="p-4 space-y-4"
+                      >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <div className="w-1 h-4 bg-indigo-500 rounded-full" />
@@ -9031,15 +9897,27 @@ const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
                     key="empty"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="h-full flex flex-col items-center justify-center text-center p-4 space-y-4"
+                    className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4"
                   >
-                    <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-indigo-500/5">
-                      <Move size={20} className="text-zinc-500 dark:text-zinc-400" />
+                    <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-indigo-500/5 animate-in zoom-in-50 duration-300">
+                      {activeViewMode === 'master' ? <Settings className="text-zinc-500 dark:text-zinc-400" size={20} /> : <Move size={20} className="text-zinc-500 dark:text-zinc-400" />}
                     </div>
                     <div className="space-y-1">
                       <p className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest">No Selection</p>
-                      <p className="text-[10px] text-zinc-500 dark:text-zinc-500 leading-relaxed max-w-[160px]">Select any field on the canvas to configure its properties.</p>
+                      <p className="text-[10px] text-zinc-500 dark:text-zinc-500 leading-relaxed max-w-[180px]">
+                        {activeViewMode === 'master' 
+                          ? 'Select any column header or click "Table Settings" to configure layout preferences.' 
+                          : 'Select any field on the canvas to configure its properties.'}
+                      </p>
                     </div>
+                    {activeViewMode === 'master' && (
+                      <button
+                        onClick={() => setSelectedId('__table_settings')}
+                        className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm"
+                      >
+                        Configure Table Settings
+                      </button>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -40,6 +40,8 @@ export function Table<T extends { id: string | number }>({
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof T; direction: 'asc' | 'desc' } | null>(null);
 
+
+
   // Reset to page 1 when data changes (search/filter applied)
   useEffect(() => {
     setCurrentPage(1);
