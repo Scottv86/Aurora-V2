@@ -4067,8 +4067,8 @@ export const ModuleEditor = () => {
                   {/* Horizontal split container for Left Sidebar + Main Grid + Right Workflow Panel */}
                   <div className="flex w-full items-stretch flex-1">
                     
-                    {/* Sidebar Vertical Tabs list if layoutType === 'sidebar' */}
-                    {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'sidebar' && (
+                    {/* Sidebar Vertical Tabs list if layoutType === 'sidebar' or 'split' */}
+                    {activeTab === 'builder' && (interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'split') && (
                       <div className="w-60 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-5 space-y-4 flex flex-col justify-between select-none">
                         <div className="space-y-4">
                           <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
@@ -8192,8 +8192,8 @@ export const ModuleEditor = () => {
                       {/* Layout Presets */}
                       <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Detail Layout</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {(['tabs', 'sidebar'] as const).map(l => (
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['tabs', 'split', 'sidebar'] as const).map(l => (
                             <button
                               key={l}
                               onClick={() => setInterfaceSettings(prev => ({
@@ -8201,14 +8201,14 @@ export const ModuleEditor = () => {
                                 detail: { ...prev.detail, layoutType: l }
                               }))}
                               className={cn(
-                                "px-2 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1",
-                                (interfaceSettings.detail.layoutType === l || (l === 'tabs' && interfaceSettings.detail.layoutType === 'split'))
+                                "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
+                                interfaceSettings.detail.layoutType === l
                                   ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
                                   : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                               )}
                             >
-                              {l === 'tabs' ? <Layout size={14} /> : <Columns size={14} />}
-                              <span>{l === 'tabs' ? 'Top Tabs' : 'Sidebar'}</span>
+                              {l === 'tabs' ? <Layout size={14} /> : l === 'split' ? <Columns size={14} /> : <Sidebar size={14} />}
+                              <span className="truncate w-full">{l === 'tabs' ? 'Top Tabs' : l === 'split' ? 'Split View' : 'Single Page'}</span>
                             </button>
                           ))}
                         </div>
