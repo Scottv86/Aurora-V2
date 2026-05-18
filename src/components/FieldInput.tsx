@@ -251,9 +251,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           input: 'h-8 px-2.5 rounded-lg text-[10px]',
           select: 'h-8 px-2 py-0.5 rounded-lg text-[10px]',
           checkbox: 'w-3.5 h-3.5 rounded',
+          checkboxIconSize: 10,
           radio: 'w-3.5 h-3.5',
-          switch: 'w-8 h-4.5',
-          switchDot: 'w-3.5 h-3.5',
+          radioDot: 'w-1.5 h-1.5',
+          text: 'text-[10px]',
+          switchContainer: 'w-8 h-4.5 rounded-full',
+          switchDot: 'w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out',
+          switchTranslate: 'translate-x-2.5',
           badge: 'px-1.5 py-0.5 text-[8px]'
         };
       case 'spacious':
@@ -261,9 +265,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           input: 'h-13 px-5 rounded-2xl text-sm',
           select: 'h-13 px-4 py-2.5 rounded-2xl text-sm',
           checkbox: 'w-5 h-5 rounded-md',
+          checkboxIconSize: 14,
           radio: 'w-5 h-5',
-          switch: 'w-11 h-6.5',
-          switchDot: 'w-5 h-5',
+          radioDot: 'w-2.5 h-2.5',
+          text: 'text-sm',
+          switchContainer: 'w-11 h-6.5 rounded-full',
+          switchDot: 'w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out',
+          switchTranslate: 'translate-x-4',
           badge: 'px-3 py-1.5 text-[11px]'
         };
       case 'standard':
@@ -272,9 +280,13 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           input: 'h-10 px-3.5 rounded-xl text-xs',
           select: 'h-10 px-3 py-1.5 rounded-xl text-xs',
           checkbox: 'w-4 h-4 rounded',
+          checkboxIconSize: 12,
           radio: 'w-4 h-4',
-          switch: 'w-9 h-5',
-          switchDot: 'w-4 h-4',
+          radioDot: 'w-2 h-2',
+          text: 'text-xs',
+          switchContainer: 'w-9 h-5 rounded-full',
+          switchDot: 'w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out',
+          switchTranslate: 'translate-x-3',
           badge: 'px-2 py-1 text-[9px]'
         };
     }
@@ -497,7 +509,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               disabled={readonly}
               onChange={() => triggerImmediateChange(opt)} 
             />
-            <span className={cn(ds.text, "font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
+            <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
           </label>
         ))}
       </div>
@@ -561,7 +573,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                   triggerImmediateChange(newValues);
                 }} 
               />
-              <span className={cn(ds.text, "font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
+              <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
             </label>
           ))}
         </div>

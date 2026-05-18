@@ -1441,7 +1441,7 @@ export const ModuleEditor = () => {
   const [interfaceSettings, setInterfaceSettings] = useState({
     master: {
       layoutType: 'table' as 'table' | 'kanban' | 'calendar',
-      columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number }[],
+      columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string }[],
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       pagination: {
         enabled: true,
@@ -2540,7 +2540,7 @@ export const ModuleEditor = () => {
             ];
 
             const existingIdx = currentCols.findIndex(c => c.fieldId === fieldId);
-            let newColItem = { fieldId, visible: true, inlineEdit: false, width: 120 };
+            let newColItem: { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string } = { fieldId, visible: true, inlineEdit: false, width: 120 };
             
             if (existingIdx !== -1) {
               newColItem = { ...currentCols[existingIdx], visible: true };
@@ -2592,7 +2592,7 @@ export const ModuleEditor = () => {
           ];
 
           const existingIdx = currentCols.findIndex(c => c.fieldId === fieldId);
-          let newColItem = { fieldId, visible: true, inlineEdit: false, width: 200 };
+          let newColItem: { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string } = { fieldId, visible: true, inlineEdit: false, width: 200 };
           
           if (existingIdx !== -1) {
             newColItem = { ...currentCols[existingIdx], visible: true };
@@ -3598,7 +3598,8 @@ export const ModuleEditor = () => {
                                             interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-4 py-4',
                                             isSelected 
                                               ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
-                                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white",
+                                            draggingColumnIndex === idx && "opacity-40 bg-zinc-200 dark:bg-zinc-800"
                                           )}
                                         >
                                           <div className="flex items-center justify-between gap-1">
@@ -5002,12 +5003,7 @@ export const ModuleEditor = () => {
                                           </AnimatePresence>
                                         </div>
                                       </div>
-                              ) : block.type === 'button' ? (
-                                      <div className="pt-2">
-                                        <div className="h-11 w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl flex items-center justify-center font-bold text-xs uppercase tracking-widest shadow-lg shadow-indigo-500/20 transition-all">
-                                          {block.label}
-                                        </div>
-                                      </div>
+
                                     ) : block.type === 'buttonGroup' ? (
                                       <div className="pt-2 flex">
                                         {['Primary', 'Secondary', 'Tertiary'].map((btn, i) => (
@@ -5078,18 +5074,7 @@ export const ModuleEditor = () => {
                                           <div className="h-2 w-5/6 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
                                         </div>
                                       </div>
-                                    ) : block.type === 'html' ? (
-                                      <div className="min-h-[120px] bg-zinc-950 rounded-2xl p-5 font-mono text-[10px] text-emerald-500/80 leading-relaxed shadow-2xl border border-white/5 overflow-hidden group/html relative">
-                                        <div className="absolute top-0 right-0 p-3 flex gap-2">
-                                          <div className="w-2 h-2 rounded-full bg-rose-500/50" />
-                                          <div className="w-2 h-2 rounded-full bg-amber-500/50" />
-                                          <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
-                                        </div>
-                                        <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
-                                        <span className="block pl-4">&lt;h1&gt{block.label}&lt;/h1&gt;</span>
-                                        <span className="block pl-4 text-zinc-500">&lt;p&gt;Dynamic HTML content...&lt;/p&gt;</span>
-                                        <span className="block text-indigo-400">&lt;/div&gt;</span>
-                                      </div>
+
                                     ) : block.type === 'icon' ? (
                                       <div className="flex flex-col items-center justify-center gap-3 pt-4 pb-2">
                                         <div className="w-16 h-16 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
@@ -5671,7 +5656,10 @@ export const ModuleEditor = () => {
                                               <div className="w-1.5 h-1.5 rounded-full bg-white" />
                                             </div>
                                           ) : (
-                                            <div className="w-5.5 h-5.5 rounded-full bg-zinc-100 dark:bg-zinc-800 border-4 border-white dark:border-zinc-950 flex items-center justify-center text-zinc-400">
+                                            <div className={cn(
+                                              "w-5.5 h-5.5 rounded-full border-4 border-white dark:border-zinc-950 flex items-center justify-center text-zinc-400",
+                                              isLocked ? "bg-zinc-100 dark:bg-zinc-800" : "bg-zinc-50 dark:bg-zinc-900"
+                                            )}>
                                               <Lock size={8} />
                                             </div>
                                           )}
@@ -5868,10 +5856,14 @@ export const ModuleEditor = () => {
                       )}>
                         <span>Live Database</span>
                         {useRealData && (
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                          </span>
+                          isFetchingRealRecords ? (
+                            <span className="w-2 h-2 border-t-2 border-indigo-500 rounded-full animate-spin shrink-0 ml-1" />
+                          ) : (
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                            </span>
+                          )
                         )}
                       </span>
                     </div>
