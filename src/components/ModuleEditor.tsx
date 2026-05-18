@@ -2636,7 +2636,7 @@ export const ModuleEditor = () => {
   // DnD Handlers updated for flat grid system
 
 
-  const handleDragOver = (e: React.DragEvent, parentId?: string) => {
+  const handleDragOver = (e: React.DragEvent, parentId?: string, targetTabId?: string) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -2706,7 +2706,7 @@ export const ModuleEditor = () => {
       rowIndex: info.index,
       rowSpan: draggedHeight,
       parentId: info.parentId,
-      tabId: currentTabId,
+      tabId: targetTabId || currentTabId,
       name: 'placeholder'
     };
 
@@ -2741,7 +2741,7 @@ export const ModuleEditor = () => {
     setPreviewLayout(null);
   };
 
-  const handleDropOnCanvas = (e: React.DragEvent, parentId?: string) => {
+  const handleDropOnCanvas = (e: React.DragEvent, parentId?: string, targetTabId?: string) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOverInfo(null);
@@ -2776,18 +2776,20 @@ export const ModuleEditor = () => {
 
       if (!fieldToInsert) return;
 
+      const resolvedTabId = targetTabId || currentTabId;
+
       const updatedField = { 
         ...fieldToInsert, 
         startCol: dropCol, 
         rowIndex: dropRow, 
-        tabId: parentId ? undefined : currentTabId 
+        tabId: parentId ? undefined : resolvedTabId 
       };
 
       // Helper to insert field into the tree
       const performInsert = (fields: Field[], targetId?: string): { fields: Field[], insertedField?: Field } => {
         if (!targetId) {
-          const sameTabFields = fields.filter(f => !f.parentId && f.tabId === currentTabId);
-          const otherFields = fields.filter(f => f.parentId || f.tabId !== currentTabId);
+          const sameTabFields = fields.filter(f => !f.parentId && f.tabId === resolvedTabId);
+          const otherFields = fields.filter(f => f.parentId || f.tabId !== resolvedTabId);
           const resolved = resolveCollisionsInArray(updatedField, [...sameTabFields, updatedField]);
           return { 
             fields: [...otherFields, ...normalizeLayout(resolved)], 
@@ -4067,8 +4069,8 @@ export const ModuleEditor = () => {
                   {/* Horizontal split container for Left Sidebar + Main Grid + Right Workflow Panel */}
                   <div className="flex w-full items-stretch flex-1">
                     
-                    {/* Sidebar Vertical Tabs list if layoutType === 'sidebar' or 'split' */}
-                    {activeTab === 'builder' && (interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'split') && (
+                    {/* Sidebar Vertical Tabs list if layoutType === 'split' */}
+                    {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'split' && (
                       <div className="w-60 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-5 space-y-4 flex flex-col justify-between select-none">
                         <div className="space-y-4">
                           <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
@@ -4157,16 +4159,17 @@ export const ModuleEditor = () => {
                     <div 
                       id="main-grid-container"
                       className={cn(
-                        "flex-1 min-w-0 p-8 pb-32 min-h-[800px] relative z-10 grid items-start content-start transition-all duration-300",
-                        "grid-cols-1", // Mobile first
-                        viewportSize !== 'mobile' && "md:grid-cols-12", // Desktop/Tablet grid
+                        "flex-1 min-w-0 p-8 pb-32 min-h-[800px] relative z-10 transition-all duration-300",
+                        interfaceSettings.detail?.layoutType === 'sidebar' 
+                          ? "flex flex-col gap-8 overflow-y-auto max-h-[calc(100vh-140px)] custom-scrollbar" 
+                          : "grid grid-cols-1 " + (viewportSize !== 'mobile' ? "md:grid-cols-12" : ""),
                         isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
                       )}
                       style={{ 
-                        gap: `${GRID_CONFIG.gap}px`,
+                        gap: interfaceSettings.detail?.layoutType === 'sidebar' ? undefined : `${GRID_CONFIG.gap}px`,
                         padding: `${GRID_CONFIG.padding}px`,
                         paddingBottom: '160px',
-                        gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+                        gridAutoRows: interfaceSettings.detail?.layoutType === 'sidebar' ? undefined : `${GRID_CONFIG.rowHeight}px`
                       }}
                     >
                     <AnimatePresence mode="popLayout">
@@ -4202,7 +4205,302 @@ export const ModuleEditor = () => {
                               </div>
                             </div>
                           </>
-                        ) : (() => {
+                        ) : interfaceSettings.detail?.layoutType === 'sidebar' ? (() => {
+                          const displayLayout = previewLayout || layout;
+                          const renderFieldBlocks = (fields: Field[], parentId?: string, tabId?: string): React.ReactNode => {
+                            const isNested = !!parentId;
+                            const filtered = fields.filter(block => {
+                              const type = block.type?.toLowerCase();
+                              if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
+
+                              if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
+
+                              if (isNested) return true;
+                              return block.tabId === tabId || (!block.tabId && tabId === tabs[0]?.id);
+                            });
+                            
+                            let items = [...filtered];
+
+                            if ((activeTab as string) === 'preview') {
+                              items = compactLayout(items);
+                            }
+
+                            return items.map((item) => {
+                              if (React.isValidElement(item)) return item;
+                              const block = item as Field;
+                              const isGroup = isContainerField(block.type);
+
+                              if (isGroup) {
+                                return (
+                                  <FieldGroup 
+                                    key={block.id}
+                                    block={block}
+                                    selectedIds={selectedIds}
+                                    onSelect={(id, e) => {
+                                      if (e?.shiftKey || e?.metaKey || e?.ctrlKey) {
+                                        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                                      } else {
+                                        setSelectedIds([id]);
+                                      }
+                                    }}
+                                    onUpdate={updateField}
+                                    onDelete={(id) => deleteBlocks([id])}
+                                    onDrop={(e) => handleDropOnCanvas(e, block.id, tabId)}
+                                    onDragOver={(e) => handleDragOver(e, block.id, tabId)}
+                                    onDragStart={handleDragStart}
+                                    renderNested={(fields, pId) => renderFieldBlocks(fields as any, pId, tabId)}
+                                    viewportSize={viewportSize}
+                                    onClone={cloneField}
+                                    isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
+                                    hoveredMapping={hoveredMapping}
+                                    dragOverInfo={dragOverInfo}
+                                  />
+                                );
+                              }
+
+                              if (block.id === 'placeholder') {
+                                return (
+                                  <div 
+                                    key="placeholder"
+                                    className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse flex items-center justify-center relative overflow-hidden h-full"
+                                    style={{ 
+                                      gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
+                                      gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
+                                    }}
+                                  >
+                                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
+                                    <div className="relative flex flex-col items-center gap-1">
+                                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+                                      <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Drop Zone</span>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <motion.div
+                                  key={block.id}
+                                  layout
+                                  draggable
+                                  onDragStart={(e: any) => handleDragStart(e, { type: 'move', fieldId: block.id })}
+                                  onDragEnd={handleDragEnd}
+                                  initial={{ opacity: 0, scale: 0.9 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.9 }}
+                                  style={{ 
+                                    gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
+                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                                      setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
+                                    } else {
+                                      setSelectedIds([block.id]);
+                                    }
+                                  }}
+                                  id={`canvas-field-${block.id}`}
+                                  className={cn(
+                                    "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
+                                    selectedIds.includes(block.id) 
+                                      ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
+                                      : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40",
+                                    block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
+                                    activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
+                                    hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
+                                  )}
+                                >
+                                  {/* Selection UI */}
+                                  {selectedIds.includes(block.id) && (
+                                    <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
+                                      Selected
+                                    </div>
+                                  )}
+                                  <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                                          {(() => {
+                                            const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+                                            const Icon = fieldDef?.icon;
+                                            return Icon ? <Icon size={10} className="text-zinc-400" /> : null;
+                                          })()}
+                                          {block.type.replace('_', ' ')}
+                                          {block.required && <span className="text-rose-500">*</span>}
+                                          {block.tooltip && <HelpCircle size={10} className="text-zinc-400" />}
+                                        </label>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {block.hidden && (
+                                          <div 
+                                            className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-500/20"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updateField(block.id, { hidden: false });
+                                            }}
+                                          >
+                                            <EyeOff size={10} className="text-rose-500" />
+                                            <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
+                                          </div>
+                                        )}
+                                        <GripVertical size={12} className="text-zinc-300 group-hover/field:text-zinc-500" />
+                                      </div>
+                                    </div>
+
+                                    {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
+                                      <p className="text-[11px] font-medium text-zinc-900 dark:text-zinc-300 mb-1">{block.label}</p>
+                                    )}
+
+                                    <div className="min-h-[20px]">
+                                      {block.type === 'heading' ? (() => {
+                                        const Tag = (block.options?.[0] || 'h2') as React.ElementType;
+                                        const size = block.options?.[0] === 'h1' ? 'text-2xl font-bold' :
+                                                     block.options?.[0] === 'h2' ? 'text-xl font-bold' :
+                                                     block.options?.[0] === 'h3' ? 'text-lg font-bold' :
+                                                     block.options?.[0] === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+                                        return (
+                                          <div className="pt-2">
+                                            <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
+                                              {block.label || 'Heading'}
+                                            </Tag>
+                                          </div>
+                                        );
+                                      })() : block.type === 'divider' ? (
+                                        <div className="py-2">
+                                          <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
+                                        </div>
+                                      ) : block.type === 'spacer' ? (
+                                        <div className="py-2">
+                                          <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
+                                        </div>
+                                      ) : block.type === 'alert' ? (() => {
+                                        const variant = block.options?.[0] || 'info';
+                                        const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                                                      variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                                                      variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                                                      'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
+                                        const AlertIcon = variant === 'error' ? XCircle :
+                                                     variant === 'warning' ? AlertTriangle :
+                                                     variant === 'success' ? Check : Info;
+                                        return (
+                                          <div className="pt-2">
+                                            <div className={cn("p-4 rounded-2xl border flex items-center gap-3", alertStyle)}>
+                                              <AlertIcon size={18} />
+                                              <span className="text-xs font-bold uppercase tracking-widest">{block.label || 'Alert Notice'}</span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })() : block.type === 'html' ? (
+                                        <div className="pt-2">
+                                          <div className="min-h-[120px] bg-zinc-950 rounded-2xl p-5 font-mono text-[10px] text-emerald-500/80 leading-relaxed shadow-2xl border border-white/5 overflow-hidden group/html relative">
+                                            <div className="absolute top-0 right-0 p-3 flex gap-2">
+                                              <div className="w-2 h-2 rounded-full bg-rose-500/50" />
+                                              <div className="w-2 h-2 rounded-full bg-amber-500/50" />
+                                              <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
+                                            </div>
+                                            <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
+                                            <span className="block pl-4">&lt;h1&gt;{block.label}&lt;/h1&gt;</span>
+                                            <span className="block pl-4 text-zinc-500">&lt;p&gt;Dynamic HTML content...&lt;/p&gt;</span>
+                                            <span className="block text-indigo-400">&lt;/div&gt;</span>
+                                          </div>
+                                        </div>
+                                      ) : block.type === 'icon' ? (
+                                        <div className="flex flex-col items-center justify-center gap-3 pt-4 pb-2">
+                                          <div className="w-16 h-16 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
+                                            <DynamicIcon name={block.iconName || 'Smile'} size={32} />
+                                          </div>
+                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
+                                        </div>
+                                      ) : block.type === 'lookup' ? (
+                                        <div className="pt-2">
+                                          <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
+                                            <div className="flex items-center gap-2">
+                                              <Search size={14} className="text-zinc-400" />
+                                              <span className="text-xs text-zinc-400 font-medium italic select-none">
+                                                {block.placeholder || `Search ${block.label}...`}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* All other basic input fields */
+                                        <div className="pt-2">
+                                          <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
+                                            <span className="text-xs text-zinc-400 font-medium italic select-none">
+                                              {block.placeholder || `Enter ${block.label}...`}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {!block.hidden && (
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateField(block.id, { hidden: true });
+                                      }}
+                                      className="absolute -top-3.5 right-15 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
+                                      title="Quick Hide Field"
+                                    >
+                                      <EyeOff size={12} />
+                                    </button>
+                                  )}
+                                </motion.div>
+                              );
+                            });
+                          };
+
+                          return tabs.map((tab) => {
+                            const tabFields = displayLayout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id)));
+
+                            return (
+                              <div 
+                                key={tab.id}
+                                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6 relative group/section w-full"
+                              >
+                                <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 select-none">
+                                  <div className="flex items-center gap-3">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                                  </div>
+                                  <button
+                                    onClick={() => setSelectedId(tab.id)}
+                                    className="p-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-100 dark:border-zinc-700 rounded-xl text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover/section:opacity-100"
+                                    title="Section Settings"
+                                  >
+                                    <Settings size={12} />
+                                  </button>
+                                </div>
+
+                                <div 
+                                  id={`section-grid-${tab.id}`}
+                                  className={cn(
+                                    "grid items-start content-start transition-all duration-300 relative min-h-[120px] w-full",
+                                    "grid-cols-1",
+                                    viewportSize !== 'mobile' && "md:grid-cols-12"
+                                  )}
+                                  style={{ 
+                                    gap: `${GRID_CONFIG.gap}px`,
+                                    gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+                                  }}
+                                  onDragOver={(e) => handleDragOver(e, undefined, tab.id)}
+                                  onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
+                                  onDragLeave={handleDragLeave}
+                                >
+                                  {renderFieldBlocks(displayLayout, undefined, tab.id)}
+                                  
+                                  {tabFields.length === 0 && !dragOverInfo && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/20 dark:bg-zinc-950/10 py-8">
+                                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Drop fields here to add to {tab.label}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })() : (() => {
                           const displayLayout = previewLayout || layout;
                           const renderFieldBlocks = (fields: Field[], parentId?: string): React.ReactNode => {
                             const isNested = !!parentId;
@@ -5273,7 +5571,7 @@ export const ModuleEditor = () => {
                     {/* Bottom Spacer for Scrolling Room */}
                     <div className="col-span-full h-32 pointer-events-none" />
 
-                    {layout.filter(block => block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id)).length === 0 && !dragOverInfo && !isLoading && (
+                    {interfaceSettings.detail?.layoutType !== 'sidebar' && layout.filter(block => block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id)).length === 0 && !dragOverInfo && !isLoading && (
                       <div className="absolute inset-8 bottom-32 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[32px] bg-white dark:bg-zinc-950/50">
                         <GridIcon size={48} className="mb-4 text-zinc-200 dark:text-zinc-800" />
                         <p className="font-medium text-sm text-zinc-500 mb-6">Drag fields from the sidebar to start building</p>
