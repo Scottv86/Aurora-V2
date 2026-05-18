@@ -45,6 +45,9 @@ interface FieldGroupProps {
   onClone: (id: string) => void;
   hoveredMapping?: { connectorId: string, sourceOutput: string, targetFieldId: string } | null;
   dragOverInfo?: { col: number, span: number, index: number, active: boolean, parentId?: string, height?: number } | null;
+  gridConfig?: typeof GRID_CONFIG;
+  isDragging?: boolean;
+  density?: 'compact' | 'standard' | 'spacious';
 }
 
 export const FieldGroup: React.FC<FieldGroupProps> = ({
@@ -61,7 +64,10 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   onClone,
   isDraggingOver,
   hoveredMapping,
-  dragOverInfo
+  dragOverInfo,
+  gridConfig,
+  isDragging,
+  density = 'standard'
 }) => {
   const isSelected = selectedIds.includes(block.id);
   const isRepeatable = block.type === 'repeatableGroup';
@@ -69,21 +75,29 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   const isAccordion = block.type === 'accordion';
   const isTabs = block.type === 'tabs_nested';
   
-  const getIcon = () => {
+  const cardPadding = density === 'compact' ? 'p-2 rounded-xl' : density === 'spacious' ? 'p-5 rounded-[28px]' : 'p-4 rounded-[24px]';
+  const headerMargin = density === 'compact' ? 'mb-1' : density === 'spacious' ? 'mb-3' : 'mb-2';
+  const iconBoxSize = density === 'compact' ? 'w-7 h-7 rounded-lg' : density === 'spacious' ? 'w-12 h-12 rounded-[20px]' : 'w-10 h-10 rounded-2xl';
+  const iconSize = density === 'compact' ? 12 : density === 'spacious' ? 20 : 16;
+  const titleTextSize = density === 'compact' ? 'text-xs' : density === 'spacious' ? 'text-base' : 'text-sm';
+  const subtitleTextSize = density === 'compact' ? 'text-[8px]' : density === 'spacious' ? 'text-[11px]' : 'text-[10px]';
+  const nestedPadding = density === 'compact' ? 'p-1.5 mt-2 rounded-lg' : density === 'spacious' ? 'p-4 mt-6 rounded-[22px]' : 'p-3 mt-4 rounded-[18px]';
+
+  const getIcon = (size: number = 16) => {
     if (block.iconName) {
-      return <DynamicIcon name={block.iconName} size={16} />;
+      return <DynamicIcon name={block.iconName} size={size} />;
     }
 
     switch (block.type) {
-      case 'card': return <Box size={16} />;
-      case 'accordion': return <LayoutGrid size={16} />;
-      case 'tabs_nested': return <FolderTree size={16} />;
-      case 'stepper': return <ListOrdered size={16} />;
-      case 'timeline': return <GitCommit size={16} />;
-      case 'repeatableGroup': return <ListPlus size={16} />;
-      case 'group': return <Layers size={16} />;
-      case 'fieldGroup': return <Folder size={16} />;
-      default: return <Folder size={16} />;
+      case 'card': return <Box size={size} />;
+      case 'accordion': return <LayoutGrid size={size} />;
+      case 'tabs_nested': return <FolderTree size={size} />;
+      case 'stepper': return <ListOrdered size={size} />;
+      case 'timeline': return <GitCommit size={size} />;
+      case 'repeatableGroup': return <ListPlus size={size} />;
+      case 'group': return <Layers size={size} />;
+      case 'fieldGroup': return <Folder size={size} />;
+      default: return <Folder size={size} />;
     }
   };
 
@@ -94,6 +108,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isContentHovered, setIsContentHovered] = useState(false);
 
+  const gc = gridConfig || GRID_CONFIG;
   const { snapToGrid } = useGridEngine();
   const isCollapsed = block.collapsible ? (block.isCollapsed ?? block.defaultCollapsed ?? false) : false;
   const isNested = !!block.parentId;
@@ -120,7 +135,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
       if (!canvas) return;
       
       const rect = canvas.getBoundingClientRect();
-      const padding = isNested ? GRID_CONFIG.nestedPadding : GRID_CONFIG.padding;
+      const padding = isNested ? gc.nestedPadding : gc.padding;
       const canvasWidth = rect.width - padding;
       const colWidth = canvasWidth / 12;
       
@@ -169,7 +184,8 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         onSelect(block.id, e);
       }}
       className={cn(
-        "group/group relative p-4 rounded-[24px] cursor-pointer transition-all duration-300 border-2 h-full flex flex-col",
+        "group/group relative cursor-pointer transition-all duration-300 border-2 h-full flex flex-col",
+        cardPadding,
         isCard ? "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-xl" :
         isAccordion ? "bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-100 dark:border-zinc-800 shadow-sm" :
         "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800",
@@ -183,13 +199,14 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
           Selected
         </div>
       )}
-      <div className="absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent rounded-[22px] pointer-events-none" />
+      <div className={cn("absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent pointer-events-none", density === 'compact' ? 'rounded-xl' : density === 'spacious' ? 'rounded-[26px]' : 'rounded-[22px]')} />
 
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
+      <div className={cn("flex items-center justify-between", headerMargin)}>
+        <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
           {showIcon && (
             <div className={cn(
-              "w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500",
+              "flex items-center justify-center transition-all duration-500",
+              iconBoxSize,
               isSelected ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30 rotate-3" : 
               isRepeatable ? "bg-amber-500/10 text-amber-500" :
               isCard ? "bg-blue-500/10 text-blue-500" :
@@ -197,14 +214,14 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
               isTabs ? "bg-emerald-500/10 text-emerald-500" :
               "bg-zinc-100 dark:bg-zinc-900 text-zinc-500"
             )}>
-              {getIcon()}
+              {getIcon(iconSize)}
             </div>
           )}
           <div>
-            <h4 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.15em] mb-0.5">
+            <h4 className={cn("font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.15em] mb-0.5", subtitleTextSize)}>
               {block.type.replace('Group', ' Group')}
             </h4>
-            <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">{block.label}</p>
+            <p className={cn("font-bold text-zinc-900 dark:text-zinc-100 tracking-tight", titleTextSize)}>{block.label}</p>
           </div>
         </div>
 
@@ -298,44 +315,49 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
               onMouseEnter={() => setIsContentHovered(true)}
               onMouseLeave={() => setIsContentHovered(false)}
               className={cn(
-                "relative rounded-[18px] border-2 border-dashed transition-all duration-300 p-3 mt-4 flex-grow",
-                isAccordion ? "p-0 mt-6 bg-transparent border-none" : "p-3 mt-4 bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800"
+                "relative border-2 border-dashed transition-all duration-300 flex-grow",
+                isAccordion ? "p-0 mt-6 bg-transparent border-none" : cn("bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800", nestedPadding)
               )}
             >
               {isAccordion ? (
-                <div className="flex flex-col gap-4">
+                <div className={cn("flex flex-col", density === 'compact' ? 'gap-2' : 'gap-4')}>
                   {block.fields && block.fields.length > 0 ? (
                     block.fields.map((section) => (
                       <div 
                         key={section.id} 
                         className={cn(
                           "bg-white dark:bg-zinc-950 border-2 transition-all overflow-hidden",
-                          selectedIds.includes(section.id) ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl z-10 scale-[1.02]" : "border-zinc-200 dark:border-zinc-800 rounded-[2rem] shadow-sm",
+                          selectedIds.includes(section.id)
+                            ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl z-10 scale-[1.02]" 
+                            : cn("border-zinc-200 dark:border-zinc-800 shadow-sm", density === 'compact' ? 'rounded-lg' : 'rounded-[2rem]'),
                           dragOverInfo?.parentId === section.id && "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl"
                         )}
-                        style={{ borderRadius: selectedIds.includes(section.id) ? '2.2rem' : '2rem' }}
+                        style={{ borderRadius: density === 'compact' ? '8px' : (selectedIds.includes(section.id) ? '2.2rem' : '2rem') }}
                       >
                         {/* Section Header in Builder */}
                         <div 
                           onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
                           className={cn(
-                            "px-6 py-4 flex items-center justify-between cursor-pointer select-none transition-colors",
+                            "flex items-center justify-between cursor-pointer select-none transition-colors",
+                            density === 'compact' ? 'px-3 py-2' : 'px-6 py-4',
                             selectedIds.includes(section.id) ? "bg-indigo-500/5" : "bg-zinc-50/80 dark:bg-zinc-900/80 border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                           )}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
                             <div className={cn(
-                              "w-8 h-8 rounded-xl flex items-center justify-center transition-all",
+                              "flex items-center justify-center transition-all",
+                              density === 'compact' ? 'w-6 h-6 rounded-md' : 'w-8 h-8 rounded-xl',
                               selectedIds.includes(section.id) ? "bg-indigo-500 text-white shadow-lg rotate-3" : "bg-indigo-500/10 text-indigo-500"
                             )}>
-                              <DynamicIcon name={section.iconName || 'Folder'} size={14} />
+                              <DynamicIcon name={section.iconName || 'Folder'} size={density === 'compact' ? 10 : 14} />
                             </div>
                             <div>
                               <p className={cn(
-                                "text-[8px] font-black uppercase tracking-widest",
+                                "font-black uppercase tracking-widest",
+                                density === 'compact' ? 'text-[7px]' : 'text-[8px]',
                                 selectedIds.includes(section.id) ? "text-indigo-600" : "text-zinc-400"
                               )}>Section Subtitle</p>
-                              <p className="text-xs font-bold text-zinc-900 dark:text-white">{section.label}</p>
+                              <p className={cn("font-bold text-zinc-900 dark:text-white", density === 'compact' ? 'text-[10px]' : 'text-xs')}>{section.label}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -361,11 +383,23 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
                             onDrop(e, section.id);
                           }}
                           className={cn(
-                            "p-4 grid grid-cols-12 gap-5 min-h-[100px] transition-colors",
+                            "relative grid grid-cols-12 transition-colors",
                             dragOverInfo?.parentId === section.id ? "bg-indigo-500/5" : "bg-transparent"
                           )}
-                          style={{ gridAutoRows: '50px' }}
+                          style={{ 
+                            gridAutoRows: `${gc.rowHeight}px`,
+                            gap: `${gc.gap}px`,
+                            padding: `${gc.nestedPadding}px`,
+                            minHeight: '100px'
+                          }}
                         >
+                          {isDragging && (
+                            <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
+                              {Array.from({ length: 12 }).map((_, i) => (
+                                <div key={i} className="h-full border-l border-r border-dashed border-indigo-500/5 dark:border-indigo-400/[0.01] bg-indigo-500/[0.001]" />
+                              ))}
+                            </div>
+                          )}
                           {renderNested && renderNested(section.fields || [], section.id)}
                           {(!section.fields || section.fields.length === 0) && !isDraggingOver && (
                             <div className="col-span-12 flex flex-col items-center justify-center py-8 opacity-30">
@@ -396,9 +430,20 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
               ) : (
                 ((block.fields && block.fields.length > 0) || isDraggingOver) ? (
                   <div 
-                    className="grid grid-cols-12 gap-5 min-h-full"
-                    style={{ gridAutoRows: '50px' }}
+                    className="relative grid grid-cols-12 min-h-full z-10"
+                    style={{ 
+                      gridAutoRows: `${gc.rowHeight}px`,
+                      gap: `${gc.gap}px`,
+                      padding: `${gc.nestedPadding}px`
+                    }}
                   >
+                    {isDragging && (
+                      <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
+                        {Array.from({ length: 12 }).map((_, i) => (
+                          <div key={i} className="h-full border-l border-r border-dashed border-indigo-500/5 dark:border-indigo-400/[0.01] bg-indigo-500/[0.001]" />
+                        ))}
+                      </div>
+                    )}
                     {renderNested && renderNested(block.fields || [], block.id)}
                   </div>
                 ) : (

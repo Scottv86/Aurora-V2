@@ -226,6 +226,7 @@ interface FieldInputProps {
   allFields?: any[];
   lookupData?: any;
   autoFocus?: boolean;
+  density?: 'compact' | 'standard' | 'spacious';
 }
 
 export const FieldInput: React.FC<FieldInputProps> = ({ 
@@ -238,9 +239,48 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   onKeyDown,
   recordData = {},
   allFields = [],
-  autoFocus = false
+  autoFocus = false,
+  density = 'standard'
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
+
+  const getDensityClasses = (d: 'compact' | 'standard' | 'spacious') => {
+    switch (d) {
+      case 'compact':
+        return {
+          input: 'h-8 px-2.5 rounded-lg text-[10px]',
+          select: 'h-8 px-2 py-0.5 rounded-lg text-[10px]',
+          checkbox: 'w-3.5 h-3.5 rounded',
+          radio: 'w-3.5 h-3.5',
+          switch: 'w-8 h-4.5',
+          switchDot: 'w-3.5 h-3.5',
+          badge: 'px-1.5 py-0.5 text-[8px]'
+        };
+      case 'spacious':
+        return {
+          input: 'h-13 px-5 rounded-2xl text-sm',
+          select: 'h-13 px-4 py-2.5 rounded-2xl text-sm',
+          checkbox: 'w-5 h-5 rounded-md',
+          radio: 'w-5 h-5',
+          switch: 'w-11 h-6.5',
+          switchDot: 'w-5 h-5',
+          badge: 'px-3 py-1.5 text-[11px]'
+        };
+      case 'standard':
+      default:
+        return {
+          input: 'h-10 px-3.5 rounded-xl text-xs',
+          select: 'h-10 px-3 py-1.5 rounded-xl text-xs',
+          checkbox: 'w-4 h-4 rounded',
+          radio: 'w-4 h-4',
+          switch: 'w-9 h-5',
+          switchDot: 'w-4 h-4',
+          badge: 'px-2 py-1 text-[9px]'
+        };
+    }
+  };
+
+  const ds = getDensityClasses(density);
 
   // Resolve constraints
   const minConstraint = (type === 'date' || type === 'time') ? resolveConstraint(field, 'min', recordData) : undefined;
@@ -343,7 +383,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }, [lookupSource, optionsSource, options, lookupResults, lookupLoading]);
 
   const inputClasses = cn(
-    "w-full bg-zinc-50 dark:bg-zinc-950/50 border rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none transition-all",
+    "w-full bg-zinc-50 dark:bg-zinc-950/50 border focus:outline-none transition-all",
+    ds.input,
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
       : "border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-950",
@@ -443,10 +484,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
           )}>
             <div className={cn(
-              "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+              ds.radio,
+              "rounded-full border-2 flex items-center justify-center transition-all",
               localValue === opt ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
             )}>
-              {localValue === opt && <div className="w-2 h-2 rounded-full bg-white" />}
+              {localValue === opt && <div className={cn(ds.radioDot, "rounded-full bg-white")} />}
             </div>
             <input 
               type="radio" 
@@ -455,7 +497,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               disabled={readonly}
               onChange={() => triggerImmediateChange(opt)} 
             />
-            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
+            <span className={cn(ds.text, "font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
           </label>
         ))}
       </div>
@@ -501,10 +543,11 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                 : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
             )}>
               <div className={cn(
-                "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
+                ds.checkbox,
+                "border-2 flex items-center justify-center transition-all",
                 currentValues.includes(opt) ? "border-indigo-500 bg-indigo-500 text-white" : "border-zinc-200 dark:border-zinc-800"
               )}>
-                {currentValues.includes(opt) && <Check size={12} strokeWidth={4} />}
+                {currentValues.includes(opt) && <Check size={ds.checkboxIconSize} strokeWidth={4} />}
               </div>
               <input 
                 type="checkbox" 
@@ -518,7 +561,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
                   triggerImmediateChange(newValues);
                 }} 
               />
-              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">{opt}</span>
+              <span className={cn(ds.text, "font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
             </label>
           ))}
         </div>
@@ -538,14 +581,15 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         onBlur={handleBlur}
         disabled={readonly}
         className={cn(
-          "w-11 h-6 rounded-full transition-all relative flex items-center px-1",
+          ds.switchContainer,
+          "transition-all relative flex items-center px-1",
           localValue ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800",
           readonly && "cursor-pointer pointer-events-none"
         )}
       >
         <div className={cn(
-          "w-4 h-4 rounded-full bg-white shadow-sm transition-all",
-          localValue ? "translate-x-5" : "translate-x-0"
+          ds.switchDot,
+          localValue ? ds.switchTranslate : "translate-x-0"
         )} />
       </button>
     );

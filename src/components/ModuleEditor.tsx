@@ -16,6 +16,8 @@ import {
   Smartphone,
   Layout,
   Layout as GridIcon,
+  Columns,
+  Sidebar,
   Grid3X3,
   Maximize2,
   Folder,
@@ -1449,6 +1451,8 @@ export const ModuleEditor = () => {
     },
     detail: {
       layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar',
+      density: 'standard' as 'compact' | 'standard' | 'spacious',
+      showWorkflow: true
     },
     filters: [] as { fieldId: string, type: string }[],
     actions: [
@@ -1457,6 +1461,20 @@ export const ModuleEditor = () => {
     ]
   });
   const [connectorMappings, setConnectorMappings] = useState<Record<string, Record<string, string>>>({});
+  
+  // Column Drag and Drop Indicators
+  const [tableDropIndicator, setTableDropIndicator] = useState<{
+    index: number;
+    hoveredIndex: number;
+    side: 'left' | 'right';
+  } | null>(null);
+
+  // Real Database Preview States
+  const [useRealData, setUseRealData] = useState(false);
+  const [realRecords, setRealRecords] = useState<any[]>([]);
+  const [isFetchingRealRecords, setIsFetchingRealRecords] = useState(false);
+  // Active Workflow Preview Stage index state
+  const [activeWorkflowStageIdx, setActiveWorkflowStageIdx] = useState<number>(1);
   const [isEditingTab, setIsEditingTab] = useState<string | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -1464,6 +1482,9 @@ export const ModuleEditor = () => {
   const [activeMappingIdx, setActiveMappingIdx] = useState<number | null>(null);
   const [activeMappingType, setActiveMappingType] = useState<'source' | 'target'>('target');
   const mockData = React.useMemo(() => generateMockData(layout, 10), [layout.length]);
+  const previewRecords = React.useMemo(() => {
+    return useRealData && realRecords.length > 0 ? realRecords : mockData;
+  }, [useRealData, realRecords, mockData]);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'architect'>('inspector');
   const [architectMessages, setArchitectMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([
     { role: 'assistant', content: 'Hello! I am the Shadow Architect. How can I help you optimize your module today?' }
@@ -1475,6 +1496,35 @@ export const ModuleEditor = () => {
   const [previewLayout, setPreviewLayout] = useState<Field[] | null>(null);
   const [hoveredMapping, setHoveredMapping] = useState<{ connectorId: string, sourceOutput: string, targetFieldId: string } | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch Real Database Records for Live Preview
+  useEffect(() => {
+    if (useRealData && id && id !== 'new') {
+      setIsFetchingRealRecords(true);
+      fetch(`${DATA_API_URL}/records?moduleId=${id}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Server error");
+          return res.json();
+        })
+        .then(data => {
+          if (Array.isArray(data)) {
+            setRealRecords(data);
+          } else if (data && Array.isArray(data.records)) {
+            setRealRecords(data.records);
+          } else {
+            setRealRecords([]);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch real records:", err);
+          toast.error("Failed to connect to Live Database. Falling back to mock data.");
+          setUseRealData(false);
+        })
+        .finally(() => {
+          setIsFetchingRealRecords(false);
+        });
+    }
+  }, [useRealData, id]);
 
   const [workflow, setWorkflow] = useState<Workflow | undefined>({
     id: `wf-${Date.now()}`,
@@ -1932,7 +1982,13 @@ export const ModuleEditor = () => {
         });
         
         if (data.interfaceSettings) {
-          setInterfaceSettings(data.interfaceSettings);
+          setInterfaceSettings({
+            ...data.interfaceSettings,
+            detail: {
+              ...data.interfaceSettings.detail,
+              showWorkflow: data.interfaceSettings.detail?.showWorkflow !== false
+            }
+          });
         }
         
         setIsRestricted(!!data.isGlobal);
@@ -2347,8 +2403,34 @@ export const ModuleEditor = () => {
     setDraggingColumnIndex(index);
   };
 
-  const handleColumnDragOver = (e: React.DragEvent, index: number) => {
+  const handleColumnHeaderDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    const side = x < width / 2 ? 'left' : 'right';
+    const targetIdx = side === 'left' ? index : index + 1;
+    
+    setTableDropIndicator({
+      index: targetIdx,
+      hoveredIndex: index,
+      side: side
+    });
+  };
+
+  const handleKeyHeaderDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTableDropIndicator({
+      index: 0,
+      hoveredIndex: -1,
+      side: 'right'
+    });
+  };
+
+  const handleColumnDragLeave = () => {
+    setTableDropIndicator(null);
   };
 
   const handleColumnDrop = (e: React.DragEvent, targetIndex: number) => {
@@ -2356,16 +2438,16 @@ export const ModuleEditor = () => {
     const sourceIndexStr = e.dataTransfer.getData('text/plain');
     if (!sourceIndexStr) return;
     const sourceIndex = parseInt(sourceIndexStr, 10);
-    if (isNaN(sourceIndex) || sourceIndex === targetIndex) return;
+    if (isNaN(sourceIndex)) return;
+
+    const targetIdx = tableDropIndicator ? tableDropIndicator.index : targetIndex;
 
     const sourceCol = activeColumns[sourceIndex];
-    const targetCol = activeColumns[targetIndex];
-    if (!sourceCol || !targetCol) return;
+    if (!sourceCol) return;
 
     setInterfaceSettings(prev => {
       const cols = [...(prev.master.columns || [])];
       
-      // If cols is empty, populate it first from activeColumns + _record_key!
       let currentCols = cols.length > 0 ? cols : [
         { fieldId: '_record_key', visible: true, inlineEdit: false, width: 120 },
         ...activeColumns.map(ac => ({
@@ -2376,7 +2458,6 @@ export const ModuleEditor = () => {
         }))
       ];
 
-      // Ensure all active columns are present in currentCols
       activeColumns.forEach(ac => {
         if (!currentCols.some(c => c.fieldId === ac.id)) {
           currentCols.push({
@@ -2388,17 +2469,42 @@ export const ModuleEditor = () => {
         }
       });
 
-      // Find the exact positions of the source and target columns inside the full columns array
       const fullSourceIdx = currentCols.findIndex(c => c.fieldId === sourceCol.id);
-      const fullTargetIdx = currentCols.findIndex(c => c.fieldId === targetCol.id);
+      if (fullSourceIdx === -1) return prev;
+
+      let fullTargetIdx = 0;
+      if (targetIdx === 0) {
+        const keyIdx = currentCols.findIndex(c => c.fieldId === '_record_key');
+        fullTargetIdx = keyIdx !== -1 ? keyIdx + 1 : 0;
+      } else {
+        const targetColRef = activeColumns[targetIdx - 1];
+        if (targetColRef) {
+          fullTargetIdx = currentCols.findIndex(c => c.fieldId === targetColRef.id);
+        } else {
+          fullTargetIdx = currentCols.length;
+        }
+      }
 
       if (fullSourceIdx !== -1 && fullTargetIdx !== -1) {
-        const moved = arrayMove(currentCols, fullSourceIdx, fullTargetIdx);
+        const itemToMove = currentCols[fullSourceIdx];
+        const remaining = currentCols.filter((_, idx) => idx !== fullSourceIdx);
+        
+        let finalInsertIdx = fullTargetIdx;
+        if (fullSourceIdx < fullTargetIdx) {
+          finalInsertIdx = fullTargetIdx - 1;
+        }
+        
+        const nextCols = [
+          ...remaining.slice(0, finalInsertIdx),
+          itemToMove,
+          ...remaining.slice(finalInsertIdx)
+        ];
+
         return {
           ...prev,
           master: {
             ...prev.master,
-            columns: moved
+            columns: nextCols
           }
         };
       }
@@ -2406,6 +2512,7 @@ export const ModuleEditor = () => {
     });
 
     setDraggingColumnIndex(null);
+    setTableDropIndicator(null);
   };
 
   const handleTableDrop = (e: React.DragEvent) => {
@@ -2417,51 +2524,102 @@ export const ModuleEditor = () => {
       if (data.type === 'master-column-add') {
         const { fieldId, isSystem } = data;
         
+        const targetIdx = tableDropIndicator ? tableDropIndicator.index : activeColumns.length;
+
         if (isSystem) {
           setInterfaceSettings(prev => {
             const cols = prev.master.columns || [];
-            if (cols.some(c => c.fieldId === fieldId)) {
-              return {
-                ...prev,
-                master: {
-                  ...prev.master,
-                  columns: cols.map(c => c.fieldId === fieldId ? { ...c, visible: true } : c)
-                }
-              };
+            let currentCols = cols.length > 0 ? [...cols] : [
+              { fieldId: '_record_key', visible: true, inlineEdit: false, width: 120 },
+              ...activeColumns.map(ac => ({
+                fieldId: ac.id,
+                visible: true,
+                inlineEdit: ac.inlineEdit || false,
+                width: ac.columnWidth || 200
+              }))
+            ];
+
+            const existingIdx = currentCols.findIndex(c => c.fieldId === fieldId);
+            let newColItem = { fieldId, visible: true, inlineEdit: false, width: 120 };
+            
+            if (existingIdx !== -1) {
+              newColItem = { ...currentCols[existingIdx], visible: true };
+              currentCols.splice(existingIdx, 1);
             }
+
+            let fullInsertIdx = 0;
+            if (targetIdx === 0) {
+              const keyIdx = currentCols.findIndex(c => c.fieldId === '_record_key');
+              fullInsertIdx = keyIdx !== -1 ? keyIdx + 1 : 0;
+            } else {
+              const targetColRef = activeColumns[targetIdx - 1];
+              if (targetColRef) {
+                fullInsertIdx = currentCols.findIndex(c => c.fieldId === targetColRef.id);
+                if (fullInsertIdx === -1) fullInsertIdx = currentCols.length;
+              } else {
+                fullInsertIdx = currentCols.length;
+              }
+            }
+
+            currentCols.splice(fullInsertIdx, 0, newColItem);
+
             return {
               ...prev,
               master: {
                 ...prev.master,
-                columns: [...cols, { fieldId, visible: true, inlineEdit: false, width: 120 }]
+                columns: currentCols
               }
             };
           });
           setSelectedId(fieldId);
           toast.success("System column added to table!");
+          setTableDropIndicator(null);
           return;
         }
 
-        // Mark field as showInTable = true
         updateField(fieldId, { showInTable: true });
 
-        // Update interfaceSettings
         setInterfaceSettings(prev => {
           const cols = prev.master.columns || [];
-          if (cols.some(c => c.fieldId === fieldId)) {
-            return {
-              ...prev,
-              master: {
-                ...prev.master,
-                columns: cols.map(c => c.fieldId === fieldId ? { ...c, visible: true } : c)
-              }
-            };
+          let currentCols = cols.length > 0 ? [...cols] : [
+            { fieldId: '_record_key', visible: true, inlineEdit: false, width: 120 },
+            ...activeColumns.map(ac => ({
+              fieldId: ac.id,
+              visible: true,
+              inlineEdit: ac.inlineEdit || false,
+              width: ac.columnWidth || 200
+            }))
+          ];
+
+          const existingIdx = currentCols.findIndex(c => c.fieldId === fieldId);
+          let newColItem = { fieldId, visible: true, inlineEdit: false, width: 200 };
+          
+          if (existingIdx !== -1) {
+            newColItem = { ...currentCols[existingIdx], visible: true };
+            currentCols.splice(existingIdx, 1);
           }
+
+          let fullInsertIdx = 0;
+          if (targetIdx === 0) {
+            const keyIdx = currentCols.findIndex(c => c.fieldId === '_record_key');
+            fullInsertIdx = keyIdx !== -1 ? keyIdx + 1 : 0;
+          } else {
+            const targetColRef = activeColumns[targetIdx - 1];
+            if (targetColRef) {
+              fullInsertIdx = currentCols.findIndex(c => c.fieldId === targetColRef.id);
+              if (fullInsertIdx === -1) fullInsertIdx = currentCols.length;
+            } else {
+              fullInsertIdx = currentCols.length;
+            }
+          }
+
+          currentCols.splice(fullInsertIdx, 0, newColItem);
+
           return {
             ...prev,
             master: {
               ...prev.master,
-              columns: [...cols, { fieldId, visible: true, inlineEdit: false, width: 200 }]
+              columns: currentCols
             }
           };
         });
@@ -2472,6 +2630,7 @@ export const ModuleEditor = () => {
     } catch (err) {
       console.error(err);
     }
+    setTableDropIndicator(null);
   };
 
   // DnD Handlers updated for flat grid system
@@ -3316,12 +3475,7 @@ export const ModuleEditor = () => {
         )}
 
         {/* Canvas / Preview */}
-        <main className={cn(
-          "flex-1 relative flex flex-col overflow-hidden",
-          activeTab === 'builder' 
-            ? (activeViewMode === 'master' ? "bg-zinc-50 dark:bg-zinc-950" : "bg-zinc-100 dark:bg-zinc-900")
-            : "bg-zinc-50 dark:bg-zinc-950"
-        )}>
+        <main className="flex-1 relative flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
           {/* Main Tab Content Area */}
           <div 
             className={cn(
@@ -3344,7 +3498,12 @@ export const ModuleEditor = () => {
                   <div className="space-y-8 animate-in fade-in duration-300">
                     {/* Columns grid settings */}
                     <div className="space-y-8" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm transition-all">
+                      <div className={cn(
+                        "bg-white dark:bg-zinc-900 border transition-all duration-300 rounded-3xl overflow-hidden shadow-sm",
+                        tableDropIndicator 
+                          ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg shadow-indigo-500/5" 
+                          : "border-zinc-200 dark:border-zinc-800"
+                      )}>
                         <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
                           <div className="space-y-0.5">
                             <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Active Table Columns</span>
@@ -3353,119 +3512,137 @@ export const ModuleEditor = () => {
                           <div className="flex items-center gap-3">
                             <button
                               onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedId('__table_settings');
-                              }}
-                              className={cn(
-                                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
-                                selectedId === '__table_settings'
-                                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
-                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                              )}
-                            >
-                              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
-                              Table Settings
-                            </button>
-                          </div>
-                        </div>
-
-                        {activeColumns.length === 0 ? (
-                          <div className="py-24 text-center space-y-4 px-6 animate-in fade-in duration-300">
-                            <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-100 dark:border-zinc-800">
-                              <TableProperties size={28} />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-sm font-bold text-zinc-900 dark:text-white">Your table is empty</p>
-                              <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                                Drag and drop fields from the **Available Fields** palette on the left directly into this workspace to build your table columns!
-                              </p>
+                                  e.stopPropagation();
+                                  setSelectedId('__table_settings');
+                                }}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                                  selectedId === '__table_settings'
+                                    ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                                )}
+                              >
+                                <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+                                Table Settings
+                              </button>
                             </div>
                           </div>
-                        ) : (
-                          <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left table-fixed">
-                              <thead>
-                                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/10">
-                                  {/* Lead Key Column (Fixed, always first) */}
-                                  <th 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedId('_record_key');
-                                    }}
-                                    style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
-                                    className={cn(
-                                      "text-[10px] font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all select-none border-r border-zinc-100 dark:border-zinc-800/50",
-                                      interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
-                                      interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4',
-                                      selectedId === '_record_key' 
-                                        ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
-                                        : "text-zinc-400"
-                                    )}
-                                  >
-                                    {interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}
-                                  </th>
 
-                                  {/* Draggable Column Headers */}
-                                  {activeColumns.map((col, idx) => {
-                                    const isSelected = selectedId === col.id;
-                                    const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id) ? 120 : 200);
-                                    const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id);
+                          {activeColumns.length === 0 ? (
+                            <div className="py-24 text-center space-y-4 px-6 animate-in fade-in duration-300">
+                              <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-100 dark:border-zinc-800">
+                                <TableProperties size={28} />
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-sm font-bold text-zinc-900 dark:text-white">Your table is empty</p>
+                                <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                                  Drag and drop fields from the **Available Fields** palette on the left directly into this workspace to build your table columns!
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto custom-scrollbar">
+                              <table className="w-full text-left table-fixed">
+                                <thead>
+                                  <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/10">
+                                    {/* Lead Key Column (Fixed, always first) */}
+                                    <th 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedId('_record_key');
+                                      }}
+                                      onDragOver={handleKeyHeaderDragOver}
+                                      onDragLeave={handleColumnDragLeave}
+                                      style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
+                                      className={cn(
+                                        "text-[10px] font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all select-none border-r border-zinc-100 dark:border-zinc-800/50 relative",
+                                        interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                        interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4',
+                                        selectedId === '_record_key' 
+                                          ? "bg-indigo-5/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
+                                          : "text-zinc-400"
+                                      )}
+                                    >
+                                      {interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}
+                                      
+                                      {/* Drop Indicator lines for Key column right drop */}
+                                      {tableDropIndicator && tableDropIndicator.hoveredIndex === -1 && (
+                                        <div className="absolute top-0 bottom-0 right-0 w-[4px] bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)] z-30 animate-pulse pointer-events-none -mr-[2px]" />
+                                      )}
+                                    </th>
 
-                                    return (
-                                      <th 
-                                        key={col.id}
-                                        style={{ width: `${width}px` }}
-                                        draggable
-                                        onDragStart={(e) => handleColumnDragStart(e, idx)}
-                                        onDragOver={(e) => handleColumnDragOver(e, idx)}
-                                        onDrop={(e) => handleColumnDrop(e, idx)}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedId(col.id);
-                                        }}
-                                        className={cn(
-                                          "text-[10px] font-bold uppercase tracking-widest cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
-                                          interfaceSettings.master.density === 'compact' ? 'px-3 py-2' : 
-                                          interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-4 py-4',
-                                          isSelected 
-                                            ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
-                                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                                        )}
-                                      >
-                                        <div className="flex items-center justify-between gap-1">
-                                          <div className="flex items-center gap-1.5 min-w-0">
-                                            <GripVertical size={11} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                                            <span className="truncate">{col.label || col.name}</span>
+                                    {/* Draggable Column Headers */}
+                                    {activeColumns.map((col, idx) => {
+                                      const isSelected = selectedId === col.id;
+                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id) ? 120 : 200);
+                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id);
+
+                                      return (
+                                        <th 
+                                          key={col.id}
+                                          style={{ width: `${width}px` }}
+                                          draggable
+                                          onDragStart={(e) => handleColumnDragStart(e, idx)}
+                                          onDragOver={(e) => handleColumnHeaderDragOver(e, idx)}
+                                          onDragLeave={handleColumnDragLeave}
+                                          onDrop={(e) => handleColumnDrop(e, idx)}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedId(col.id);
+                                          }}
+                                          className={cn(
+                                            "text-[10px] font-bold uppercase tracking-widest cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
+                                            interfaceSettings.master.density === 'compact' ? 'px-3 py-2' : 
+                                            interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-4 py-4',
+                                            isSelected 
+                                              ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
+                                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                                          )}
+                                        >
+                                          <div className="flex items-center justify-between gap-1">
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                              <GripVertical size={11} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                              <span className="truncate">{col.label || col.name}</span>
+                                            </div>
+                                            
+                                            {/* Remove Header Button */}
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!isSystem) {
+                                                  updateField(col.id, { showInTable: false });
+                                                }
+                                                setInterfaceSettings(prev => {
+                                                  const cols = prev.master.columns || [];
+                                                  return {
+                                                    ...prev,
+                                                    master: {
+                                                      ...prev.master,
+                                                      columns: cols.map(c => c.fieldId === col.id ? { ...c, visible: false } : c)
+                                                    }
+                                                  };
+                                                });
+                                                if (selectedId === col.id) setSelectedId(null);
+                                                toast.success("Column removed");
+                                              }}
+                                              className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                              <X size={10} />
+                                            </button>
                                           </div>
-                                          
-                                          {/* Remove Header Button */}
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              if (!isSystem) {
-                                                updateField(col.id, { showInTable: false });
-                                              }
-                                              setInterfaceSettings(prev => {
-                                                const cols = prev.master.columns || [];
-                                                return {
-                                                  ...prev,
-                                                  master: {
-                                                    ...prev.master,
-                                                    columns: cols.map(c => c.fieldId === col.id ? { ...c, visible: false } : c)
-                                                  }
-                                                };
-                                              });
-                                              if (selectedId === col.id) setSelectedId(null);
-                                              toast.success("Column removed");
-                                            }}
-                                            className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                                          >
-                                            <X size={10} />
-                                          </button>
-                                        </div>
-                                      </th>
-                                    );
-                                  })}
+
+                                          {/* Drop Indicator lines */}
+                                          {tableDropIndicator && tableDropIndicator.hoveredIndex === idx && (
+                                            <div 
+                                              className={cn(
+                                                "absolute top-0 bottom-0 w-[4px] bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)] z-30 animate-pulse pointer-events-none",
+                                                tableDropIndicator.side === 'left' ? "left-0 -ml-[2px]" : "right-0 -mr-[2px]"
+                                              )}
+                                            />
+                                          )}
+                                        </th>
+                                      );
+                                    })}
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 select-none">
@@ -3536,7 +3713,8 @@ export const ModuleEditor = () => {
             ) : (
               <>
                 {/* Unified Page Control Bar */}
-              <div className="sticky top-0 z-30 bg-zinc-100/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 h-[52px] flex items-center gap-4">
+                {activeTab !== 'builder' && (
+                  <div className="sticky top-0 z-30 bg-zinc-100/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 h-[52px] flex items-center gap-4">
                 {isLoading ? (
                   <>
                     {/* Skeleton for Icon & Title */}
@@ -3713,19 +3891,21 @@ export const ModuleEditor = () => {
                     </div>
                   </>
                 )}
-              </div>
+                  </div>
+                )}
 
               <div className="w-full space-y-4 relative px-6 py-6">
 
-                {/* Grid Canvas */}
-                <div 
-                  ref={canvasContainerRef}
-                  className={cn(
-                    "mx-auto transition-all duration-500 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm dark:shadow-2xl overflow-hidden relative grid-canvas-container",
-                    viewportSize === 'desktop' ? "w-full" :
-                    viewportSize === 'tablet' ? "w-[768px]" :
-                    "w-[375px]"
-                  )}
+                <div className="flex items-start gap-6 w-full">
+                  {/* Grid Canvas */}
+                  <div 
+                    ref={canvasContainerRef}
+                    className={cn(
+                      "flex-1 min-w-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm overflow-hidden relative grid-canvas-container flex flex-col",
+                      viewportSize === 'desktop' ? "w-full" :
+                      viewportSize === 'tablet' ? "w-[768px]" :
+                      "w-[375px]"
+                    )}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDropOnCanvas}
@@ -3733,10 +3913,251 @@ export const ModuleEditor = () => {
                   {/* Connection Visualizer Layer */}
                   <ConnectionLine hoveredMapping={hoveredMapping} containerRef={canvasContainerRef} />
 
+                  {/* In-Canvas Title Header (Conditional for builder canvas) */}
+                  {activeTab === 'builder' && (
+                    <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm px-8 py-5 flex items-center justify-between gap-4 z-20 relative select-none">
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedId('page-header');
+                        }}
+                        className={cn(
+                          "flex items-center gap-3.5 cursor-pointer group px-3 py-2 rounded-2xl transition-all border border-transparent flex-shrink-0",
+                          selectedId === 'page-header' 
+                            ? "bg-indigo-500/10 border-indigo-500/30 ring-4 ring-indigo-500/5 shadow-sm" 
+                            : "hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:border-zinc-100 dark:hover:border-zinc-800"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md shadow-zinc-200/50 dark:shadow-none border border-transparent",
+                          selectedId === 'page-header' 
+                            ? "bg-indigo-600 text-white shadow-indigo-500/20" 
+                            : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/5 group-hover:border-indigo-500/10"
+                        )}>
+                          <DynamicIcon name={moduleSettings.iconName || 'Box'} size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-base font-black text-zinc-900 dark:text-white tracking-tight truncate leading-none">
+                              {moduleSettings.titleFieldId 
+                                ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Page Title') 
+                                : 'Page Title'}
+                            </h2>
+                            <Settings2 size={13} className={cn("transition-all duration-300 flex-shrink-0", selectedId === 'page-header' ? "opacity-100 text-indigo-500 transform rotate-45" : "opacity-0 group-hover:opacity-100 text-zinc-400")} />
+                          </div>
+                          <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest mt-1 block">Record Header Title</span>
+                        </div>
+                      </div>
+
+                      {/* Detail Settings Configuration trigger */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedId('__detail_settings');
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm border",
+                          selectedId === '__detail_settings'
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20"
+                            : "bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                        )}
+                      >
+                        <Settings size={12} className={cn("transition-transform duration-500", selectedId === '__detail_settings' ? "rotate-90" : "")} />
+                        <span>Detail Settings</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Dynamic horizontal section tabs bar inside the builder canvas card */}
+                  {activeTab === 'builder' && (interfaceSettings.detail?.layoutType === 'tabs' || !interfaceSettings.detail?.layoutType) && (
+                    <div className="px-8 py-3 bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none">
+                      <div className="flex-1 flex items-center gap-2 overflow-hidden">
+                        <Reorder.Group 
+                          axis="x" 
+                          values={tabs} 
+                          onReorder={setTabs}
+                          className="flex items-center gap-1.5"
+                        >
+                          {tabs.map((tab) => (
+                            <Reorder.Item 
+                              key={tab.id} 
+                              value={tab}
+                              dragListener={isEditingTab !== tab.id}
+                              className="group relative flex-shrink-0"
+                            >
+                              {isEditingTab === tab.id ? (
+                                <input
+                                  autoFocus
+                                  className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
+                                  value={tab.label}
+                                  onChange={(e) => {
+                                    const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                    setTabs(newTabs);
+                                  }}
+                                  onBlur={() => setIsEditingTab(null)}
+                                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                />
+                              ) : (
+                                <div className="flex items-center">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCurrentTabId(tab.id);
+                                      setSelectedId(tab.id);
+                                    }}
+                                    onDoubleClick={() => setIsEditingTab(tab.id)}
+                                    className={cn(
+                                      "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border whitespace-nowrap",
+                                      currentTabId === tab.id
+                                        ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                        : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                                    )}
+                                  >
+                                    <span>{tab.label}</span>
+                                    {currentTabId === tab.id && (
+                                      <Settings2 
+                                        size={11} 
+                                        className="opacity-60 hover:opacity-100 transition-opacity" 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedId(tab.id);
+                                        }}
+                                      />
+                                    )}
+                                  </button>
+                                  {tabs.length > 1 && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newTabs = tabs.filter(t => t.id !== tab.id);
+                                        setTabs(newTabs);
+                                        if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
+                                        setLayout(layout.filter(field => field.tabId !== tab.id));
+                                      }}
+                                      className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                    >
+                                      <X size={8} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </Reorder.Item>
+                          ))}
+                        </Reorder.Group>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newId = `tab-${Date.now()}`;
+                            setTabs([...tabs, { id: newId, label: 'New Section' }]);
+                            setCurrentTabId(newId);
+                            setIsEditingTab(newId);
+                            setSelectedId(newId);
+                          }}
+                          className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0 shadow-sm"
+                          title="Add Section Tab"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Horizontal split container for Left Sidebar + Main Grid + Right Workflow Panel */}
+                  <div className="flex w-full items-stretch flex-1">
+                    
+                    {/* Sidebar Vertical Tabs list if layoutType === 'sidebar' */}
+                    {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'sidebar' && (
+                      <div className="w-60 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-5 space-y-4 flex flex-col justify-between select-none">
+                        <div className="space-y-4">
+                          <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
+                          <Reorder.Group 
+                            axis="y" 
+                            values={tabs} 
+                            onReorder={setTabs}
+                            className="space-y-1.5"
+                          >
+                            {tabs.map((tab) => (
+                              <Reorder.Item 
+                                key={tab.id} 
+                                value={tab}
+                                dragListener={isEditingTab !== tab.id}
+                                className="group relative"
+                              >
+                                {isEditingTab === tab.id ? (
+                                  <input
+                                    autoFocus
+                                    className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none shadow-lg text-zinc-900 dark:text-white"
+                                    value={tab.label}
+                                    onChange={(e) => {
+                                      const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                      setTabs(newTabs);
+                                    }}
+                                    onBlur={() => setIsEditingTab(null)}
+                                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                  />
+                                ) : (
+                                  <div className="flex items-center">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentTabId(tab.id);
+                                        setSelectedId(tab.id);
+                                      }}
+                                      onDoubleClick={() => setIsEditingTab(tab.id)}
+                                      className={cn(
+                                        "w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group",
+                                        currentTabId === tab.id
+                                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                      )}
+                                    >
+                                      <span className="truncate">{tab.label}</span>
+                                      <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", currentTabId === tab.id ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
+                                    </button>
+                                    {tabs.length > 1 && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const newTabs = tabs.filter(t => t.id !== tab.id);
+                                          setTabs(newTabs);
+                                          if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
+                                          setLayout(layout.filter(field => field.tabId !== tab.id));
+                                        }}
+                                        className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                      >
+                                        <X size={8} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </Reorder.Item>
+                            ))}
+                          </Reorder.Group>
+                        </div>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newId = `tab-${Date.now()}`;
+                            setTabs([...tabs, { id: newId, label: 'New Section' }]);
+                            setCurrentTabId(newId);
+                            setIsEditingTab(newId);
+                            setSelectedId(newId);
+                          }}
+                          className="w-full py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 shadow-sm font-bold text-xs uppercase tracking-widest"
+                        >
+                          <Plus size={14} />
+                          <span>Add Section</span>
+                        </button>
+                      </div>
+                    )}
+
                     <div 
                       id="main-grid-container"
                       className={cn(
-                        "p-8 pb-32 min-h-[800px] relative z-10 grid items-start content-start transition-all duration-300",
+                        "flex-1 min-w-0 p-8 pb-32 min-h-[800px] relative z-10 grid items-start content-start transition-all duration-300",
                         "grid-cols-1", // Mobile first
                         viewportSize !== 'mobile' && "md:grid-cols-12", // Desktop/Tablet grid
                         isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
@@ -4861,9 +5282,231 @@ export const ModuleEditor = () => {
                       </div>
                     )}
                   </div>
+                    
+                    {/* Workflow Sidebar Preview Panel (Embedded inside the Main Canvas Card) */}
+                    {(interfaceSettings.detail as any)?.showWorkflow && activeTab === 'builder' && (
+                      <div className="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 flex flex-col flex-shrink-0 relative z-20 overflow-hidden select-none min-h-[800px]">
+                        {/* Status Header */}
+                        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                              Workflow Pipeline
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                            In Progress
+                          </span>
+                        </div>
+
+                        {/* Active Stage Indigo Banner */}
+                        {(() => {
+                          const activeNodes = workflow?.nodes
+                            ? [...workflow.nodes]
+                                .filter((n: any) => n.type !== 'start' && n.type !== 'end' && n.data?.label)
+                                .sort((a: any, b: any) => (a.position?.x || 0) - (b.position?.x || 0))
+                            : [];
+
+                          const stages = activeNodes.length > 0 
+                            ? activeNodes.map((n: any, idx) => ({
+                                id: n.id,
+                                label: n.data.label,
+                                status: idx < activeWorkflowStageIdx ? 'completed' : idx === activeWorkflowStageIdx ? 'active' : 'locked',
+                                checklist: idx === activeWorkflowStageIdx ? [
+                                  `Verify ${n.data.label} parameters`,
+                                  `Inspect associated credentials`,
+                                  `Log audit confirmation code`
+                                ] : []
+                              }))
+                            : [
+                                { id: 'stage-1', label: 'Initial Review', status: activeWorkflowStageIdx > 0 ? 'completed' : 'active', checklist: [] },
+                                { id: 'stage-2', label: 'Manager Approval', status: activeWorkflowStageIdx === 1 ? 'active' : activeWorkflowStageIdx > 1 ? 'completed' : 'locked', checklist: ['Verify department budget allocation', 'Inspect credential files', 'Check manager signatures'] },
+                                { id: 'stage-3', label: 'Compliance Audit', status: activeWorkflowStageIdx === 2 ? 'active' : activeWorkflowStageIdx > 2 ? 'completed' : 'locked', checklist: ['Confirm global guidelines compliance', 'Perform verification checks'] },
+                                { id: 'stage-4', label: 'Final Dispatch', status: activeWorkflowStageIdx === 3 ? 'active' : 'locked', checklist: ['Release resources to deployment queue', 'Generate production logs'] }
+                              ];
+
+                          const activeStage = stages.find(s => s.status === 'active') || stages[stages.length - 1];
+
+                          return (
+                            <>
+                              <div className="p-5 bg-gradient-to-br from-indigo-500/5 to-transparent border-b border-zinc-100 dark:border-zinc-900/50">
+                                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest block mb-1">Active Phase</span>
+                                <h4 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight leading-none mb-1.5">
+                                  {activeStage?.label}
+                                </h4>
+                                <p className="text-[9px] text-zinc-400 font-medium leading-relaxed">
+                                  {activeStage?.status === 'active' 
+                                    ? "Awaiting checklist approval and audit step signoff." 
+                                    : "All workflow stages have been completed."}
+                                </p>
+                              </div>
+
+                              {/* Pipeline Stepper Scroll Block */}
+                              <div className="flex-grow overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                                <div className="relative pl-6 space-y-6">
+                                  {/* Vertical Line Connector */}
+                                  <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-zinc-200 dark:bg-zinc-800" />
+
+                                  {stages.map((stage, idx) => {
+                                    const isCompleted = stage.status === 'completed';
+                                    const isActive = stage.status === 'active';
+                                    const isLocked = stage.status === 'locked';
+
+                                    return (
+                                      <div key={stage.id} className="relative space-y-3">
+                                        {/* Stepper Dot */}
+                                        <div className="absolute -left-[22px] top-1 z-10 flex items-center justify-center">
+                                          {isCompleted ? (
+                                            <div className="w-5.5 h-5.5 rounded-full bg-emerald-500 border-4 border-white dark:border-zinc-950 flex items-center justify-center text-white shadow-sm shadow-emerald-500/20">
+                                              <ShieldCheck size={10} />
+                                            </div>
+                                          ) : isActive ? (
+                                            <div className="w-5.5 h-5.5 rounded-full bg-indigo-600 border-4 border-white dark:border-zinc-950 flex items-center justify-center text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-500/20 animate-pulse">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                            </div>
+                                          ) : (
+                                            <div className="w-5.5 h-5.5 rounded-full bg-zinc-100 dark:bg-zinc-800 border-4 border-white dark:border-zinc-950 flex items-center justify-center text-zinc-400">
+                                              <Lock size={8} />
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Stage Card Header */}
+                                        <div className="pl-2">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className={cn(
+                                              "text-[10px] font-black tracking-tight transition-colors",
+                                              isCompleted ? "text-zinc-500 dark:text-zinc-500 line-through" :
+                                              isActive ? "text-zinc-950 dark:text-white" : "text-zinc-400"
+                                            )}>
+                                              {stage.label}
+                                            </span>
+                                            {isActive && (
+                                              <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-[8px] font-bold text-indigo-500 uppercase tracking-widest">
+                                                Active
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">
+                                            Stage {idx + 1}
+                                          </p>
+                                        </div>
+
+                                        {/* Checklist Block for Active Stage */}
+                                        {isActive && stage.checklist && stage.checklist.length > 0 && (
+                                          <motion.div 
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="ml-2 p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800/80 rounded-2xl space-y-2.5 shadow-sm"
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <ClipboardList size={10} className="text-zinc-400" />
+                                              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Milestones Checklist</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                              {stage.checklist.map((item, itemIdx) => (
+                                                <div key={itemIdx} className="flex items-start gap-2 group/check cursor-pointer">
+                                                  <div className="w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 flex items-center justify-center shrink-0 mt-0.5 group-hover/check:border-indigo-500 transition-colors">
+                                                    <Check size={8} className="text-indigo-600 dark:text-indigo-400 opacity-80" />
+                                                  </div>
+                                                  <span className="text-[9px] text-zinc-600 dark:text-zinc-400 leading-tight font-medium">
+                                                    {item}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </motion.div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Micro Audit Logs Stream */}
+                                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900 space-y-3 px-5">
+                                  <div className="flex items-center gap-1.5">
+                                    <History size={11} className="text-zinc-400" />
+                                    <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Pipeline Audit Stream</span>
+                                  </div>
+                                  <div className="space-y-2.5 font-sans pb-4">
+                                    <div className="flex items-start gap-2.5">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                                      <div>
+                                        <p className="text-[9px] text-zinc-500 font-medium leading-none">
+                                          Stage 1 &quot;{stages[0]?.label}&quot; signed off
+                                        </p>
+                                        <span className="text-[7px] text-zinc-400 uppercase tracking-widest mt-0.5 block">By system • 2m ago</span>
+                                      </div>
+                                    </div>
+                                    {activeWorkflowStageIdx > 0 && (
+                                      <div className="flex items-start gap-2.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                                        <div>
+                                          <p className="text-[9px] text-zinc-500 font-medium leading-none">
+                                            Stage 2 &quot;{stages[1]?.label}&quot; signed off
+                                          </p>
+                                          <span className="text-[7px] text-zinc-400 uppercase tracking-widest mt-0.5 block">By Admin User • 45s ago</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Footer Action Tray */}
+                              <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm space-y-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (activeWorkflowStageIdx < stages.length - 1) {
+                                      setActiveWorkflowStageIdx(prev => prev + 1);
+                                      toast.success(`Advanced workflow stage to "${stages[activeWorkflowStageIdx + 1]?.label}"!`);
+                                    } else {
+                                      setActiveWorkflowStageIdx(0);
+                                      toast.success("Workflow pipeline reset to Stage 1!");
+                                    }
+                                  }}
+                                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-md shadow-indigo-500/20"
+                                >
+                                  <Zap size={11} />
+                                  <span>{activeWorkflowStageIdx < stages.length - 1 ? 'Advance Stage' : 'Reset Pipeline'}</span>
+                                </button>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toast.info("Audit stage details downloaded.")}
+                                    className="flex items-center justify-center gap-1 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[8px] font-black uppercase tracking-widest text-zinc-600 dark:text-zinc-400 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                                  >
+                                    <Info size={9} />
+                                    <span>Info</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveWorkflowStageIdx(0);
+                                      toast.error("Workflow stage rejected & rolled back!");
+                                    }}
+                                    className="flex items-center justify-center gap-1 py-1.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/50 text-[8px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900 transition-colors"
+                                  >
+                                    <XCircle size={9} />
+                                    <span>Reject</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                  </div>
                 </div>
               </div>
-              </>
+            </div>
+            </>
             )
           ) : activeTab === 'preview' ? (
             <div className="w-full px-8 pb-20">
@@ -4890,8 +5533,48 @@ export const ModuleEditor = () => {
                       Detail View
                     </button>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                  <div className="flex items-center gap-4">
+                    {/* Database Mode Sliding Toggle Switch */}
+                    <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/80 px-4 py-1.5 rounded-full select-none shadow-sm">
+                      <span className={cn(
+                        "text-[9px] font-black uppercase tracking-widest transition-colors",
+                        !useRealData ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 dark:text-zinc-500"
+                      )}>
+                        Mock Data
+                      </span>
+                      <button
+                        onClick={() => {
+                          setUseRealData(prev => !prev);
+                          toast.info(!useRealData ? "Switched to Live Database Mode" : "Switched to Mock Data Mode");
+                        }}
+                        className={cn(
+                          "relative w-9 h-5 rounded-full transition-all duration-300 flex items-center p-0.5",
+                          useRealData ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                        )}
+                      >
+                        <motion.div
+                          className="w-4 h-4 bg-white rounded-full shadow-md animate-in fade-in zoom-in duration-300"
+                          layout
+                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                          animate={{ x: useRealData ? 16 : 0 }}
+                        />
+                      </button>
+                      <span className={cn(
+                        "text-[9px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5",
+                        useRealData ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 dark:text-zinc-500"
+                      )}>
+                        <span>Live Database</span>
+                        {useRealData && (
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center gap-1.5">
+                      <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />
                       <span className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em]">Live Testing Mode</span>
                     </div>
                   </div>
@@ -5006,7 +5689,7 @@ export const ModuleEditor = () => {
                       <div className="flex items-center justify-between px-2">
                         <div className="space-y-1">
                           <h3 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">{moduleSettings.name || 'Module'} Records</h3>
-                          <p className="text-xs text-zinc-500">Previewing with {mockData.length} mock records generated from your schema.</p>
+                          <p className="text-xs text-zinc-500">Previewing with {previewRecords.length} {useRealData ? 'live API database' : 'mock'} records generated from your schema.</p>
                         </div>
                         <button 
                           onClick={() => {
@@ -5068,7 +5751,7 @@ export const ModuleEditor = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                              {mockData.map((record, idx) => (
+                              {previewRecords.map((record, idx) => (
                                 <tr 
                                   key={record.id} 
                                   onClick={() => {
@@ -5127,7 +5810,7 @@ export const ModuleEditor = () => {
                         {interfaceSettings.master.pagination?.enabled && (
                           <div className="px-8 py-4 bg-zinc-50/50 dark:bg-zinc-800/20 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                             <div className="flex items-center gap-6">
-                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Showing 1 to {Math.min(interfaceSettings.master.pagination?.pageSize || 25, mockData.length)} of {mockData.length} records</span>
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Showing 1 to {Math.min(interfaceSettings.master.pagination?.pageSize || 25, previewRecords.length)} of {previewRecords.length} records</span>
                               <div className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800" />
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Per Page:</span>
@@ -7444,6 +8127,111 @@ export const ModuleEditor = () => {
                               </p>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : selectedId === '__detail_settings' ? (
+                    <motion.div 
+                      key="detail-settings-inspector"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="p-4 space-y-6"
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                          <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                            Detail Settings
+                          </h3>
+                        </div>
+                        <button 
+                          onClick={() => setSelectedId(null)}
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-[9px] text-zinc-400 leading-relaxed font-medium">
+                          Configure layout presets, form density, and display secondary workflows on canvas.
+                        </p>
+                      </div>
+
+                      {/* Density Control Panel */}
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Form Density</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['compact', 'standard', 'spacious'] as const).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setInterfaceSettings(prev => ({
+                                ...prev,
+                                detail: { ...prev.detail, density: d }
+                              }))}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                ((interfaceSettings.detail as any)?.density || 'standard') === d 
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                              )}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Layout Presets */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Detail Layout</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['tabs', 'sidebar'] as const).map(l => (
+                            <button
+                              key={l}
+                              onClick={() => setInterfaceSettings(prev => ({
+                                ...prev,
+                                detail: { ...prev.detail, layoutType: l }
+                              }))}
+                              className={cn(
+                                "px-2 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1",
+                                (interfaceSettings.detail.layoutType === l || (l === 'tabs' && interfaceSettings.detail.layoutType === 'split'))
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                              )}
+                            >
+                              {l === 'tabs' ? <Layout size={14} /> : <Columns size={14} />}
+                              <span>{l === 'tabs' ? 'Top Tabs' : 'Sidebar'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Detail View Workflow Toggle */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between px-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest font-black block">Show Workflow Panel</label>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5">Simulate process and approval streams on screen.</span>
+                          </div>
+                          <button
+                            onClick={() => setInterfaceSettings(prev => ({
+                              ...prev,
+                              detail: { ...prev.detail, showWorkflow: !(prev.detail as any).showWorkflow }
+                            }))}
+                            className={cn(
+                              "w-10 h-6 rounded-full p-0.5 transition-all shrink-0 relative flex items-center",
+                              (interfaceSettings.detail as any).showWorkflow ? "bg-indigo-600 justify-end" : "bg-zinc-200 dark:bg-zinc-800 justify-start"
+                            )}
+                          >
+                            <motion.div 
+                              layout 
+                              className="w-5 h-5 bg-white rounded-full shadow-sm" 
+                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                            />
+                          </button>
                         </div>
                       </div>
                     </motion.div>

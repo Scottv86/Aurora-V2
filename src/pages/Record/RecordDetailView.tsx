@@ -773,13 +773,57 @@ export const RecordDetailView = () => {
     }
   };
 
+  const getDensityStyles = (d: 'compact' | 'standard' | 'spacious') => {
+    switch (d) {
+      case 'compact':
+        return {
+          gapX: '12px',
+          gapY: '12px',
+          padding: 'p-2',
+          rounded: 'rounded-xl',
+          cardPaddingAndRounding: 'p-2.5 -m-2.5 rounded-xl',
+          nestedGridGap: 'gap-3',
+          labelSize: 'text-[9px]',
+          fontSize: 'text-[10px]'
+        };
+      case 'spacious':
+        return {
+          gapX: '24px',
+          gapY: '24px',
+          padding: 'p-6',
+          rounded: 'rounded-[32px]',
+          cardPaddingAndRounding: 'p-6 -m-6 rounded-3xl',
+          nestedGridGap: 'gap-8',
+          labelSize: 'text-[11px]',
+          fontSize: 'text-sm'
+        };
+      case 'standard':
+      default:
+        return {
+          gapX: '16px',
+          gapY: '24px',
+          padding: 'p-4',
+          rounded: 'rounded-2xl',
+          cardPaddingAndRounding: 'p-4 -m-4 rounded-2xl',
+          nestedGridGap: 'gap-6',
+          labelSize: 'text-[10px]',
+          fontSize: 'text-xs'
+        };
+    }
+  };
+
   const renderNestedField = (nestedField: any) => {
     if (!isFieldVisible(nestedField, editData || record || {}, visibilityContext)) return null;
+    const density = (interfaceSettings.detail as any)?.density || 'standard';
+    const ds = getDensityStyles(density);
+    
     return (
       <div 
         key={nestedField.id} 
         className={cn(
-          "p-4 rounded-3xl transition-all relative border-2 group/nestedField",
+          "transition-all relative border-2 group/nestedField",
+          ds.padding,
+          ds.rounded,
           activeFieldId === nestedField.id 
             ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
             : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
@@ -801,7 +845,7 @@ export const RecordDetailView = () => {
           </div>
         )}
 
-        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+        <label className={cn(ds.labelSize, "font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label")}>
           {nestedField.label}
           {nestedField.required && <span className="text-rose-500">*</span>}
           {nestedField.tooltip && (
@@ -841,9 +885,10 @@ export const RecordDetailView = () => {
           readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
           recordData={editData}
           allFields={allFields}
+          density={density}
         />
         {nestedField.helperText && (
-          <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{nestedField.helperText}</p>
+          <p className={cn(ds.fontSize, "text-zinc-500 mt-1.5 font-medium px-0.5 italic")}>{nestedField.helperText}</p>
         )}
       </div>
     );
@@ -887,9 +932,13 @@ export const RecordDetailView = () => {
       );
     }
 
+    const density = (interfaceSettings.detail as any)?.density || 'standard';
+    const ds = getDensityStyles(density);
+
     return (
       <div 
-        className="grid grid-cols-12 w-full gap-x-4 gap-y-6"
+        className="grid grid-cols-12 w-full"
+        style={{ gap: `${ds.gapY} ${ds.gapX}` }}
       >
         <AnimatePresence mode="popLayout">
           {visibleFields.map((field: ModuleField) => (
@@ -922,7 +971,8 @@ export const RecordDetailView = () => {
               }}
             >
             <div className={cn(
-              "w-full transition-all duration-200 rounded-2xl p-4 -m-4 border-2 relative",
+              "w-full transition-all duration-200 border-2 relative",
+              ds.cardPaddingAndRounding,
               activeFieldId === field.id 
                 ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
                 : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) 
@@ -961,7 +1011,7 @@ export const RecordDetailView = () => {
               <AccordionContainer 
                 field={field}
                 renderContent={(section) => (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: ds.gapX }}>
                     {(section.fields || []).map(renderNestedField)}
                   </div>
                 )}
@@ -972,7 +1022,7 @@ export const RecordDetailView = () => {
                 isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
                 onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: ds.gapX }}>
                   {(field.fields || []).map(renderNestedField)}
                 </div>
               </CollapsibleFieldGroup>
