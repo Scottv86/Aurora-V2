@@ -80,6 +80,11 @@ export function Table<T extends { id: string | number }>({
   const totalPages = Math.ceil(totalItems / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, totalItems);
+
+  const paginatedData = useMemo(() => {
+    if (!pagination) return sortedData;
+    return sortedData.slice(startIndex, endIndex);
+  }, [sortedData, pagination, startIndex, endIndex]);
   
   const customPaddingClass = columns.find(col => col.className && (col.className.includes('px-') || col.className.includes('py-')))?.className;
   const actionsPadding = customPaddingClass 

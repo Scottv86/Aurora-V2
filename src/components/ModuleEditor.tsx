@@ -2067,7 +2067,6 @@ export const ModuleEditor = () => {
   const [showConsole, setShowConsole] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
-  const [showGridlines, setShowGridlines] = useState(true);
   const [showSystemFields, setShowSystemFields] = useState(true);
   
   // Tab Scrolling Refs & State
@@ -2969,18 +2968,6 @@ export const ModuleEditor = () => {
             </div>
           )}
 
-          <button 
-            onClick={() => setShowGridlines(!showGridlines)}
-            className={cn(
-              "p-1.5 rounded-lg border transition-all",
-              showGridlines 
-                ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-500 shadow-inner" 
-                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-            title={showGridlines ? "Hide Gridlines" : "Show Gridlines"}
-          >
-            <Grid3X3 size={14} />
-          </button>
 
           <button 
             onClick={() => setShowSystemFields(!showSystemFields)}
@@ -3728,12 +3715,6 @@ export const ModuleEditor = () => {
                 )}
               </div>
 
-              {/* Blueprint Grid Background */}
-              {showGridlines && (
-                <div className="absolute inset-0 pointer-events-none opacity-[0.05] dark:opacity-[0.05]" 
-                     style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-              )}
-              
               <div className="w-full space-y-4 relative px-6 py-6">
 
                 {/* Grid Canvas */}
@@ -3751,15 +3732,6 @@ export const ModuleEditor = () => {
                 >
                   {/* Connection Visualizer Layer */}
                   <ConnectionLine hoveredMapping={hoveredMapping} containerRef={canvasContainerRef} />
-
-                  {/* Grid Lines Overlay (Builder Mode Only) */}
-                  {showGridlines && (
-                    <div className="absolute inset-0 pointer-events-none grid grid-cols-12 gap-4 px-8 py-8 opacity-[0.03] dark:opacity-[0.05]">
-                      {Array.from({ length: 12 }).map((_, i) => (
-                        <div key={i} className="h-full border-x border-zinc-900 dark:border-white" />
-                      ))}
-                    </div>
-                  )}
 
                     <div 
                       id="main-grid-container"
@@ -5836,11 +5808,9 @@ export const ModuleEditor = () => {
                   <div className="h-full w-full">
 <div className="h-full w-full bg-zinc-900 relative overflow-hidden flex items-center justify-center">
               {/* Dependency Grid Background */}
-              {showGridlines && (
-                <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-                  style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
-                />
-              )}
+              <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+                style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
+              />
               
               {/* Visual Map Content */}
               <div className="relative z-10 space-y-12 flex flex-col items-center">
@@ -6146,7 +6116,6 @@ export const ModuleEditor = () => {
                 onEdgeSelect={setSelectedEdgeId}
                 rightSidebarTab={rightSidebarTabWorkflow}
                 setRightSidebarTab={setRightSidebarTabWorkflow}
-                showGridlines={showGridlines}
               />
             </div>
           ) : activeTab === 'security' ? (
