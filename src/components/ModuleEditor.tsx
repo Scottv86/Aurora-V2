@@ -5140,7 +5140,12 @@ export const ModuleEditor = () => {
                                         <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
                                         <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
                                       </div>
-                                    ) : (block.type === 'select' || block.type === 'lookup' || block.type === 'user') ? (
+                                    ) : block.type === 'lookup' ? (
+                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 gap-2 shadow-sm dark:shadow-none">
+                                        <Search size={14} className="text-zinc-400 dark:text-zinc-600" />
+                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Search ${block.label?.toLowerCase() || 'records'}...`}</span>
+                                      </div>
+                                    ) : (block.type === 'select' || block.type === 'user') ? (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
                                         <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Select ${block.label?.toLowerCase() || 'option'}...`}</span>
                                         <ChevronDown size={14} className="text-zinc-400 dark:text-zinc-600" />
