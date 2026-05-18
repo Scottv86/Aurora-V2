@@ -12,6 +12,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   className?: string;
   readonly?: boolean;
+  onBlur?: () => void;
 }
 
 export const RichTextEditor: React.FC<RichTextEditorProps> = ({
@@ -19,7 +20,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   onChange,
   placeholder,
   className,
-  readonly = false
+  readonly = false,
+  onBlur
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +70,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         ref={editorRef}
         contentEditable={!readonly}
         onInput={(e) => onChange(e.currentTarget.innerHTML)}
+        onBlur={onBlur}
         dangerouslySetInnerHTML={{ __html: value }}
         className={cn(
           "p-5 min-h-[150px] text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none prose prose-zinc dark:prose-invert max-w-none",

@@ -21,7 +21,6 @@ import {
   RefreshCw,
   CheckCircle2,
   Lock,
-  Check,
   HelpCircle,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -701,11 +700,7 @@ export const RecordDetailView = () => {
     }
   };
 
-  const handleCancelEdit = () => {
-    if (!record) return;
-    setEditData(record);
-    setActiveFieldId(null);
-  };
+
 
   const handleSyncConnector = async (field: any) => {
     if (!tenant?.id || !moduleId || !recordId || !field.connectorId) return;

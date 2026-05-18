@@ -716,7 +716,7 @@ export const ModuleView = () => {
       return 'px-6 py-4 text-sm';
     })();
 
-    const hasStatusField = displayFields.some((f: any) => f.id === 'status' || f.name?.toLowerCase() === 'status');
+    // hasStatusField removed
 
     // Define the custom column accessor mapper
     const mapCustomFieldToColumn = (field: any) => ({

@@ -12,6 +12,7 @@ interface UserSelectorProps {
   className?: string;
   error?: boolean;
   readonly?: boolean;
+  onBlur?: () => void;
 }
 
 export const UserSelector: React.FC<UserSelectorProps> = ({
@@ -20,7 +21,8 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
   placeholder = 'Select a user...',
   className,
   error = false,
-  readonly = false
+  readonly = false,
+  onBlur
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -96,11 +98,12 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        onBlur?.();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [onBlur]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (readonly) return;
@@ -128,11 +131,13 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
           onChange(user.id, user);
           setIsOpen(false);
           setSearch('');
+          onBlur?.();
         }
         break;
       case 'Escape':
         e.preventDefault();
         setIsOpen(false);
+        onBlur?.();
         break;
     }
   };
@@ -264,6 +269,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
                             onChange(user.id, user);
                             setIsOpen(false);
                             setSearch('');
+                            onBlur?.();
                           }}
                           onMouseEnter={() => {
                             const idx = flattenedResults.findIndex(u => u.id === user.id);

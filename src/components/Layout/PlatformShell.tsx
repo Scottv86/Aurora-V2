@@ -599,7 +599,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     })
   );
   
-  const enabledModules = modules.filter(m => m.status === 'ACTIVE');
+  const enabledModules = modules.filter((m: any) => m.status === 'ACTIVE' || m.enabled);
 
   const resolvedConfig = useMemo(() => {
     if (!menuConfig) return null;
@@ -616,7 +616,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             return mod ? { 
               ...item, 
               label: mod.name, 
-              iconName: mod.iconName || item.iconName 
+              iconName: (mod as any).iconName || mod.icon || item.iconName 
             } : item;
           });
         const existingModuleIds = new Set(currentItems.map(i => i.id));
@@ -626,7 +626,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           .map(m => ({
             id: `module:${m.id}`,
             label: m.name,
-            iconName: m.iconName || 'Box',
+            iconName: (m as any).iconName || m.icon || 'Box',
             to: `/workspace/modules/${m.id}`,
             isVisible: true
           }));

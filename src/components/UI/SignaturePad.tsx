@@ -6,12 +6,14 @@ interface SignaturePadProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  onBlur?: () => void;
 }
 
 export const SignaturePad: React.FC<SignaturePadProps> = ({
   value,
   onChange,
-  className
+  className,
+  onBlur
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -89,10 +91,14 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
   };
 
   return (
-    <div className={cn(
-      "bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm flex flex-col",
-      className
-    )}>
+    <div 
+      tabIndex={0}
+      onBlur={onBlur}
+      className={cn(
+        "bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm flex flex-col focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all outline-none",
+        className
+      )}
+    >
       <div className="flex-1 min-h-[200px] relative cursor-crosshair">
         <canvas
           ref={canvasRef}

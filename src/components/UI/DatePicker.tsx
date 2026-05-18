@@ -39,6 +39,8 @@ interface DatePickerProps {
   excludeWeekends?: boolean;
   min?: string; // YYYY-MM-DD
   max?: string; // YYYY-MM-DD
+  onBlur?: () => void;
+  className?: string;
 }
 
 export const DatePicker: React.FC<DatePickerProps> = ({

@@ -239,7 +239,7 @@ router.post('/records', async (req: TenantRequest, res) => {
       });
       return result;
     };
-    const allFields = flattenFields(layout);
+    const allFields = flattenFields(config.layout || []);
     const requiredFields = allFields.filter((f: any) => f.required);
 
     const missingFields = requiredFields.filter((f: any) => {
@@ -251,7 +251,7 @@ router.post('/records', async (req: TenantRequest, res) => {
       if (actualVal === undefined || actualVal === null) {
         // Find if this field belongs to a container in the data
         const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
-        const group = layout.find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
+        const group = (config.layout || []).find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
         if (group) {
           actualVal = data[group.id]?.[f.id];
         }
