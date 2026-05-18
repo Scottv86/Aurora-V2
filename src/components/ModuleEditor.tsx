@@ -89,6 +89,8 @@ import {
   Check,
   Command,
   Info,
+  XCircle,
+  AlertTriangle,
   ChevronRight,
   Copy,
   Key
@@ -1245,9 +1247,9 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
           {fObj.type === 'spacer' && (
             <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
           )}
-          {fObj.type === 'html/text' && (
+          {(fObj.type === 'html/text' || fObj.type === 'html-text') && (
             <p className="text-sm text-zinc-500 leading-relaxed">
-              {fObj.placeholderOverride || 'Enter some descriptive text or HTML here...'}
+              {fObj.labelOverride || fObj.placeholderOverride || 'Enter some descriptive text or HTML here...'}
             </p>
           )}
           <div className="mt-2 flex items-center gap-2">
@@ -1258,6 +1260,74 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
                  return Icon ? <Icon size={8} className="text-zinc-400" /> : null;
                })()}
                {fObj.type}
+             </span>
+          </div>
+        </div>
+      ) : ['heading', 'divider', 'spacer', 'alert', 'html', 'button'].includes(field?.type || '') ? (
+        <div className="py-2 space-y-2">
+          {field?.type === 'heading' && (() => {
+            const Tag = (field?.options?.[0] || 'h2') as React.ElementType;
+            const size = field?.options?.[0] === 'h1' ? 'text-2xl font-bold' :
+                         field?.options?.[0] === 'h2' ? 'text-xl font-bold' :
+                         field?.options?.[0] === 'h3' ? 'text-lg font-bold' :
+                         field?.options?.[0] === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+            return (
+              <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
+                {fObj.labelOverride || field?.label || 'Heading'}
+              </Tag>
+            );
+          })()}
+          {field?.type === 'divider' && (
+            <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
+          )}
+          {field?.type === 'spacer' && (
+            <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
+          )}
+          {field?.type === 'alert' && (() => {
+            const variant = field?.options?.[0] || 'info';
+            const style = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                          variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                          variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                          'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
+            const Icon = variant === 'error' ? XCircle :
+                         variant === 'warning' ? AlertTriangle :
+                         variant === 'success' ? Check : Info;
+            return (
+              <div className={cn("p-4 rounded-2xl border flex items-center gap-3", style)}>
+                <Icon size={18} />
+                <span className="text-xs font-bold uppercase tracking-widest">{fObj.labelOverride || field?.label || 'Alert Notice'}</span>
+              </div>
+            );
+          })()}
+          {field?.type === 'html' && (
+            <div 
+              className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none" 
+              dangerouslySetInnerHTML={{ __html: fObj.labelOverride || field?.label || 'HTML content...' }} 
+            />
+          )}
+          {field?.type === 'button' && (
+            <button
+              type="button"
+              className={cn(
+                "px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
+                field?.variant === 'secondary' ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" :
+                field?.variant === 'outline' ? "border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white" :
+                field?.variant === 'danger' ? "bg-rose-500 text-white" :
+                "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+              )}
+            >
+              {fObj.labelOverride || field?.label || 'Action Button'}
+            </button>
+          )}
+          
+          <div className="mt-2 flex items-center gap-2">
+             <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+               {(() => {
+                 const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field?.type);
+                 const Icon = fieldDef?.icon;
+                 return Icon ? <Icon size={8} className="text-zinc-400" /> : null;
+               })()}
+               {field?.type} {field?.type === 'heading' && `(${field?.options?.[0] || 'h2'})`}
              </span>
           </div>
         </div>
@@ -3309,9 +3379,6 @@ export const ModuleEditor = () => {
                               <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
                               Table Settings
                             </button>
-                            <span className="text-[10px] text-indigo-500 font-black bg-indigo-500/10 px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                              {activeColumns.length} Active Columns
-                            </span>
                           </div>
                         </div>
 
@@ -3340,7 +3407,9 @@ export const ModuleEditor = () => {
                                     }}
                                     style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
                                     className={cn(
-                                      "px-6 py-4 text-[10px] font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all select-none border-r border-zinc-100 dark:border-zinc-800/50",
+                                      "text-[10px] font-bold uppercase tracking-widest cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all select-none border-r border-zinc-100 dark:border-zinc-800/50",
+                                      interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                      interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4',
                                       selectedId === '_record_key' 
                                         ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
                                         : "text-zinc-400"
@@ -3368,7 +3437,9 @@ export const ModuleEditor = () => {
                                           setSelectedId(col.id);
                                         }}
                                         className={cn(
-                                          "px-4 py-4 text-[10px] font-bold uppercase tracking-widest cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
+                                          "text-[10px] font-bold uppercase tracking-widest cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
+                                          interfaceSettings.master.density === 'compact' ? 'px-3 py-2' : 
+                                          interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-4 py-4',
                                           isSelected 
                                             ? "bg-indigo-50/40 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400" 
                                             : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
@@ -3415,7 +3486,11 @@ export const ModuleEditor = () => {
                                 {mockData.slice(0, 3).map((row, rIdx) => (
                                   <tr key={rIdx} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-900/10 transition-colors">
                                     {/* Lead ID column */}
-                                    <td className="px-6 py-4 text-xs font-bold text-indigo-500/80 font-mono">
+                                    <td className={cn(
+                                      "font-bold text-indigo-500/80 font-mono",
+                                      interfaceSettings.master.density === 'compact' ? 'px-6 py-2 text-[10px]' : 
+                                      interfaceSettings.master.density === 'spacious' ? 'px-6 py-5 text-sm' : 'px-6 py-4 text-xs'
+                                    )}>
                                       {moduleSettings.recordKeyPrefix || 'KEY'}-{100 + rIdx}
                                     </td>
                                     
@@ -3450,7 +3525,11 @@ export const ModuleEditor = () => {
                                         <td 
                                           key={col.id} 
                                           style={{ width: `${width}px` }}
-                                          className="px-4 py-4 text-xs text-zinc-500 dark:text-zinc-400 truncate border-l border-zinc-100/50 dark:border-zinc-800/30"
+                                          className={cn(
+                                            "text-zinc-500 dark:text-zinc-400 truncate border-l border-zinc-100/50 dark:border-zinc-800/30",
+                                            interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[11px]' : 
+                                            interfaceSettings.master.density === 'spacious' ? 'px-4 py-5 text-sm' : 'px-4 py-4 text-xs'
+                                          )}
                                         >
                                           {cellValue}
                                         </td>
@@ -3910,7 +3989,67 @@ export const ModuleEditor = () => {
                                     )}
 
                                   <div className="min-h-[20px]">
-                                    {block.type === 'radio' || block.type === 'checkboxGroup' ? (
+                                    {block.type === 'heading' ? (() => {
+                                      const Tag = (block.options?.[0] || 'h2') as React.ElementType;
+                                      const size = block.options?.[0] === 'h1' ? 'text-2xl font-bold' :
+                                                   block.options?.[0] === 'h2' ? 'text-xl font-bold' :
+                                                   block.options?.[0] === 'h3' ? 'text-lg font-bold' :
+                                                   block.options?.[0] === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+                                      return (
+                                        <div className="pt-2">
+                                          <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
+                                            {block.label || 'Heading'}
+                                          </Tag>
+                                        </div>
+                                      );
+                                    })() : block.type === 'divider' ? (
+                                      <div className="py-2">
+                                        <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
+                                      </div>
+                                    ) : block.type === 'spacer' ? (
+                                      <div className="py-2">
+                                        <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
+                                      </div>
+                                    ) : block.type === 'alert' ? (() => {
+                                      const variant = block.options?.[0] || 'info';
+                                      const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                                                    variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                                                    variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                                                    'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
+                                      const AlertIcon = variant === 'error' ? XCircle :
+                                                   variant === 'warning' ? AlertTriangle :
+                                                   variant === 'success' ? Check : Info;
+                                      return (
+                                        <div className="pt-2">
+                                          <div className={cn("p-4 rounded-2xl border flex items-center gap-3", alertStyle)}>
+                                            <AlertIcon size={18} />
+                                            <span className="text-xs font-bold uppercase tracking-widest">{block.label || 'Alert Notice'}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })() : block.type === 'html' ? (
+                                      <div className="pt-2">
+                                        <div 
+                                          className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none" 
+                                          dangerouslySetInnerHTML={{ __html: block.label || 'HTML content...' }} 
+                                        />
+                                      </div>
+                                    ) : block.type === 'button' ? (
+                                      <div className="pt-2">
+                                        <button
+                                          type="button"
+                                          className={cn(
+                                            "px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
+                                            block.variant === 'secondary' ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" :
+                                            block.variant === 'outline' ? "border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white" :
+                                            block.variant === 'danger' ? "bg-rose-500 text-white" :
+                                            "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                          )}
+                                        >
+                                          {block.label || 'Action Button'}
+                                        </button>
+                                      </div>
+                                    ) : block.type === 'radio' || block.type === 'checkboxGroup' ? (
                                       <div className="space-y-3 pt-2">
                                         {(block.options || ['Option 1', 'Option 2']).map((opt, i) => (
                                           <div key={i} className="flex items-center gap-3">
@@ -4926,14 +5065,34 @@ export const ModuleEditor = () => {
                           <table className="w-full text-left border-collapse">
                             <thead>
                               <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
-                                <th className="px-6 py-4 w-12 text-center text-[10px] font-black text-zinc-400 uppercase tracking-widest">#</th>
+                                <th className={cn(
+                                  "w-12 text-center text-[10px] font-black text-zinc-400 uppercase tracking-widest",
+                                  interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                  interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                )}>#</th>
                                 {displayFields.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
-                                  <th key={f.id} style={{ minWidth: f.columnWidth || 150 }} className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                                  <th 
+                                    key={f.id} 
+                                    style={{ minWidth: f.columnWidth || 150 }} 
+                                    className={cn(
+                                      "text-[10px] font-black text-zinc-400 uppercase tracking-widest",
+                                      interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                      interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                    )}
+                                  >
                                     {f.label}
                                   </th>
                                 ))}
-                                <th className="px-6 py-4 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Created</th>
-                                <th className="px-6 py-4 w-20"></th>
+                                <th className={cn(
+                                  "text-[10px] font-black text-zinc-400 uppercase tracking-widest",
+                                  interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                  interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                )}>Created</th>
+                                <th className={cn(
+                                  "w-20",
+                                  interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                  interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                )}></th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
@@ -4947,18 +5106,43 @@ export const ModuleEditor = () => {
                                   }}
                                   className="group hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-all cursor-pointer"
                                 >
-                                  <td className="px-6 py-4 text-center text-[10px] font-mono text-zinc-400">{idx + 1}</td>
+                                  <td className={cn(
+                                    "text-center font-mono text-zinc-400",
+                                    interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[10px]' : 
+                                    interfaceSettings.master.density === 'spacious' ? 'px-8 py-5 text-xs' : 'px-6 py-4 text-[10px]'
+                                  )}>{idx + 1}</td>
                                   {displayFields.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
-                                    <td key={f.id} className="px-6 py-4">
-                                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                                    <td 
+                                      key={f.id} 
+                                      className={cn(
+                                        interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                        interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                      )}
+                                    >
+                                      <span className={cn(
+                                        "font-bold text-zinc-700 dark:text-zinc-300",
+                                        interfaceSettings.master.density === 'compact' ? 'text-[11px]' : 
+                                        interfaceSettings.master.density === 'spacious' ? 'text-sm' : 'text-xs'
+                                      )}>
                                         {f.type === 'boolean' ? (record[f.id] ? 'Yes' : 'No') : String(record[f.id])}
                                       </span>
                                     </td>
                                   ))}
-                                  <td className="px-6 py-4">
-                                    <span className="text-[10px] font-medium text-zinc-400">{new Date(record.createdAt).toLocaleDateString()}</span>
+                                  <td className={cn(
+                                    interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                    interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                  )}>
+                                    <span className={cn(
+                                      "font-medium text-zinc-400",
+                                      interfaceSettings.master.density === 'compact' ? 'text-[10px]' : 
+                                      interfaceSettings.master.density === 'spacious' ? 'text-xs' : 'text-[10px]'
+                                    )}>{new Date(record.createdAt).toLocaleDateString()}</span>
                                   </td>
-                                  <td className="px-6 py-4 text-right">
+                                  <td className={cn(
+                                    "text-right",
+                                    interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                    interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                  )}>
                                     <button className="p-2 text-zinc-300 hover:text-indigo-500 transition-colors opacity-0 group-hover:opacity-100">
                                       <ArrowRight size={14} />
                                     </button>

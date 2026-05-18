@@ -81,9 +81,10 @@ export function Table<T extends { id: string | number }>({
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, totalItems);
   
-  const paginatedData = pagination 
-    ? sortedData.slice(startIndex, endIndex) 
-    : sortedData;
+  const customPaddingClass = columns.find(col => col.className && (col.className.includes('px-') || col.className.includes('py-')))?.className;
+  const actionsPadding = customPaddingClass 
+    ? customPaddingClass.split(' ').filter(c => c.startsWith('px-') || c.startsWith('py-') || c.includes('px-') || c.includes('py-')).join(' ') 
+    : 'px-6 py-4';
 
   const content = (
     <>
@@ -95,12 +96,14 @@ export function Table<T extends { id: string | number }>({
                 const isSortable = col.sortable && (col.sortKey || typeof col.accessor === 'string');
                 const sortKey = col.sortKey || (typeof col.accessor === 'string' ? col.accessor as keyof T : null);
                 const isSorted = sortConfig?.key === sortKey;
+                const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
 
                 return (
                   <th 
                     key={idx} 
                     className={cn(
-                      'px-6 py-4 transition-colors',
+                      !hasCustomPadding && 'px-6 py-4',
+                      'transition-colors',
                       isSortable && 'cursor-pointer hover:bg-white/10 dark:hover:bg-white/5 select-none',
                       col.className
                     )}
@@ -123,7 +126,7 @@ export function Table<T extends { id: string | number }>({
                 );
               })}
               {headerActions && (
-                <th className="px-6 py-4 text-right">
+                <th className={cn(actionsPadding, "text-right")}>
                   {headerActions}
                 </th>
               )}
@@ -133,12 +136,21 @@ export function Table<T extends { id: string | number }>({
             {loading ? (
               Array.from({ length: pageSize }).map((_, i) => (
                 <tr key={i}>
-                  {columns.map((_, j) => (
-                    <td key={j} className="px-6 py-4">
-                      <Skeleton variant="text" className="w-full opacity-50" />
-                    </td>
-                  ))}
-                  {headerActions && <td className="px-6 py-4" />}
+                  {columns.map((col, j) => {
+                    const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
+                    return (
+                      <td 
+                        key={j} 
+                        className={cn(
+                          !hasCustomPadding && 'px-6 py-4',
+                          col.className
+                        )}
+                      >
+                        <Skeleton variant="text" className="w-full opacity-50" />
+                      </td>
+                    );
+                  })}
+                  {headerActions && <td className={actionsPadding} />}
                 </tr>
               ))
             ) : paginatedData.length === 0 ? (
@@ -157,14 +169,25 @@ export function Table<T extends { id: string | number }>({
                     onRowClick && 'cursor-pointer'
                   )}
                 >
-                  {columns.map((col, idx) => (
-                    <td key={idx} className={cn('px-6 py-4 text-zinc-700 dark:text-zinc-300', col.className)} style={col.style}>
-                      {typeof col.accessor === 'function'
-                        ? col.accessor(item)
-                        : (item[col.accessor] as React.ReactNode)}
-                    </td>
-                  ))}
-                  {headerActions && <td className="px-6 py-4" />}
+                  {columns.map((col, idx) => {
+                    const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
+                    return (
+                      <td 
+                        key={idx} 
+                        className={cn(
+                          !hasCustomPadding && 'px-6 py-4',
+                          'text-zinc-700 dark:text-zinc-300', 
+                          col.className
+                        )} 
+                        style={col.style}
+                      >
+                        {typeof col.accessor === 'function'
+                          ? col.accessor(item)
+                          : (item[col.accessor] as React.ReactNode)}
+                      </td>
+                    );
+                  })}
+                  {headerActions && <td className={actionsPadding} />}
                 </tr>
               ))
             )}
