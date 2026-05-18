@@ -3919,151 +3919,178 @@ export const ModuleEditor = () => {
                   {/* In-Canvas Title Header (Conditional for builder canvas) */}
                   {activeTab === 'builder' && (
                     <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm px-8 py-5 flex items-center justify-between gap-4 z-20 relative select-none">
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId('page-header');
-                        }}
-                        className={cn(
-                          "flex items-center gap-3.5 cursor-pointer group px-3 py-2 rounded-2xl transition-all border border-transparent flex-shrink-0",
-                          selectedId === 'page-header' 
-                            ? "bg-indigo-500/10 border-indigo-500/30 ring-4 ring-indigo-500/5 shadow-sm" 
-                            : "hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:border-zinc-100 dark:hover:border-zinc-800"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md shadow-zinc-200/50 dark:shadow-none border border-transparent",
-                          selectedId === 'page-header' 
-                            ? "bg-indigo-600 text-white shadow-indigo-500/20" 
-                            : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/5 group-hover:border-indigo-500/10"
-                        )}>
-                          <DynamicIcon name={moduleSettings.iconName || 'Box'} size={20} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h2 className="text-base font-black text-zinc-900 dark:text-white tracking-tight truncate leading-none">
-                              {moduleSettings.titleFieldId 
-                                ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Page Title') 
-                                : 'Page Title'}
-                            </h2>
-                            <Settings2 size={13} className={cn("transition-all duration-300 flex-shrink-0", selectedId === 'page-header' ? "opacity-100 text-indigo-500 transform rotate-45" : "opacity-0 group-hover:opacity-100 text-zinc-400")} />
+                      {isLoading ? (
+                        <div className="flex items-center gap-3.5 px-3 py-2 rounded-2xl flex-shrink-0 animate-pulse">
+                          <div className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="h-4 w-28 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                            <div className="h-2 w-16 bg-zinc-200/60 dark:bg-zinc-800/60 rounded-sm" />
                           </div>
-                          <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest mt-1 block">Record Header Title</span>
                         </div>
-                      </div>
+                      ) : (
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('page-header');
+                          }}
+                          className={cn(
+                            "flex items-center gap-3.5 cursor-pointer group px-3 py-2 rounded-2xl transition-all border border-transparent flex-shrink-0",
+                            selectedId === 'page-header' 
+                              ? "bg-indigo-500/10 border-indigo-500/30 ring-4 ring-indigo-500/5 shadow-sm" 
+                              : "hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:border-zinc-100 dark:hover:border-zinc-800"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md shadow-zinc-200/50 dark:shadow-none border border-transparent",
+                            selectedId === 'page-header' 
+                              ? "bg-indigo-600 text-white shadow-indigo-500/20" 
+                              : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/5 group-hover:border-indigo-500/10"
+                          )}>
+                            <DynamicIcon name={moduleSettings.iconName || 'Box'} size={20} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base font-black text-zinc-900 dark:text-white tracking-tight truncate leading-none">
+                                {moduleSettings.titleFieldId 
+                                  ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Page Title') 
+                                  : 'Page Title'}
+                              </h2>
+                              <Settings2 size={13} className={cn("transition-all duration-300 flex-shrink-0", selectedId === 'page-header' ? "opacity-100 text-indigo-500 transform rotate-45" : "opacity-0 group-hover:opacity-100 text-zinc-400")} />
+                            </div>
+                            <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest mt-1 block">Record Header Title</span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Detail Settings Configuration trigger */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId('__detail_settings');
-                        }}
-                        className={cn(
-                          "flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm border",
-                          selectedId === '__detail_settings'
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20"
-                            : "bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
-                        )}
-                      >
-                        <Settings size={12} className={cn("transition-transform duration-500", selectedId === '__detail_settings' ? "rotate-90" : "")} />
-                        <span>Detail Settings</span>
-                      </button>
+                      {isLoading ? (
+                        <div className="h-9 w-28 bg-zinc-200 dark:bg-zinc-800 rounded-2xl animate-pulse" />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('__detail_settings');
+                          }}
+                          className={cn(
+                            "flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm border",
+                            selectedId === '__detail_settings'
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20"
+                              : "bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                          )}
+                        >
+                          <Settings size={12} className={cn("transition-transform duration-500", selectedId === '__detail_settings' ? "rotate-90" : "")} />
+                          <span>Detail Settings</span>
+                        </button>
+                      )}
                     </div>
                   )}
 
                   {/* Dynamic horizontal section tabs bar inside the builder canvas card */}
                   {activeTab === 'builder' && (interfaceSettings.detail?.layoutType === 'tabs' || !interfaceSettings.detail?.layoutType) && (
                     <div className="px-8 py-3 bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none">
-                      <div className="flex-1 flex items-center gap-2 overflow-hidden">
-                        <Reorder.Group 
-                          axis="x" 
-                          values={tabs} 
-                          onReorder={setTabs}
-                          className="flex items-center gap-1.5"
-                        >
-                          {tabs.map((tab) => (
-                            <Reorder.Item 
-                              key={tab.id} 
-                              value={tab}
-                              dragListener={isEditingTab !== tab.id}
-                              className="group relative flex-shrink-0"
+                      {isLoading ? (
+                        <>
+                          <div className="flex-grow flex items-center gap-2 overflow-hidden animate-pulse">
+                            {[1, 2, 3].map((i) => (
+                              <div key={i} className="h-7.5 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-xl flex-shrink-0" />
+                            ))}
+                          </div>
+                          <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl flex-shrink-0 animate-pulse" />
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex-1 flex items-center gap-2 overflow-hidden">
+                            <Reorder.Group 
+                              axis="x" 
+                              values={tabs} 
+                              onReorder={setTabs}
+                              className="flex items-center gap-1.5"
                             >
-                              {isEditingTab === tab.id ? (
-                                <input
-                                  autoFocus
-                                  className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
-                                  value={tab.label}
-                                  onChange={(e) => {
-                                    const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                                    setTabs(newTabs);
-                                  }}
-                                  onBlur={() => setIsEditingTab(null)}
-                                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                                />
-                              ) : (
-                                <div className="flex items-center">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setCurrentTabId(tab.id);
-                                      setSelectedId(tab.id);
-                                    }}
-                                    onDoubleClick={() => setIsEditingTab(tab.id)}
-                                    className={cn(
-                                      "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border whitespace-nowrap",
-                                      currentTabId === tab.id
-                                        ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                        : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                                    )}
-                                  >
-                                    <span>{tab.label}</span>
-                                    {currentTabId === tab.id && (
-                                      <Settings2 
-                                        size={11} 
-                                        className="opacity-60 hover:opacity-100 transition-opacity" 
+                              {tabs.map((tab) => (
+                                <Reorder.Item 
+                                  key={tab.id} 
+                                  value={tab}
+                                  dragListener={isEditingTab !== tab.id}
+                                  className="group relative flex-shrink-0"
+                                >
+                                  {isEditingTab === tab.id ? (
+                                    <input
+                                      autoFocus
+                                      className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
+                                      value={tab.label}
+                                      onChange={(e) => {
+                                        const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                        setTabs(newTabs);
+                                      }}
+                                      onBlur={() => setIsEditingTab(null)}
+                                      onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                    />
+                                  ) : (
+                                    <div className="flex items-center">
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          setCurrentTabId(tab.id);
                                           setSelectedId(tab.id);
                                         }}
-                                      />
-                                    )}
-                                  </button>
-                                  {tabs.length > 1 && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const newTabs = tabs.filter(t => t.id !== tab.id);
-                                        setTabs(newTabs);
-                                        if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                        setLayout(layout.filter(field => field.tabId !== tab.id));
-                                      }}
-                                      className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
-                                    >
-                                      <X size={8} />
-                                    </button>
+                                        onDoubleClick={() => setIsEditingTab(tab.id)}
+                                        className={cn(
+                                          "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border whitespace-nowrap",
+                                          currentTabId === tab.id
+                                            ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                            : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                                        )}
+                                      >
+                                        <span>{tab.label}</span>
+                                        {currentTabId === tab.id && (
+                                          <Settings2 
+                                            size={11} 
+                                            className="opacity-60 hover:opacity-100 transition-opacity" 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedId(tab.id);
+                                            }}
+                                          />
+                                        )}
+                                      </button>
+                                      {tabs.length > 1 && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const newTabs = tabs.filter(t => t.id !== tab.id);
+                                            setTabs(newTabs);
+                                            if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
+                                            setLayout(layout.filter(field => field.tabId !== tab.id));
+                                          }}
+                                          className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                        >
+                                          <X size={8} />
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
-                                </div>
-                              )}
-                            </Reorder.Item>
-                          ))}
-                        </Reorder.Group>
-                        
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newId = `tab-${Date.now()}`;
-                            setTabs([...tabs, { id: newId, label: 'New Section' }]);
-                            setCurrentTabId(newId);
-                            setIsEditingTab(newId);
-                            setSelectedId(newId);
-                          }}
-                          className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0 shadow-sm"
-                          title="Add Section Tab"
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
+                                </Reorder.Item>
+                              ))}
+                            </Reorder.Group>
+                            
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newId = `tab-${Date.now()}`;
+                                setTabs([...tabs, { id: newId, label: 'New Section' }]);
+                                setCurrentTabId(newId);
+                                setIsEditingTab(newId);
+                                setSelectedId(newId);
+                              }}
+                              className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0 shadow-sm"
+                              title="Add Section Tab"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -4073,87 +4100,100 @@ export const ModuleEditor = () => {
                     {/* Sidebar Vertical Tabs list if layoutType === 'split' */}
                     {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'split' && (
                       <div className="w-60 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-5 space-y-4 flex flex-col justify-between select-none">
-                        <div className="space-y-4">
-                          <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
-                          <Reorder.Group 
-                            axis="y" 
-                            values={tabs} 
-                            onReorder={setTabs}
-                            className="space-y-1.5"
-                          >
-                            {tabs.map((tab) => (
-                              <Reorder.Item 
-                                key={tab.id} 
-                                value={tab}
-                                dragListener={isEditingTab !== tab.id}
-                                className="group relative"
+                        {isLoading ? (
+                          <div className="space-y-4 animate-pulse w-full">
+                            <div className="h-3 w-16 bg-zinc-200 dark:bg-zinc-800 rounded px-2 ml-2" />
+                            <div className="space-y-2">
+                              {[1, 2, 3].map(i => (
+                                <div key={i} className="h-9 w-full bg-zinc-200 dark:bg-zinc-800 rounded-xl" />
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="space-y-4">
+                              <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
+                              <Reorder.Group 
+                                axis="y" 
+                                values={tabs} 
+                                onReorder={setTabs}
+                                className="space-y-1.5"
                               >
-                                {isEditingTab === tab.id ? (
-                                  <input
-                                    autoFocus
-                                    className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none shadow-lg text-zinc-900 dark:text-white"
-                                    value={tab.label}
-                                    onChange={(e) => {
-                                      const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                                      setTabs(newTabs);
-                                    }}
-                                    onBlur={() => setIsEditingTab(null)}
-                                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                                  />
-                                ) : (
-                                  <div className="flex items-center">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setCurrentTabId(tab.id);
-                                        setSelectedId(tab.id);
-                                      }}
-                                      onDoubleClick={() => setIsEditingTab(tab.id)}
-                                      className={cn(
-                                        "w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group",
-                                        currentTabId === tab.id
-                                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                      )}
-                                    >
-                                      <span className="truncate">{tab.label}</span>
-                                      <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", currentTabId === tab.id ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
-                                    </button>
-                                    {tabs.length > 1 && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const newTabs = tabs.filter(t => t.id !== tab.id);
+                                {tabs.map((tab) => (
+                                  <Reorder.Item 
+                                    key={tab.id} 
+                                    value={tab}
+                                    dragListener={isEditingTab !== tab.id}
+                                    className="group relative"
+                                  >
+                                    {isEditingTab === tab.id ? (
+                                      <input
+                                        autoFocus
+                                        className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none shadow-lg text-zinc-900 dark:text-white"
+                                        value={tab.label}
+                                        onChange={(e) => {
+                                          const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
                                           setTabs(newTabs);
-                                          if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                          setLayout(layout.filter(field => field.tabId !== tab.id));
                                         }}
-                                        className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
-                                      >
-                                        <X size={8} />
-                                      </button>
+                                        onBlur={() => setIsEditingTab(null)}
+                                        onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                      />
+                                    ) : (
+                                      <div className="flex items-center">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setCurrentTabId(tab.id);
+                                            setSelectedId(tab.id);
+                                          }}
+                                          onDoubleClick={() => setIsEditingTab(tab.id)}
+                                          className={cn(
+                                            "w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group",
+                                            currentTabId === tab.id
+                                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                          )}
+                                        >
+                                          <span className="truncate">{tab.label}</span>
+                                          <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", currentTabId === tab.id ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
+                                        </button>
+                                        {tabs.length > 1 && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const newTabs = tabs.filter(t => t.id !== tab.id);
+                                              setTabs(newTabs);
+                                              if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
+                                              setLayout(layout.filter(field => field.tabId !== tab.id));
+                                            }}
+                                            className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                          >
+                                            <X size={8} />
+                                          </button>
+                                        )}
+                                      </div>
                                     )}
-                                  </div>
-                                )}
-                              </Reorder.Item>
-                            ))}
-                          </Reorder.Group>
-                        </div>
-                        
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newId = `tab-${Date.now()}`;
-                            setTabs([...tabs, { id: newId, label: 'New Section' }]);
-                            setCurrentTabId(newId);
-                            setIsEditingTab(newId);
-                            setSelectedId(newId);
-                          }}
-                          className="w-full py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 shadow-sm font-bold text-xs uppercase tracking-widest"
-                        >
-                          <Plus size={14} />
-                          <span>Add Section</span>
-                        </button>
+                                  </Reorder.Item>
+                                ))}
+                              </Reorder.Group>
+                            </div>
+                            
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newId = `tab-${Date.now()}`;
+                                setTabs([...tabs, { id: newId, label: 'New Section' }]);
+                                setCurrentTabId(newId);
+                                setIsEditingTab(newId);
+                                setSelectedId(newId);
+                              }}
+                              className="w-full py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 shadow-sm font-bold text-xs uppercase tracking-widest"
+                            >
+                              <Plus size={14} />
+                              <span>Add Section</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -5574,7 +5614,56 @@ export const ModuleEditor = () => {
                     {/* Workflow Sidebar Preview Panel (Embedded inside the Main Canvas Card) */}
                     {(interfaceSettings.detail as any)?.showWorkflow && activeTab === 'builder' && (
                       <div className="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 flex flex-col flex-shrink-0 relative z-20 overflow-hidden select-none min-h-[800px]">
-                        {/* Status Header */}
+                        {isLoading ? (
+                          <div className="flex flex-col h-full animate-pulse w-full">
+                            {/* Skeleton Status Header */}
+                            <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                                <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                              </div>
+                              <div className="h-4.5 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+                            </div>
+
+                            {/* Skeleton Active Stage Indigo Banner */}
+                            <div className="p-5 bg-gradient-to-br from-indigo-500/5 to-transparent border-b border-zinc-100 dark:border-zinc-900/50 space-y-2">
+                              <div className="h-2 w-12 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                              <div className="h-4 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                              <div className="h-3 w-48 bg-zinc-200/60 dark:bg-zinc-800/60 rounded" />
+                            </div>
+
+                            {/* Pipeline Stepper Skeleton */}
+                            <div className="flex-grow p-5 space-y-6">
+                              <div className="relative pl-6 space-y-6">
+                                {/* Vertical Line Connector */}
+                                <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-zinc-200 dark:bg-zinc-800" />
+                                {[1, 2, 3, 4].map(i => (
+                                  <div key={i} className="relative space-y-2 pl-2">
+                                    {/* Stepper Dot Skeleton */}
+                                    <div className="absolute -left-[22px] top-1 z-10 w-5.5 h-5.5 rounded-full bg-zinc-200 dark:bg-zinc-800 border-4 border-white dark:border-zinc-950" />
+                                    <div className="h-3.5 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                    <div className="h-2.5 w-10 bg-zinc-200/60 dark:bg-zinc-800/60 rounded" />
+                                    {i === 2 && (
+                                      <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800/80 rounded-2xl space-y-2 shadow-sm mt-2 ml-2">
+                                        <div className="h-2.5 w-16 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                        <div className="space-y-1.5 pt-1">
+                                          {[1, 2].map(j => (
+                                            <div key={j} className="flex items-center gap-2">
+                                              <div className="w-3.5 h-3.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950" />
+                                              <div className="h-2 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Status Header */}
                         <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-sm flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
                             <span className="relative flex h-2 w-2">
@@ -5790,6 +5879,8 @@ export const ModuleEditor = () => {
                             </>
                           );
                         })()}
+                          </>
+                        )}
                       </div>
                     )}
 
