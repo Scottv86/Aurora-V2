@@ -27,19 +27,20 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const localRowsRef = React.useRef(localRows);
 
   // Sync with external value prop
   React.useEffect(() => {
     setLocalRows(value);
+    localRowsRef.current = value;
   }, [value]);
 
   const triggerBlockSave = (newRows: any[]) => {
-    if (JSON.stringify(newRows) !== JSON.stringify(value)) {
-      onChange?.(newRows);
-      // Trigger an immediate server-side save for collection changes
-      onBlur?.();
-    }
+    // Always pass the explicit newRows to onChange and onBlur
+    onChange?.(newRows);
+    onBlur?.();
   };
+
 
   const handleAdd = () => {
     if (readOnly) return;
@@ -53,12 +54,16 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       localData: newRow,
       localSchema: field.fields,
       onSaveLocal: (updatedRow) => {
-        const finalRows = [...localRows, updatedRow];
+        // Use the ref to get the latest rows (avoids stale closure)
+        const finalRows = [...localRowsRef.current, updatedRow];
+        localRowsRef.current = finalRows;
         setLocalRows(finalRows);
         triggerBlockSave(finalRows);
       }
     });
   };
+
+
 
   const handleRemove = (index: number) => {
     if (readOnly) return;
@@ -68,15 +73,16 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
 
   const confirmDelete = () => {
     if (deletingIndex === null) return;
-    const newRows = localRows.filter((_, i) => i !== deletingIndex);
+    const newRows = localRowsRef.current.filter((_, i) => i !== deletingIndex);
     setLocalRows(newRows);
+    localRowsRef.current = newRows;
     triggerBlockSave(newRows);
     setShowDeleteModal(false);
     setDeletingIndex(null);
   };
 
   const handleDrillDown = (index: number, isReadOnly: boolean = false) => {
-    const row = localRows[index];
+    const row = localRowsRef.current[index];
     pushModal({
       moduleId: 'virtual',
       type: isReadOnly ? 'view' : 'edit',
@@ -84,13 +90,17 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       localData: row,
       localSchema: field.fields,
       onSaveLocal: isReadOnly ? undefined : (updatedRow) => {
-        const newRows = [...localRows];
+        // Use the ref to get the latest rows (avoids stale closure)
+        const newRows = [...localRowsRef.current];
         newRows[index] = updatedRow;
+        localRowsRef.current = newRows;
         setLocalRows(newRows);
         triggerBlockSave(newRows);
       }
     });
   };
+
+
 
   // Ensure all rows have a stable ID for the Table component
   const rowsWithIds = useMemo(() => {
@@ -117,57 +127,65 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   const columns = useMemo(() => [
     ...(field.fields || []).map((subField: any) => ({
       header: subField.label,
-      accessor: (row: any) => (
-        <div className="text-sm text-zinc-700 dark:text-zinc-300 font-semibold tracking-tight">
-          {row[subField.id] ? String(row[subField.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
-        </div>
-      ),
+      accessor: (row: any) => {
+        const activeDensity = field.density || 'standard';
+        const cellFontClass = activeDensity === 'compact' ? 'text-xs' : 'text-sm';
+        return (
+          <div className={cn(cellFontClass, "text-zinc-700 dark:text-zinc-300 font-semibold tracking-tight")}>
+            {row[subField.id] ? String(row[subField.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
+          </div>
+        );
+      },
       sortable: true,
       sortKey: subField.id
     })),
     {
       header: '',
       className: 'text-right',
-      accessor: (row: any) => (
-        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDrillDown(row._originalIndex, true);
-            }} 
-            className="p-2.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all"
-            title="View"
-          >
-            <Eye size={16} />
-          </button>
-          {!readOnly && (
-            <>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDrillDown(row._originalIndex);
-                }} 
-                className="p-2.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all"
-                title="Edit"
-              >
-                <Edit2 size={16} />
-              </button>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRemove(row._originalIndex);
-                }} 
-                className="p-2.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all"
-                title="Remove"
-              >
-                <Trash2 size={16} />
-              </button>
-            </>
-          )}
-        </div>
-      )
+      accessor: (row: any) => {
+        const activeDensity = field.density || 'standard';
+        const buttonPaddingClass = activeDensity === 'compact' ? 'p-1.5' : 'p-2.5';
+        return (
+          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDrillDown(row._originalIndex, true);
+              }} 
+              className={cn(buttonPaddingClass, "text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all")}
+              title="View"
+            >
+              <Eye size={16} />
+            </button>
+            {!readOnly && (
+              <>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDrillDown(row._originalIndex);
+                  }} 
+                  className={cn(buttonPaddingClass, "text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-2xl transition-all")}
+                  title="Edit"
+                >
+                  <Edit2 size={16} />
+                </button>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemove(row._originalIndex);
+                  }} 
+                  className={cn(buttonPaddingClass, "text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all")}
+                  title="Remove"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }
     }
-  ], [field.fields, readOnly, localRows]);
+  ], [field.fields, readOnly, localRows, field.density]);
 
   // Default to table if not specified
   const displayMode = field.variant || 'table';
@@ -178,8 +196,9 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       tabIndex={0} 
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          triggerBlockSave(localRows);
-          onBlur?.();
+          // No-op: saves are handled explicitly by triggerBlockSave when rows change.
+          // We intentionally do NOT fire a save here to avoid overwriting server-generated
+          // values (like autonumbers) with stale local state.
         }
       }}
     >
@@ -277,6 +296,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
             emptyMessage={searchQuery ? 'No items match your search.' : `Empty Collection. ${!readOnly ? 'Create your first record to begin.' : ''}`}
             className="bg-transparent dark:bg-transparent border-none"
             noContainer={true}
+            density={field.density || 'standard'}
           />
         </div>
       )}
