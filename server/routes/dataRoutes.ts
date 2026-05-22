@@ -5,6 +5,59 @@ import { RLS_CONTEXT } from '../lib/prisma';
 
 const router = express.Router();
 
+function processAutonumbers(dataObject: any, fields: any[], updatedConfig: any): boolean {
+  if (!dataObject || typeof dataObject !== 'object' || !fields || !Array.isArray(fields)) return false;
+  let changed = false;
+
+  const getNextAutonumber = (field: any) => {
+    const fieldKey = `_autonumber_${field.id}`;
+    const currentNum = updatedConfig[fieldKey] !== undefined ? updatedConfig[fieldKey] : (field.autonumberStart || 1);
+    const prefix = field.autonumberPrefix || '';
+    const suffix = field.autonumberSuffix || '';
+    const digits = field.autonumberDigits || 0;
+    const formattedNum = currentNum.toString().padStart(digits, '0');
+    
+    updatedConfig[fieldKey] = currentNum + 1;
+    return `${prefix}${formattedNum}${suffix}`;
+  };
+
+  fields.forEach((field: any) => {
+    if (field.type === 'autonumber') {
+      if (!dataObject[field.id]) {
+        dataObject[field.id] = getNextAutonumber(field);
+        changed = true;
+      }
+    } else if (field.type === 'repeatableGroup') {
+      const arrayVal = dataObject[field.id];
+      if (Array.isArray(arrayVal)) {
+        arrayVal.forEach((item: any) => {
+          if (item && typeof item === 'object') {
+            const itemChanged = processAutonumbers(item, field.fields || [], updatedConfig);
+            if (itemChanged) {
+              changed = true;
+            }
+          }
+        });
+      }
+    } else if (field.fields && Array.isArray(field.fields)) {
+      const nestedObj = dataObject[field.id];
+      if (nestedObj && typeof nestedObj === 'object' && !Array.isArray(nestedObj)) {
+        const nestedChanged = processAutonumbers(nestedObj, field.fields, updatedConfig);
+        if (nestedChanged) {
+          changed = true;
+        }
+      } else {
+        const flatChanged = processAutonumbers(dataObject, field.fields, updatedConfig);
+        if (flatChanged) {
+          changed = true;
+        }
+      }
+    }
+  });
+
+  return changed;
+}
+
 // GET all modules for this tenant
 router.get('/modules', async (req: TenantRequest, res) => {
   try {
@@ -284,26 +337,11 @@ router.post('/records', async (req: TenantRequest, res) => {
         configChanged = true;
       }
 
-      // 2. Handle specific 'autonumber' fields in layout
-      const autonumberFields = allFields.filter((f: any) => f.type === 'autonumber');
-
-      autonumberFields.forEach((field: any) => {
-        // Only generate if not already provided (e.g. by a migration or manual override)
-        if (!finalData[field.id]) {
-          const fieldKey = `_autonumber_${field.id}`;
-          const currentNum = updatedConfig[fieldKey] !== undefined ? updatedConfig[fieldKey] : (field.autonumberStart || 1);
-          
-          const prefix = field.autonumberPrefix || '';
-          const suffix = field.autonumberSuffix || '';
-          const digits = field.autonumberDigits || 0;
-          
-          const formattedNum = currentNum.toString().padStart(digits, '0');
-          finalData[field.id] = `${prefix}${formattedNum}${suffix}`;
-          
-          updatedConfig[fieldKey] = currentNum + 1;
-          configChanged = true;
-        }
-      });
+      // 2. Handle specific 'autonumber' fields in layout (including repeatable groups)
+      const autonumbersChanged = processAutonumbers(finalData, config.layout || [], updatedConfig);
+      if (autonumbersChanged) {
+        configChanged = true;
+      }
 
       if (configChanged) {
         await db.module.update({
@@ -391,6 +429,19 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     
     if (module) {
       const config = module.config as any;
+      let configChanged = false;
+      const updatedConfig = { ...config };
+
+      // Process autonumbers recursively (including repeatable groups)
+      configChanged = processAutonumbers(updatedData, config.layout || [], updatedConfig);
+
+      if (configChanged) {
+        await db.module.update({
+          where: { id: module.id },
+          data: { config: updatedConfig }
+        });
+      }
+
       const layout = config.layout || [];
       const flattenFields = (fields: any[]): any[] => {
         const result: any[] = [];
@@ -507,6 +558,19 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
 
     if (module) {
       const config = module.config as any;
+      let configChanged = false;
+      const updatedConfig = { ...config };
+
+      // Process autonumbers recursively (including repeatable groups)
+      configChanged = processAutonumbers(updatedData, config.layout || [], updatedConfig);
+
+      if (configChanged) {
+        await db.module.update({
+          where: { id: module.id },
+          data: { config: updatedConfig }
+        });
+      }
+
       const layout = config.layout || [];
       const flattenFields = (fields: any[]): any[] => {
         const result: any[] = [];

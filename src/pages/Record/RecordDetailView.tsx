@@ -596,7 +596,14 @@ export const RecordDetailView = () => {
       
       // Final sync with server data - merge with current local state to preserve in-flight edits
       setRecord(updatedRecord);
-      setEditData(prev => ({ ...updatedRecord, ...prev }));
+      setEditData(prev => {
+        if (!fieldIdBeingSaved) return updatedRecord;
+        return {
+          ...updatedRecord,
+          ...prev,
+          [fieldIdBeingSaved]: updatedRecord[fieldIdBeingSaved]
+        };
+      });
 
       if (recordId && updatedRecord._record_key) {
         setBreadcrumbOverride(recordId, updatedRecord._record_key);
