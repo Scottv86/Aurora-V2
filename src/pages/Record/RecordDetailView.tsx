@@ -42,6 +42,7 @@ import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPrevi
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
 import { RecordDetailSkeleton } from '../../components/Platform/RecordDetailSkeleton';
+import { DynamicIcon } from '../../components/UI/DynamicIcon';
 
 
 interface WorkflowState {
@@ -1234,7 +1235,12 @@ export const RecordDetailView = () => {
                             : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
                         )}
                       >
-                        <span className="truncate">{tab.label}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {interfaceSettings.detail?.showTabIcons && (
+                            <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                          )}
+                          <span className="truncate">{tab.label}</span>
+                        </div>
                         <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
                       </button>
                     );
@@ -1254,7 +1260,11 @@ export const RecordDetailView = () => {
               {visibleTabs.map((tab: any) => (
                 <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
                   <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    {interfaceSettings.detail?.showTabIcons ? (
+                      <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    )}
                     <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
                   </div>
                   {renderFieldsGrid(tab.id)}
@@ -1295,12 +1305,15 @@ export const RecordDetailView = () => {
                         key={tab.id}
                         onClick={() => setActiveTabId(tab.id)}
                         className={cn(
-                          "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                          "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2",
                           activeTabId === tab.id
                             ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
                             : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                         )}
                       >
+                        {interfaceSettings.detail?.showTabIcons && (
+                          <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                        )}
                         {tab.label}
                       </button>
                     ))}

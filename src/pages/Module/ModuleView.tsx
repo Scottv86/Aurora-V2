@@ -28,6 +28,7 @@ import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
+import { DynamicIcon } from '../../components/UI/DynamicIcon';
 
 import { useModalStack } from '../../context/ModalStackContext';
 
@@ -1240,12 +1241,15 @@ export const ModuleView = () => {
                         key={tab.id}
                         onClick={() => setActiveTabId(tab.id)}
                         className={cn(
-                          "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap",
+                          "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2",
                           activeTabId === tab.id
                             ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
                             : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                         )}
                       >
+                        {interfaceSettings.detail?.showTabIcons && (
+                          <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="shrink-0" />
+                        )}
                         {tab.label}
                       </button>
                     ))}

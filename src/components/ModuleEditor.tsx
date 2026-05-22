@@ -1452,7 +1452,8 @@ export const ModuleEditor = () => {
     detail: {
       layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar',
       density: 'standard' as 'compact' | 'standard' | 'spacious',
-      showWorkflow: true
+      showWorkflow: true,
+      showTabIcons: false
     },
     filters: [] as { fieldId: string, type: string }[],
     actions: [
@@ -1986,7 +1987,8 @@ export const ModuleEditor = () => {
             ...data.interfaceSettings,
             detail: {
               ...data.interfaceSettings.detail,
-              showWorkflow: data.interfaceSettings.detail?.showWorkflow !== false
+              showWorkflow: data.interfaceSettings.detail?.showWorkflow !== false,
+              showTabIcons: !!data.interfaceSettings.detail?.showTabIcons
             }
           });
         }
@@ -3837,6 +3839,9 @@ export const ModuleEditor = () => {
                                         : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
                                     )}
                                   >
+                                    {interfaceSettings.detail?.showTabIcons && (
+                                      <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                                    )}
                                     {tab.label}
                                     {currentTabId === tab.id && (
                                       <Settings2 
@@ -4051,6 +4056,9 @@ export const ModuleEditor = () => {
                                             : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                                         )}
                                       >
+                                        {interfaceSettings.detail?.showTabIcons && (
+                                          <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                                        )}
                                         <span>{tab.label}</span>
                                         {currentTabId === tab.id && (
                                           <Settings2 
@@ -4163,7 +4171,12 @@ export const ModuleEditor = () => {
                                               : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
                                           )}
                                         >
-                                          <span className="truncate">{tab.label}</span>
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            {interfaceSettings.detail?.showTabIcons && (
+                                              <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                                            )}
+                                            <span className="truncate">{tab.label}</span>
+                                          </div>
                                           <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", currentTabId === tab.id ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
                                         </button>
                                         {tabs.length > 1 && (
@@ -4536,7 +4549,11 @@ export const ModuleEditor = () => {
                               >
                                 <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 select-none">
                                   <div className="flex items-center gap-3">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                                    {interfaceSettings.detail?.showTabIcons ? (
+                                      <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                                    ) : (
+                                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                                    )}
                                     <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
                                   </div>
                                   <button
@@ -6055,12 +6072,15 @@ export const ModuleEditor = () => {
                               key={tab.id}
                               onClick={() => setCurrentTabId(tab.id)}
                               className={cn(
-                                "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                                "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2",
                                 currentTabId === tab.id 
                                   ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
                                   : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                               )}
                             >
+                              {interfaceSettings.detail?.showTabIcons && (
+                                <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                              )}
                               {tab.label}
                             </button>
                           ))}
@@ -8667,6 +8687,33 @@ export const ModuleEditor = () => {
                           </button>
                         </div>
                       </div>
+
+                      {/* Tab Icons Toggle */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between px-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest font-black block">Show Tab Icons</label>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5">Display icons on detail section tabs.</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setInterfaceSettings(prev => ({
+                              ...prev,
+                              detail: { ...prev.detail, showTabIcons: !prev.detail.showTabIcons }
+                            }))}
+                            className={cn(
+                              "w-10 h-6 rounded-full p-0.5 transition-all shrink-0 relative flex items-center",
+                              interfaceSettings.detail.showTabIcons ? "bg-indigo-600 justify-end" : "bg-zinc-200 dark:bg-zinc-800 justify-start"
+                            )}
+                          >
+                            <motion.div 
+                              layout 
+                              className="w-5 h-5 bg-white rounded-full shadow-sm" 
+                              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                            />
+                          </button>
+                        </div>
+                      </div>
                     </motion.div>
                   ) : selectedId === '__table_settings' && activeViewMode === 'master' ? (
                     <motion.div 
@@ -11231,6 +11278,16 @@ export const ModuleEditor = () => {
                           placeholder="e.g. General"
                         />
                       </div>
+
+                      {interfaceSettings.detail?.showTabIcons && (
+                        <div className="space-y-2">
+                          <IconPicker 
+                            label="Tab Icon"
+                            value={selectedTab.iconName || 'Layout'}
+                            onChange={(iconName) => updateTab(selectedTab.id, { iconName })}
+                          />
+                        </div>
+                      )}
 
                       <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <VisibilityRuleEditor 

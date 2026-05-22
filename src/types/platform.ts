@@ -185,6 +185,7 @@ export interface LookupFilter {
 export interface Tab {
   id: string;
   label: string;
+  iconName?: string;
   visibilityRule?: VisibilityRule;
 }
 
