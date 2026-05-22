@@ -134,7 +134,8 @@ const App = () => {
                 <Route path="modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
                 
                 {/* Platform Operations */}
-                <Route path="queue" element={<WorkQueue />} />
+                <Route path="my-work" element={<WorkQueue />} />
+                <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
                 <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
                 <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
                 <Route path="analytics" element={<Analytics />} />

@@ -10,7 +10,7 @@ import {
   Zap,
   Database
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -22,7 +22,7 @@ import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 import { Skeleton } from './UI/Skeleton';
 
 export const WorkQueue = () => {
-  const { tenant, isLoading: platformLoading } = usePlatform();
+  const { tenant, user: platformUser, isLoading: platformLoading, members } = usePlatform();
   const [page, setPage] = useState(1);
   const { data: cases, loading: casesLoading, hasMore, mutate: mutateCases } = useData('records', { page, limit: 20, append: true });
   const { data: modules, loading: modulesLoading } = useData('modules');
@@ -32,8 +32,39 @@ export const WorkQueue = () => {
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'documents'>('details');
   const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
+  const [assigneeFilter, setAssigneeFilter] = useState<'mine' | 'unassigned' | 'all'>('mine');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loading = (casesLoading && page === 1) || modulesLoading;
+
+  const myMemberId = platformUser?.memberId || platformUser?.cuid;
+
+  const filteredCases = useMemo(() => {
+    if (!cases) return [];
+    return cases.filter((c: any) => {
+      // Filter by module activity
+      if (!c.moduleId || !activeModuleIds.has(c.moduleId)) return false;
+
+      // Filter by assignee
+      if (assigneeFilter === 'mine') {
+        if (c.assigneeId !== myMemberId) return false;
+      } else if (assigneeFilter === 'unassigned') {
+        if (c.assigneeId) return false;
+      }
+
+      // Filter by search query
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        const matchTitle = c.title?.toLowerCase().includes(query) || false;
+        const matchId = c.id?.toLowerCase().includes(query) || false;
+        const matchModule = c.module?.toLowerCase().includes(query) || false;
+        const matchStatus = c.status?.toLowerCase().includes(query) || false;
+        if (!matchTitle && !matchId && !matchModule && !matchStatus) return false;
+      }
+
+      return true;
+    });
+  }, [cases, activeModuleIds, assigneeFilter, myMemberId, searchQuery]);
 
   useEffect(() => {
     if (!modules) return;
@@ -67,6 +98,26 @@ export const WorkQueue = () => {
     } catch (error) {
       console.error(error);
       toast.error("Failed to process case");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleUpdateCaseAssignee = async (newAssigneeId: string | null) => {
+    if (!tenant?.id || !selectedCase) return;
+    
+    setProcessing(true);
+    try {
+      await mutateCases('UPDATE', { 
+        assigneeId: newAssigneeId,
+        moduleId: selectedCase.moduleId
+      }, selectedCase.id);
+      
+      toast.success(newAssigneeId ? "Case claimed successfully" : "Case released successfully");
+      setSelectedCase((prev: any) => prev ? { ...prev, assigneeId: newAssigneeId } : null);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to update case assignee");
     } finally {
       setProcessing(false);
     }
@@ -135,18 +186,57 @@ export const WorkQueue = () => {
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-10 space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Queue</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">My work</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Manage and process active cases across all modules.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Assignee Filter Tabs */}
+          <div className="flex bg-zinc-100 dark:bg-zinc-950 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <button
+              onClick={() => setAssigneeFilter('mine')}
+              className={cn(
+                "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                assigneeFilter === 'mine' 
+                  ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-md shadow-indigo-500/5" 
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              )}
+            >
+              Assigned to me
+            </button>
+            <button
+              onClick={() => setAssigneeFilter('unassigned')}
+              className={cn(
+                "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                assigneeFilter === 'unassigned' 
+                  ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-md shadow-indigo-500/5" 
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              )}
+            >
+              Unassigned
+            </button>
+            <button
+              onClick={() => setAssigneeFilter('all')}
+              className={cn(
+                "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                assigneeFilter === 'all' 
+                  ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-md shadow-indigo-500/5" 
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              )}
+            >
+              All cases
+            </button>
+          </div>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
             <input 
               type="text" 
               placeholder="Filter cases..." 
-              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500 w-64"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500 w-64 transition-all"
             />
           </div>
           <button className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
@@ -157,7 +247,7 @@ export const WorkQueue = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-4">
-          {cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).length > 0 ? cases.filter(c => c.moduleId && activeModuleIds.has(c.moduleId)).map((c) => (
+          {filteredCases.length > 0 ? filteredCases.map((c) => (
             <div
               key={c.id}
               onClick={() => setSelectedCase(c)}
@@ -191,13 +281,39 @@ export const WorkQueue = () => {
                       c.priority === 'Medium' ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
                     )}>{c.priority}</p>
                   </div>
+                  {/* Assignee display in row */}
+                  <div className="text-right min-w-[100px]">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Assignee</p>
+                    {(() => {
+                      const caseAssignee = (members || []).find(m => m.id === c.assigneeId);
+                      if (caseAssignee) {
+                        return (
+                          <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                            {caseAssignee.avatarUrl ? (
+                              <img src={caseAssignee.avatarUrl} alt={caseAssignee.name} className="w-4 h-4 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-[8px] font-black text-indigo-500">
+                                {caseAssignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </div>
+                            )}
+                            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300 max-w-[80px] truncate">{caseAssignee.name}</span>
+                          </div>
+                        );
+                      }
+                      return <span className="text-xs text-zinc-400 italic font-medium">Unassigned</span>;
+                    })()}
+                  </div>
                   <ChevronRight size={16} className="text-zinc-300 dark:text-zinc-700 group-hover:text-zinc-500 dark:group-hover:text-zinc-400 transition-colors" />
                 </div>
               </div>
             </div>
           )) : (
             <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center">
-              <p className="text-zinc-500">No active cases found in the queue.</p>
+              <p className="text-zinc-500">
+                {assigneeFilter === 'mine' ? 'No cases assigned to you.' :
+                 assigneeFilter === 'unassigned' ? 'No unassigned cases.' :
+                 'No cases found.'}
+              </p>
             </div>
           )}
           
@@ -275,6 +391,29 @@ export const WorkQueue = () => {
                           {selectedCase.createdAt ? new Date(selectedCase.createdAt).toLocaleString() : selectedCase.time}
                         </span>
                       </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-500">Assignee</span>
+                        {(() => {
+                          const caseAssignee = (members || []).find(m => m.id === selectedCase.assigneeId);
+                          if (caseAssignee) {
+                            return (
+                              <span className="text-zinc-900 dark:text-white font-medium flex items-center gap-2">
+                                {caseAssignee.avatarUrl ? (
+                                  <img src={caseAssignee.avatarUrl} alt={caseAssignee.name} className="w-4 h-4 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-[8px] font-black text-indigo-500">
+                                    {caseAssignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                  </div>
+                                )}
+                                {caseAssignee.name}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-zinc-400 dark:text-zinc-600 font-medium italic">Unassigned</span>
+                          );
+                        })()}
+                      </div>
                     </div>
 
                     <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
@@ -292,6 +431,38 @@ export const WorkQueue = () => {
                           <span>Generate</span>
                         </button>
                       </div>
+
+                      {/* Claim / Release Case Button */}
+                      {(() => {
+                        const isAssignedToMe = selectedCase.assigneeId === myMemberId;
+                        const isAssignedToOthers = selectedCase.assigneeId && !isAssignedToMe;
+                        const otherAssigneeName = isAssignedToOthers 
+                          ? (members || []).find(m => m.id === selectedCase.assigneeId)?.name || 'Someone Else'
+                          : '';
+
+                        if (isAssignedToMe) {
+                          return (
+                            <button
+                              onClick={() => handleUpdateCaseAssignee(null)}
+                              disabled={processing}
+                              className="w-full py-2 bg-rose-600/10 border border-rose-500/20 hover:bg-rose-600/20 text-rose-600 dark:text-rose-400 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2"
+                            >
+                              <span>Release Case</span>
+                            </button>
+                          );
+                        } else {
+                          return (
+                            <button
+                              onClick={() => handleUpdateCaseAssignee(myMemberId)}
+                              disabled={processing}
+                              className="w-full py-2 bg-indigo-600 text-white hover:bg-indigo-500 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/10"
+                            >
+                              <span>{isAssignedToOthers ? `Claim Case (Assigned to ${otherAssigneeName})` : 'Claim Case'}</span>
+                            </button>
+                          );
+                        }
+                      })()}
+
                       <button 
                         onClick={handleProcessCase}
                         disabled={processing || selectedCase.status === 'Completed'}
@@ -322,7 +493,7 @@ export const WorkQueue = () => {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-zinc-500">No case selected</p>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1">Select a case from the queue to view details and AI insights.</p>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1">Select a case from My work to view details and AI insights.</p>
                 </div>
               </div>
             )}

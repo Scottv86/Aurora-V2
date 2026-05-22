@@ -45,16 +45,56 @@ interface PlatformContextType {
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
 
+const fallbackContext: PlatformContextType = {
+  user: null,
+  tenant: null,
+  environment: 'DEV',
+  setEnvironment: () => {},
+  isLoading: false,
+  refetchContext: async () => {},
+  isDeveloper: false,
+  capabilities: new Set(),
+  modules: [],
+  modulesLoading: false,
+  refreshModules: async () => {},
+  menuConfig: null,
+  setMenuConfig: () => {},
+  updateMenuConfig: async () => {},
+  billingUsage: null,
+  billingLoading: false,
+  refreshBilling: async () => {},
+  updateTenant: async () => {},
+  isAIAssistantOpen: false,
+  setIsAIAssistantOpen: () => {},
+  isChatOpen: false,
+  setIsChatOpen: () => {},
+  isAppLauncherOpen: false,
+  setIsAppLauncherOpen: () => {},
+  isNotificationsOpen: false,
+  setIsNotificationsOpen: () => {},
+  breadcrumbOverrides: {},
+  setBreadcrumbOverride: () => {},
+  members: [],
+  membersLoading: false,
+  refreshMembers: async () => {},
+  teams: [],
+  teamsLoading: false,
+  refreshTeams: async () => {}
+};
+
 export const usePlatform = () => {
   const context = useContext(PlatformContext);
   if (context === undefined) {
-    throw new Error(
-      'usePlatform must be used within PlatformProvider. ' +
-      'Check if PlatformProvider is correctly wrapping the component tree in App.tsx.'
+    console.warn(
+      '[usePlatform] Warning: usePlatform was called outside of PlatformProvider. ' +
+      'Check if PlatformProvider is correctly wrapping the component tree in App.tsx. ' +
+      'Returning fallback context to prevent application crash.'
     );
+    return fallbackContext;
   }
   return context;
 };
+
 
 export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const { user: supabaseUser, loading: authLoading, session } = useAuth();

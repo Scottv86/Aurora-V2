@@ -276,6 +276,8 @@ export interface User {
   avatarUrl?: string;
   position?: string;
   capabilities?: string[];
+  memberId?: string;
+  cuid?: string;
 }
 
 export interface DocumentTemplate {

@@ -11,11 +11,9 @@ import {
   ArrowLeft, 
   ChevronRight,
   ChevronLeft,
-  Sparkles, 
   History, 
   AlertCircle, 
   GitFork,
-  ArrowRight,
   X,
   Zap,
   RefreshCw,
@@ -47,6 +45,7 @@ import { DynamicIcon } from '../../components/UI/DynamicIcon';
 
 interface WorkflowState {
   currentNodeId: string;
+  transitions?: any[];
   history: {
     nodeId: string;
     timestamp: string;
@@ -60,7 +59,7 @@ export const RecordDetailView = () => {
   const navigate = useNavigate();
   const auth = useAuth();
   const { session, user: supabaseUser } = auth;
-  const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride } = usePlatform();
+  const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members } = usePlatform();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [record, setRecord] = useState<Record<string, any> | null>(null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
@@ -98,6 +97,79 @@ export const RecordDetailView = () => {
   useEffect(() => {
     editDataRef.current = editData;
   }, [editData]);
+
+  // Dropdown menus states and refs for toolbar
+  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
+  const [showTransitionsMenu, setShowTransitionsMenu] = useState(false);
+  const [showHistoryMenu, setShowHistoryMenu] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+
+  const assigneeMenuRef = useRef<HTMLDivElement>(null);
+  const transitionsMenuRef = useRef<HTMLDivElement>(null);
+  const historyMenuRef = useRef<HTMLDivElement>(null);
+
+  // Click outside hook for toolbar dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (assigneeMenuRef.current && !assigneeMenuRef.current.contains(target)) {
+        setShowAssigneeMenu(false);
+      }
+      if (transitionsMenuRef.current && !transitionsMenuRef.current.contains(target)) {
+        setShowTransitionsMenu(false);
+      }
+      if (historyMenuRef.current && !historyMenuRef.current.contains(target)) {
+        setShowHistoryMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const currentAssignee = useMemo(() => {
+    const assigneeId = editData.assigneeId ?? record?.assigneeId;
+    if (!assigneeId) return null;
+    return (members || []).find(m => m.id === assigneeId) || null;
+  }, [editData.assigneeId, record?.assigneeId, members]);
+
+  const handleUpdateAssignee = async (newAssigneeId: string | null) => {
+    if (!tenant?.id || !moduleId || !recordId) return;
+
+    // Update local state first (optimistic update)
+    setRecord(prev => prev ? { ...prev, assigneeId: newAssigneeId } : null);
+    setEditData(prev => ({ ...prev, assigneeId: newAssigneeId }));
+    editDataRef.current = { ...editDataRef.current, assigneeId: newAssigneeId };
+
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          assigneeId: newAssigneeId
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to update assignee');
+      }
+
+      const updatedRecord = await res.json();
+      setRecord(updatedRecord);
+      setEditData(prev => ({ ...prev, ...updatedRecord }));
+      editDataRef.current = { ...editDataRef.current, ...updatedRecord };
+      toast.success(newAssigneeId ? "Record assigned successfully" : "Assignee cleared");
+    } catch (error: any) {
+      console.error("Assignee Update Error:", error);
+      toast.error(error.message || "Failed to update assignee");
+    }
+  };
 
   
 
@@ -1211,297 +1283,432 @@ export const RecordDetailView = () => {
             </div>
           </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex items-center gap-3">
+          {/* Status & Transitions Dropdown */}
+          {activeWorkflow ? (
+            <div className="relative" ref={transitionsMenuRef}>
+              {(() => {
+                const wState = record.workflowState as WorkflowState | undefined;
+                const currentNode = activeWorkflow?.nodes.find((n: any) => n.id === wState?.currentNodeId);
+
+                if (!currentNode) {
+                  return (
+                    <button
+                      onClick={handleStartWorkflow}
+                      disabled={isTransitioning}
+                      className="h-10 px-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                    >
+                      {isTransitioning ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <LucideIcons.Zap size={12} fill="currentColor" />
+                      )}
+                      <span>Initialize Workflow</span>
+                    </button>
+                  );
+                }
+
+                const transitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === wState?.currentNodeId) || [];
+
+                return (
+                  <>
+                    <button
+                      onClick={() => setShowTransitionsMenu(!showTransitionsMenu)}
+                      className="h-10 px-4 bg-indigo-500/10 dark:bg-indigo-500/5 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider relative overflow-hidden group/status"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
+                      <span>{currentNode.name}</span>
+                      <LucideIcons.ChevronDown size={14} className="text-indigo-500/70 group-hover:text-indigo-500 transition-colors" />
+                    </button>
+
+                    <AnimatePresence>
+                      {showTransitionsMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden p-1.5 space-y-0.5"
+                        >
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-2.5 py-1.5">Transitions</p>
+                          {transitions.map((edge: any) => {
+                            const targetNode = activeWorkflow?.nodes.find((n: any) => n.id === edge.target);
+                            if (!targetNode) return null;
+
+                            return (
+                              <button
+                                key={edge.id}
+                                onClick={() => {
+                                  handleStatusTransition(targetNode.name, targetNode.id);
+                                  setShowTransitionsMenu(false);
+                                }}
+                                disabled={isTransitioning}
+                                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-between group/item disabled:opacity-50"
+                              >
+                                <span>{targetNode.name}</span>
+                                <LucideIcons.ArrowRight size={12} className="text-zinc-400 group-hover/item:translate-x-0.5 transition-transform" />
+                              </button>
+                            );
+                          })}
+                          {transitions.length === 0 && (
+                            <p className="text-[10px] text-zinc-400 italic px-2.5 py-2">No available transitions</p>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
+                );
+              })()}
+            </div>
+          ) : null}
+
+          {/* Visualizer Trigger */}
+          {activeWorkflow && (
+            <button
+              onClick={() => setShowVisualizer(true)}
+              title="View Workflow Diagram"
+              className="w-10 h-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
+            >
+              <GitFork size={16} />
+            </button>
+          )}
+
+          {/* History Popover */}
+          {activeWorkflow && (
+            <div className="relative" ref={historyMenuRef}>
+              <button
+                onClick={() => setShowHistoryMenu(!showHistoryMenu)}
+                title="Workflow History"
+                className={cn(
+                  "w-10 h-10 border text-zinc-500 rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm",
+                  showHistoryMenu 
+                    ? "bg-indigo-50 dark:bg-indigo-950/20 border-indigo-500/50 text-indigo-600 dark:text-indigo-400"
+                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:text-indigo-500 dark:hover:text-indigo-400"
+                )}
+              >
+                <History size={16} />
+              </button>
+
+              <AnimatePresence>
+                {showHistoryMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col"
+                  >
+                    <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 flex items-center justify-between">
+                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Workflow History</span>
+                      <History size={12} className="text-zinc-400" />
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto p-3 space-y-4 relative before:absolute before:inset-y-3 before:left-5 before:w-px before:bg-zinc-200 dark:before:bg-zinc-800 scrollbar-thin">
+                      {(() => {
+                        const wState = record.workflowState as WorkflowState | undefined;
+                        const history = wState?.history || [];
+
+                        if (history.length === 0) {
+                          return (
+                            <p className="text-[10px] text-zinc-400 italic text-center py-4 pl-4">No history available</p>
+                          );
+                        }
+
+                        return history.map((h, i) => {
+                          const node = activeWorkflow?.nodes?.find((n: any) => n.id === h.nodeId);
+                          return (
+                            <div key={i} className="relative pl-7 flex flex-col gap-0.5">
+                              <div className={cn(
+                                "absolute left-1.5 top-1 w-2.5 h-2.5 rounded-full bg-white dark:bg-zinc-950 border-2 z-10 transition-colors",
+                                i === history.length - 1 ? "border-indigo-500 scale-110 shadow-lg shadow-indigo-500/20" : "border-zinc-300 dark:border-zinc-700"
+                              )} />
+                              <p className="text-[11px] font-bold text-zinc-900 dark:text-white leading-tight">
+                                {node?.name || 'Unknown Node'}
+                              </p>
+                              <div className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium space-x-1 flex items-center flex-wrap">
+                                <span>{new Date(h.timestamp).toLocaleDateString()} {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                {h.triggeredBy && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-indigo-500/80">{h.triggeredBy}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* Assignee Picker */}
+          <div className="relative" ref={assigneeMenuRef}>
+            <button
+              onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
+              className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all flex items-center gap-2 group text-xs font-semibold shadow-sm"
+            >
+              {currentAssignee ? (
+                <>
+                  {currentAssignee.avatarUrl ? (
+                    <img src={currentAssignee.avatarUrl} alt={currentAssignee.name} className="w-5 h-5 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+                      {currentAssignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </div>
+                  )}
+                  <span className="text-zinc-700 dark:text-zinc-300 max-w-[100px] truncate">{currentAssignee.name}</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:border-indigo-500 transition-colors">
+                    <LucideIcons.User size={10} />
+                  </div>
+                  <span className="text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">Assignee</span>
+                </>
+              )}
+              <LucideIcons.ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
+            </button>
+
+            <AnimatePresence>
+              {showAssigneeMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
+                >
+                  {/* Actions */}
+                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-1">
+                    <button
+                      onClick={() => {
+                        const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
+                        if (me) handleUpdateAssignee(me.id);
+                        setShowAssigneeMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
+                    >
+                      <LucideIcons.UserCheck size={12} />
+                      <span>Assign to me</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleUpdateAssignee(null);
+                        setShowAssigneeMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
+                    >
+                      <LucideIcons.UserMinus size={12} />
+                      <span>Clear Assignee</span>
+                    </button>
+                  </div>
+
+                  {/* Search */}
+                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 relative">
+                    <LucideIcons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={12} />
+                    <input
+                      type="text"
+                      placeholder="Search members..."
+                      value={assigneeSearch}
+                      onChange={(e) => setAssigneeSearch(e.target.value)}
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Members List */}
+                  <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 max-h-48 scrollbar-thin">
+                    {(members || [])
+                      .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                      .map(member => {
+                        const isSelected = (editData.assigneeId ?? record?.assigneeId) === member.id;
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => {
+                              handleUpdateAssignee(member.id);
+                              setShowAssigneeMenu(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
+                              isSelected && "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {member.avatarUrl ? (
+                                <img src={member.avatarUrl} alt={member.name} className="w-5 h-5 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center text-[9px] font-bold">
+                                  {member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="truncate leading-none">{member.name}</p>
+                                <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
+                              </div>
+                            </div>
+                            {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
+                          </button>
+                        );
+                      })}
+                    {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
+                      <p className="text-[10px] text-zinc-400 text-center py-4 italic font-medium">No members found</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Delete Button */}
           <button 
             onClick={() => setShowDeleteModal(true)}
-            className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 rounded-xl transition-all flex items-center gap-2 font-bold text-xs uppercase tracking-widest"
+            className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
+            title="Delete Record"
           >
             <Trash2 size={16} />
-            <span>Delete Record</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {interfaceSettings.detail?.layoutType === 'split' ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-              {/* Left Navigation Menu */}
-              <div className="md:col-span-1 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
-                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
-                <div className="space-y-1">
-                  {visibleTabs.map((tab: any) => {
-                    const isActive = activeTabId === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={cn(
-                          "w-full text-left px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between group",
-                          isActive
-                            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {interfaceSettings.detail?.showTabIcons && (
-                            <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
-                          )}
-                          <span className="truncate">{tab.label}</span>
-                        </div>
-                        <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Right Field Cards Container */}
-              <div className="md:col-span-3 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
-                {activeTabId ? renderFieldsGrid(activeTabId) : (
-                  <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
-                )}
-              </div>
-            </div>
-          ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
-            <div className="space-y-8">
-              {visibleTabs.map((tab: any) => (
-                <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
-                  <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
-                    {interfaceSettings.detail?.showTabIcons ? (
-                      <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                    )}
-                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
-                  </div>
-                  {renderFieldsGrid(tab.id)}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
-              {moduleData?.tabs && moduleData.tabs.length > 0 && (
-                <div className="relative group/tabs overflow-hidden rounded-t-[31px]">
-                  <AnimatePresence>
-                    {showLeftScroll && (
-                      <motion.div 
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
-                      >
-                        <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                          <button 
-                            onClick={() => handleScroll('left')}
-                            className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
-                          >
-                            <ChevronLeft size={18} />
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <div 
-                    ref={tabContainerRef}
-                    onScroll={checkScroll}
-                    className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
-                  >
-                    {visibleTabs.map((tab: any) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={cn(
-                          "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2",
-                          activeTabId === tab.id
-                            ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
-                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                        )}
-                      >
+      <div className="w-full space-y-8">
+        {interfaceSettings.detail?.layoutType === 'split' ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+            {/* Left Navigation Menu */}
+            <div className="md:col-span-1 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
+              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
+              <div className="space-y-1">
+                {visibleTabs.map((tab: any) => {
+                  const isActive = activeTabId === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTabId(tab.id)}
+                      className={cn(
+                        "w-full text-left px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between group",
+                        isActive
+                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
                         {interfaceSettings.detail?.showTabIcons && (
                           <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
                         )}
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <AnimatePresence>
-                    {showRightScroll && (
-                      <motion.div 
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 10 }}
-                        className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
-                      >
-                        <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                          <button 
-                            onClick={() => handleScroll('right')}
-                            className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
-                          >
-                            <ChevronRight size={18} />
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-
-              <div className="p-8">
-                {activeTabId ? renderFieldsGrid(activeTabId) : (
-                  <div className="text-zinc-500 text-sm">
-                    Select a section
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-8">
-          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 space-y-8 shadow-sm">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">Current State</h3>
-                <button 
-                  onClick={() => setShowVisualizer(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg text-indigo-400 text-[10px] font-bold border border-indigo-500/20 transition-all active:scale-95 group/graph"
-                >
-                  <GitFork size={12} className="group-hover:rotate-12 transition-transform" />
-                  View Workflow
-                </button>
-              </div>
-
-              {(() => {
-                const wState = record.workflowState as WorkflowState | undefined;
-                const currentNode = activeWorkflow?.nodes.find((n: any) => n.id === wState?.currentNodeId);
-                
-                if (!currentNode) {
-                  if (activeWorkflow) {
-                    return (
-                      <button 
-                        onClick={handleStartWorkflow}
-                        disabled={isTransitioning}
-                        className="w-full p-8 bg-indigo-500/5 border border-dashed border-indigo-500/20 rounded-[32px] flex flex-col items-center justify-center gap-4 group hover:bg-indigo-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <div className="w-12 h-12 bg-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
-                          {isTransitioning ? <Loader2 size={24} className="animate-spin" /> : <Zap size={24} fill="currentColor" />}
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Initialize Workflow</p>
-                          <p className="text-[10px] text-zinc-500 mt-1">This record has no active state. Click to begin the journey.</p>
-                        </div>
-                      </button>
-                    );
-                  }
-                  return (
-                    <div className="p-4 bg-zinc-50 dark:bg-zinc-950/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-center">
-                      <p className="text-xs text-zinc-500 italic">No active workflow state found.</p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="p-5 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-500/20 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform">
-                      <Sparkles size={48} className="text-white" />
-                    </div>
-                    <div className="relative z-10 space-y-1">
-                      <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Active Node</p>
-                      <h4 className="text-xl font-black text-white">{currentNode.name}</h4>
-                      <p className="text-[11px] text-white/70 font-medium">{currentNode.type} State</p>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="space-y-3">
-                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-1">Available Transitions</h3>
-                <div className="space-y-2">
-                  {(() => {
-                    const wState = record.workflowState as any;
-                    const transitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === wState?.currentNodeId) || [];
-                    
-                    if (transitions.length === 0) {
-                      return (
-                        <p className="text-[10px] text-zinc-500 italic px-1">No further transitions available.</p>
-                      );
-                    }
-
-                    return transitions.map((edge: any) => {
-                      const targetNode = activeWorkflow?.nodes.find((n: any) => n.id === edge.target);
-                      if (!targetNode) return null;
-
-                      return (
-                        <button
-                          key={edge.id}
-                          onClick={() => handleStatusTransition(targetNode.name, targetNode.id)}
-                          disabled={isTransitioning}
-                          className="w-full flex items-center justify-between p-4 bg-white dark:bg-zinc-950/30 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 transition-colors">
-                              {isTransitioning ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-                            </div>
-                            <div className="text-left">
-                              <p className="text-xs font-bold text-zinc-900 dark:text-white">{targetNode.name}</p>
-                            </div>
-                          </div>
-                          <ChevronRight size={14} className="text-zinc-400" />
-                        </button>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">History</h3>
-                <History size={12} className="text-zinc-600" />
-              </div>
-              <div className="space-y-6 relative before:absolute before:inset-0 before:left-3 before:w-px before:bg-zinc-200 dark:before:bg-zinc-800 py-2">
-                {(() => {
-                  const wState = record.workflowState as WorkflowState | undefined;
-                  const history = wState?.history || [];
-
-                  if (history.length === 0) return (
-                    <p className="text-[10px] text-zinc-400 italic pl-10">No history available.</p>
-                  );
-
-                  return history.map((h, i) => {
-                    const node = activeWorkflow?.nodes?.find((n: any) => n.id === h.nodeId);
-                    return (
-                      <div key={i} className="relative pl-10">
-                        <div className={cn(
-                          "absolute left-1 top-1.5 w-4 h-4 rounded-full bg-white dark:bg-zinc-950 border-2 z-10 transition-colors",
-                          i === history.length - 1 ? "border-indigo-500 scale-110 shadow-lg shadow-indigo-500/20" : "border-zinc-300 dark:border-zinc-700"
-                        )} />
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
-                            {node?.name || 'Unknown Node'}
-                          </p>
-                          <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-medium">
-                            <span>{new Date(h.timestamp).toLocaleString()}</span>
-                            {h.triggeredBy && (
-                              <>
-                                <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                                <span className="text-indigo-500/80">{h.triggeredBy}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
+                        <span className="truncate">{tab.label}</span>
                       </div>
-                    );
-                  });
-                })()}
+                      <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
+                    </button>
+                  );
+                })}
               </div>
+            </div>
+
+            {/* Right Field Cards Container */}
+            <div className="md:col-span-3 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
+              {activeTabId ? renderFieldsGrid(activeTabId) : (
+                <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
+              )}
             </div>
           </div>
-        </div>
+        ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
+          <div className="space-y-8">
+            {visibleTabs.map((tab: any) => (
+              <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
+                <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+                  {interfaceSettings.detail?.showTabIcons ? (
+                    <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  )}
+                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                </div>
+                {renderFieldsGrid(tab.id)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
+            {moduleData?.tabs && moduleData.tabs.length > 0 && (
+              <div className="relative group/tabs overflow-hidden rounded-t-[31px]">
+                <AnimatePresence>
+                  {showLeftScroll && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
+                    >
+                      <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                        <button 
+                          onClick={() => handleScroll('left')}
+                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div 
+                  ref={tabContainerRef}
+                  onScroll={checkScroll}
+                  className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
+                >
+                  {visibleTabs.map((tab: any) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTabId(tab.id)}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2",
+                        activeTabId === tab.id
+                          ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
+                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                      )}
+                    >
+                      {interfaceSettings.detail?.showTabIcons && (
+                        <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                      )}
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence>
+                  {showRightScroll && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
+                    >
+                      <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                        <button 
+                          onClick={() => handleScroll('right')}
+                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            <div className="p-8">
+              {activeTabId ? renderFieldsGrid(activeTabId) : (
+                <div className="text-zinc-500 text-sm">
+                  Select a section
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
 

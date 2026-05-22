@@ -151,7 +151,7 @@ export const Dashboard = () => {
             <Workflow size={18} className="text-indigo-600 dark:text-indigo-400" />
             Active Workflows
           </h3>
-            <Link to="/workspace/queue" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 flex items-center gap-1">
+            <Link to="/workspace/my-work" className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 flex items-center gap-1">
               View All <ChevronRight size={14} />
             </Link>
           </div>

@@ -7,7 +7,7 @@ export const systemDefaultMenuConfig: MenuConfig = {
       title: 'Main',
       items: [
         { id: 'dashboard', label: 'Dashboard', iconName: 'LayoutDashboard', to: '/workspace', isVisible: true },
-        { id: 'queue', label: 'Queue', iconName: 'ClipboardList', to: '/workspace/queue', isVisible: true }
+        { id: 'queue', label: 'My work', iconName: 'ClipboardList', to: '/workspace/my-work', isVisible: true }
       ]
     },
     {
