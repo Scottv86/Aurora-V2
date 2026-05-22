@@ -5405,41 +5405,49 @@ export const ModuleEditor = () => {
                                           </div>
                                         ))}
                                       </div>
-                                    ) : block.type === 'datatable' ? (
-                                      <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
-                                        <div className="h-14 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-900 flex items-center px-6 gap-8">
-                                          {['Name', 'Category', 'Status', 'Date Modified'].map((col, i) => (
-                                            <div key={i} className={cn("flex-1 text-[9px] font-black text-zinc-400 uppercase tracking-widest", i > 1 && "hidden md:block")}>{col}</div>
-                                          ))}
-                                        </div>
-                                        <div className="divide-y divide-zinc-50 dark:divide-zinc-900">
-                                          {[1, 2, 3, 4].map(row => (
-                                            <div key={row} className="h-14 flex items-center px-6 gap-8 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                                              <div className="flex-1 flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-[10px]">R{row}</div>
-                                                <div className="h-2 w-24 bg-zinc-100 dark:bg-zinc-800 rounded-full" />
-                                              </div>
-                                              <div className="flex-1 hidden md:block"><div className="h-2 w-16 bg-zinc-50 dark:bg-zinc-800 rounded-full opacity-60" /></div>
-                                              <div className="flex-1 hidden md:block">
-                                                <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full w-fit">
-                                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    ) : block.type === 'datatable' ? (() => {
+                                      const d = block.density || 'standard';
+                                      const headerHeight = d === 'compact' ? 'h-10' : d === 'spacious' ? 'h-16' : 'h-14';
+                                      const rowHeight = d === 'compact' ? 'h-10' : d === 'spacious' ? 'h-16' : 'h-14';
+                                      const padding = d === 'compact' ? 'px-4' : d === 'spacious' ? 'px-8' : 'px-6';
+                                      const avatarSize = d === 'compact' ? 'w-6 h-6' : d === 'spacious' ? 'w-9 h-9' : 'w-8 h-8';
+                                      return (
+                                        <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-2xl transition-all duration-300">
+                                          <div className={cn("bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-900 flex items-center gap-8 transition-all duration-300", headerHeight, padding)}>
+                                            {['Name', 'Category', 'Status', 'Date Modified'].map((col, i) => (
+                                              <div key={i} className={cn("flex-1 text-[9px] font-black text-zinc-400 uppercase tracking-widest", i > 1 && "hidden md:block")}>{col}</div>
+                                            ))}
+                                          </div>
+                                          <div className="divide-y divide-zinc-50 dark:divide-zinc-900">
+                                            {[1, 2, 3, 4].map(row => (
+                                              <div key={row} className={cn("flex items-center gap-8 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-all duration-300", rowHeight, padding)}>
+                                                <div className="flex-1 flex items-center gap-3">
+                                                  <div className={cn("rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-[10px] transition-all duration-300", avatarSize)}>R{row}</div>
+                                                  <div className="h-2 w-24 bg-zinc-100 dark:bg-zinc-800 rounded-full" />
                                                 </div>
+                                                <div className="flex-1 hidden md:block"><div className="h-2 w-16 bg-zinc-50 dark:bg-zinc-800 rounded-full opacity-60" /></div>
+                                                <div className="flex-1 hidden md:block">
+                                                  <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full w-fit">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                  </div>
+                                                </div>
+                                                <div className="flex-1 hidden md:block"><div className="h-2 w-20 bg-zinc-50 dark:bg-zinc-800 rounded-full opacity-60" /></div>
                                               </div>
-                                              <div className="flex-1 hidden md:block"><div className="h-2 w-20 bg-zinc-50 dark:bg-zinc-800 rounded-full opacity-60" /></div>
+                                            ))}
+                                          </div>
+                                          <div className="h-12 border-t border-zinc-100 dark:border-zinc-900 flex items-center px-6 justify-between bg-zinc-50/30">
+                                            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Showing 4 of 24 records</span>
+                                            <div className="flex gap-2">
+                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 rotate-90" /></div>
+                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold">1</div>
+                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">2</div>
+                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 -rotate-90" /></div>
                                             </div>
-                                          ))}
-                                        </div>
-                                        <div className="h-12 border-t border-zinc-100 dark:border-zinc-900 flex items-center px-6 justify-between bg-zinc-50/30">
-                                          <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Showing 4 of 24 records</span>
-                                          <div className="flex gap-2">
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 rotate-90" /></div>
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold">1</div>
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">2</div>
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 -rotate-90" /></div>
                                           </div>
                                         </div>
-                                      </div>
-                                    ) : block.type === 'duallist' ? (
+                                      );
+                                    })()
+                                    : block.type === 'duallist' ? (
                                       <div className="flex gap-6 items-center">
                                         <div className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
                                           <div className="h-10 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-900 flex items-center px-4">
@@ -11223,6 +11231,29 @@ export const ModuleEditor = () => {
                                 );
                               });
                             })()}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Table Spacing Control Panel */}
+                      {(selectedField.type === 'datatable' || (selectedField.type === 'repeatableGroup' && (selectedField.variant || 'table') === 'table')) && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Table Spacing</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {(['compact', 'standard', 'spacious'] as const).map(d => (
+                              <button
+                                key={d}
+                                onClick={() => updateField(selectedField.id, { density: d })}
+                                className={cn(
+                                  "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                  (selectedField.density || 'standard') === d 
+                                    ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm" 
+                                    : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                                )}
+                              >
+                                {d}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       )}

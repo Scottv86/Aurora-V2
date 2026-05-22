@@ -23,6 +23,7 @@ interface TableProps<T> {
   className?: string;
   headerActions?: React.ReactNode;
   noContainer?: boolean;
+  density?: 'compact' | 'standard' | 'spacious';
 }
 
 export function Table<T extends { id: string | number }>({
@@ -35,7 +36,8 @@ export function Table<T extends { id: string | number }>({
   pageSize = 10,
   className,
   headerActions,
-  noContainer = false
+  noContainer = false,
+  density = 'standard'
 }: TableProps<T>) {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof T; direction: 'asc' | 'desc' } | null>(null);
@@ -86,16 +88,29 @@ export function Table<T extends { id: string | number }>({
     return sortedData.slice(startIndex, endIndex);
   }, [sortedData, pagination, startIndex, endIndex]);
   
+  const paddingClass = 
+    density === 'compact' ? 'px-4 py-2' : 
+    density === 'spacious' ? 'px-8 py-5' : 
+    'px-6 py-4';
+
+  const headerTextSize = 
+    density === 'compact' ? 'text-[10px]' : 
+    'text-xs';
+
+  const bodyTextSize = 
+    density === 'compact' ? 'text-xs' : 
+    'text-sm';
+
   const customPaddingClass = columns.find(col => col.className && (col.className.includes('px-') || col.className.includes('py-')))?.className;
   const actionsPadding = customPaddingClass 
     ? customPaddingClass.split(' ').filter(c => c.startsWith('px-') || c.startsWith('py-') || c.includes('px-') || c.includes('py-')).join(' ') 
-    : 'px-6 py-4';
+    : paddingClass;
 
   const content = (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead className="border-b border-white/10 bg-white/5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-white/5 dark:text-zinc-400">
+        <table className={cn("w-full text-left border-collapse", bodyTextSize)}>
+          <thead className={cn("border-b border-white/10 bg-white/5 font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-white/5 dark:text-zinc-400", headerTextSize)}>
             <tr>
               {columns.map((col, idx) => {
                 const isSortable = col.sortable && (col.sortKey || typeof col.accessor === 'string');
@@ -107,7 +122,7 @@ export function Table<T extends { id: string | number }>({
                   <th 
                     key={idx} 
                     className={cn(
-                      !hasCustomPadding && 'px-6 py-4',
+                      !hasCustomPadding && paddingClass,
                       'transition-colors',
                       isSortable && 'cursor-pointer hover:bg-white/10 dark:hover:bg-white/5 select-none',
                       col.className
@@ -147,7 +162,7 @@ export function Table<T extends { id: string | number }>({
                       <td 
                         key={j} 
                         className={cn(
-                          !hasCustomPadding && 'px-6 py-4',
+                          !hasCustomPadding && paddingClass,
                           col.className
                         )}
                       >
@@ -180,7 +195,7 @@ export function Table<T extends { id: string | number }>({
                       <td 
                         key={idx} 
                         className={cn(
-                          !hasCustomPadding && 'px-6 py-4',
+                          !hasCustomPadding && paddingClass,
                           'text-zinc-700 dark:text-zinc-300', 
                           col.className
                         )} 

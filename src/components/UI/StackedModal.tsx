@@ -70,6 +70,23 @@ const RecordModal = ({
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
+    // Validate required fields
+    if (moduleData?.layout) {
+      const missingFields = moduleData.layout.filter((field: any) => {
+        if (!isFieldVisible(field, record, { user })) return false;
+        if (!field.required) return false;
+        if (['heading', 'divider', 'alert', 'html', 'button', 'autonumber', 'calculation', 'ai_summary'].includes(field.type)) return false;
+
+        const val = record?.[field.id];
+        return val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
+      });
+
+      if (missingFields.length > 0) {
+        toast.error(`Please fill in required fields: ${missingFields.map(f => f.label || f.id).join(', ')}`);
+        return;
+      }
+    }
+
     if (entry.localData && entry.onSaveLocal) {
       entry.onSaveLocal(record);
       onPop();

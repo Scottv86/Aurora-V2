@@ -296,7 +296,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
             {!readOnly && (
               <button 
                 onClick={handleAdd}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-50 hover:shadow-lg hover:shadow-indigo-500/20 transition-all active:scale-95"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/20 transition-all active:scale-95"
               >
                 <Plus size={14} />
                 Add Item

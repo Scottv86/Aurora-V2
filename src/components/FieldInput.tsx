@@ -395,7 +395,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }, [lookupSource, optionsSource, options, lookupResults, lookupLoading]);
 
   const inputClasses = cn(
-    "w-full bg-zinc-50 dark:bg-zinc-950/50 border focus:outline-none transition-all",
+    "w-full bg-zinc-50 dark:bg-zinc-950/50 border focus:outline-none transition-all text-zinc-900 dark:text-white",
     ds.input,
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
@@ -466,9 +466,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           autoFocus={autoFocus}
           className={cn(inputClasses, "appearance-none")}
         >
-          <option value="">Select...</option>
+          <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">Select...</option>
           {resolvedOptions?.map((opt: string, j: number) => (
-            <option key={j} value={opt}>{opt}</option>
+            <option key={j} value={opt} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt}</option>
           ))}
         </select>
         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
@@ -708,15 +708,34 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'datatable') {
+    const activeDensity = field.density || density || 'standard';
+    const paddingClass = 
+      activeDensity === 'compact' ? 'px-3 py-1.5' : 
+      activeDensity === 'spacious' ? 'px-6 py-4' : 
+      'px-4 py-3';
+
+    const headerTextSize = 
+      activeDensity === 'compact' ? 'text-[9px]' : 
+      'text-[10px]';
+
+    const bodyTextSize = 
+      activeDensity === 'compact' ? 'text-[11px]' : 
+      'text-xs';
+
+    const footerPadding = 
+      activeDensity === 'compact' ? 'p-2' : 
+      activeDensity === 'spacious' ? 'p-4' : 
+      'p-3';
+
     return (
       <div className="w-full border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800">
               <tr>
-                <th className="px-4 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap">Source Record</th>
+                <th className={cn(paddingClass, headerTextSize, "font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap")}>Source Record</th>
                 {lookupResults[0] && Object.keys(lookupResults[0]).filter(k => !['id', 'name', '_metadata', 'createdAt', 'updatedAt'].includes(k)).slice(0, 3).map(key => (
-                  <th key={key} className="px-4 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap">{key.replace(/([A-Z])/g, ' $1').trim()}</th>
+                  <th key={key} className={cn(paddingClass, headerTextSize, "font-black text-zinc-400 uppercase tracking-widest whitespace-nowrap")}>{key.replace(/([A-Z])/g, ' $1').trim()}</th>
                 ))}
               </tr>
             </thead>
@@ -737,9 +756,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
               ) : (
                 lookupResults.slice(0, 5).map((row, idx) => (
                   <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
-                    <td className="px-4 py-3 text-xs font-bold text-indigo-600 dark:text-indigo-400">{row.name}</td>
+                    <td className={cn(paddingClass, bodyTextSize, "font-bold text-indigo-600 dark:text-indigo-400")}>{row.name}</td>
                     {Object.entries(row).filter(([k]) => !['id', 'name', '_metadata', 'createdAt', 'updatedAt'].includes(k)).slice(0, 3).map(([, v], i) => (
-                      <td key={i} className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-400 truncate max-w-[150px]">{String(v)}</td>
+                      <td key={i} className={cn(paddingClass, bodyTextSize, "text-zinc-600 dark:text-zinc-400 truncate max-w-[150px]")}>{String(v)}</td>
                     ))}
                   </tr>
                 ))
@@ -748,7 +767,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           </table>
         </div>
         {lookupResults.length > 5 && (
-          <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/20 border-t border-zinc-200 dark:border-zinc-800 flex justify-center">
+          <div className={cn(footerPadding, "bg-zinc-50/50 dark:bg-zinc-900/20 border-t border-zinc-200 dark:border-zinc-800 flex justify-center")}>
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">+{lookupResults.length - 5} more records</span>
           </div>
         )}
