@@ -26,6 +26,9 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  // Tracks the length of the array after a new row is added, so we can show a
+  // loading indicator in autonumber cells until the server responds with the value.
+  const [savingRowCount, setSavingRowCount] = useState<number | null>(null);
 
   // Keep a ref to the latest value so modal callbacks never have stale closures.
   // We do NOT maintain a separate localRows state — the component is fully controlled
@@ -35,6 +38,24 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   React.useLayoutEffect(() => {
     valueRef.current = value;
   });
+
+  // Autonumber sub-fields in this repeatable group
+  const autonumberSubFields = useMemo(
+    () => (field.fields || []).filter((f: any) => f.type === 'autonumber'),
+    [field.fields]
+  );
+
+  // Once value updates and the pending row now has autonumber values, clear the saving indicator
+  React.useEffect(() => {
+    if (savingRowCount === null) return;
+    if (value.length < savingRowCount) return;
+    const pendingRow = value[savingRowCount - 1];
+    if (!pendingRow) return;
+    // If there are no autonumber fields, or at least one has resolved, clear the indicator
+    if (autonumberSubFields.length === 0 || autonumberSubFields.some((f: any) => pendingRow[f.id])) {
+      setSavingRowCount(null);
+    }
+  }, [value, savingRowCount, autonumberSubFields]);
 
   const triggerSave = (newRows: any[]) => {
     onChange?.(newRows);
@@ -52,6 +73,10 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       onSaveLocal: (updatedRow) => {
         // Use ref so we always append to the latest rows, not a stale snapshot
         const finalRows = [...valueRef.current, updatedRow];
+        // Mark the new row as pending so the autonumber cell shows a loading indicator
+        if (autonumberSubFields.length > 0) {
+          setSavingRowCount(finalRows.length);
+        }
         triggerSave(finalRows);
       }
     });
@@ -115,6 +140,20 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       accessor: (row: any) => {
         const activeDensity = field.density || 'standard';
         const cellFontClass = activeDensity === 'compact' ? 'text-xs' : 'text-sm';
+        // Show a loading badge for autonumber cells on the row currently awaiting server response
+        const isPendingAutonumber =
+          subField.type === 'autonumber' &&
+          savingRowCount !== null &&
+          row._originalIndex === savingRowCount - 1 &&
+          !row[subField.id];
+        if (isPendingAutonumber) {
+          return (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-400 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+              Generating…
+            </span>
+          );
+        }
         return (
           <div className={cn(cellFontClass, "text-zinc-700 dark:text-zinc-300 font-semibold tracking-tight")}>
             {row[subField.id] ? String(row[subField.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
@@ -170,7 +209,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
         );
       }
     }
-  ], [field.fields, readOnly, field.density]);
+  ], [field.fields, readOnly, field.density, savingRowCount]);
 
   // Default to table if not specified
   const displayMode = field.variant || 'table';
