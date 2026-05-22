@@ -136,34 +136,13 @@ export const RecordDetailView = () => {
     if (!tenant?.id || !moduleId || !recordId) return;
 
     // Update local state first (optimistic update)
-    setRecord(prev => prev ? { ...prev, assigneeId: newAssigneeId } : null);
-    setEditData(prev => ({ ...prev, assigneeId: newAssigneeId }));
-    editDataRef.current = { ...editDataRef.current, assigneeId: newAssigneeId };
+    const updatedData = { ...editDataRef.current, assigneeId: newAssigneeId };
+    setEditData(updatedData);
+    editDataRef.current = updatedData;
 
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          moduleId,
-          assigneeId: newAssigneeId
-        })
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to update assignee');
-      }
-
-      const updatedRecord = await res.json();
-      setRecord(updatedRecord);
-      setEditData(prev => ({ ...prev, ...updatedRecord }));
-      editDataRef.current = { ...editDataRef.current, ...updatedRecord };
+      // Route the update through the queue-based handleUpdateEntry
+      await handleUpdateEntry(updatedData, 'assigneeId', true);
       toast.success(newAssigneeId ? "Record assigned successfully" : "Assignee cleared");
     } catch (error: any) {
       console.error("Assignee Update Error:", error);
@@ -630,6 +609,15 @@ export const RecordDetailView = () => {
             }
           }
         });
+
+        // Also check if assigneeId has changed since it is a special field not in allFields
+        if (fieldIdBeingSaved !== 'assigneeId') {
+          const newVal = currentData.assigneeId;
+          const oldVal = record?.assigneeId;
+          if (newVal !== oldVal) {
+            payload.assigneeId = newVal;
+          }
+        }
       } else {
         Object.assign(payload, currentData);
       }
