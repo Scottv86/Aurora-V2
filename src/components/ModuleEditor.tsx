@@ -2472,16 +2472,14 @@ export const ModuleEditor = () => {
       const fullSourceIdx = currentCols.findIndex(c => c.fieldId === sourceCol.id);
       if (fullSourceIdx === -1) return prev;
 
-      let fullTargetIdx = 0;
-      if (targetIdx === 0) {
-        const keyIdx = currentCols.findIndex(c => c.fieldId === '_record_key');
-        fullTargetIdx = keyIdx !== -1 ? keyIdx + 1 : 0;
-      } else {
-        const targetColRef = activeColumns[targetIdx - 1];
+      let fullTargetIdx = currentCols.length;
+      if (targetIdx < activeColumns.length) {
+        const targetColRef = activeColumns[targetIdx];
         if (targetColRef) {
-          fullTargetIdx = currentCols.findIndex(c => c.fieldId === targetColRef.id);
-        } else {
-          fullTargetIdx = currentCols.length;
+          const idxInCurrent = currentCols.findIndex(c => c.fieldId === targetColRef.id);
+          if (idxInCurrent !== -1) {
+            fullTargetIdx = idxInCurrent;
+          }
         }
       }
 
@@ -2547,17 +2545,14 @@ export const ModuleEditor = () => {
               currentCols.splice(existingIdx, 1);
             }
 
-            let fullInsertIdx = 0;
-            if (targetIdx === 0) {
-              const keyIdx = currentCols.findIndex(c => c.fieldId === '_record_key');
-              fullInsertIdx = keyIdx !== -1 ? keyIdx + 1 : 0;
-            } else {
-              const targetColRef = activeColumns[targetIdx - 1];
+            let fullInsertIdx = currentCols.length;
+            if (targetIdx < activeColumns.length) {
+              const targetColRef = activeColumns[targetIdx];
               if (targetColRef) {
-                fullInsertIdx = currentCols.findIndex(c => c.fieldId === targetColRef.id);
-                if (fullInsertIdx === -1) fullInsertIdx = currentCols.length;
-              } else {
-                fullInsertIdx = currentCols.length;
+                const idxInCurrent = currentCols.findIndex(c => c.fieldId === targetColRef.id);
+                if (idxInCurrent !== -1) {
+                  fullInsertIdx = idxInCurrent;
+                }
               }
             }
 
@@ -2599,17 +2594,14 @@ export const ModuleEditor = () => {
             currentCols.splice(existingIdx, 1);
           }
 
-          let fullInsertIdx = 0;
-          if (targetIdx === 0) {
-            const keyIdx = currentCols.findIndex(c => c.fieldId === '_record_key');
-            fullInsertIdx = keyIdx !== -1 ? keyIdx + 1 : 0;
-          } else {
-            const targetColRef = activeColumns[targetIdx - 1];
+          let fullInsertIdx = currentCols.length;
+          if (targetIdx < activeColumns.length) {
+            const targetColRef = activeColumns[targetIdx];
             if (targetColRef) {
-              fullInsertIdx = currentCols.findIndex(c => c.fieldId === targetColRef.id);
-              if (fullInsertIdx === -1) fullInsertIdx = currentCols.length;
-            } else {
-              fullInsertIdx = currentCols.length;
+              const idxInCurrent = currentCols.findIndex(c => c.fieldId === targetColRef.id);
+              if (idxInCurrent !== -1) {
+                fullInsertIdx = idxInCurrent;
+              }
             }
           }
 
@@ -3500,13 +3492,25 @@ export const ModuleEditor = () => {
                   <div className="space-y-8 animate-in fade-in duration-300">
                     {/* Columns grid settings */}
                     <div className="space-y-8" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
-                      <div className={cn(
-                        "bg-white dark:bg-zinc-900 border transition-all duration-300 rounded-3xl overflow-hidden shadow-sm",
-                        tableDropIndicator 
-                          ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg shadow-indigo-500/5" 
-                          : "border-zinc-200 dark:border-zinc-800"
-                      )}>
-                        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
+                      <div 
+                        className={cn(
+                          "rounded-3xl relative transition-all duration-300",
+                          tableDropIndicator ? "shadow-lg shadow-indigo-500/5" : "shadow-sm"
+                        )}
+                      >
+                        {/* Absolute Background Layer */}
+                        <div className="absolute inset-0 bg-white dark:bg-zinc-900 rounded-3xl -z-10 pointer-events-none" />
+                        
+                        {/* Absolute Border Overlay Layer */}
+                        <div 
+                          className={cn(
+                            "absolute inset-0 rounded-3xl border pointer-events-none z-10 transition-all duration-300",
+                            tableDropIndicator 
+                              ? "border-indigo-500 ring-4 ring-indigo-500/30" 
+                              : "border-zinc-200 dark:border-zinc-800"
+                          )}
+                        />
+                        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between rounded-t-3xl">
                           <div className="space-y-0.5">
                             <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Active Table Columns</span>
                             <p className="text-[9px] text-zinc-400 font-bold uppercase">Drag & Drop headers to reorder • Click header to edit settings</p>
@@ -3531,7 +3535,7 @@ export const ModuleEditor = () => {
                           </div>
 
                           {activeColumns.length === 0 ? (
-                            <div className="py-24 text-center space-y-4 px-6 animate-in fade-in duration-300">
+                            <div className="py-24 text-center space-y-4 px-6 animate-in fade-in duration-300 rounded-b-3xl">
                               <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-100 dark:border-zinc-800">
                                 <TableProperties size={28} />
                               </div>
@@ -3543,7 +3547,7 @@ export const ModuleEditor = () => {
                               </div>
                             </div>
                           ) : (
-                            <div className="overflow-x-auto custom-scrollbar">
+                            <div className="overflow-x-auto custom-scrollbar rounded-b-3xl">
                               <table className="w-full text-left table-fixed">
                                 <thead>
                                   <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/10">
@@ -3904,15 +3908,20 @@ export const ModuleEditor = () => {
                   <div 
                     ref={canvasContainerRef}
                     className={cn(
-                      "flex-1 min-w-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm overflow-hidden relative grid-canvas-container flex flex-col",
+                      "flex-1 min-w-0 rounded-3xl shadow-sm overflow-hidden relative grid-canvas-container flex flex-col",
                       viewportSize === 'desktop' ? "w-full" :
                       viewportSize === 'tablet' ? "w-[768px]" :
                       "w-[375px]"
                     )}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDropOnCanvas}
-                >
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDropOnCanvas}
+                  >
+                    {/* Absolute Background Layer */}
+                    <div className="absolute inset-0 bg-white dark:bg-zinc-900 rounded-3xl -z-10 pointer-events-none" />
+                    
+                    {/* Absolute Border Overlay Layer */}
+                    <div className="absolute inset-0 rounded-3xl border border-zinc-200 dark:border-zinc-800 pointer-events-none z-30" />
                   {/* Connection Visualizer Layer */}
                   <ConnectionLine hoveredMapping={hoveredMapping} containerRef={canvasContainerRef} />
 
@@ -4475,6 +4484,30 @@ export const ModuleEditor = () => {
                                       )}
                                     </div>
                                   </div>
+
+                                  {/* Quick Action Buttons (Overlapping Border) */}
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      cloneField(block.id);
+                                    }}
+                                    className="absolute -top-3.5 right-6 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
+                                    title="Duplicate Field"
+                                  >
+                                    <Copy size={12} />
+                                  </button>
+
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLayout(prev => removeFieldRecursive(prev, block.id));
+                                      if (selectedId === block.id) setSelectedId(null);
+                                    }}
+                                    className="absolute -top-3.5 -right-3.5 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95"
+                                    title="Delete Field"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
 
                                   {!block.hidden && (
                                     <button 
@@ -5892,7 +5925,14 @@ export const ModuleEditor = () => {
             )
           ) : activeTab === 'preview' ? (
             <div className="w-full px-8 pb-20">
-              <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-2xl overflow-hidden min-h-[600px]">
+              <div 
+                className="rounded-[32px] shadow-2xl overflow-hidden min-h-[600px] relative"
+              >
+                {/* Absolute Background Layer */}
+                <div className="absolute inset-0 bg-white dark:bg-zinc-950 rounded-[32px] -z-10 pointer-events-none" />
+                
+                {/* Absolute Border Overlay Layer */}
+                <div className="absolute inset-0 rounded-[32px] border border-zinc-200 dark:border-zinc-800 pointer-events-none z-30" />
                 {/* Preview Toolbar */}
                 <div className="h-16 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent px-8 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -6101,7 +6141,14 @@ export const ModuleEditor = () => {
                         </button>
                       </div>
 
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-xl shadow-indigo-500/5">
+                      <div 
+                        className="rounded-3xl overflow-hidden shadow-xl shadow-indigo-500/5 relative"
+                      >
+                        {/* Absolute Background Layer */}
+                        <div className="absolute inset-0 bg-white dark:bg-zinc-900 rounded-3xl -z-10 pointer-events-none" />
+                        
+                        {/* Absolute Border Overlay Layer */}
+                        <div className="absolute inset-0 rounded-3xl border border-zinc-200 dark:border-zinc-800 pointer-events-none z-30" />
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse">
                             <thead>

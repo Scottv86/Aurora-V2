@@ -9,3 +9,4 @@ coverage/
 
 /generated/prisma
 dev.db
+/scratch/
