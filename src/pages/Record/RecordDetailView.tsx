@@ -568,19 +568,10 @@ export const RecordDetailView = () => {
       if (fieldIdBeingSaved) {
         setSavingFieldId(null);
         setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
-        
-        const savedFieldDef = allFields.find(f => f.id === fieldIdBeingSaved);
-        const isRepeatable = savedFieldDef?.type === 'repeatableGroup';
-
-        // We also update the 'record' state optimistically so other parts of the app see the change.
-        // For repeatableGroup fields: skip updating editData optimistically — the server will return
-        // the array WITH generated autonumbers, and we want that to be the first value change
-        // that RepeatableGroupBlock sees (triggering its useEffect to update its localRows table).
+        // Update both record and editData optimistically so the UI reflects the change immediately
         setRecord(prev => ({ ...prev, ...payload }));
-        if (!isRepeatable) {
-          setEditData(prev => ({ ...prev, ...payload }));
-          editDataRef.current = { ...editDataRef.current, ...payload };
-        }
+        setEditData(prev => ({ ...prev, ...payload }));
+        editDataRef.current = { ...editDataRef.current, ...payload };
       }
       
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;

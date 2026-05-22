@@ -23,47 +23,39 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   onBlur
 }) => {
   const { pushModal } = useModalStack();
-  const [localRows, setLocalRows] = useState(value);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const localRowsRef = React.useRef(localRows);
 
-  // Sync with external value prop
-  React.useEffect(() => {
-    setLocalRows(value);
-    localRowsRef.current = value;
-  }, [value]);
+  // Keep a ref to the latest value so modal callbacks never have stale closures.
+  // We do NOT maintain a separate localRows state — the component is fully controlled
+  // by the `value` prop. This ensures server-generated values (like autonumbers) are
+  // reflected in the table immediately when the parent state updates.
+  const valueRef = React.useRef(value);
+  React.useLayoutEffect(() => {
+    valueRef.current = value;
+  });
 
-  const triggerBlockSave = (newRows: any[]) => {
-    // Always pass the explicit newRows to onChange and onBlur
+  const triggerSave = (newRows: any[]) => {
     onChange?.(newRows);
     onBlur?.();
   };
 
-
   const handleAdd = () => {
     if (readOnly) return;
-    const newRow = {};
-    
-    // Launch modal for the new row immediately
     pushModal({
       moduleId: 'virtual',
       type: 'edit',
       title: `New ${field.label} Item`,
-      localData: newRow,
+      localData: {},
       localSchema: field.fields,
       onSaveLocal: (updatedRow) => {
-        // Use the ref to get the latest rows (avoids stale closure)
-        const finalRows = [...localRowsRef.current, updatedRow];
-        localRowsRef.current = finalRows;
-        setLocalRows(finalRows);
-        triggerBlockSave(finalRows);
+        // Use ref so we always append to the latest rows, not a stale snapshot
+        const finalRows = [...valueRef.current, updatedRow];
+        triggerSave(finalRows);
       }
     });
   };
-
-
 
   const handleRemove = (index: number) => {
     if (readOnly) return;
@@ -73,16 +65,14 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
 
   const confirmDelete = () => {
     if (deletingIndex === null) return;
-    const newRows = localRowsRef.current.filter((_, i) => i !== deletingIndex);
-    setLocalRows(newRows);
-    localRowsRef.current = newRows;
-    triggerBlockSave(newRows);
+    const newRows = valueRef.current.filter((_, i) => i !== deletingIndex);
+    triggerSave(newRows);
     setShowDeleteModal(false);
     setDeletingIndex(null);
   };
 
   const handleDrillDown = (index: number, isReadOnly: boolean = false) => {
-    const row = localRowsRef.current[index];
+    const row = valueRef.current[index];
     pushModal({
       moduleId: 'virtual',
       type: isReadOnly ? 'view' : 'edit',
@@ -90,21 +80,17 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       localData: row,
       localSchema: field.fields,
       onSaveLocal: isReadOnly ? undefined : (updatedRow) => {
-        // Use the ref to get the latest rows (avoids stale closure)
-        const newRows = [...localRowsRef.current];
+        // Use ref so we always update the latest snapshot
+        const newRows = [...valueRef.current];
         newRows[index] = updatedRow;
-        localRowsRef.current = newRows;
-        setLocalRows(newRows);
-        triggerBlockSave(newRows);
+        triggerSave(newRows);
       }
     });
   };
 
-
-
-  // Ensure all rows have a stable ID for the Table component
+  // Derive display rows from value (fully controlled — no local state)
   const rowsWithIds = useMemo(() => {
-    let filtered = localRows.map((row, index) => ({
+    let filtered = value.map((row, index) => ({
       ...row,
       id: row.id || `row-${index}`,
       _originalIndex: index
@@ -113,7 +99,6 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(row => {
-        // Search in all fields defined for this group
         return field.fields.some((f: any) => {
           const val = row[f.id];
           return val && String(val).toLowerCase().includes(q);
@@ -122,7 +107,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
     }
 
     return filtered;
-  }, [localRows, searchQuery, field.fields]);
+  }, [value, searchQuery, field.fields]);
 
   const columns = useMemo(() => [
     ...(field.fields || []).map((subField: any) => ({
@@ -185,26 +170,16 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
         );
       }
     }
-  ], [field.fields, readOnly, localRows, field.density]);
+  ], [field.fields, readOnly, field.density]);
 
   // Default to table if not specified
   const displayMode = field.variant || 'table';
 
   return (
-    <div 
-      className="space-y-4 outline-none" 
-      tabIndex={0} 
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          // No-op: saves are handled explicitly by triggerBlockSave when rows change.
-          // We intentionally do NOT fire a save here to avoid overwriting server-generated
-          // values (like autonumbers) with stale local state.
-        }
-      }}
-    >
+    <div className="space-y-4">
       {displayMode === 'list' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {localRows.map((row, idx) => (
+          {value.map((row, idx) => (
             <button
               key={idx}
               onClick={() => handleDrillDown(idx)}
@@ -253,14 +228,14 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
               onClick={handleAdd}
               className={cn(
                 "flex flex-col items-center justify-center p-8 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] group hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-center",
-                localRows.length === 0 ? "col-span-full py-16" : ""
+                value.length === 0 ? "col-span-full py-16" : ""
               )}
             >
               <div className="w-14 h-14 bg-zinc-50 dark:bg-zinc-900 rounded-[1.25rem] flex items-center justify-center mx-auto mb-4 group-hover:bg-indigo-500 group-hover:text-white transition-all shadow-inner">
                 <Plus size={24} className="text-zinc-400 group-hover:text-white" />
               </div>
               <p className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.2em] group-hover:text-indigo-500 transition-colors">
-                {localRows.length === 0 ? `Initialize ${field.label}` : 'Add New'}
+                {value.length === 0 ? `Initialize ${field.label}` : 'Add New'}
               </p>
               <p className="text-[10px] text-zinc-400 mt-2 font-medium">Click to expand this collection.</p>
             </button>
