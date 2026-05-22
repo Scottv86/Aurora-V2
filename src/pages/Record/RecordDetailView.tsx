@@ -568,10 +568,19 @@ export const RecordDetailView = () => {
       if (fieldIdBeingSaved) {
         setSavingFieldId(null);
         setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
-        // We also update the 'record' state optimistically so other parts of the app see the change
+        
+        const savedFieldDef = allFields.find(f => f.id === fieldIdBeingSaved);
+        const isRepeatable = savedFieldDef?.type === 'repeatableGroup';
+
+        // We also update the 'record' state optimistically so other parts of the app see the change.
+        // For repeatableGroup fields: skip updating editData optimistically — the server will return
+        // the array WITH generated autonumbers, and we want that to be the first value change
+        // that RepeatableGroupBlock sees (triggering its useEffect to update its localRows table).
         setRecord(prev => ({ ...prev, ...payload }));
-        setEditData(prev => ({ ...prev, ...payload }));
-        editDataRef.current = { ...editDataRef.current, ...payload };
+        if (!isRepeatable) {
+          setEditData(prev => ({ ...prev, ...payload }));
+          editDataRef.current = { ...editDataRef.current, ...payload };
+        }
       }
       
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
@@ -601,6 +610,7 @@ export const RecordDetailView = () => {
         return {
           ...updatedRecord,
           ...prev,
+          // Always take the server's version of the saved field (it may have generated autonumbers)
           [fieldIdBeingSaved]: updatedRecord[fieldIdBeingSaved]
         };
       });
@@ -1034,7 +1044,7 @@ export const RecordDetailView = () => {
                  field={field}
                  value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
                  onChange={(newVal) => handleFieldChange(field.id, newVal)}
-                 onBlur={() => handleUpdateEntry()}
+                 onBlur={() => handleUpdateEntry(undefined, field.id)}
                  hideHeader={true}
               />
             ) : field.type === 'connector' ? (
