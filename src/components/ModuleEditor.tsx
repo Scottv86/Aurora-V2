@@ -2173,7 +2173,8 @@ export const ModuleEditor = () => {
       { id: 'createdAt', label: 'Created Date', type: 'date' },
       { id: 'createdBy', label: 'Created By', type: 'user' },
       { id: 'updatedAt', label: 'Updated Date', type: 'date' },
-      { id: 'status', label: 'Status', type: 'select' }
+      { id: 'status', label: 'Status', type: 'select' },
+      { id: 'assigneeId', label: 'Assignee', type: 'user' }
     ];
     return systemFieldsDef.find(sf => sf.id === selectedId) || null;
   }, [selectedId, interfaceSettings.master.columns]);
@@ -2183,7 +2184,8 @@ export const ModuleEditor = () => {
       { id: 'createdAt', label: 'Created Date', type: 'date' },
       { id: 'createdBy', label: 'Created By', type: 'user' },
       { id: 'updatedAt', label: 'Updated Date', type: 'date' },
-      { id: 'status', label: 'Status', type: 'select' }
+      { id: 'status', label: 'Status', type: 'select' },
+      { id: 'assigneeId', label: 'Assignee', type: 'user' }
     ];
 
     const activeCustom = displayFields.filter(f => f.showInTable !== false);
@@ -3248,7 +3250,8 @@ export const ModuleEditor = () => {
                     { id: 'createdAt', label: 'Created Date', type: 'date' },
                     { id: 'createdBy', label: 'Created By', type: 'user' },
                     { id: 'updatedAt', label: 'Updated Date', type: 'date' },
-                    { id: 'status', label: 'Status', type: 'select' }
+                    { id: 'status', label: 'Status', type: 'select' },
+                    { id: 'assigneeId', label: 'Assignee', type: 'user' }
                   ].filter(sf => 
                     sf.label.toLowerCase().includes(sidebarSearch.toLowerCase()) && 
                     !displayFields.some(df => df.id === sf.id) // Avoid duplicates
@@ -3582,8 +3585,8 @@ export const ModuleEditor = () => {
                                     {/* Draggable Column Headers */}
                                     {activeColumns.map((col, idx) => {
                                       const isSelected = selectedId === col.id;
-                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id) ? 120 : 200);
-                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id);
+                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId'].includes(col.id) ? 120 : 200);
+                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId'].includes(col.id);
 
                                       return (
                                         <th 
@@ -3669,11 +3672,11 @@ export const ModuleEditor = () => {
                                     
                                     {/* Active columns data cells */}
                                     {activeColumns.map((col) => {
-                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status'].includes(col.id) ? 120 : 200);
+                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId'].includes(col.id) ? 120 : 200);
                                       let cellValue = row[col.id] || row[col.name] || '-';
                                       
                                       // Custom user display
-                                      if (col.type === 'user' || col.id === 'createdBy') {
+                                      if (col.type === 'user' || col.id === 'createdBy' || col.id === 'assigneeId') {
                                         cellValue = (
                                           <div className="flex items-center gap-1.5">
                                             <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-500 border border-zinc-300 dark:border-zinc-700">
@@ -8966,6 +8969,51 @@ export const ModuleEditor = () => {
                             <div className={cn(
                               "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
                               interfaceSettings.master.columns?.some(c => c.fieldId === selectedSystemField.id && c.visible !== false) ? "right-1" : "left-1"
+                            )} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Inline Edit Toggle (only for Assignee) */}
+                      {selectedSystemField.id === 'assigneeId' && (
+                        <div className="pt-4 border-t border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Inline Edit</p>
+                            <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Allow editing in Table</p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                const exists = cols.some(c => c.fieldId === selectedSystemField.id);
+                                const isCurrentlyInlineEdit = cols.find(c => c.fieldId === selectedSystemField.id)?.inlineEdit || false;
+                                const newInlineEdit = !isCurrentlyInlineEdit;
+                                if (!exists) {
+                                  return {
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      columns: [...cols, { fieldId: selectedSystemField.id, visible: true, inlineEdit: newInlineEdit }]
+                                    }
+                                  };
+                                }
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: cols.map(c => c.fieldId === selectedSystemField.id ? { ...c, inlineEdit: newInlineEdit } : c)
+                                  }
+                                };
+                              });
+                            }}
+                            className={cn(
+                              "w-10 h-6 rounded-full relative transition-all",
+                              interfaceSettings.master.columns?.find(c => c.fieldId === selectedSystemField.id)?.inlineEdit ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-800"
+                            )}
+                          >
+                            <div className={cn(
+                              "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
+                              interfaceSettings.master.columns?.find(c => c.fieldId === selectedSystemField.id)?.inlineEdit ? "right-1" : "left-1"
                             )} />
                           </button>
                         </div>

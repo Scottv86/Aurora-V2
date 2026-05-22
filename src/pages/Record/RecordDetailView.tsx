@@ -127,7 +127,7 @@ export const RecordDetailView = () => {
   }, []);
 
   const currentAssignee = useMemo(() => {
-    const assigneeId = editData.assigneeId ?? record?.assigneeId;
+    const assigneeId = editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId;
     if (!assigneeId) return null;
     return (members || []).find(m => m.id === assigneeId) || null;
   }, [editData.assigneeId, record?.assigneeId, members]);
@@ -604,7 +604,7 @@ export const RecordDetailView = () => {
           if (f.id !== fieldIdBeingSaved) {
             const newVal = getFieldValue(currentData, f.id);
             const oldVal = getFieldValue(record, f.id);
-            if (newVal !== oldVal) {
+            if (newVal !== undefined && newVal !== oldVal) {
               payload[f.id] = newVal;
             }
           }
@@ -614,7 +614,7 @@ export const RecordDetailView = () => {
         if (fieldIdBeingSaved !== 'assigneeId') {
           const newVal = currentData.assigneeId;
           const oldVal = record?.assigneeId;
-          if (newVal !== oldVal) {
+          if (newVal !== undefined && newVal !== oldVal) {
             payload.assigneeId = newVal;
           }
         }
@@ -1512,7 +1512,7 @@ export const RecordDetailView = () => {
                     {(members || [])
                       .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
                       .map(member => {
-                        const isSelected = (editData.assigneeId ?? record?.assigneeId) === member.id;
+                        const isSelected = (editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId) === member.id;
                         return (
                           <button
                             key={member.id}
