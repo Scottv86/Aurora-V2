@@ -1571,9 +1571,9 @@ export const RecordDetailView = () => {
 
       <div className="w-full space-y-8">
         {interfaceSettings.detail?.layoutType === 'split' ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6 items-start">
             {/* Left Navigation Menu */}
-            <div className="md:col-span-1 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
+            <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
               <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
               <div className="space-y-1">
                 {visibleTabs.map((tab: any) => {
@@ -1603,7 +1603,7 @@ export const RecordDetailView = () => {
             </div>
 
             {/* Right Field Cards Container */}
-            <div className="md:col-span-3 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
+            <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
               {activeTabId ? renderFieldsGrid(activeTabId) : (
                 <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
               )}
