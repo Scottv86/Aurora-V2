@@ -25,7 +25,7 @@ export const useNestedRecords = (parentRecordId?: string) => {
       
       if (!res.ok) throw new Error('Failed to fetch nested records');
       const data = await res.json();
-      setRecords(data);
+      setRecords(data.records || []);
     } catch (err: any) {
       setError(err.message);
     } finally {

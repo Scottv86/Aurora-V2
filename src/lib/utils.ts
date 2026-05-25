@@ -280,6 +280,8 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
   
   const type = field.type;
   
+  if (type === 'sub_module') return 4;
+  
   if (isContainerField(type)) {
     // If collapsed, return 2 units to match standard field height (120px)
     if (field.isCollapsed) return 2;

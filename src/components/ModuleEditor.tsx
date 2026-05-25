@@ -658,7 +658,7 @@ export const FIELD_CATEGORIES = [
     id: 'hierarchical',
     label: 'Hierarchical',
     fields: [
-      { id: 'sub_module', label: 'Nested Collection', icon: Layers, defaultSpan: 6 },
+      { id: 'sub_module', label: 'Sub-module', icon: Layers, defaultSpan: 6 },
     ]
   }
 ];
@@ -4545,6 +4545,38 @@ export const ModuleEditor = () => {
                                           </div>
                                           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
                                         </div>
+                                      ) : block.type === 'sub_module' ? (
+                                        <div className="pt-2 flex-1 flex flex-col justify-between">
+                                          <div className="border border-dashed border-indigo-500/20 bg-indigo-500/[0.02] dark:bg-indigo-500/[0.01] rounded-2xl p-3.5 space-y-3 flex flex-col flex-1 h-36">
+                                            {/* Mock records list */}
+                                            <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+                                              <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                  <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
+                                                    <Layers size={11} className="text-indigo-500/70" />
+                                                  </div>
+                                                  <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record A</span>
+                                                </div>
+                                                <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                              </div>
+                                              <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                  <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
+                                                    <Layers size={11} className="text-indigo-500/70" />
+                                                  </div>
+                                                  <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record B</span>
+                                                </div>
+                                                <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Mock Action */}
+                                            <div className="flex items-center justify-center gap-1.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[9px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest select-none shadow-sm">
+                                              <Plus size={11} className="text-zinc-450" />
+                                              <span>Add / Link Record</span>
+                                            </div>
+                                          </div>
+                                        </div>
                                       ) : block.type === 'lookup' ? (
                                         <div className="pt-2">
                                           <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
@@ -5591,6 +5623,38 @@ export const ModuleEditor = () => {
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
                                         <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
                                         <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
+                                      </div>
+                                    ) : block.type === 'sub_module' ? (
+                                      <div className="pt-2 flex-1 flex flex-col justify-between">
+                                        <div className="border border-dashed border-indigo-500/20 bg-indigo-500/[0.02] dark:bg-indigo-500/[0.01] rounded-2xl p-3.5 space-y-3 flex flex-col flex-1 h-36">
+                                          {/* Mock records list */}
+                                          <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+                                            <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
+                                                  <Layers size={11} className="text-indigo-500/70" />
+                                                </div>
+                                                <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record A</span>
+                                              </div>
+                                              <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                            </div>
+                                            <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
+                                                  <Layers size={11} className="text-indigo-500/70" />
+                                                </div>
+                                                <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record B</span>
+                                              </div>
+                                              <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Mock Action */}
+                                          <div className="flex items-center justify-center gap-1.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[9px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest select-none shadow-sm">
+                                            <Plus size={11} className="text-zinc-450" />
+                                            <span>Add / Link Record</span>
+                                          </div>
+                                        </div>
                                       </div>
                                     ) : block.type === 'lookup' ? (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 gap-2 shadow-sm dark:shadow-none">
@@ -10781,7 +10845,7 @@ export const ModuleEditor = () => {
                       {selectedField.type === 'sub_module' && (
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Nested Collection</label>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Sub-module</label>
                             
                             {selectedField.targetModuleId ? (
                               <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3">
@@ -10793,7 +10857,7 @@ export const ModuleEditor = () => {
                                     <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">
                                       {modules.find(m => m.id === selectedField.targetModuleId)?.name || selectedField.targetModuleId}
                                     </h4>
-                                    <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Linked Collection</p>
+                                    <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Linked Sub-module</p>
                                   </div>
                                 </div>
                                 <button
@@ -10810,21 +10874,21 @@ export const ModuleEditor = () => {
                                   <Layers size={18} />
                                 </div>
                                 <div className="space-y-1">
-                                  <h4 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-widest">No Collection Configured</h4>
-                                  <p className="text-[9px] text-zinc-500 max-w-[180px] mx-auto leading-normal">Link an existing module or quick create a new one to populate this nested block.</p>
+                                  <h4 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-widest">No Sub-module Configured</h4>
+                                  <p className="text-[9px] text-zinc-500 max-w-[180px] mx-auto leading-normal">Link an existing module or quick create a new one to populate this submodule block.</p>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => setShowSubmoduleWizard(true)}
                                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/5"
                                 >
-                                  Setup Nested Collection...
+                                  Setup Sub-module...
                                 </button>
                               </div>
                             )}
                           </div>
                           <p className="text-[9px] text-zinc-500 italic px-1 leading-normal">
-                            A Nested Collection renders child records as first-class, independent database rows linked back to this parent record.
+                            A Sub-module renders child records as first-class, independent database rows linked back to this parent record.
                           </p>
                         </div>
                       )}

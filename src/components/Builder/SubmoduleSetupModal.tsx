@@ -215,7 +215,7 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
                 )}
                 <div>
                   <h2 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-                    {step === 'source' ? 'Nested Collection Setup' :
+                    {step === 'source' ? 'Sub-module Setup' :
                      step === 'configure' ? (sourceType === 'existing' ? 'Choose Existing Module' : 'Configure New Module') :
                      'Confirm Configuration'}
                   </h2>
@@ -394,10 +394,10 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
                       <Sparkles size={28} className="animate-pulse" />
                     </div>
                     <div className="space-y-2 max-w-md">
-                      <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">Ready to Link Nested Collection</h3>
+                      <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">Ready to Link Sub-module</h3>
                       <p className="text-xs text-zinc-500 leading-relaxed">
                         {sourceType === 'existing' ? (
-                          <>You are linking the existing module <strong>{selectedModuleName}</strong> to this nested collection field.</>
+                          <>You are linking the existing module <strong>{selectedModuleName}</strong> to this submodule field.</>
                         ) : (
                           <>We will bootstrap a new custom module named <strong>{selectedModuleName}</strong> and establish the parent relationship.</>
                         )}
