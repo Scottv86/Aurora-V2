@@ -125,6 +125,7 @@ export const ModuleCatalog = () => {
   const [enabling, setEnabling] = useState<string | null>(null);
   const [moduleToDelete, setModuleToDelete] = useState<any>(null);
   const [previewModule, setPreviewModule] = useState<any>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   // Persistence
   useEffect(() => {
@@ -309,7 +310,12 @@ export const ModuleCatalog = () => {
   const filteredModules = useMemo(() => {
     return allModules.filter((m: Module) => {
       // Tab filtering
-      if (activeTab === 'INSTALLED' && !m.enabled) return false;
+      if (activeTab === 'INSTALLED') {
+        // Must be an installed instance (not a template)
+        if (m.isTemplate) return false;
+        // Hide inactive unless toggled on
+        if (!m.enabled && !showInactive) return false;
+      }
       if (activeTab === 'LIBRARY' && !m.isTemplate) return false;
 
       const categoryMatch = selectedCategories.includes('All') || (m.category && selectedCategories.includes(m.category));
@@ -320,7 +326,7 @@ export const ModuleCatalog = () => {
 
       return categoryMatch && typeMatch && statusMatch && searchMatch;
     });
-  }, [allModules, selectedCategories, selectedType, selectedStatus, debouncedQuery, activeTab]);
+  }, [allModules, selectedCategories, selectedType, selectedStatus, debouncedQuery, activeTab, showInactive]);
 
   const rowProps = useMemo(() => ({
     filteredModules,
@@ -404,6 +410,22 @@ export const ModuleCatalog = () => {
           </div>
 
           <div className="flex items-center gap-3 pr-2 border-l border-zinc-200 dark:border-zinc-800 pl-4">
+
+            {/* Show Inactive Toggle — only on Installed tab */}
+            {activeTab === 'INSTALLED' && (
+              <button
+                onClick={() => setShowInactive(v => !v)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border",
+                  showInactive
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent"
+                    : "bg-transparent text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300"
+                )}
+              >
+                <LucideIcons.EyeOff size={11} />
+                Inactive
+              </button>
+            )}
 
             <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800" />
 
@@ -510,7 +532,12 @@ export const ModuleCatalog = () => {
                         initial={{ opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.005 }}
-                        className="group p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[24px] transition-all hover:shadow-xl hover:border-indigo-500/30 cursor-pointer flex flex-col relative overflow-hidden h-full"
+                        className={cn(
+                          "group p-5 border rounded-[24px] transition-all cursor-pointer flex flex-col relative overflow-hidden h-full",
+                          mod.enabled
+                            ? "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:shadow-xl hover:border-indigo-500/30"
+                            : "bg-zinc-50/60 dark:bg-zinc-900/40 border-zinc-200/60 dark:border-zinc-800/50 opacity-60 hover:opacity-80"
+                        )}
                       >
                         <div className="relative z-10 flex flex-col h-full">
                           <div className="flex items-start justify-between mb-5">
@@ -560,20 +587,30 @@ export const ModuleCatalog = () => {
                                   </button>
                                 )}
                                 {mod.enabled ? (
-                                  <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 text-emerald-600 rounded-lg border border-emerald-500/20">
-                                    <CheckCircle2 size={10} />
-                                    <span className="text-[9px] font-black uppercase tracking-tighter">Active</span>
-                                  </div>
-                                ) : (
-                                  <button 
-                                    onClick={() => handleEnable(mod)}
-                                    disabled={enabling === mod.id}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-md"
-                                  >
-                                    <span>{enabling === mod.id ? 'Installing...' : (mod.isTemplate ? 'Install' : 'Add')}</span>
-                                    {enabling === mod.id ? <LucideIcons.Loader2 size={10} className="animate-spin" /> : <ArrowRight size={10} />}
-                                  </button>
-                                )}
+                                   <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 text-emerald-600 rounded-lg border border-emerald-500/20">
+                                     <CheckCircle2 size={10} />
+                                     <span className="text-[9px] font-black uppercase tracking-tighter">Active</span>
+                                   </div>
+                                 ) : activeTab === 'INSTALLED' ? (
+                                   // Inactive installed module — show re-enable button
+                                   <button
+                                     onClick={() => handleEnable(mod)}
+                                     disabled={enabling === mod.id}
+                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all"
+                                   >
+                                     <span>{enabling === mod.id ? 'Enabling...' : 'Re-enable'}</span>
+                                     {enabling === mod.id ? <LucideIcons.Loader2 size={10} className="animate-spin" /> : <LucideIcons.RotateCw size={10} />}
+                                   </button>
+                                 ) : (
+                                   <button 
+                                     onClick={() => handleEnable(mod)}
+                                     disabled={enabling === mod.id}
+                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-md"
+                                   >
+                                     <span>{enabling === mod.id ? 'Installing...' : (mod.isTemplate ? 'Install' : 'Add')}</span>
+                                     {enabling === mod.id ? <LucideIcons.Loader2 size={10} className="animate-spin" /> : <ArrowRight size={10} />}
+                                   </button>
+                                 )}
                              </div>
                           </div>
                         </div>
