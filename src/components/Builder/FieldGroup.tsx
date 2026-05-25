@@ -219,7 +219,16 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
           )}
           <div>
             <h4 className={cn("font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.15em] mb-0.5", subtitleTextSize)}>
-              {block.type.replace('Group', ' Group')}
+              {({
+                repeatableGroup: 'Collection',
+                fieldGroup: 'Field Group',
+                group: 'Group',
+                card: 'Card',
+                accordion: 'Accordion',
+                tabs_nested: 'Tabs',
+                stepper: 'Stepper',
+                timeline: 'Timeline',
+              } as Record<string, string>)[block.type] || block.type.replace('Group', ' Group')}
             </h4>
             <p className={cn("font-bold text-zinc-900 dark:text-zinc-100 tracking-tight", titleTextSize)}>{block.label}</p>
           </div>

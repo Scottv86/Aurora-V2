@@ -4462,7 +4462,7 @@ export const ModuleEditor = () => {
                                             const Icon = fieldDef?.icon;
                                             return Icon ? <Icon size={10} className="text-zinc-400" /> : null;
                                           })()}
-                                          {block.type.replace('_', ' ')}
+                                          {FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type)?.label || block.type.replace('_', ' ')}
                                           {block.required && <span className="text-rose-500">*</span>}
                                           {block.tooltip && <HelpCircle size={10} className="text-zinc-400" />}
                                         </label>
@@ -4865,7 +4865,7 @@ export const ModuleEditor = () => {
                                              const Icon = fieldDef?.icon;
                                              return Icon ? <Icon size={10} className="text-zinc-400" /> : null;
                                            })()}
-                                          {block.type.replace('_', ' ')}
+                                          {FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type)?.label || block.type.replace('_', ' ')}
                                           {block.required && <span className="text-rose-500">*</span>}
                                           {block.tooltip && <HelpCircle size={10} className="text-zinc-400" />}
                                         </label>
