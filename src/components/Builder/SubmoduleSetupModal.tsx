@@ -50,10 +50,11 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
   
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Filter out current parent module and match search query
+  // Filter out current parent module, ensure they are enabled, and match search query
   const eligibleModules = useMemo(() => {
     return modules
       .filter(m => m.id !== currentModuleId)
+      .filter(m => m.status === 'ACTIVE' || m.enabled)
       .filter(m => m.name?.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [modules, currentModuleId, searchQuery]);
 
