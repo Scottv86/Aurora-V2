@@ -82,7 +82,7 @@ const RecordModal = ({
       });
 
       if (missingFields.length > 0) {
-        toast.error(`Please fill in required fields: ${missingFields.map(f => f.label || f.id).join(', ')}`);
+        toast.error(`Please fill in required fields: ${missingFields.map((f: any) => f.label || f.id).join(', ')}`);
         return;
       }
     }
@@ -250,6 +250,7 @@ const RecordModal = ({
                                   parentRecordId={entry.recordId!}
                                   moduleId={field.targetModuleId}
                                   label={field.label}
+                                  field={field}
                                 />
                               ) : field.type === 'repeatableGroup' ? (
                                 <RepeatableGroupBlock 
@@ -311,6 +312,7 @@ const RecordModal = ({
                                 parentRecordId={entry.recordId!}
                                 moduleId={coll.targetModuleId}
                                 label={coll.label}
+                                field={coll}
                             />
                           ))}
                         </div>

@@ -405,8 +405,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   // Layout & Content Components (No Value)
   if (type === 'heading') {
-    const Tag = (options?.[0] || 'h2') as React.ElementType;
-    const size = options?.[0] === 'h1' ? 'text-2xl' : options?.[0] === 'h2' ? 'text-xl' : 'text-lg';
+    const rawTag = options?.[0] || 'h2';
+    const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
+    const size = Tag === 'h1' ? 'text-2xl' : Tag === 'h2' ? 'text-xl' : 'text-lg';
     return <Tag className={cn("font-bold text-zinc-900 dark:text-white tracking-tight", size)}>{label}</Tag>;
   }
 

@@ -160,19 +160,25 @@ router.get('/records', async (req: TenantRequest, res) => {
     let records;
 
     if (associationId) {
-      // For associations, we still use raw query but with LIMIT/OFFSET
-      const countRes: any[] = await db.$queryRaw`
-        SELECT COUNT(*)::int as count FROM records 
-        WHERE associations @> ${JSON.stringify([{ record_id: associationId }])}::jsonb
-      `;
-      total = countRes[0].count;
+      total = await db.record.count({
+        where: {
+          associations: {
+            array_contains: [{ record_id: associationId as string }]
+          }
+        }
+      });
 
-      records = await db.$queryRaw`
-        SELECT * FROM records 
-        WHERE associations @> ${JSON.stringify([{ record_id: associationId }])}::jsonb
-        ORDER BY created_at DESC
-        LIMIT ${l} OFFSET ${skip}
-      `;
+      records = await db.record.findMany({
+        where: {
+          associations: {
+            array_contains: [{ record_id: associationId as string }]
+          }
+        },
+        include: { createdByMember: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: l
+      });
     } else if (platformModuleId === 'people-organisations') {
       total = await db.party.count({ where: {} });
       records = await db.party.findMany({

@@ -95,7 +95,8 @@ import {
   AlertTriangle,
   ChevronRight,
   Copy,
-  Key
+  Key,
+  Edit2
 } from 'lucide-react';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow, FieldType, Tab, VisibilityRule } from '../types/platform';
@@ -509,6 +510,7 @@ export interface Field {
   min?: number;
   max?: number;
   variant?: string;
+  density?: 'compact' | 'standard' | 'spacious';
   action?: string;
   iconName?: string;
   showIcon?: boolean;
@@ -1269,11 +1271,12 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
       ) : ['heading', 'divider', 'spacer', 'alert', 'html', 'button'].includes(field?.type || '') ? (
         <div className="py-2 space-y-2">
           {field?.type === 'heading' && (() => {
-            const Tag = (field?.options?.[0] || 'h2') as React.ElementType;
-            const size = field?.options?.[0] === 'h1' ? 'text-2xl font-bold' :
-                         field?.options?.[0] === 'h2' ? 'text-xl font-bold' :
-                         field?.options?.[0] === 'h3' ? 'text-lg font-bold' :
-                         field?.options?.[0] === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+            const rawTag = field?.options?.[0] || 'h2';
+            const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
+            const size = Tag === 'h1' ? 'text-2xl font-bold' :
+                         Tag === 'h2' ? 'text-xl font-bold' :
+                         Tag === 'h3' ? 'text-lg font-bold' :
+                         Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
             return (
               <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
                 {fObj.labelOverride || field?.label || 'Heading'}
@@ -4487,11 +4490,12 @@ export const ModuleEditor = () => {
 
                                     <div className="min-h-[20px]">
                                       {block.type === 'heading' ? (() => {
-                                        const Tag = (block.options?.[0] || 'h2') as React.ElementType;
-                                        const size = block.options?.[0] === 'h1' ? 'text-2xl font-bold' :
-                                                     block.options?.[0] === 'h2' ? 'text-xl font-bold' :
-                                                     block.options?.[0] === 'h3' ? 'text-lg font-bold' :
-                                                     block.options?.[0] === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+                                        const rawTag = block.options?.[0] || 'h2';
+                                        const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
+                                        const size = Tag === 'h1' ? 'text-2xl font-bold' :
+                                                     Tag === 'h2' ? 'text-xl font-bold' :
+                                                     Tag === 'h3' ? 'text-lg font-bold' :
+                                                     Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
                                         return (
                                           <div className="pt-2">
                                             <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
@@ -4545,35 +4549,82 @@ export const ModuleEditor = () => {
                                           </div>
                                           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
                                         </div>
+                                      ) : block.type === 'time' ? (
+                                        <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
+                                          <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
+                                          <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
+                                        </div>
                                       ) : block.type === 'sub_module' ? (
                                         <div className="pt-2 flex-1 flex flex-col justify-between">
-                                          <div className="border border-dashed border-indigo-500/20 bg-indigo-500/[0.02] dark:bg-indigo-500/[0.01] rounded-2xl p-3.5 space-y-3 flex flex-col flex-1 h-36">
-                                            {/* Mock records list */}
-                                            <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
-                                              <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                  <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
-                                                    <Layers size={11} className="text-indigo-500/70" />
-                                                  </div>
-                                                  <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record A</span>
-                                                </div>
-                                                <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                          <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
+                                            {/* Inner Toolbar */}
+                                            <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
+                                              <div className="flex-1 max-w-[140px] relative">
+                                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
+                                                <input 
+                                                  type="text"
+                                                  placeholder={`Search ${block.label}...`}
+                                                  disabled
+                                                  className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+                                                />
                                               </div>
-                                              <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                  <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
-                                                    <Layers size={11} className="text-indigo-500/70" />
-                                                  </div>
-                                                  <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record B</span>
+                                              <div className="flex items-center gap-1.5 shrink-0">
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
+                                                  <Search size={10} />
+                                                  <span>Link Existing</span>
                                                 </div>
-                                                <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
+                                                  <Plus size={10} />
+                                                  <span>Add Record</span>
+                                                </div>
                                               </div>
                                             </div>
-                                            
-                                            {/* Mock Action */}
-                                            <div className="flex items-center justify-center gap-1.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[9px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest select-none shadow-sm">
-                                              <Plus size={11} className="text-zinc-450" />
-                                              <span>Add / Link Record</span>
+
+                                            {/* Table layout (Mock) */}
+                                            <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
+                                              <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                  <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
+                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
+                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
+                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
+                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
+                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                                                  <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                                                    <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-001</td>
+                                                    <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record A</td>
+                                                    <td className="px-4 py-1.5">
+                                                      <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                                                    </td>
+                                                    <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
+                                                    <td className="px-4 py-1.5 text-right">
+                                                      <div className="flex justify-end gap-1 opacity-60">
+                                                        <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                                                        <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                                                        <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                  <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                                                    <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-002</td>
+                                                    <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record B</td>
+                                                    <td className="px-4 py-1.5">
+                                                      <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                                                    </td>
+                                                    <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
+                                                    <td className="px-4 py-1.5 text-right">
+                                                      <div className="flex justify-end gap-1 opacity-60">
+                                                        <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                                                        <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                                                        <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                </tbody>
+                                              </table>
                                             </div>
                                           </div>
                                         </div>
@@ -4875,11 +4926,12 @@ export const ModuleEditor = () => {
 
                                   <div className="min-h-[20px]">
                                     {block.type === 'heading' ? (() => {
-                                      const Tag = (block.options?.[0] || 'h2') as React.ElementType;
-                                      const size = block.options?.[0] === 'h1' ? 'text-2xl font-bold' :
-                                                   block.options?.[0] === 'h2' ? 'text-xl font-bold' :
-                                                   block.options?.[0] === 'h3' ? 'text-lg font-bold' :
-                                                   block.options?.[0] === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+                                      const rawTag = block.options?.[0] || 'h2';
+                                      const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
+                                      const size = Tag === 'h1' ? 'text-2xl font-bold' :
+                                                   Tag === 'h2' ? 'text-xl font-bold' :
+                                                   Tag === 'h3' ? 'text-lg font-bold' :
+                                                   Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
                                       return (
                                         <div className="pt-2">
                                           <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
@@ -5626,33 +5678,75 @@ export const ModuleEditor = () => {
                                       </div>
                                     ) : block.type === 'sub_module' ? (
                                       <div className="pt-2 flex-1 flex flex-col justify-between">
-                                        <div className="border border-dashed border-indigo-500/20 bg-indigo-500/[0.02] dark:bg-indigo-500/[0.01] rounded-2xl p-3.5 space-y-3 flex flex-col flex-1 h-36">
-                                          {/* Mock records list */}
-                                          <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
-                                            <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
-                                              <div className="flex items-center gap-2 min-w-0">
-                                                <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
-                                                  <Layers size={11} className="text-indigo-500/70" />
-                                                </div>
-                                                <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record A</span>
-                                              </div>
-                                              <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                        <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
+                                          {/* Inner Toolbar */}
+                                          <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
+                                            <div className="flex-1 max-w-[140px] relative">
+                                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
+                                              <input 
+                                                type="text"
+                                                placeholder={`Search ${block.label}...`}
+                                                disabled
+                                                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+                                              />
                                             </div>
-                                            <div className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 rounded-xl shadow-sm">
-                                              <div className="flex items-center gap-2 min-w-0">
-                                                <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-450 shrink-0">
-                                                  <Layers size={11} className="text-indigo-500/70" />
-                                                </div>
-                                                <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 truncate">Example Associated Record B</span>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                              <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
+                                                <Search size={10} />
+                                                <span>Link Existing</span>
                                               </div>
-                                              <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
+                                              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
+                                                <Plus size={10} />
+                                                <span>Add Record</span>
+                                              </div>
                                             </div>
                                           </div>
-                                          
-                                          {/* Mock Action */}
-                                          <div className="flex items-center justify-center gap-1.5 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[9px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest select-none shadow-sm">
-                                            <Plus size={11} className="text-zinc-450" />
-                                            <span>Add / Link Record</span>
+
+                                          {/* Table layout (Mock) */}
+                                          <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
+                                            <table className="w-full text-left border-collapse">
+                                              <thead>
+                                                <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
+                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
+                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
+                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
+                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
+                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                                                <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                                                  <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-001</td>
+                                                  <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record A</td>
+                                                  <td className="px-4 py-1.5">
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                                                  </td>
+                                                  <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
+                                                  <td className="px-4 py-1.5 text-right">
+                                                    <div className="flex justify-end gap-1 opacity-60">
+                                                      <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                                                      <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                                                      <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                                <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                                                  <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-002</td>
+                                                  <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record B</td>
+                                                  <td className="px-4 py-1.5">
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                                                  </td>
+                                                  <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
+                                                  <td className="px-4 py-1.5 text-right">
+                                                    <div className="flex justify-end gap-1 opacity-60">
+                                                      <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                                                      <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                                                      <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                              </tbody>
+                                            </table>
                                           </div>
                                         </div>
                                       </div>
@@ -9109,7 +9203,7 @@ export const ModuleEditor = () => {
                         />
                       </div>
 
-                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button'].includes(selectedField.type) && (
+                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(selectedField.type) && (
                         <>
                           <div className="space-y-2">
                             <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Helper Text</label>
@@ -9156,7 +9250,7 @@ export const ModuleEditor = () => {
                         </>
                       )}
 
-                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button'].includes(selectedField.type) && (
+                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(selectedField.type) && (
                         <div className="pt-2">
                           <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
                             <div className="flex items-center gap-3">
@@ -9187,34 +9281,36 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
-                      <div className="pt-2">
-                        <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                              selectedField.hidden ? "bg-rose-500/10 text-rose-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
-                            )}>
-                              <EyeOff size={14} />
+                      {selectedField.type !== 'sub_module' && (
+                        <div className="pt-2">
+                          <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
+                            <div className="flex items-center gap-3">
+                              <div className={cn(
+                                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                selectedField.hidden ? "bg-rose-500/10 text-rose-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                              )}>
+                                <EyeOff size={14} />
+                              </div>
+                              <div>
+                                <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Hidden by Default</span>
+                                <span className="block text-[9px] text-zinc-500">{selectedField.hidden ? 'Field is hidden from users' : 'Field is visible to users'}</span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Hidden by Default</span>
-                              <span className="block text-[9px] text-zinc-500">{selectedField.hidden ? 'Field is hidden from users' : 'Field is visible to users'}</span>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => updateField(selectedField.id, { hidden: !selectedField.hidden })}
-                            className={cn(
-                              "w-10 h-5 rounded-full relative transition-colors duration-300",
-                              selectedField.hidden ? "bg-rose-600" : "bg-zinc-300 dark:bg-zinc-700"
-                            )}
-                          >
-                            <motion.div 
-                              animate={{ x: selectedField.hidden ? 22 : 2 }}
-                              className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
-                            />
-                          </button>
-                        </label>
-                      </div>
+                            <button 
+                              onClick={() => updateField(selectedField.id, { hidden: !selectedField.hidden })}
+                              className={cn(
+                                "w-10 h-5 rounded-full relative transition-colors duration-300",
+                                selectedField.hidden ? "bg-rose-600" : "bg-zinc-300 dark:bg-zinc-700"
+                              )}
+                            >
+                              <motion.div 
+                                animate={{ x: selectedField.hidden ? 22 : 2 }}
+                                className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
+                              />
+                            </button>
+                          </label>
+                        </div>
+                      )}
 
                       </div>
 
@@ -11149,7 +11245,7 @@ export const ModuleEditor = () => {
                       )}
 
                       {/* Table Spacing Control Panel */}
-                      {(selectedField.type === 'datatable' || (selectedField.type === 'repeatableGroup' && (selectedField.variant || 'table') === 'table')) && (
+                      {(selectedField.type === 'datatable' || selectedField.type === 'sub_module' || (selectedField.type === 'repeatableGroup' && (selectedField.variant || 'table') === 'table')) && (
                         <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
                           <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Table Spacing</label>
                           <div className="grid grid-cols-3 gap-2">

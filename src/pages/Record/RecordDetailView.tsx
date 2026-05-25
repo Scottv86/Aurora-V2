@@ -1096,6 +1096,7 @@ export const RecordDetailView = () => {
                 parentRecordId={recordId || record.id}
                 moduleId={field.targetModuleId}
                 label={field.label}
+                field={field}
               />
             ) : field.type === 'repeatableGroup' ? (
               <RepeatableGroupBlock 
