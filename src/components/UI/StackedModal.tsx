@@ -93,26 +93,41 @@ const RecordModal = ({
       return;
     }
 
-    if (!tenant?.id || !entry.moduleId || !record?.id) return;
+    if (!tenant?.id || !entry.moduleId) return;
+    
+    const isNew = !record?.id;
     setIsSaving(true);
+    
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`${DATA_API_URL}/records/${record.id}`, {
-        method: 'PUT',
+      const url = isNew ? `${DATA_API_URL}/records` : `${DATA_API_URL}/records/${record.id}`;
+      const method = isNew ? 'POST' : 'PUT';
+      
+      const payload = isNew ? { moduleId: entry.moduleId, ...record } : record;
+
+      const res = await fetch(url, {
+        method,
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`, 
           'x-tenant-id': tenant.id 
         },
-        body: JSON.stringify(record)
+        body: JSON.stringify(payload)
       });
+      
       if (res.ok) {
-        toast.success("Changes saved successfully");
+        const savedData = await res.json();
+        toast.success(isNew ? "Record created successfully" : "Changes saved successfully");
+        if (entry.onSave) {
+          entry.onSave(savedData);
+        }
+        onPop();
       } else {
-        throw new Error("Failed to save");
+        const err = await res.json();
+        throw new Error(err.error || "Failed to save");
       }
-    } catch (err) {
-      toast.error("Error saving record");
+    } catch (err: any) {
+      toast.error(err.message || "Error saving record");
     } finally {
       setIsSaving(false);
     }
@@ -156,6 +171,11 @@ const RecordModal = ({
             headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id }
           });
           if (recRes.ok) setRecord(await recRes.json());
+        } else {
+          setRecord({
+            moduleId: entry.moduleId,
+            associations: entry.parentAssociation ? [{ record_id: entry.parentAssociation.recordId }] : [],
+          });
         }
       } catch (err) {
         console.error("Failed to fetch modal data:", err);

@@ -141,6 +141,7 @@ import { NexusSelectionModal } from './Builder/NexusSelectionModal';
 import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
 import { FieldSelectorModal } from './Builder/FieldSelectorModal';
+import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
 
 const METADATA_FIELDS = [
   { id: 'createdAt', label: 'Created Date', type: 'date', tabId: 'metadata' },
@@ -1603,6 +1604,7 @@ export const ModuleEditor = () => {
   const [activeConnectors, setActiveConnectors] = useState<any[]>([]);
   const [connectorRegistry, setConnectorRegistry] = useState<any[]>([]);
   const [showConnectorModal, setShowConnectorModal] = useState(false);
+  const [showSubmoduleWizard, setShowSubmoduleWizard] = useState(false);
 
   // Fetch Active Connectors & Registry
   useEffect(() => {
@@ -4194,7 +4196,7 @@ export const ModuleEditor = () => {
                           <>
                             <div className="space-y-4 flex-1 min-h-0 flex flex-col">
                               <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
-                              <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                              <div className="flex-1 overflow-y-auto px-1.5 pt-1.5 pb-2 custom-scrollbar">
                                 <Reorder.Group 
                                   axis="y" 
                                   values={tabs} 
@@ -10779,19 +10781,51 @@ export const ModuleEditor = () => {
                       {selectedField.type === 'sub_module' && (
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Target Collection</label>
-                            <select 
-                              value={selectedField.targetModuleId || ''}
-                              onChange={(e) => updateField(selectedField.id, { targetModuleId: e.target.value })}
-                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
-                            >
-                              <option value="">Select Module...</option>
-                              {modules.filter(m => m.id !== id).map(m => (
-                                <option key={m.id} value={m.id}>{m.name}</option>
-                              ))}
-                            </select>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Nested Collection</label>
+                            
+                            {selectedField.targetModuleId ? (
+                              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                                    <Layers size={18} />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+                                      {modules.find(m => m.id === selectedField.targetModuleId)?.name || selectedField.targetModuleId}
+                                    </h4>
+                                    <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Linked Collection</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowSubmoduleWizard(true)}
+                                  className="w-full py-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-950 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all"
+                                >
+                                  Change Setup...
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="p-5 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-center space-y-4">
+                                <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 mx-auto">
+                                  <Layers size={18} />
+                                </div>
+                                <div className="space-y-1">
+                                  <h4 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-widest">No Collection Configured</h4>
+                                  <p className="text-[9px] text-zinc-500 max-w-[180px] mx-auto leading-normal">Link an existing module or quick create a new one to populate this nested block.</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowSubmoduleWizard(true)}
+                                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/5"
+                                >
+                                  Setup Nested Collection...
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          <p className="text-[9px] text-zinc-600 italic px-1">This will render a mirrored view of records from the selected module that are associated with this parent.</p>
+                          <p className="text-[9px] text-zinc-500 italic px-1 leading-normal">
+                            A Nested Collection renders child records as first-class, independent database rows linked back to this parent record.
+                          </p>
                         </div>
                       )}
 
@@ -11390,6 +11424,21 @@ export const ModuleEditor = () => {
           }}
         />
       </div>
+
+      <SubmoduleSetupModal 
+        isOpen={showSubmoduleWizard}
+        onClose={() => setShowSubmoduleWizard(false)}
+        modules={modules}
+        currentModuleId={id}
+        onComplete={(targetModuleId) => {
+          if (selectedField) {
+            updateField(selectedField.id, { targetModuleId });
+          }
+        }}
+        tenantId={tenant?.id || ''}
+        token={(import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || ''}
+        DATA_API_URL={DATA_API_URL}
+      />
 
       <NexusSelectionModal 
         isOpen={showConnectorModal}

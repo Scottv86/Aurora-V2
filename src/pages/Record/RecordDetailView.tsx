@@ -38,6 +38,7 @@ import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
+import { RecursiveCollectionBlock } from '../../components/Platform/RecursiveCollectionBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
 import { RecordDetailSkeleton } from '../../components/Platform/RecordDetailSkeleton';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
@@ -1022,14 +1023,14 @@ export const RecordDetailView = () => {
               data-active-field={activeFieldId === field.id ? field.id : undefined}
               className={cn(
                 "group/field transition-all relative min-w-0",
-                !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) && "cursor-pointer"
+                !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) && "cursor-pointer"
               )}
               style={{
                 gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                 gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
               }}
               onClick={() => {
-                if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type)) {
+                if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type)) {
                   setActiveFieldId(field.id);
                 }
               }}
@@ -1039,7 +1040,7 @@ export const RecordDetailView = () => {
               ds.cardPaddingAndRounding,
               activeFieldId === field.id 
                 ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable'].includes(field.type) 
+                : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) 
                   ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
                   : "border-transparent"
             )}>
@@ -1090,6 +1091,12 @@ export const RecordDetailView = () => {
                   {(field.fields || []).map(renderNestedField)}
                 </div>
               </CollapsibleFieldGroup>
+            ) : field.type === 'sub_module' ? (
+              <RecursiveCollectionBlock 
+                parentRecordId={recordId || record.id}
+                moduleId={field.targetModuleId}
+                label={field.label}
+              />
             ) : field.type === 'repeatableGroup' ? (
               <RepeatableGroupBlock 
                  field={field}

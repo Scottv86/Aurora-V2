@@ -9,6 +9,11 @@ export interface ModalEntry {
   localData?: any;
   localSchema?: any[];
   onSaveLocal?: (data: any) => void;
+  parentAssociation?: {
+    recordId: string;
+    moduleId: string;
+  };
+  onSave?: (data: any) => void;
 }
 
 interface ModalStackContextType {
