@@ -98,6 +98,8 @@ import {
   Key,
   Edit2
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow, FieldType, Tab, VisibilityRule } from '../types/platform';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
@@ -1412,6 +1414,7 @@ export const ModuleEditor = () => {
   const { teams } = useTeams();
   const { positions } = usePositions();
   const { groups: permissionGroups } = usePermissionGroups();
+  const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRestricted, setIsRestricted] = useState(false);
@@ -1455,7 +1458,8 @@ export const ModuleEditor = () => {
       timelineDateFieldId: 'createdAt',
       ganttStartDateFieldId: 'createdAt',
       ganttEndDateFieldId: 'createdAt',
-      mapAddressFieldId: '_record_key'
+      mapAddressFieldId: '_record_key',
+      calendarDateFieldId: 'createdAt'
     },
     detail: {
       layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar' | 'process' | 'accordion',
@@ -2002,7 +2006,8 @@ export const ModuleEditor = () => {
               timelineDateFieldId: data.interfaceSettings.master?.timelineDateFieldId || 'createdAt',
               ganttStartDateFieldId: data.interfaceSettings.master?.ganttStartDateFieldId || 'createdAt',
               ganttEndDateFieldId: data.interfaceSettings.master?.ganttEndDateFieldId || 'createdAt',
-              mapAddressFieldId: data.interfaceSettings.master?.mapAddressFieldId || '_record_key'
+              mapAddressFieldId: data.interfaceSettings.master?.mapAddressFieldId || '_record_key',
+              calendarDateFieldId: data.interfaceSettings.master?.calendarDateFieldId || 'createdAt'
             },
             detail: {
               ...data.interfaceSettings.detail,
@@ -2107,6 +2112,7 @@ export const ModuleEditor = () => {
       const savedModule = await response.json();
       
       await refreshModules();
+      queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
       
       if (isNew) {
         toast.success('Module created successfully!');
@@ -2120,7 +2126,7 @@ export const ModuleEditor = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, interfaceSettings, session?.access_token, navigate, refreshModules]);
+  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -2148,6 +2154,7 @@ export const ModuleEditor = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
   const [showSystemFields, setShowSystemFields] = useState(true);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   
   // Tab Scrolling Refs & State
   const tabContainerRef = useRef<HTMLDivElement>(null);
@@ -3027,6 +3034,777 @@ export const ModuleEditor = () => {
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, ...updates } : t));
   };
 
+  const mockRecords = [
+    { id: '1', _record_key: 'REQ-001', title: 'Website Redesign', status: 'In Progress', assignee: 'Scott V.', date: '2026-05-29', end_date: '2026-06-15', location: 'San Francisco, CA' },
+    { id: '2', _record_key: 'REQ-002', title: 'Database Optimization', status: 'To Do', assignee: 'Jane D.', date: '2026-05-30', end_date: '2026-06-05', location: 'New York, NY' },
+    { id: '3', _record_key: 'REQ-003', title: 'API Integration', status: 'Done', assignee: 'Alex M.', date: '2026-05-28', end_date: '2026-05-28', location: 'Los Angeles, CA' },
+    { id: '4', _record_key: 'REQ-004', title: 'Security Audit', status: 'In Progress', assignee: 'Scott V.', date: '2026-06-01', end_date: '2026-06-10', location: 'Chicago, IL' }
+  ];
+
+  const renderMasterKanbanPreview = () => {
+    const statuses = ['To Do', 'In Progress', 'Done'];
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Kanban Board Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Grouping by: Status</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Columns</span>
+            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">Status</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+          {statuses.map(status => {
+            const statusRecords = mockRecords.filter(r => r.status === status);
+            return (
+              <div key={status} className="bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-800/40 rounded-[2rem] p-5 flex flex-col gap-4">
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "w-2 h-2 rounded-full",
+                      status === 'Done' ? "bg-emerald-500" :
+                      status === 'In Progress' ? "bg-indigo-500" : "bg-zinc-400"
+                    )} />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200">{status}</span>
+                  </div>
+                  <span className="text-[9px] font-bold px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 rounded-full">{statusRecords.length}</span>
+                </div>
+                
+                <div className="space-y-3">
+                  {statusRecords.map(record => (
+                    <div key={record.id} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-black text-indigo-500 tracking-wider">{record._record_key}</span>
+                        <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-[8px] font-bold text-zinc-600 dark:text-zinc-400">
+                          {record.assignee.substring(0, 2)}
+                        </div>
+                      </div>
+                      <h4 className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{record.title}</h4>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterCalendarPreview = () => {
+    const days = Array.from({ length: 35 }, (_, i) => i - 3);
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button className="p-2 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400"><ChevronLeft size={14} /></button>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">May 2026</h3>
+            <button className="p-2 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400"><ChevronRight size={14} /></button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Date Field</span>
+            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
+              {interfaceSettings.master.calendarDateFieldId || 'createdAt'}
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+              <div key={d} className="py-3 text-center text-[10px] font-black text-zinc-400 uppercase tracking-wider">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 divide-x divide-y divide-zinc-100 dark:divide-zinc-800/50">
+            {days.map((day, idx) => {
+              const dateVal = day > 0 && day <= 31 ? day : '';
+              const matchingRecs = dateVal === 29 ? [mockRecords[0]] : dateVal === 30 ? [mockRecords[1]] : dateVal === 28 ? [mockRecords[2]] : [];
+              return (
+                <div key={idx} className="min-h-[100px] p-3 flex flex-col gap-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-950/20 transition-colors">
+                  <span className={cn(
+                    "text-[10px] font-bold text-zinc-400",
+                    dateVal === 29 && "text-indigo-600 dark:text-indigo-400 font-extrabold"
+                  )}>{dateVal}</span>
+                  {matchingRecs.map(r => (
+                    <div key={r.id} className="px-2 py-1 rounded bg-indigo-550/10 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-[9px] font-bold text-indigo-600 dark:text-indigo-400 truncate">
+                      {r._record_key}: {r.title}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterMapPreview = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Interactive Map Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Location Mapping</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Address Field</span>
+            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
+              {interfaceSettings.master.mapAddressFieldId || '_record_key'}
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-4 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm min-h-[500px]">
+          <div className="bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">
+            <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Geocoded Locations</span>
+            <div className="space-y-2 flex-grow overflow-y-auto">
+              {mockRecords.map(r => (
+                <div key={r.id} className="p-3.5 border border-zinc-100 dark:border-zinc-800/80 hover:border-indigo-500/30 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/20 cursor-pointer transition-all">
+                  <div className="text-[9px] font-black text-indigo-500 uppercase">{r._record_key}</div>
+                  <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{r.title}</div>
+                  <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider mt-1 flex items-center gap-1">
+                    <LucideIcons.MapPin size={10} />
+                    {r.location}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="lg:col-span-3 bg-zinc-100 dark:bg-zinc-950 relative flex items-center justify-center p-8 overflow-hidden select-none">
+            <div className="absolute inset-0 bg-[radial-gradient(#e4e4e7_1.5px,transparent_1.5px)] dark:bg-[radial-gradient(#27272a_1.5px,transparent_1.5px)] [background-size:24px_24px] opacity-60" />
+            
+            <div className="w-[80%] h-[80%] rounded-[2rem] bg-indigo-500/5 dark:bg-indigo-500/2 border-2 border-indigo-500/10 dark:border-indigo-500/5 flex items-center justify-center relative backdrop-blur-[2px]">
+              <div className="absolute top-[30%] left-[25%] flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-indigo-500/20 animate-ping absolute"></div>
+                <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-900 border-2 border-indigo-600 flex items-center justify-center relative z-10 shadow-lg cursor-pointer">
+                  <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                </div>
+                <span className="text-[9px] font-black bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 px-2 py-0.5 rounded-lg shadow-md mt-1 relative z-20">SF</span>
+              </div>
+              
+              <div className="absolute top-[50%] right-[30%] flex flex-col items-center">
+                <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-900 border-2 border-indigo-600 flex items-center justify-center relative z-10 shadow-lg cursor-pointer">
+                  <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                </div>
+                <span className="text-[9px] font-black bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 px-2 py-0.5 rounded-lg shadow-md mt-1 relative z-20">NY</span>
+              </div>
+              
+              <div className="text-center text-[10px] font-bold text-zinc-400 uppercase tracking-widest max-w-xs leading-relaxed z-10 bg-white/80 dark:bg-zinc-900/80 px-6 py-4 rounded-2xl border border-zinc-200 dark:border-zinc-800/50 shadow-sm">
+                Leaflet Map Container Canvas Preview
+              </div>
+            </div>
+            
+            <div className="absolute bottom-6 right-6 flex flex-col gap-1.5 shadow-sm z-20">
+              <button className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-extrabold">+</button>
+              <button className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-extrabold">-</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterCardsPreview = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Cards View Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Grid Cards</h3>
+          </div>
+          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 text-[9px] font-black uppercase tracking-wider text-zinc-500">
+            <span className="px-2.5 py-1 bg-white dark:bg-zinc-950 rounded-lg shadow-sm">Grid</span>
+            <span className="px-2.5 py-1">List</span>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {mockRecords.map(r => (
+            <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black text-indigo-500 tracking-wider">{r._record_key}</span>
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border",
+                  r.status === 'Done' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600" :
+                  r.status === 'In Progress' ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-600" :
+                  "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400"
+                )}>{r.status}</span>
+              </div>
+              
+              <div className="flex-1">
+                <h4 className="text-xs font-black uppercase tracking-wide text-zinc-800 dark:text-zinc-200 leading-tight">{r.title}</h4>
+              </div>
+              
+              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-black text-indigo-600">{r.assignee.substring(0, 2)}</div>
+                  <span className="text-[9px] font-bold text-zinc-500">{r.assignee}</span>
+                </div>
+                <span className="text-[8px] font-bold text-zinc-400">{r.date}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterTimelinePreview = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Timeline View Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Chronological Progression</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Sorting Field</span>
+            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
+              {interfaceSettings.master.timelineDateFieldId || 'createdAt'}
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 shadow-sm relative">
+          <div className="absolute left-[36px] top-8 bottom-8 w-0.5 bg-zinc-100 dark:bg-zinc-800" />
+          
+          <div className="space-y-8 relative">
+            {mockRecords.map(r => (
+              <div key={r.id} className="flex items-start gap-6">
+                <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-900 border-2 border-indigo-600 flex items-center justify-center relative z-10 shrink-0 shadow">
+                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                </div>
+                
+                <div className="flex-1 bg-zinc-50/50 dark:bg-zinc-900/20 border border-zinc-100 dark:border-zinc-800/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[8px] font-black text-indigo-500 uppercase tracking-wider">{r.date}</span>
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white">{r._record_key}: {r.title}</h4>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="px-2 py-0.5 rounded-full text-[8px] font-bold border bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-800 uppercase">{r.status}</span>
+                    <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-indigo-600">{r.assignee.substring(0, 2)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterGanttPreview = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Gantt Chart Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Project Schedules</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-1.5 border border-zinc-200 dark:border-zinc-800 text-[9px] font-bold text-zinc-500">
+              <span className="text-zinc-400">Start:</span>
+              <span>{interfaceSettings.master.ganttStartDateFieldId || 'createdAt'}</span>
+            </div>
+            <div className="flex items-center gap-1 bg-zinc-50 dark:bg-zinc-800 rounded-xl px-3 py-1.5 border border-zinc-200 dark:border-zinc-800 text-[9px] font-bold text-zinc-500">
+              <span className="text-zinc-400">End:</span>
+              <span>{interfaceSettings.master.ganttEndDateFieldId || 'createdAt'}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm flex flex-col">
+          <div className="grid grid-cols-12 divide-x divide-zinc-200 dark:divide-zinc-800 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            <div className="col-span-3 p-3 text-[10px] font-black text-zinc-400 uppercase tracking-wider">Record / Task</div>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} className="p-3 text-center text-[9px] font-bold text-zinc-400">May {26 + i}</div>
+            ))}
+          </div>
+          
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+            {mockRecords.map((r, rIdx) => (
+              <div key={r.id} className="grid grid-cols-12 divide-x divide-zinc-200/50 dark:divide-zinc-800/30 items-center">
+                <div className="col-span-3 p-4 flex flex-col gap-0.5">
+                  <span className="text-[8px] font-black text-indigo-500">{r._record_key}</span>
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{r.title}</span>
+                </div>
+                
+                <div className="col-span-9 p-4 relative h-12 flex items-center bg-zinc-50/20 dark:bg-zinc-950/5">
+                  <div 
+                    className={cn(
+                      "h-5 rounded-lg flex items-center px-3 absolute border shadow-sm select-none cursor-pointer hover:opacity-90 transition-opacity",
+                      r.status === 'Done' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600" :
+                      r.status === 'In Progress' ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-600" :
+                      "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400"
+                    )}
+                    style={{
+                      left: `${10 + rIdx * 15}%`,
+                      width: `${30 + (3 - rIdx) * 10}%`
+                    }}
+                  >
+                    <span className="text-[8px] font-black uppercase tracking-wider truncate text-zinc-700 dark:text-zinc-300">{r.assignee}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterAnalyticsPreview = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Analytics Dashboard Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Overview Metrics</h3>
+          </div>
+          <div className="px-3.5 py-1.5 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-[9px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+            <LucideIcons.Activity size={12} />
+            Live Dashboard
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[
+            { label: 'Total Records', val: '4', icon: LucideIcons.Folder, color: 'text-indigo-500 bg-indigo-500/10' },
+            { label: 'To Do', val: '1', icon: LucideIcons.Clock, color: 'text-zinc-500 bg-zinc-500/10' },
+            { label: 'In Progress', val: '2', icon: LucideIcons.Activity, color: 'text-amber-500 bg-amber-500/10' },
+            { label: 'Completed', val: '1', icon: LucideIcons.CheckCircle2, color: 'text-emerald-500 bg-emerald-500/10' }
+          ].map((card, i) => (
+            <div key={i} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">{card.label}</span>
+                <div className="text-2xl font-black text-zinc-900 dark:text-white">{card.val}</div>
+              </div>
+              <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center shrink-0", card.color)}>
+                <card.icon size={16} />
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm h-64 flex flex-col justify-between">
+            <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Status Breakdown</h4>
+            <div className="flex-grow flex items-center justify-center relative">
+              <div className="w-32 h-32 rounded-full border-[12px] border-indigo-600 border-t-emerald-500 border-l-zinc-300 relative flex items-center justify-center shadow">
+                <div className="w-16 h-16 rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center text-[10px] font-black text-zinc-500 uppercase">Status</div>
+              </div>
+              
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+                {['To Do (25%)', 'In Progress (50%)', 'Done (25%)'].map((l, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5 text-[9px] font-bold text-zinc-400">
+                    <span className={cn(
+                      "w-2 h-2 rounded-full",
+                      idx === 0 ? "bg-zinc-300" : idx === 1 ? "bg-indigo-500" : "bg-emerald-500"
+                    )} />
+                    {l}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm h-64 flex flex-col justify-between">
+            <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Assignee Workload</h4>
+            <div className="flex-grow flex items-end justify-between px-8 pt-8">
+              {[
+                { name: 'Scott V.', val: '2 records', h: 'h-[80%]' },
+                { name: 'Jane D.', val: '1 record', h: 'h-[40%]' },
+                { name: 'Alex M.', val: '1 record', h: 'h-[40%]' }
+              ].map((bar, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-2 w-16">
+                  <div className={cn("w-6 rounded-t-lg bg-indigo-500 relative group flex justify-center", bar.h)}>
+                    <div className="absolute -top-6 px-1.5 py-0.5 bg-zinc-950 text-white rounded text-[8px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{bar.val}</div>
+                  </div>
+                  <span className="text-[9px] font-bold text-zinc-400">{bar.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMasterViewPreview = () => {
+    switch (interfaceSettings.master.layoutType) {
+      case 'kanban':
+        return renderMasterKanbanPreview();
+      case 'calendar':
+        return renderMasterCalendarPreview();
+      case 'map':
+        return renderMasterMapPreview();
+      case 'cards':
+        return renderMasterCardsPreview();
+      case 'timeline':
+        return renderMasterTimelinePreview();
+      case 'gantt':
+        return renderMasterGanttPreview();
+      case 'analytics':
+        return renderMasterAnalyticsPreview();
+      default:
+        return null;
+    }
+  };
+
+  const renderFieldBlocks = (fields: Field[], parentId?: string, tabId?: string): React.ReactNode => {
+    const isNested = !!parentId;
+    const targetTabId = tabId || currentTabId;
+    const filtered = fields.filter(block => {
+      const type = block.type?.toLowerCase();
+      if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
+
+      if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
+
+      if (isNested) return true;
+      return block.tabId === targetTabId || (!block.tabId && targetTabId === tabs[0]?.id);
+    });
+    
+    let items = [...filtered];
+
+    if ((activeTab as string) === 'preview') {
+      items = compactLayout(items);
+    }
+
+    return items.map((item) => {
+      if (React.isValidElement(item)) return item;
+      const block = item as Field;
+      const isGroup = isContainerField(block.type);
+
+      if (isGroup) {
+        return (
+          <FieldGroup 
+            key={block.id}
+            block={block}
+            selectedIds={selectedIds}
+            onSelect={(id, e) => {
+              if (e?.shiftKey || e?.metaKey || e?.ctrlKey) {
+                setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+              } else {
+                setSelectedIds([id]);
+              }
+            }}
+            onUpdate={updateField}
+            onDelete={(id) => deleteBlocks([id])}
+            onDrop={(e) => handleDropOnCanvas(e, block.id, targetTabId)}
+            onDragOver={(e) => handleDragOver(e, block.id, targetTabId)}
+            onDragStart={handleDragStart}
+            renderNested={(fields, pId) => renderFieldBlocks(fields as any, pId, targetTabId)}
+            viewportSize={viewportSize}
+            onClone={cloneField}
+            isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
+            hoveredMapping={hoveredMapping}
+            dragOverInfo={dragOverInfo}
+          />
+        );
+      }
+
+      if (block.id === 'placeholder') {
+        return (
+          <div 
+            key="placeholder"
+            className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse flex items-center justify-center relative overflow-hidden h-full"
+            style={{ 
+              gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
+              gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
+            <div className="relative flex flex-col items-center gap-1">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+              <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Drop Zone</span>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <motion.div
+          key={block.id}
+          layout
+          draggable
+          onDragStart={(e: any) => handleDragStart(e, { type: 'move', fieldId: block.id })}
+          onDragEnd={handleDragEnd}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          style={{ 
+            gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
+            gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (e.shiftKey || e.metaKey || e.ctrlKey) {
+              setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
+            } else {
+              setSelectedIds([block.id]);
+            }
+          }}
+          id={`canvas-field-${block.id}`}
+          className={cn(
+            "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
+            selectedIds.includes(block.id) 
+              ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
+              : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40",
+            block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
+            activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
+            hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
+          )}
+        >
+          {/* Selection UI */}
+          {selectedIds.includes(block.id) && (
+            <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
+              Selected
+            </div>
+          )}
+          <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                  {(() => {
+                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+                    const Icon = fieldDef?.icon;
+                    return Icon ? <Icon size={10} className="text-zinc-400" /> : null;
+                  })()}
+                  {FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type)?.label || block.type.replace('_', ' ')}
+                  {block.required && <span className="text-rose-500">*</span>}
+                  {block.tooltip && <HelpCircle size={10} className="text-zinc-400" />}
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                {block.hidden && (
+                  <div 
+                    className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-500/20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateField(block.id, { hidden: false });
+                    }}
+                  >
+                    <EyeOff size={10} className="text-rose-500" />
+                    <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
+                  </div>
+                )}
+                <GripVertical size={12} className="text-zinc-300 group-hover/field:text-zinc-500" />
+              </div>
+            </div>
+
+            {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
+              <p className="text-[11px] font-medium text-zinc-900 dark:text-zinc-300 mb-1">{block.label}</p>
+            )}
+
+            <div className="min-h-[20px]">
+              {block.type === 'heading' ? (() => {
+                const rawTag = block.options?.[0] || 'h2';
+                const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
+                const size = Tag === 'h1' ? 'text-2xl font-bold' :
+                             Tag === 'h2' ? 'text-xl font-bold' :
+                             Tag === 'h3' ? 'text-lg font-bold' :
+                             Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
+                return (
+                  <div className="pt-2">
+                    <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
+                      {block.label || 'Heading'}
+                    </Tag>
+                  </div>
+                );
+              })() : block.type === 'divider' ? (
+                <div className="py-2">
+                  <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
+                </div>
+              ) : block.type === 'spacer' ? (
+                <div className="py-2">
+                  <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
+                </div>
+              ) : block.type === 'alert' ? (() => {
+                const variant = block.options?.[0] || 'info';
+                const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                              variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                              variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                              'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
+                const AlertIcon = variant === 'error' ? XCircle :
+                             variant === 'warning' ? AlertTriangle :
+                             variant === 'success' ? Check : Info;
+                return (
+                  <div className="pt-2">
+                    <div className={cn("p-4 rounded-2xl border flex items-center gap-3", alertStyle)}>
+                      <AlertIcon size={18} />
+                      <span className="text-xs font-bold uppercase tracking-widest">{block.label || 'Alert Notice'}</span>
+                    </div>
+                  </div>
+                );
+              })() : block.type === 'html' ? (
+                <div className="pt-2">
+                  <div className="min-h-[120px] bg-zinc-950 rounded-2xl p-5 font-mono text-[10px] text-emerald-500/80 leading-relaxed shadow-2xl border border-white/5 overflow-hidden group/html relative">
+                    <div className="absolute top-0 right-0 p-3 flex gap-2">
+                      <div className="w-2 h-2 rounded-full bg-rose-500/50" />
+                      <div className="w-2 h-2 rounded-full bg-amber-500/50" />
+                      <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
+                    </div>
+                    <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
+                    <span className="block pl-4">&lt;h1&gt;{block.label}&lt;/h1&gt;</span>
+                    <span className="block pl-4 text-zinc-500">&lt;p&gt;Dynamic HTML content...&lt;/p&gt;</span>
+                    <span className="block text-indigo-400">&lt;/div&gt;</span>
+                  </div>
+                </div>
+              ) : block.type === 'icon' ? (
+                <div className="flex flex-col items-center justify-center gap-3 pt-4 pb-2">
+                  <div className="w-16 h-16 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
+                    <DynamicIcon name={block.iconName || 'Smile'} size={32} />
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
+                </div>
+              ) : block.type === 'time' ? (
+                <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
+                  <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
+                  <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
+                </div>
+              ) : block.type === 'sub_module' ? (
+                <div className="pt-2 flex-1 flex flex-col justify-between">
+                  <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
+                    {/* Inner Toolbar */}
+                    <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
+                      <div className="flex-1 max-w-[140px] relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
+                        <input 
+                          type="text"
+                          placeholder={`Search ${block.label}...`}
+                          disabled
+                          className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
+                          <Search size={10} />
+                          <span>Link Existing</span>
+                        </div>
+                        <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
+                          <Plus size={10} />
+                          <span>Add Record</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table layout (Mock) */}
+                    <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
+                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
+                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
+                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
+                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
+                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                          <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                            <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-001</td>
+                            <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record A</td>
+                            <td className="px-4 py-1.5">
+                              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                            </td>
+                            <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
+                            <td className="px-4 py-1.5 text-right">
+                              <div className="flex justify-end gap-1 opacity-60">
+                                <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                                <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                                <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                            <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-002</td>
+                            <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record B</td>
+                            <td className="px-4 py-1.5">
+                              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                            </td>
+                            <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-550 font-medium">5/25/2026</td>
+                            <td className="px-4 py-1.5 text-right">
+                              <div className="flex justify-end gap-1 opacity-60">
+                                <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                                <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                                <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : block.type === 'lookup' ? (
+                <div className="pt-2">
+                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
+                    <div className="flex items-center gap-2">
+                      <Search size={14} className="text-zinc-400" />
+                      <span className="text-xs text-zinc-400 font-medium italic select-none">
+                        {block.placeholder || `Search ${block.label}...`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* All other basic input fields */
+                <div className="pt-2">
+                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
+                    <span className="text-xs text-zinc-400 font-medium italic select-none">
+                      {block.placeholder || `Enter ${block.label}...`}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Action Buttons (Overlapping Border) */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              cloneField(block.id);
+            }}
+            className="absolute -top-3.5 right-6 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
+            title="Duplicate Field"
+          >
+            <Copy size={12} />
+          </button>
+
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setLayout(prev => removeFieldRecursive(prev, block.id));
+              if (selectedId === block.id) setSelectedId(null);
+            }}
+            className="absolute -top-3.5 -right-3.5 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95"
+            title="Delete Field"
+          >
+            <Trash2 size={14} />
+          </button>
+
+          {!block.hidden && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                updateField(block.id, { hidden: true });
+              }}
+              className="absolute -top-3.5 right-15 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
+              title="Quick Hide Field"
+            >
+              <EyeOff size={12} />
+            </button>
+          )}
+        </motion.div>
+      );
+    });
+  };
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-zinc-950 overflow-hidden">
       {/* Sub-Header / Toolbar */}
@@ -3525,6 +4303,8 @@ export const ModuleEditor = () => {
           </aside>
         )}
 
+
+
         {/* Canvas / Preview */}
         <main className="flex-1 relative flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
           {/* Main Tab Content Area */}
@@ -3545,10 +4325,9 @@ export const ModuleEditor = () => {
             activeViewMode === 'master' ? (
               <div className="flex-1 flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 p-8 custom-scrollbar overflow-y-auto min-h-full">
                 <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
-                  {/* Unified Configuration Content */}
-                  <div className="space-y-8 animate-in fade-in duration-300">
-                    {/* Columns grid settings */}
-                    <div className="space-y-8" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
+                  {(!interfaceSettings.master.layoutType || interfaceSettings.master.layoutType === 'table') ? (
+                    <div className="space-y-8 animate-in fade-in duration-300">
+                      <div className="space-y-8" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
                       <div 
                         className={cn(
                           "rounded-3xl relative transition-all duration-300",
@@ -3769,9 +4548,10 @@ export const ModuleEditor = () => {
                             </table>
                           </div>
                         )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : renderMasterViewPreview()}
                 </div>
               </div>
             ) : (
@@ -4206,6 +4986,52 @@ export const ModuleEditor = () => {
                     </div>
                   )}
 
+                  {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (
+                    <div className="px-8 py-5 bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex flex-col gap-4 select-none">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                          <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Guided Process Wizard Preview</span>
+                          <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase mt-0.5">
+                            Step {(tabs.findIndex(t => t.id === currentTabId) + 1) || 1} of {tabs.length}: {tabs.find(t => t.id === currentTabId)?.label || 'Step'}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                          {tabs.map((tab: any, idx: number) => {
+                            const isCurrent = currentTabId === tab.id;
+                            const isCompleted = tabs.findIndex(t => t.id === currentTabId) > idx;
+                            return (
+                              <div key={tab.id} className="flex items-center">
+                                {idx > 0 && <span className="w-4 h-px bg-zinc-200 dark:bg-zinc-800 mx-1" />}
+                                <div 
+                                  onClick={() => {
+                                    setCurrentTabId(tab.id);
+                                    setSelectedId(tab.id);
+                                  }}
+                                  className={cn(
+                                    "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all cursor-pointer",
+                                    isCurrent
+                                      ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                      : isCompleted
+                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                                        : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400"
+                                  )}
+                                >
+                                  {isCompleted ? <LucideIcons.Check size={8} strokeWidth={4} /> : idx + 1}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-indigo-600 transition-all duration-300"
+                          style={{ width: `${((tabs.findIndex(t => t.id === currentTabId) + 1) / tabs.length) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Horizontal split container for Left Sidebar + Main Grid + Right Workflow Panel */}
                   <div className="flex w-full items-stretch flex-1">
                     
@@ -4316,8 +5142,57 @@ export const ModuleEditor = () => {
                       </div>
                     )}
 
-                    <div 
-                      id="main-grid-container"
+                    {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'accordion' ? (
+                      <div className="flex-1 p-8 pb-32 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] custom-scrollbar select-none">
+                        {tabs.map((tab) => {
+                          const isCollapsed = collapsedGroups[tab.id] ?? false;
+                          return (
+                            <div 
+                              key={tab.id} 
+                              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[24px] shadow-sm overflow-hidden transition-all"
+                            >
+                              <div 
+                                onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
+                                className="p-5 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {interfaceSettings.detail?.showTabIcons ? (
+                                    <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="text-indigo-500 shrink-0" />
+                                  ) : (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                  )}
+                                  <h3 className="text-[10px] font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                                </div>
+                                <LucideIcons.ChevronDown size={14} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
+                              </div>
+                              
+                              {!isCollapsed && (
+                                <div 
+                                  onDragOver={(e) => handleDragOver(e, undefined, tab.id)}
+                                  onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
+                                  className={cn(
+                                    "p-6 min-h-[150px] relative transition-all duration-300 grid grid-cols-1 md:grid-cols-12",
+                                    isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
+                                  )}
+                                  style={{ 
+                                    gap: `${GRID_CONFIG.gap}px`,
+                                    gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+                                  }}
+                                >
+                                  {isLoading ? (
+                                    <div className="col-span-12 h-20 bg-zinc-50 dark:bg-zinc-900/50 animate-pulse rounded-xl" />
+                                  ) : (
+                                    renderFieldBlocks(previewLayout || layout, undefined, tab.id)
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div 
+                        id="main-grid-container"
                       className={cn(
                         "flex-1 min-w-0 p-8 pb-32 min-h-[800px] relative z-10 transition-all duration-300",
                         interfaceSettings.detail?.layoutType === 'sidebar' 
@@ -5923,8 +6798,42 @@ export const ModuleEditor = () => {
                       </div>
                     )}
                   </div>
-                    
+                    )
+                  }
                   </div>
+
+                  {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (
+                    <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex justify-between gap-4 select-none">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idx = tabs.findIndex(t => t.id === currentTabId);
+                          if (idx > 0) {
+                            setCurrentTabId(tabs[idx - 1].id);
+                            setSelectedId(tabs[idx - 1].id);
+                          }
+                        }}
+                        disabled={tabs.findIndex(t => t.id === currentTabId) === 0}
+                        className="px-5 py-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idx = tabs.findIndex(t => t.id === currentTabId);
+                          if (idx < tabs.length - 1) {
+                            setCurrentTabId(tabs[idx + 1].id);
+                            setSelectedId(tabs[idx + 1].id);
+                          }
+                        }}
+                        disabled={tabs.findIndex(t => t.id === currentTabId) === tabs.length - 1}
+                        className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+                      >
+                        {tabs.findIndex(t => t.id === currentTabId) === tabs.length - 1 ? 'Finish' : 'Next Step'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -8882,6 +9791,33 @@ export const ModuleEditor = () => {
                                 master: {
                                   ...prev.master,
                                   ganttEndDateFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="createdAt">Created Date (System)</option>
+                              <option value="updatedAt">Updated Date (System)</option>
+                              {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Calendar View specific settings */}
+                      {interfaceSettings.master.layoutType === 'calendar' && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Calendar Settings</label>
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Date Field Source</label>
+                            <select 
+                              value={interfaceSettings.master.calendarDateFieldId || 'createdAt'}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  calendarDateFieldId: e.target.value
                                 }
                               }))}
                               className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"

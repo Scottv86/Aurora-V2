@@ -567,6 +567,7 @@ export const ModuleView = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarViewMode, setCalendarViewMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
 
   const interfaceSettings = useMemo(() => {
     return (moduleData as any)?.interfaceSettings || {
@@ -614,12 +615,51 @@ export const ModuleView = () => {
 
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-      toast.success("Record updated successfully");
+    onMutate: async ({ recordId, data }) => {
+      // Cancel any outgoing refetches for records (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ['records', tenant?.id, moduleId] });
+
+      // Snapshot the previous value
+      const queryKey = ['records', tenant?.id, moduleId, page, pageSize];
+      const previousRecordsData = queryClient.getQueryData(queryKey);
+
+      // Optimistically update the React Query cache
+      if (previousRecordsData) {
+        queryClient.setQueryData(
+          queryKey,
+          (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              records: old.records.map((r: any) => 
+                r.id === recordId ? { ...r, ...data } : r
+              )
+            };
+          }
+        );
+      }
+
+      // Also optimistically update the local component state
+      setRecords(prev => 
+        prev.map((r: any) => r.id === recordId ? { ...r, ...data } : r)
+      );
+
+      return { previousRecordsData, queryKey };
     },
-    onError: (error: any) => {
+    onError: (error: any, _variables, context: any) => {
+      // Rollback to the previous state on error
+      if (context?.previousRecordsData) {
+        queryClient.setQueryData(context.queryKey, context.previousRecordsData);
+        setRecords(context.previousRecordsData.records);
+      }
       toast.error(error.message || "Failed to update record");
+    },
+    onSettled: () => {
+      // Refetch in the background to ensure data sync
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+    },
+    onSuccess: () => {
+      toast.success("Record updated successfully");
     }
   });
 
@@ -689,32 +729,125 @@ export const ModuleView = () => {
     });
   };
 
-  const calendarConfig = useMemo(() => {
+  const calendarData = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
+    const dateFieldId = interfaceSettings.master.calendarDateFieldId || allFields.find(f => f.type === 'date')?.id || 'createdAt';
+
+    // 1. Month View parameters
     const firstDayIndex = new Date(year, month, 1).getDay();
     const numDays = new Date(year, month + 1, 0).getDate();
-    const dateField = allFields.find(f => f.type === 'date') || { id: 'createdAt' };
-    return { year, month, firstDayIndex, numDays, dateFieldId: dateField.id };
-  }, [allFields, currentDate]);
+    
+    // 2. Week View parameters
+    const startOfWeek = new Date(currentDate);
+    const dayOfWeek = currentDate.getDay(); // 0 is Sunday
+    startOfWeek.setDate(currentDate.getDate() - dayOfWeek);
+    startOfWeek.setHours(0, 0, 0, 0);
 
-  const dateToRecordsMap = useMemo(() => {
-    const map: Record<number, any[]> = {};
-    const { year, month, dateFieldId } = calendarConfig;
+    const weekDates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      return d;
+    });
 
+    // 3. Year View mappings
+    // yearRecordsMap: monthIndex (0..11) -> day (1..31) -> record[]
+    const yearRecordsMap: Record<number, Record<number, any[]>> = {};
+    for (let m = 0; m < 12; m++) {
+      yearRecordsMap[m] = {};
+    }
+
+    // 4. Month View mappings
+    // monthRecordsMap: day (1..31) -> record[]
+    const monthRecordsMap: Record<number, any[]> = {};
+
+    // 5. Week View mappings
+    // weekRecordsMap: dayIndex (0..6) -> record[]
+    const weekRecordsMap: Record<number, any[]> = {
+      0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: []
+    };
+
+    // 6. Day View mappings
+    // dayRecords: record[], hourlyRecords: hour (8..18) -> record[], allDayRecords: record[]
+    const dayRecords: any[] = [];
+    const hourlyRecords: Record<number, any[]> = {};
+    const allDayRecords: any[] = [];
+    for (let h = 8; h <= 18; h++) {
+      hourlyRecords[h] = [];
+    }
+
+    // Iterate and map records
     filteredRecords.forEach(record => {
       const rawDate = record[dateFieldId] || record.createdAt;
       if (!rawDate) return;
       const dateObj = new Date(rawDate);
-      if (dateObj.getFullYear() === year && dateObj.getMonth() === month) {
-        const day = dateObj.getDate();
-        if (!map[day]) map[day] = [];
-        map[day].push(record);
+      if (isNaN(dateObj.getTime())) return;
+
+      const recordYear = dateObj.getFullYear();
+      const recordMonth = dateObj.getMonth();
+      const recordDay = dateObj.getDate();
+
+      // Year mapping
+      if (recordYear === year) {
+        if (!yearRecordsMap[recordMonth][recordDay]) {
+          yearRecordsMap[recordMonth][recordDay] = [];
+        }
+        yearRecordsMap[recordMonth][recordDay].push(record);
+      }
+
+      // Month mapping
+      if (recordYear === year && recordMonth === month) {
+        if (!monthRecordsMap[recordDay]) {
+          monthRecordsMap[recordDay] = [];
+        }
+        monthRecordsMap[recordDay].push(record);
+      }
+
+      // Week mapping
+      weekDates.forEach((wDate, idx) => {
+        if (
+          dateObj.getFullYear() === wDate.getFullYear() &&
+          dateObj.getMonth() === wDate.getMonth() &&
+          dateObj.getDate() === wDate.getDate()
+        ) {
+          weekRecordsMap[idx].push(record);
+        }
+      });
+
+      // Day mapping
+      if (
+        recordYear === currentDate.getFullYear() &&
+        recordMonth === currentDate.getMonth() &&
+        recordDay === currentDate.getDate()
+      ) {
+        dayRecords.push(record);
+
+        const hour = dateObj.getHours();
+        const hasTime = dateObj.getHours() !== 0 || dateObj.getMinutes() !== 0 || dateObj.getSeconds() !== 0;
+
+        if (hasTime && hour >= 8 && hour <= 18) {
+          hourlyRecords[hour].push(record);
+        } else {
+          allDayRecords.push(record);
+        }
       }
     });
 
-    return map;
-  }, [filteredRecords, calendarConfig]);
+    return {
+      year,
+      month,
+      firstDayIndex,
+      numDays,
+      dateFieldId,
+      weekDates,
+      yearRecordsMap,
+      monthRecordsMap,
+      weekRecordsMap,
+      dayRecords,
+      hourlyRecords,
+      allDayRecords
+    };
+  }, [filteredRecords, allFields, currentDate, interfaceSettings]);
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June", 
@@ -880,51 +1013,162 @@ export const ModuleView = () => {
   };
 
   const renderCalendarView = () => {
-    const { year, month, firstDayIndex, numDays, dateFieldId } = calendarConfig;
-    const daysInWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    
-    const cells = [];
-    for (let i = 0; i < firstDayIndex; i++) {
-      cells.push(null);
-    }
-    for (let d = 1; d <= numDays; d++) {
-      cells.push(d);
-    }
+    const { 
+      year, 
+      month, 
+      firstDayIndex, 
+      numDays, 
+      dateFieldId, 
+      weekDates, 
+      yearRecordsMap, 
+      monthRecordsMap, 
+      weekRecordsMap, 
+      dayRecords, 
+      hourlyRecords, 
+      allDayRecords 
+    } = calendarData;
 
-    const prevMonth = () => {
-      setCurrentDate(new Date(year, month - 1, 1));
+    const getMonthDaysGrid = (y: number, m: number) => {
+      const firstDay = new Date(y, m, 1).getDay();
+      const numD = new Date(y, m + 1, 0).getDate();
+      const grid = [];
+      for (let i = 0; i < firstDay; i++) {
+        grid.push(null);
+      }
+      for (let d = 1; d <= numD; d++) {
+        grid.push(d);
+      }
+      return grid;
     };
 
-    const nextMonth = () => {
-      setCurrentDate(new Date(year, month + 1, 1));
+    const formatWeekRange = () => {
+      const start = weekDates[0];
+      const end = weekDates[6];
+      if (start.getMonth() === end.getMonth()) {
+        return `${monthNames[start.getMonth()]} ${start.getDate()} – ${end.getDate()}, ${start.getFullYear()}`;
+      } else if (start.getFullYear() === end.getFullYear()) {
+        return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()}, ${start.getFullYear()}`;
+      } else {
+        return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()}, ${start.getFullYear()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`;
+      }
     };
 
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={prevMonth}
-              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
-            >
-              <LucideIcons.ChevronLeft size={16} />
-            </button>
-            <h3 className="text-base font-black uppercase tracking-wider text-zinc-900 dark:text-white min-w-[150px] text-center">
-              {monthNames[month]} {year}
-            </h3>
-            <button 
-              onClick={nextMonth}
-              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
-            >
-              <LucideIcons.ChevronRight size={16} />
-            </button>
-          </div>
-          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-            Date source: <span className="text-indigo-500 font-black">{allFields.find(f => f.id === dateFieldId)?.label || 'Created Date'}</span>
-          </div>
+    const getHeaderTitle = () => {
+      if (calendarViewMode === 'year') {
+        return `${year}`;
+      } else if (calendarViewMode === 'month') {
+        return `${monthNames[month]} ${year}`;
+      } else if (calendarViewMode === 'week') {
+        return formatWeekRange();
+      } else {
+        // day view
+        return `${monthNames[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`;
+      }
+    };
+
+    const handlePrev = () => {
+      if (calendarViewMode === 'year') {
+        setCurrentDate(new Date(year - 1, month, 1));
+      } else if (calendarViewMode === 'month') {
+        setCurrentDate(new Date(year, month - 1, 1));
+      } else if (calendarViewMode === 'week') {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() - 7);
+        setCurrentDate(d);
+      } else if (calendarViewMode === 'day') {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() - 1);
+        setCurrentDate(d);
+      }
+    };
+
+    const handleNext = () => {
+      if (calendarViewMode === 'year') {
+        setCurrentDate(new Date(year + 1, month, 1));
+      } else if (calendarViewMode === 'month') {
+        setCurrentDate(new Date(year, month + 1, 1));
+      } else if (calendarViewMode === 'week') {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() + 7);
+        setCurrentDate(d);
+      } else if (calendarViewMode === 'day') {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() + 1);
+        setCurrentDate(d);
+      }
+    };
+
+    const handleToday = () => {
+      setCurrentDate(new Date());
+    };
+
+    const renderYearView = () => {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-300">
+          {monthNames.map((mName, mIdx) => {
+            const monthDays = getMonthDaysGrid(year, mIdx);
+            const dayMap = yearRecordsMap[mIdx] || {};
+            const monthRecordsCount = Object.values(dayMap).reduce((sum, list) => sum + (list?.length || 0), 0);
+
+            return (
+              <div 
+                key={mName}
+                onClick={() => {
+                  setCurrentDate(new Date(year, mIdx, 1));
+                  setCalendarViewMode('month');
+                }}
+                className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl hover:border-indigo-500/50 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between min-h-[180px]"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                    {mName}
+                  </span>
+                  {monthRecordsCount > 0 && (
+                    <span className="text-[10px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                      {monthRecordsCount} {monthRecordsCount === 1 ? 'record' : 'records'}
+                    </span>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-7 gap-1 flex-1 items-center justify-items-center">
+                  {monthDays.map((dayVal, idx) => {
+                    if (dayVal === null) {
+                      return <div key={idx} className="w-2.5 h-2.5 rounded-sm bg-transparent" />;
+                    }
+                    const hasRecords = dayMap[dayVal]?.length > 0;
+                    return (
+                      <div 
+                        key={idx} 
+                        title={hasRecords ? `${dayMap[dayVal].length} records on ${mName} ${dayVal}` : undefined}
+                        className={cn(
+                          "w-2.5 h-2.5 rounded-sm transition-all duration-300",
+                          hasRecords 
+                            ? "bg-indigo-500 dark:bg-indigo-400 shadow-[0_0_6px_rgba(99,102,241,0.5)] scale-110" 
+                            : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                        )}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
+      );
+    };
 
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm">
+    const renderMonthView = () => {
+      const daysInWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const cells = [];
+      for (let i = 0; i < firstDayIndex; i++) {
+        cells.push(null);
+      }
+      for (let d = 1; d <= numDays; d++) {
+        cells.push(d);
+      }
+
+      return (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm animate-in fade-in duration-300">
           <div className="grid grid-cols-7 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
             {daysInWeek.map(day => (
               <div key={day} className="py-4 text-center text-[10px] font-black text-zinc-400 uppercase tracking-wider">
@@ -935,13 +1179,19 @@ export const ModuleView = () => {
 
           <div className="grid grid-cols-7 divide-x divide-y divide-zinc-200 dark:divide-zinc-800">
             {cells.map((day, idx) => {
-              const dayRecords = day ? (dateToRecordsMap[day] || []) : [];
+              const dayRecordsList = day ? (monthRecordsMap[day] || []) : [];
               return (
                 <div 
                   key={idx} 
+                  onClick={() => {
+                    if (day) {
+                      setCurrentDate(new Date(year, month, day));
+                      setCalendarViewMode('day');
+                    }
+                  }}
                   className={cn(
-                    "min-h-[120px] p-3 flex flex-col space-y-2 transition-colors",
-                    !day ? "bg-zinc-50/30 dark:bg-zinc-950/10" : "bg-white dark:bg-zinc-900"
+                    "min-h-[120px] p-3 flex flex-col space-y-2 transition-colors cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10",
+                    !day ? "bg-zinc-50/30 dark:bg-zinc-950/10 cursor-default" : "bg-white dark:bg-zinc-900"
                   )}
                 >
                   {day && (
@@ -949,24 +1199,27 @@ export const ModuleView = () => {
                       <span className={cn(
                         "text-xs font-bold font-mono",
                         new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
-                          ? "w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center"
+                          ? "w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black"
                           : "text-zinc-500"
                       )}>
                         {day}
                       </span>
-                      {dayRecords.length > 0 && (
+                      {dayRecordsList.length > 0 && (
                         <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-full">
-                          {dayRecords.length}
+                          {dayRecordsList.length}
                         </span>
                       )}
                     </div>
                   )}
 
                   <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[80px] custom-scrollbar pr-0.5">
-                    {dayRecords.map(record => (
+                    {dayRecordsList.map(record => (
                       <div 
                         key={record.id}
-                        onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/workspace/modules/${moduleId}/records/${record.id}`);
+                        }}
                         className="px-2 py-1 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-lg text-[9px] font-bold text-indigo-600 dark:text-indigo-400 truncate cursor-pointer transition-all flex items-center justify-between group"
                       >
                         <span className="truncate">{record._record_key || 'Record'}</span>
@@ -978,6 +1231,278 @@ export const ModuleView = () => {
             })}
           </div>
         </div>
+      );
+    };
+
+    const renderWeekView = () => {
+      const daysInWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      
+      return (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm animate-in fade-in duration-300">
+          <div className="grid grid-cols-7 divide-x divide-zinc-200 dark:divide-zinc-800">
+            {weekDates.map((wDate, idx) => {
+              const dayRecordsList = weekRecordsMap[idx] || [];
+              const isToday = wDate.getDate() === new Date().getDate() &&
+                              wDate.getMonth() === new Date().getMonth() &&
+                              wDate.getFullYear() === new Date().getFullYear();
+              
+              return (
+                <div key={idx} className="flex flex-col min-h-[500px]">
+                  {/* Day Header */}
+                  <div 
+                    onClick={() => {
+                      setCurrentDate(wDate);
+                      setCalendarViewMode('day');
+                    }}
+                    className={cn(
+                      "p-4 text-center border-b border-zinc-200 dark:border-zinc-800 cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 transition-colors",
+                      isToday ? "bg-indigo-50/5" : "bg-zinc-50/20 dark:bg-zinc-900/20"
+                    )}
+                  >
+                    <div className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">
+                      {daysInWeek[idx].slice(0, 3)}
+                    </div>
+                    <div className={cn(
+                      "text-lg font-black font-mono inline-flex items-center justify-center w-8 h-8 rounded-full",
+                      isToday ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/25" : "text-zinc-900 dark:text-white"
+                    )}>
+                      {wDate.getDate()}
+                    </div>
+                  </div>
+
+                  {/* Day Records Body */}
+                  <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[400px] custom-scrollbar bg-white dark:bg-zinc-900">
+                    {dayRecordsList.map(record => (
+                      <div 
+                        key={record.id}
+                        onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                        className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer space-y-2 group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-indigo-500 uppercase tracking-wider">
+                            {record._record_key || 'Key'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-bold text-zinc-900 dark:text-white leading-relaxed truncate">
+                          {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled'}
+                        </p>
+                        
+                        {displayFields[1] && (
+                          <p className="text-[9px] text-zinc-400 font-medium truncate">
+                            <span className="font-bold text-zinc-500">{displayFields[1].label}:</span> {record[displayFields[1].id] || record[displayFields[1].name]}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    {dayRecordsList.length === 0 && (
+                      <div className="h-20 border border-dashed border-zinc-200 dark:border-zinc-800/80 rounded-2xl flex items-center justify-center text-zinc-400 text-[9px] font-bold uppercase tracking-wider">
+                        No records
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    const renderDayView = () => {
+      const hours = Array.from({ length: 11 }, (_, i) => i + 8); // 8 to 18
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+          {/* Left panel: Hourly Schedule */}
+          <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm space-y-6">
+            <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              Daily Schedule
+            </h4>
+            
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {/* All Day Slots */}
+              {allDayRecords.length > 0 && (
+                <div className="flex gap-4 border-b border-zinc-100 dark:border-zinc-800/50 pb-4">
+                  <div className="w-16 shrink-0 text-right">
+                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                      All Day
+                    </span>
+                  </div>
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {allDayRecords.map(record => (
+                      <div 
+                        key={record.id}
+                        onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                        className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 hover:border-indigo-500/50 rounded-xl cursor-pointer transition-all flex items-center justify-between"
+                      >
+                        <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
+                        <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate flex-1 text-right">
+                          {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Hourly Slots */}
+              {hours.map(hour => {
+                const hourRecords = hourlyRecords[hour] || [];
+                const isAm = hour < 12;
+                const hourLabel = `${hour === 12 ? 12 : hour % 12}:00 ${isAm ? 'AM' : 'PM'}`;
+
+                return (
+                  <div key={hour} className="flex gap-4 items-start min-h-[48px]">
+                    <div className="w-16 shrink-0 text-right pt-1">
+                      <span className="text-[10px] font-mono font-bold text-zinc-400">
+                        {hourLabel}
+                      </span>
+                    </div>
+                    <div className="flex-1 border-t border-zinc-100 dark:border-zinc-800/60 pt-2">
+                      {hourRecords.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {hourRecords.map(record => (
+                            <div 
+                              key={record.id}
+                              onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                              className="p-3 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-xl cursor-pointer transition-all flex items-center justify-between group"
+                            >
+                              <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
+                              <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 truncate flex-1 text-right">
+                                {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[9px] text-zinc-300 dark:text-zinc-700 italic pt-1 uppercase tracking-wider font-semibold">
+                          Free slot
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right panel: Record Index */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm space-y-6 flex flex-col max-h-[675px]">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">
+                Records Summary
+              </h4>
+              <span className="text-[10px] font-black text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                {dayRecords.length} {dayRecords.length === 1 ? 'record' : 'records'}
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1.5 custom-scrollbar">
+              {dayRecords.map(record => (
+                <div 
+                  key={record.id}
+                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                  className="p-5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer space-y-3 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
+                      {record._record_key || 'Key'}
+                    </span>
+                    <span className="text-[9px] font-bold text-zinc-400 font-mono">
+                      {new Date(record[dateFieldId] || record.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-xs font-black text-zinc-900 dark:text-white leading-relaxed">
+                    {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled Record'}
+                  </p>
+                  
+                  {displayFields.slice(1, 4).map((f: any) => {
+                    const val = record[f.id] || record[f.name];
+                    if (val === undefined || val === null || val === '') return null;
+                    
+                    if (f.type === 'user') {
+                      const resolvedUser = members?.find((m: any) => m.id === val);
+                      return (
+                        <div key={f.id} className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-semibold">
+                          <span className="text-zinc-500">{f.label}:</span>
+                          <span className="text-zinc-700 dark:text-zinc-300 font-bold">{resolvedUser?.name || val}</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <p key={f.id} className="text-[10px] text-zinc-400 font-semibold truncate">
+                        <span className="text-zinc-500">{f.label}:</span> {val}
+                      </p>
+                    );
+                  })}
+                </div>
+              ))}
+              {dayRecords.length === 0 && (
+                <div className="h-full border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-zinc-400 space-y-2 py-20">
+                  <LucideIcons.Calendar size={28} className="text-zinc-300 dark:text-zinc-700" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">No scheduled records</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handlePrev}
+              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              <LucideIcons.ChevronLeft size={16} />
+            </button>
+            <h3 className="text-base font-black uppercase tracking-wider text-zinc-900 dark:text-white min-w-[150px] text-center">
+              {getHeaderTitle()}
+            </h3>
+            <button 
+              onClick={handleNext}
+              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              <LucideIcons.ChevronRight size={16} />
+            </button>
+            <button 
+              onClick={handleToday}
+              className="px-4 py-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-black uppercase tracking-wider rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              Today
+            </button>
+          </div>
+          <div className="flex items-center gap-4 self-end sm:self-center">
+            <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-2xl border border-zinc-200/50 dark:border-zinc-700/50">
+              {(['year', 'month', 'week', 'day'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setCalendarViewMode(mode)}
+                  className={cn(
+                    "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all",
+                    calendarViewMode === mode 
+                      ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-sm border border-zinc-200/50 dark:border-zinc-800/50" 
+                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                  )}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <div className="hidden md:block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+              Date source: <span className="text-indigo-500 font-black">{allFields.find(f => f.id === dateFieldId)?.label || 'Created Date'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* View Mode Router */}
+        {calendarViewMode === 'year' && renderYearView()}
+        {calendarViewMode === 'month' && renderMonthView()}
+        {calendarViewMode === 'week' && renderWeekView()}
+        {calendarViewMode === 'day' && renderDayView()}
       </div>
     );
   };
