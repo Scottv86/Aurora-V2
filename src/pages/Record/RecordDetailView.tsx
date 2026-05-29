@@ -55,8 +55,20 @@ interface WorkflowState {
   }[];
 }
 
-export const RecordDetailView = () => {
-  const { moduleId, recordId } = useParams();
+export const RecordDetailView = ({
+  moduleIdProp,
+  recordIdProp,
+  isModal = false,
+  onClose
+}: {
+  moduleIdProp?: string;
+  recordIdProp?: string;
+  isModal?: boolean;
+  onClose?: () => void;
+} = {}) => {
+  const { moduleId: routeModuleId, recordId: routeRecordId } = useParams();
+  const moduleId = moduleIdProp || routeModuleId;
+  const recordId = recordIdProp || routeRecordId;
   const navigate = useNavigate();
   const auth = useAuth();
   const { session, user: supabaseUser } = auth;
@@ -837,7 +849,11 @@ export const RecordDetailView = () => {
       }
 
       toast.success("Record deleted successfully");
-      navigate(`/workspace/modules/${moduleId}`);
+      if (isModal && onClose) {
+        onClose();
+      } else {
+        navigate(`/workspace/modules/${moduleId}`);
+      }
     } catch (error: any) {
       console.error("Delete Error:", error);
       toast.error(error.message || "Failed to delete record");
@@ -1248,7 +1264,11 @@ export const RecordDetailView = () => {
       
       await handleUpdateEntry(editData, undefined, false, true);
       toast.success("Process completed successfully!");
-      navigate(`/workspace/modules/${moduleId}`);
+      if (isModal && onClose) {
+        onClose();
+      } else {
+        navigate(`/workspace/modules/${moduleId}`);
+      }
     };
 
     return (
@@ -1378,18 +1398,37 @@ export const RecordDetailView = () => {
   if (loading || platformLoading) return <RecordDetailSkeleton />;
 
 
-  if (!moduleData || !record) return <Navigate to="/workspace" replace />;
+  if (!moduleData || !record) {
+    if (isModal) {
+      return (
+        <div className="flex flex-col items-center justify-center p-12 space-y-4 w-full h-[60vh]">
+          <Loader2 className="animate-spin text-indigo-500" size={24} />
+          <span className="text-sm text-zinc-500 font-black uppercase tracking-wider">Loading record details...</span>
+        </div>
+      );
+    }
+    return <Navigate to="/workspace" replace />;
+  }
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-20 space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link 
-            to={`/workspace/modules/${moduleId}`}
-            className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </Link>
+          {isModal ? (
+            <button 
+              onClick={onClose}
+              className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          ) : (
+            <Link 
+              to={`/workspace/modules/${moduleId}`}
+              className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </Link>
+          )}
           <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-500/20">
             <Icon size={24} className="text-white" />
           </div>
@@ -1746,6 +1785,17 @@ export const RecordDetailView = () => {
           >
             <Trash2 size={16} />
           </button>
+
+          {/* Close Button (for Modal) */}
+          {isModal && (
+            <button 
+              onClick={onClose}
+              className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
+              title="Close"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
 

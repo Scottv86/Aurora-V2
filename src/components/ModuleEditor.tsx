@@ -1447,7 +1447,7 @@ export const ModuleEditor = () => {
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
   const [interfaceSettings, setInterfaceSettings] = useState({
     master: {
-      layoutType: 'table' as 'table' | 'kanban' | 'calendar' | 'map' | 'cards' | 'timeline' | 'gantt' | 'analytics',
+      layoutType: 'table' as 'table' | 'kanban' | 'calendar' | 'map' | 'cards' | 'timeline' | 'gantt' | 'analytics' | 'pipeline',
       columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string }[],
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       pagination: {
@@ -1459,7 +1459,10 @@ export const ModuleEditor = () => {
       ganttStartDateFieldId: 'createdAt',
       ganttEndDateFieldId: 'createdAt',
       mapAddressFieldId: '_record_key',
-      calendarDateFieldId: 'createdAt'
+      calendarDateFieldId: 'createdAt',
+      detailViewMode: 'page' as 'page' | 'modal',
+      pipelineValueFieldId: '',
+      pipelineDateFieldId: ''
     },
     detail: {
       layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar' | 'process' | 'accordion',
@@ -2153,7 +2156,7 @@ export const ModuleEditor = () => {
   const [showConsole, setShowConsole] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [moduleState, setModuleState] = useState<Record<string, any>>({});
-  const [showSystemFields, setShowSystemFields] = useState(true);
+  const showSystemFields = true;
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   
   // Tab Scrolling Refs & State
@@ -3050,9 +3053,26 @@ export const ModuleEditor = () => {
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Kanban Board Preview</span>
             <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Grouping by: Status</h3>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Columns</span>
-            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">Status</div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Columns</span>
+              <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">Status</div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Kanban Settings
+            </button>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
@@ -3103,11 +3123,28 @@ export const ModuleEditor = () => {
             <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">May 2026</h3>
             <button className="p-2 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400"><ChevronRight size={14} /></button>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Date Field</span>
-            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
-              {interfaceSettings.master.calendarDateFieldId || 'createdAt'}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Date Field</span>
+              <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
+                {interfaceSettings.master.calendarDateFieldId || 'createdAt'}
+              </div>
             </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Calendar Settings
+            </button>
           </div>
         </div>
         
@@ -3149,11 +3186,28 @@ export const ModuleEditor = () => {
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Interactive Map Preview</span>
             <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Location Mapping</h3>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Address Field</span>
-            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
-              {interfaceSettings.master.mapAddressFieldId || '_record_key'}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Address Field</span>
+              <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
+                {interfaceSettings.master.mapAddressFieldId || '_record_key'}
+              </div>
             </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Map Settings
+            </button>
           </div>
         </div>
         
@@ -3216,9 +3270,26 @@ export const ModuleEditor = () => {
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Cards View Preview</span>
             <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Grid Cards</h3>
           </div>
-          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 text-[9px] font-black uppercase tracking-wider text-zinc-500">
-            <span className="px-2.5 py-1 bg-white dark:bg-zinc-950 rounded-lg shadow-sm">Grid</span>
-            <span className="px-2.5 py-1">List</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 text-[9px] font-black uppercase tracking-wider text-zinc-500">
+              <span className="px-2.5 py-1 bg-white dark:bg-zinc-950 rounded-lg shadow-sm">Grid</span>
+              <span className="px-2.5 py-1">List</span>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Cards Settings
+            </button>
           </div>
         </div>
         
@@ -3261,11 +3332,28 @@ export const ModuleEditor = () => {
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Timeline View Preview</span>
             <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Chronological Progression</h3>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Sorting Field</span>
-            <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
-              {interfaceSettings.master.timelineDateFieldId || 'createdAt'}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest font-black">Sorting Field</span>
+              <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-zinc-500">
+                {interfaceSettings.master.timelineDateFieldId || 'createdAt'}
+              </div>
             </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Timeline Settings
+            </button>
           </div>
         </div>
         
@@ -3314,6 +3402,21 @@ export const ModuleEditor = () => {
               <span className="text-zinc-400">End:</span>
               <span>{interfaceSettings.master.ganttEndDateFieldId || 'createdAt'}</span>
             </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Gantt Settings
+            </button>
           </div>
         </div>
         
@@ -3365,9 +3468,26 @@ export const ModuleEditor = () => {
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Analytics Dashboard Preview</span>
             <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Overview Metrics</h3>
           </div>
-          <div className="px-3.5 py-1.5 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-[9px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
-            <LucideIcons.Activity size={12} />
-            Live Dashboard
+          <div className="flex items-center gap-3">
+            <div className="px-3.5 py-1.5 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 text-[9px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+              <LucideIcons.Activity size={12} />
+              Live Dashboard
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Analytics Settings
+            </button>
           </div>
         </div>
         
@@ -3434,6 +3554,112 @@ export const ModuleEditor = () => {
     );
   };
 
+  const renderMasterPipelinePreview = () => {
+    const pipelineValueFieldId = interfaceSettings.master.pipelineValueFieldId;
+    const valueFieldName = pipelineValueFieldId 
+      ? (layout.find(f => f.id === pipelineValueFieldId)?.label || 'Deal Value')
+      : 'None (Count Only)';
+
+    const stages = ['Lead', 'Proposal', 'Closed Won'];
+    const mockPipelineRecords = [
+      { id: 'p1', _record_key: 'OPP-001', title: 'Enterprise CRM Setup', stage: 'Lead', value: 45000, date: '2026-06-15', assignee: 'Scott V.' },
+      { id: 'p2', _record_key: 'OPP-002', title: 'Cloud Infrastructure Migration', stage: 'Proposal', value: 85000, date: '2026-06-20', assignee: 'Jane D.' },
+      { id: 'p3', _record_key: 'OPP-003', title: 'Custom Mobile App', stage: 'Closed Won', value: 120000, date: '2026-05-28', assignee: 'Alex M.' },
+      { id: 'p4', _record_key: 'OPP-004', title: 'Security Architecture Audit', stage: 'Proposal', value: 15000, date: '2026-07-02', assignee: 'Scott V.' }
+    ];
+
+    const formatCurrency = (val: number) => {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+      }).format(val);
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest block">Sales Pipeline Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Grouping by: Stage</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">Value Source</span>
+              <div className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-bold text-indigo-650 dark:text-indigo-400">
+                {valueFieldName}
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Pipeline Settings
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-6 overflow-x-auto pb-4 custom-scrollbar items-start">
+          {stages.map(stage => {
+            const stageRecords = mockPipelineRecords.filter(r => r.stage === stage);
+            const totalVal = stageRecords.reduce((sum, r) => sum + r.value, 0);
+
+            return (
+              <div key={stage} className="bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-800/40 rounded-[2rem] p-5 flex flex-col gap-4 w-full md:w-[280px] shrink-0">
+                <div className="flex flex-col gap-1 px-2 pb-2 border-b border-zinc-200/50 dark:border-zinc-800/40">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "w-2 h-2 rounded-full",
+                        stage === 'Closed Won' ? "bg-emerald-500" :
+                        stage === 'Proposal' ? "bg-indigo-500" : "bg-amber-400"
+                      )} />
+                      <span className="text-[10px] font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200">{stage}</span>
+                    </div>
+                    <span className="text-[9px] font-bold px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 rounded-full">{stageRecords.length}</span>
+                  </div>
+                  {pipelineValueFieldId && (
+                    <span className="text-[11px] font-bold text-indigo-650 dark:text-indigo-400 font-mono mt-1">
+                      {formatCurrency(totalVal)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {stageRecords.map(record => (
+                    <div key={record.id} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-black text-indigo-500 tracking-wider">{record._record_key}</span>
+                        <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-[8px] font-bold text-zinc-600 dark:text-zinc-400">
+                          {record.assignee.substring(0, 2)}
+                        </div>
+                      </div>
+                      <h4 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 leading-tight">{record.title}</h4>
+                      {pipelineValueFieldId && (
+                        <div className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 font-mono">
+                          {formatCurrency(record.value)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderMasterViewPreview = () => {
     switch (interfaceSettings.master.layoutType) {
       case 'kanban':
@@ -3450,6 +3676,8 @@ export const ModuleEditor = () => {
         return renderMasterGanttPreview();
       case 'analytics':
         return renderMasterAnalyticsPreview();
+      case 'pipeline':
+        return renderMasterPipelinePreview();
       default:
         return null;
     }
@@ -3893,6 +4121,7 @@ export const ModuleEditor = () => {
                       <option value="timeline">Timeline View</option>
                       <option value="gantt">Gantt Chart</option>
                       <option value="analytics">Analytics View</option>
+                      <option value="pipeline">Sales Pipeline</option>
                     </>
                   ) : (
                     <>
@@ -3954,20 +4183,6 @@ export const ModuleEditor = () => {
               ))}
             </div>
           )}
-
-
-          <button 
-            onClick={() => setShowSystemFields(!showSystemFields)}
-            className={cn(
-              "p-1.5 rounded-lg border transition-all",
-              showSystemFields 
-                ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-500 shadow-inner" 
-                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-            title={showSystemFields ? "Hide System Fields" : "Show System Fields"}
-          >
-            <Zap size={14} />
-          </button>
 
           <button 
             onClick={() => setIsCommandPaletteOpen(true)}
@@ -4834,7 +5049,13 @@ export const ModuleEditor = () => {
                           )}
                         >
                           <Settings size={12} className={cn("transition-transform duration-500", selectedId === '__detail_settings' ? "rotate-90" : "")} />
-                          <span>Detail Settings</span>
+                          <span>
+                            {interfaceSettings.detail.layoutType === 'tabs' || !interfaceSettings.detail.layoutType ? 'Tabbed Settings' :
+                             interfaceSettings.detail.layoutType === 'split' ? 'Split Settings' :
+                             interfaceSettings.detail.layoutType === 'sidebar' ? 'Single Page Settings' :
+                             interfaceSettings.detail.layoutType === 'process' ? 'Wizard Settings' :
+                             'Accordion Settings'}
+                          </span>
                         </button>
                       )}
                     </div>
@@ -9495,7 +9716,11 @@ export const ModuleEditor = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
                           <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
-                            Detail Settings
+                            {interfaceSettings.detail.layoutType === 'tabs' || !interfaceSettings.detail.layoutType ? 'Tabbed Layout Settings' :
+                             interfaceSettings.detail.layoutType === 'split' ? 'Split View Settings' :
+                             interfaceSettings.detail.layoutType === 'sidebar' ? 'Single Page Settings' :
+                             interfaceSettings.detail.layoutType === 'process' ? 'Wizard Settings' :
+                             'Accordion Settings'}
                           </h3>
                         </div>
                         <button 
@@ -9632,6 +9857,37 @@ export const ModuleEditor = () => {
                           </button>
                         </div>
                       </div>
+
+                      {/* Detail View Mode */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Detail View Interaction</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { value: 'page', label: 'New Page' },
+                            { value: 'modal', label: 'Modal Overlay' }
+                          ].map(m => (
+                            <button
+                              key={m.value}
+                              type="button"
+                              onClick={() => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: { 
+                                  ...prev.master, 
+                                  detailViewMode: m.value 
+                                }
+                              }))}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                (interfaceSettings.master.detailViewMode || 'page') === m.value
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                  : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                              )}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </motion.div>
                   ) : selectedId === '__table_settings' && activeViewMode === 'master' ? (
                     <motion.div 
@@ -9646,7 +9902,15 @@ export const ModuleEditor = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
                           <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
-                            Table Settings
+                            {interfaceSettings.master.layoutType === 'kanban' ? 'Kanban Settings' :
+                             interfaceSettings.master.layoutType === 'calendar' ? 'Calendar Settings' :
+                             interfaceSettings.master.layoutType === 'map' ? 'Map Settings' :
+                             interfaceSettings.master.layoutType === 'cards' ? 'Cards Settings' :
+                             interfaceSettings.master.layoutType === 'timeline' ? 'Timeline Settings' :
+                             interfaceSettings.master.layoutType === 'gantt' ? 'Gantt Settings' :
+                             interfaceSettings.master.layoutType === 'analytics' ? 'Analytics Settings' :
+                             interfaceSettings.master.layoutType === 'pipeline' ? 'Pipeline Settings' :
+                             'Table Settings'}
                           </h3>
                         </div>
                         <button 
@@ -9683,6 +9947,36 @@ export const ModuleEditor = () => {
                               )}
                             >
                               {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Detail View Mode */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Detail View Interaction</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: 'page', label: 'New Page' },
+                            { value: 'modal', label: 'Modal Overlay' }
+                          ] as const).map(m => (
+                            <button
+                              key={m.value}
+                              onClick={() => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: { 
+                                  ...prev.master, 
+                                  detailViewMode: m.value 
+                                }
+                              }))}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                (interfaceSettings.master.detailViewMode || 'page') === m.value
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                  : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                              )}
+                            >
+                              {m.label}
                             </button>
                           ))}
                         </div>
@@ -9851,6 +10145,52 @@ export const ModuleEditor = () => {
                             >
                               <option value="_record_key">Record Key (Text)</option>
                               {displayFields.filter((f: any) => ['text', 'longText', 'address', 'connector', 'lookup'].includes(f.type)).map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sales Pipeline specific settings */}
+                      {interfaceSettings.master.layoutType === 'pipeline' && (
+                        <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block font-black">Pipeline Settings</label>
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Deal Value / Amount Field</label>
+                            <select 
+                              value={interfaceSettings.master.pipelineValueFieldId || ''}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  pipelineValueFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">-- Select Field --</option>
+                              {displayFields.filter((f: any) => ['number', 'currency', 'calculation'].includes(f.type)).map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Close Date Field (Optional)</label>
+                            <select 
+                              value={interfaceSettings.master.pipelineDateFieldId || ''}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  pipelineDateFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">-- Select Field --</option>
+                              {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
                                 <option key={f.id} value={f.id}>{f.label || f.name}</option>
                               ))}
                             </select>

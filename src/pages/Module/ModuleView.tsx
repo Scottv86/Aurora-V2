@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { RecordDetailView } from '../Record/RecordDetailView';
 import { createPortal } from 'react-dom';
 import { Table } from '../../components/UI/Table';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -568,6 +569,7 @@ export const ModuleView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarViewMode, setCalendarViewMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
+  const [activeDetailRecordId, setActiveDetailRecordId] = useState<string | null>(null);
 
   const interfaceSettings = useMemo(() => {
     return (moduleData as any)?.interfaceSettings || {
@@ -582,6 +584,15 @@ export const ModuleView = () => {
       actions: []
     };
   }, [moduleData]);
+
+  const handleRecordClick = (recordId: string) => {
+    const detailViewMode = interfaceSettings.master.detailViewMode || 'page';
+    if (detailViewMode === 'modal') {
+      setActiveDetailRecordId(recordId);
+    } else {
+      navigate(`/workspace/modules/${moduleId}/records/${recordId}`);
+    }
+  };
 
   const filteredRecords = useMemo(() => {
     if (!searchQuery.trim()) return records;
@@ -720,6 +731,53 @@ export const ModuleView = () => {
 
   const handleMoveCard = (recordId: string, newStage: string) => {
     const fieldId = kanbanConfig.fieldId;
+    updateMutation.mutate({
+      recordId,
+      data: {
+        [fieldId]: newStage,
+        status: newStage
+      }
+    });
+  };
+
+  const pipelineConfig = useMemo(() => {
+    const statusField = allFields.find(f => f.type === 'status' || f.name === 'status');
+    const stages = statusField?.options || ['Lead', 'Qualification', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'];
+    const fieldId = statusField?.id || 'status';
+
+    const valueFieldId = interfaceSettings.master.pipelineValueFieldId || '';
+    const dateFieldId = interfaceSettings.master.pipelineDateFieldId || '';
+
+    const grouped: Record<string, any[]> = {};
+    stages.forEach(stage => {
+      grouped[stage] = [];
+    });
+
+    filteredRecords.forEach(record => {
+      const val = record[fieldId] || record.status || stages[0];
+      if (grouped[val]) {
+        grouped[val].push(record);
+      } else {
+        if (grouped[stages[0]]) grouped[stages[0]].push(record);
+      }
+    });
+
+    // Calculate aggregated column statistics
+    const columnTotals: Record<string, number> = {};
+    stages.forEach(stage => {
+      const cards = grouped[stage] || [];
+      const total = cards.reduce((sum, rec) => {
+        const value = parseFloat(rec[valueFieldId]) || 0;
+        return sum + value;
+      }, 0);
+      columnTotals[stage] = total;
+    });
+
+    return { stages, fieldId, valueFieldId, dateFieldId, grouped, columnTotals };
+  }, [allFields, filteredRecords, interfaceSettings]);
+
+  const handleMovePipelineCard = (recordId: string, newStage: string) => {
+    const fieldId = pipelineConfig.fieldId;
     updateMutation.mutate({
       recordId,
       data: {
@@ -902,7 +960,7 @@ export const ModuleView = () => {
                       key={record.id}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
-                      onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                      onClick={() => handleRecordClick(record.id)}
                       className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-indigo-500/50 hover:shadow-lg transition-all group relative space-y-4"
                     >
                       <div className="flex items-center justify-between">
@@ -1001,6 +1059,191 @@ export const ModuleView = () => {
                   {cards.length === 0 && (
                     <div className="h-28 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 text-[10px] font-bold uppercase">
                       Empty column
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPipelineView = () => {
+    const { stages, fieldId, valueFieldId, dateFieldId, grouped, columnTotals } = pipelineConfig;
+
+    const formatCurrency = (val: any) => {
+      const parsed = parseFloat(val);
+      if (isNaN(parsed)) return '$0';
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+      }).format(parsed);
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Filter pipeline deals..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest hidden md:block">
+            Value Source: <span className="text-indigo-500 font-black">{allFields.find(f => f.id === valueFieldId)?.label || 'None (Count Only)'}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-6 overflow-x-auto pb-4 custom-scrollbar">
+          {stages.map((stage: string) => {
+            const cards = grouped[stage] || [];
+            const totalValue = columnTotals[stage] || 0;
+            return (
+              <div 
+                key={stage}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  const rId = e.dataTransfer.getData('text/plain');
+                  if (rId) handleMovePipelineCard(rId, stage);
+                }}
+                className="bg-zinc-50 dark:bg-zinc-900/20 border border-zinc-200/50 dark:border-zinc-800/50 rounded-[2rem] p-4 flex flex-col min-h-[550px] w-full md:w-[280px] shrink-0"
+              >
+                {/* Column Header */}
+                <div className="mb-4 pb-3 border-b border-zinc-200/50 dark:border-zinc-800/50 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                      {stage}
+                    </span>
+                    <span className="px-2 py-0.5 bg-zinc-200/50 dark:bg-zinc-800/50 rounded-full text-[9px] font-bold text-zinc-500">
+                      {cards.length}
+                    </span>
+                  </div>
+                  {valueFieldId && (
+                    <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono tracking-tight">
+                      {formatCurrency(totalValue)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Cards List */}
+                <div className="flex-1 space-y-3.5 overflow-y-auto max-h-[500px] pr-1 custom-scrollbar">
+                  {cards.map(record => {
+                    const value = record[valueFieldId];
+                    const dateVal = record[dateFieldId];
+                    const assignee = members?.find((m: any) => m.id === record.assigneeId);
+
+                    return (
+                      <div 
+                        key={record.id}
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
+                        onClick={() => handleRecordClick(record.id)}
+                        className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-indigo-500/50 hover:shadow-xl transition-all group relative space-y-3.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">
+                            {record._record_key || 'Deal'}
+                          </span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRecordToDelete(record.id);
+                              }}
+                              className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <p className="text-xs font-black text-zinc-900 dark:text-white leading-snug">
+                            {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled Opportunity'}
+                          </p>
+                          {valueFieldId && value !== undefined && value !== null && (
+                            <p className="text-sm font-black font-mono text-zinc-800 dark:text-zinc-200">
+                              {formatCurrency(value)}
+                            </p>
+                          )}
+                          {dateFieldId && dateVal && (
+                            <p className="text-[9px] font-bold text-zinc-400 font-mono">
+                              Close: {new Date(dateVal).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Card Footer Assignee */}
+                        <div className="flex items-center justify-between pt-2.5 border-t border-zinc-100 dark:border-zinc-800/60">
+                          <div className="flex items-center gap-1">
+                            {assignee ? (
+                              <div className={cn(
+                                "w-4 h-4 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200/50 dark:border-zinc-800/50",
+                                assignee.isSynthetic 
+                                  ? "bg-indigo-500/10 text-indigo-600" 
+                                  : "bg-zinc-100 text-zinc-600"
+                              )}>
+                                {assignee.avatarUrl ? (
+                                  <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  assignee.isSynthetic ? <LucideIcons.Bot size={8} /> : <LucideIcons.User size={8} />
+                                )}
+                              </div>
+                            ) : (
+                              <div className="w-4 h-4 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center border border-zinc-200/30">
+                                <LucideIcons.User size={8} className="text-zinc-400" />
+                              </div>
+                            )}
+                            <span className="text-[9px] text-zinc-400 font-bold truncate max-w-[80px]">
+                              {assignee?.name || 'Unassigned'}
+                            </span>
+                          </div>
+                          
+                          <div className="flex gap-1">
+                            {stages.indexOf(stage) > 0 && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const prevStage = stages[stages.indexOf(stage) - 1];
+                                  handleMovePipelineCard(record.id, prevStage);
+                                }}
+                                className="p-0.5 text-[9px] font-black text-zinc-400 hover:text-indigo-500"
+                                title="Move Stage Back"
+                              >
+                                ←
+                              </button>
+                            )}
+                            {stages.indexOf(stage) < stages.length - 1 && (
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const nextStage = stages[stages.indexOf(stage) + 1];
+                                  handleMovePipelineCard(record.id, nextStage);
+                                }}
+                                className="p-0.5 text-[9px] font-black text-zinc-400 hover:text-indigo-500"
+                                title="Move Stage Next"
+                              >
+                                →
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {cards.length === 0 && (
+                    <div className="h-24 border border-dashed border-zinc-200 dark:border-zinc-800/80 rounded-2xl flex items-center justify-center text-zinc-400 text-[9px] font-black uppercase tracking-wider">
+                      No deals
                     </div>
                   )}
                 </div>
@@ -1218,7 +1461,7 @@ export const ModuleView = () => {
                         key={record.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(`/workspace/modules/${moduleId}/records/${record.id}`);
+                          handleRecordClick(record.id);
                         }}
                         className="px-2 py-1 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-lg text-[9px] font-bold text-indigo-600 dark:text-indigo-400 truncate cursor-pointer transition-all flex items-center justify-between group"
                       >
@@ -1275,7 +1518,7 @@ export const ModuleView = () => {
                     {dayRecordsList.map(record => (
                       <div 
                         key={record.id}
-                        onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                        onClick={() => handleRecordClick(record.id)}
                         className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer space-y-2 group"
                       >
                         <div className="flex items-center justify-between">
@@ -1332,7 +1575,7 @@ export const ModuleView = () => {
                     {allDayRecords.map(record => (
                       <div 
                         key={record.id}
-                        onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                        onClick={() => handleRecordClick(record.id)}
                         className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 hover:border-indigo-500/50 rounded-xl cursor-pointer transition-all flex items-center justify-between"
                       >
                         <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
@@ -1364,7 +1607,7 @@ export const ModuleView = () => {
                           {hourRecords.map(record => (
                             <div 
                               key={record.id}
-                              onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                              onClick={() => handleRecordClick(record.id)}
                               className="p-3 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-xl cursor-pointer transition-all flex items-center justify-between group"
                             >
                               <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
@@ -1401,7 +1644,7 @@ export const ModuleView = () => {
               {dayRecords.map(record => (
                 <div 
                   key={record.id}
-                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                  onClick={() => handleRecordClick(record.id)}
                   className="p-5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer space-y-3 group"
                 >
                   <div className="flex items-center justify-between">
@@ -1510,7 +1753,7 @@ export const ModuleView = () => {
   const LeafletMapWrapper = ({
     records,
     interfaceSettings,
-    navigate,
+    handleRecordClick,
     moduleId,
     displayFields
   }: any) => {
@@ -1789,7 +2032,7 @@ export const ModuleView = () => {
                 </div>
 
                 <button 
-                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${selectedRecord.id}`)}
+                  onClick={() => handleRecordClick(selectedRecord.id)}
                   className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
                 >
                   Open Details
@@ -1808,7 +2051,7 @@ export const ModuleView = () => {
         records={filteredRecords}
         interfaceSettings={interfaceSettings}
         members={members}
-        navigate={navigate}
+        handleRecordClick={handleRecordClick}
         moduleId={moduleId}
         displayFields={displayFields}
       />
@@ -1843,7 +2086,7 @@ export const ModuleView = () => {
             return (
               <div 
                 key={record.id}
-                onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                onClick={() => handleRecordClick(record.id)}
                 className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/[0.03] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
               >
                 <div>
@@ -1948,7 +2191,7 @@ export const ModuleView = () => {
                 </div>
 
                 <div 
-                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                  onClick={() => handleRecordClick(record.id)}
                   className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   <div className="space-y-1">
@@ -2087,7 +2330,7 @@ export const ModuleView = () => {
               return (
                 <div 
                   key={record.id} 
-                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                  onClick={() => handleRecordClick(record.id)}
                   className="flex min-w-full items-center group hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 cursor-pointer transition-colors"
                 >
                   <div className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 p-4 truncate">
@@ -2579,7 +2822,7 @@ export const ModuleView = () => {
         
         <Table 
           data={filteredRecords as any}
-          onRowClick={(record) => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+          onRowClick={(record) => handleRecordClick(record.id)}
           className="bg-transparent dark:bg-transparent border-none shadow-none"
           noContainer={true}
           pagination={false}
@@ -2744,7 +2987,9 @@ export const ModuleView = () => {
           <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
         </div>
       ) : records.length > 0 ? (
-        interfaceSettings.master.layoutType === 'kanban' ? (
+        interfaceSettings.master.layoutType === 'pipeline' ? (
+          renderPipelineView()
+        ) : interfaceSettings.master.layoutType === 'kanban' ? (
           renderKanbanView()
         ) : interfaceSettings.master.layoutType === 'calendar' ? (
           renderCalendarView()
@@ -3054,6 +3299,39 @@ export const ModuleView = () => {
                 >
                   Delete
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {activeDetailRecordId && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setActiveDetailRecordId(null);
+                queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+              }}
+              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-[92vw] xl:max-w-7xl h-[85vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden z-10"
+            >
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <RecordDetailView 
+                  moduleIdProp={moduleId} 
+                  recordIdProp={activeDetailRecordId} 
+                  isModal={true} 
+                  onClose={() => {
+                    setActiveDetailRecordId(null);
+                    queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+                  }} 
+                />
               </div>
             </motion.div>
           </div>
