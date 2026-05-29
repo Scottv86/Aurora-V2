@@ -2059,6 +2059,21 @@ export const ModuleView = () => {
   };
 
   const renderCardsView = () => {
+    const cardFields: any[] = interfaceSettings.master.cardFields || [];
+    const activeCardFields = cardFields.length > 0
+      ? cardFields.filter((cf: any) => cf.visible !== false).map((cf: any) => {
+          const customField = displayFields.find(f => f.id === cf.fieldId);
+          const systemField = [
+            { id: 'createdAt', label: 'Created Date', type: 'date' },
+            { id: 'createdBy', label: 'Created By', type: 'user' },
+            { id: 'updatedAt', label: 'Updated Date', type: 'date' },
+            { id: 'status', label: 'Status', type: 'select' },
+            { id: 'assigneeId', label: 'Assignee', type: 'user' }
+          ].find(sf => sf.id === cf.fieldId);
+          return customField || systemField;
+        }).filter(Boolean)
+      : displayFields.slice(1, 4);
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
@@ -2102,8 +2117,19 @@ export const ModuleView = () => {
                   </h4>
 
                   <div className="mt-4 space-y-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
-                    {displayFields.slice(1, 4).map((f: any) => {
-                      const val = record[f.id] || record[f.name];
+                    {activeCardFields.map((f: any) => {
+                      let val = record[f.id] || record[f.name];
+                      if (f.id === 'createdBy' && record.createdBy) {
+                        const creator = members?.find((m: any) => m.id === record.createdBy);
+                        if (creator) val = creator.name;
+                      }
+                      if (f.id === 'assigneeId' && record.assigneeId) {
+                        const assigneeUser = members?.find((m: any) => m.id === record.assigneeId);
+                        if (assigneeUser) val = assigneeUser.name;
+                      }
+                      if (f.id === 'createdAt' || f.id === 'updatedAt') {
+                        val = record[f.id] ? new Date(record[f.id]).toLocaleDateString() : '';
+                      }
                       if (val === undefined || val === null || val === '') return null;
                       return (
                         <p key={f.id} className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate flex items-center justify-between">

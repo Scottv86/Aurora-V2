@@ -40,6 +40,7 @@ import {
   BrainCircuit,
   Palette,
   ArrowUp,
+  ArrowDown,
   X,
   Bug,
   Database,
@@ -1462,7 +1463,8 @@ export const ModuleEditor = () => {
       calendarDateFieldId: 'createdAt',
       detailViewMode: 'page' as 'page' | 'modal',
       pipelineValueFieldId: '',
-      pipelineDateFieldId: ''
+      pipelineDateFieldId: '',
+      cardFields: [] as { fieldId: string, visible: boolean }[]
     },
     detail: {
       layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar' | 'process' | 'accordion',
@@ -2010,7 +2012,8 @@ export const ModuleEditor = () => {
               ganttStartDateFieldId: data.interfaceSettings.master?.ganttStartDateFieldId || 'createdAt',
               ganttEndDateFieldId: data.interfaceSettings.master?.ganttEndDateFieldId || 'createdAt',
               mapAddressFieldId: data.interfaceSettings.master?.mapAddressFieldId || '_record_key',
-              calendarDateFieldId: data.interfaceSettings.master?.calendarDateFieldId || 'createdAt'
+              calendarDateFieldId: data.interfaceSettings.master?.calendarDateFieldId || 'createdAt',
+              cardFields: data.interfaceSettings.master?.cardFields || []
             },
             detail: {
               ...data.interfaceSettings.detail,
@@ -2684,6 +2687,46 @@ export const ModuleEditor = () => {
     setTableDropIndicator(null);
   };
 
+  const handleCardsDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    try {
+      const jsonStr = e.dataTransfer.getData('application/json');
+      if (!jsonStr) return;
+      const data = JSON.parse(jsonStr);
+      if (data.type === 'master-column-add') {
+        const { fieldId } = data;
+        setInterfaceSettings((prev: any) => {
+          const cardFields = prev.master.cardFields || [];
+          const currentFields = cardFields.length > 0
+            ? cardFields
+            : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+
+          if (currentFields.some((cf: any) => cf.fieldId === fieldId)) {
+            toast.success("Field already active on cards!");
+            return {
+              ...prev,
+              master: {
+                ...prev.master,
+                cardFields: currentFields.map((cf: any) => cf.fieldId === fieldId ? { ...cf, visible: true } : cf)
+              }
+            };
+          }
+          toast.success("Field added to cards!");
+          return {
+            ...prev,
+            master: {
+              ...prev.master,
+              cardFields: [...currentFields, { fieldId, visible: true }]
+            }
+          };
+        });
+        setSelectedId('__table_settings');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // DnD Handlers updated for flat grid system
 
 
@@ -3263,6 +3306,21 @@ export const ModuleEditor = () => {
   };
 
   const renderMasterCardsPreview = () => {
+    const cardFields = interfaceSettings.master.cardFields || [];
+    const activeCardFields = cardFields.length > 0
+      ? cardFields.filter(cf => cf.visible !== false).map(cf => {
+          const customField = displayFields.find(f => f.id === cf.fieldId);
+          const systemField = [
+            { id: 'createdAt', label: 'Created Date', type: 'date' },
+            { id: 'createdBy', label: 'Created By', type: 'user' },
+            { id: 'updatedAt', label: 'Updated Date', type: 'date' },
+            { id: 'status', label: 'Status', type: 'select' },
+            { id: 'assigneeId', label: 'Assignee', type: 'user' }
+          ].find(sf => sf.id === cf.fieldId);
+          return customField || systemField;
+        }).filter(Boolean)
+      : displayFields.slice(1, 4);
+
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
@@ -3293,21 +3351,50 @@ export const ModuleEditor = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div 
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleCardsDrop}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 min-h-[300px] border-2 border-dashed border-transparent hover:border-zinc-300 dark:hover:border-zinc-800 rounded-[2rem] p-2 transition-all"
+        >
           {mockRecords.map(r => (
-            <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black text-indigo-500 tracking-wider">{r._record_key}</span>
-                <span className={cn(
-                  "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border",
-                  r.status === 'Done' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600" :
-                  r.status === 'In Progress' ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-600" :
-                  "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400"
-                )}>{r.status}</span>
-              </div>
-              
-              <div className="flex-1">
-                <h4 className="text-xs font-black uppercase tracking-wide text-zinc-800 dark:text-zinc-200 leading-tight">{r.title}</h4>
+            <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all flex flex-col gap-4 justify-between min-h-[220px]">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black text-indigo-500 tracking-wider">{r._record_key}</span>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border",
+                    r.status === 'Done' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600" :
+                    r.status === 'In Progress' ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-600" :
+                    "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400"
+                  )}>{r.status}</span>
+                </div>
+                
+                <h4 className="text-xs font-black uppercase tracking-wide text-zinc-800 dark:text-zinc-200 leading-tight mt-4">
+                  {displayFields[0] ? ((r as any)[displayFields[0].name] || (r as any)[displayFields[0].id] || r.title || 'Untitled') : r.title || 'Untitled'}
+                </h4>
+                
+                <div className="mt-4 space-y-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                  {activeCardFields.map((f: any) => {
+                    let val = (r as any)[f.id] || (r as any)[f.name];
+                    if (f.id === 'createdAt' || f.id === 'updatedAt') val = r.date;
+                    if (f.id === 'assigneeId') val = r.assignee;
+                    if (val === undefined || val === null || val === '') {
+                      if (f.type === 'currency') val = '$5,000';
+                      else if (f.type === 'number') val = '42';
+                      else if (f.type === 'date') val = r.date;
+                      else val = `Mock ${f.label || f.name}`;
+                    }
+                    return (
+                      <p key={f.id} className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate flex items-center justify-between">
+                        <span className="font-bold text-zinc-400">{f.label || f.name}:</span>
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">{String(val)}</span>
+                      </p>
+                    );
+                  })}
+                  {activeCardFields.length === 0 && (
+                    <p className="text-[9px] text-zinc-400 italic">No body fields configured</p>
+                  )}
+                </div>
               </div>
               
               <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
@@ -4323,7 +4410,11 @@ export const ModuleEditor = () => {
                                 </div>
                                 <div className="space-y-2">
                                   {group.fields.map((field) => {
-                                    const isAlreadyActive = field.showInTable !== false;
+                                    const isAlreadyActive = interfaceSettings.master.layoutType === 'cards'
+                                      ? ((interfaceSettings.master.cardFields || []).length > 0
+                                          ? interfaceSettings.master.cardFields.some(cf => cf.fieldId === field.id && cf.visible !== false)
+                                          : displayFields.slice(1, 4).some(df => df.id === field.id))
+                                      : field.showInTable !== false;
                                     const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
                                     const Icon = fieldDef?.icon || TableProperties;
                                     
@@ -4336,16 +4427,19 @@ export const ModuleEditor = () => {
                                         }}
                                         onDragEnd={handleDragEnd}
                                         onClick={() => {
-                                          if (!isAlreadyActive) {
-                                            updateField(field.id, { showInTable: true });
-                                            setInterfaceSettings(prev => {
-                                              const cols = prev.master.columns || [];
-                                              if (cols.some(c => c.fieldId === field.id)) {
+                                          if (interfaceSettings.master.layoutType === 'cards') {
+                                            setInterfaceSettings((prev: any) => {
+                                              const cardFields = prev.master.cardFields || [];
+                                              const currentFields = cardFields.length > 0
+                                                ? cardFields
+                                                : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+                                              
+                                              if (currentFields.some((cf: any) => cf.fieldId === field.id)) {
                                                 return {
                                                   ...prev,
                                                   master: {
                                                     ...prev.master,
-                                                    columns: cols.map(c => c.fieldId === field.id ? { ...c, visible: true } : c)
+                                                    cardFields: currentFields.map((cf: any) => cf.fieldId === field.id ? { ...cf, visible: !cf.visible } : cf)
                                                   }
                                                 };
                                               }
@@ -4353,12 +4447,36 @@ export const ModuleEditor = () => {
                                                 ...prev,
                                                 master: {
                                                   ...prev.master,
-                                                  columns: [...cols, { fieldId: field.id, visible: true, inlineEdit: false, width: 200 }]
+                                                  cardFields: [...currentFields, { fieldId: field.id, visible: true }]
                                                 }
                                               };
                                             });
+                                            setSelectedId('__table_settings');
+                                          } else {
+                                            if (!isAlreadyActive) {
+                                              updateField(field.id, { showInTable: true });
+                                              setInterfaceSettings(prev => {
+                                                const cols = prev.master.columns || [];
+                                                if (cols.some(c => c.fieldId === field.id)) {
+                                                  return {
+                                                    ...prev,
+                                                    master: {
+                                                      ...prev.master,
+                                                      columns: cols.map(c => c.fieldId === field.id ? { ...c, visible: true } : c)
+                                                    }
+                                                  };
+                                                }
+                                                return {
+                                                  ...prev,
+                                                  master: {
+                                                    ...prev.master,
+                                                    columns: [...cols, { fieldId: field.id, visible: true, inlineEdit: false, width: 200 }]
+                                                  }
+                                                };
+                                              });
+                                            }
+                                            setSelectedId(field.id);
                                           }
-                                          setSelectedId(field.id);
                                         }}
                                         className={cn(
                                           "flex items-center justify-between p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing hover:shadow-sm group",
@@ -4407,7 +4525,13 @@ export const ModuleEditor = () => {
                           
                           <div className="space-y-2">
                             {systemFields.map((field) => {
-                              const isAlreadyActive = field.id === '_record_key' || interfaceSettings.master.columns?.some(c => c.fieldId === field.id && c.visible !== false);
+                              const isAlreadyActive = field.id === '_record_key' || (
+                                interfaceSettings.master.layoutType === 'cards'
+                                  ? ((interfaceSettings.master.cardFields || []).length > 0
+                                      ? interfaceSettings.master.cardFields.some(cf => cf.fieldId === field.id && cf.visible !== false)
+                                      : displayFields.slice(1, 4).some(df => df.id === field.id))
+                                  : interfaceSettings.master.columns?.some(c => c.fieldId === field.id && c.visible !== false)
+                              );
                               const Icon = field.id === '_record_key' ? Key : field.type === 'user' ? Users : Calendar;
                               
                               return (
@@ -4420,15 +4544,20 @@ export const ModuleEditor = () => {
                                   }}
                                   onDragEnd={handleDragEnd}
                                   onClick={() => {
-                                    if (field.id !== '_record_key' && !isAlreadyActive) {
-                                      setInterfaceSettings(prev => {
-                                        const cols = prev.master.columns || [];
-                                        if (cols.some(c => c.fieldId === field.id)) {
+                                    if (field.id === '_record_key') return;
+                                    if (interfaceSettings.master.layoutType === 'cards') {
+                                      setInterfaceSettings((prev: any) => {
+                                        const cardFields = prev.master.cardFields || [];
+                                        const currentFields = cardFields.length > 0
+                                          ? cardFields
+                                          : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+                                        
+                                        if (currentFields.some((cf: any) => cf.fieldId === field.id)) {
                                           return {
                                             ...prev,
                                             master: {
                                               ...prev.master,
-                                              columns: cols.map(c => c.fieldId === field.id ? { ...c, visible: true } : c)
+                                              cardFields: currentFields.map((cf: any) => cf.fieldId === field.id ? { ...cf, visible: !cf.visible } : cf)
                                             }
                                           };
                                         }
@@ -4436,12 +4565,35 @@ export const ModuleEditor = () => {
                                           ...prev,
                                           master: {
                                             ...prev.master,
-                                            columns: [...cols, { fieldId: field.id, visible: true, inlineEdit: false, width: 120 }]
+                                            cardFields: [...currentFields, { fieldId: field.id, visible: true }]
                                           }
                                         };
                                       });
+                                      setSelectedId('__table_settings');
+                                    } else {
+                                      if (!isAlreadyActive) {
+                                        setInterfaceSettings(prev => {
+                                          const cols = prev.master.columns || [];
+                                          if (cols.some(c => c.fieldId === field.id)) {
+                                            return {
+                                              ...prev,
+                                              master: {
+                                                ...prev.master,
+                                                columns: cols.map(c => c.fieldId === field.id ? { ...c, visible: true } : c)
+                                              }
+                                            };
+                                          }
+                                          return {
+                                            ...prev,
+                                            master: {
+                                              ...prev.master,
+                                              columns: [...cols, { fieldId: field.id, visible: true, inlineEdit: false, width: 120 }]
+                                            }
+                                          };
+                                        });
+                                      }
+                                      setSelectedId(field.id);
                                     }
-                                    setSelectedId(field.id);
                                   }}
                                   className={cn(
                                     "flex items-center justify-between p-3 rounded-xl border transition-all cursor-grab active:cursor-grabbing hover:shadow-sm group",
@@ -9869,11 +10021,11 @@ export const ModuleEditor = () => {
                             <button
                               key={m.value}
                               type="button"
-                              onClick={() => setInterfaceSettings(prev => ({
+                              onClick={() => setInterfaceSettings((prev: any) => ({
                                 ...prev,
                                 master: { 
                                   ...prev.master, 
-                                  detailViewMode: m.value 
+                                  detailViewMode: m.value as 'page' | 'modal' 
                                 }
                               }))}
                               className={cn(
@@ -10194,6 +10346,214 @@ export const ModuleEditor = () => {
                                 <option key={f.id} value={f.id}>{f.label || f.name}</option>
                               ))}
                             </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cards View specific settings */}
+                      {interfaceSettings.master.layoutType === 'cards' && (
+                        <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block font-black">Card Fields Config</label>
+                          
+                          {/* Add Field Section */}
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1 block font-black">Add Field to Card</label>
+                            <select 
+                              value=""
+                              onChange={(e) => {
+                                const fieldId = e.target.value;
+                                if (!fieldId) return;
+                                setInterfaceSettings((prev: any) => {
+                                  const cardFields = prev.master.cardFields || [];
+                                  const currentFields = cardFields.length > 0
+                                    ? cardFields
+                                    : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+                                  
+                                  if (currentFields.some((cf: any) => cf.fieldId === fieldId)) {
+                                    return {
+                                      ...prev,
+                                      master: {
+                                        ...prev.master,
+                                        cardFields: currentFields.map((cf: any) => cf.fieldId === fieldId ? { ...cf, visible: true } : cf)
+                                      }
+                                    };
+                                  }
+                                  return {
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      cardFields: [...currentFields, { fieldId, visible: true }]
+                                    }
+                                  };
+                                });
+                              }}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">-- Select field to add --</option>
+                              {/* Option for custom fields */}
+                              {displayFields
+                                .filter(f => {
+                                  const cardFields = interfaceSettings.master.cardFields || [];
+                                  const currentFields = cardFields.length > 0
+                                    ? cardFields
+                                    : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+                                  return !currentFields.some(cf => cf.fieldId === f.id && cf.visible !== false);
+                                })
+                                .map(f => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name} (Custom)</option>
+                                ))
+                              }
+                              {/* Option for system fields */}
+                              {[
+                                { id: 'createdAt', label: 'Created Date' },
+                                { id: 'createdBy', label: 'Created By' },
+                                { id: 'updatedAt', label: 'Updated Date' },
+                                { id: 'status', label: 'Status' },
+                                { id: 'assigneeId', label: 'Assignee' }
+                              ]
+                                .filter(sf => {
+                                  const cardFields = interfaceSettings.master.cardFields || [];
+                                  const currentFields = cardFields.length > 0
+                                    ? cardFields
+                                    : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+                                  return !currentFields.some(cf => cf.fieldId === sf.id && cf.visible !== false);
+                                })
+                                .map(sf => (
+                                  <option key={sf.id} value={sf.id}>{sf.label} (System)</option>
+                                ))
+                              }
+                            </select>
+                          </div>
+
+                          {/* Ordered active field list */}
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1 block font-black">Card Body Fields</label>
+                            <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1">
+                              {(() => {
+                                const cardFields = interfaceSettings.master.cardFields || [];
+                                const currentFields = cardFields.length > 0
+                                  ? cardFields
+                                  : displayFields.slice(1, 4).map(df => ({ fieldId: df.id, visible: true }));
+                                
+                                return currentFields.map((cf, index) => {
+                                  // Find the field def
+                                  const customField = displayFields.find(f => f.id === cf.fieldId);
+                                  const systemField = [
+                                    { id: 'createdAt', label: 'Created Date' },
+                                    { id: 'createdBy', label: 'Created By' },
+                                    { id: 'updatedAt', label: 'Updated Date' },
+                                    { id: 'status', label: 'Status' },
+                                    { id: 'assigneeId', label: 'Assignee' }
+                                  ].find(sf => sf.id === cf.fieldId);
+                                  
+                                  const label = customField ? (customField.label || customField.name) : (systemField ? systemField.label : cf.fieldId);
+                                  const isSystem = !!systemField;
+                                  
+                                  return (
+                                    <div 
+                                      key={cf.fieldId}
+                                      className={cn(
+                                        "flex items-center justify-between p-2.5 rounded-xl border text-[10px] transition-all",
+                                        cf.visible !== false
+                                          ? "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 shadow-sm"
+                                          : "bg-zinc-50 dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/50 text-zinc-400"
+                                      )}
+                                    >
+                                      <span className="truncate max-w-[120px] font-bold" title={label}>
+                                        {label} {isSystem && <span className="text-[8px] opacity-60 font-medium">(Sys)</span>}
+                                      </span>
+                                      
+                                      <div className="flex items-center gap-0.5 shrink-0">
+                                        {/* Reordering arrows */}
+                                        <button
+                                          disabled={index === 0}
+                                          onClick={() => {
+                                            setInterfaceSettings((prev: any) => {
+                                              const newFields = [...currentFields];
+                                              const temp = newFields[index];
+                                              newFields[index] = newFields[index - 1];
+                                              newFields[index - 1] = temp;
+                                              return {
+                                                ...prev,
+                                                master: {
+                                                  ...prev.master,
+                                                  cardFields: newFields
+                                                }
+                                              };
+                                            });
+                                          }}
+                                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-30 rounded text-zinc-500 transition-colors"
+                                        >
+                                          <ArrowUp size={12} />
+                                        </button>
+                                        
+                                        <button
+                                          disabled={index === currentFields.length - 1}
+                                          onClick={() => {
+                                            setInterfaceSettings((prev: any) => {
+                                              const newFields = [...currentFields];
+                                              const temp = newFields[index];
+                                              newFields[index] = newFields[index + 1];
+                                              newFields[index + 1] = temp;
+                                              return {
+                                                ...prev,
+                                                master: {
+                                                  ...prev.master,
+                                                  cardFields: newFields
+                                                }
+                                              };
+                                            });
+                                          }}
+                                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 disabled:opacity-30 rounded text-zinc-500 transition-colors"
+                                        >
+                                          <ArrowDown size={12} />
+                                        </button>
+                                        
+                                        {/* Visibility toggle / delete */}
+                                        <button
+                                          onClick={() => {
+                                            setInterfaceSettings((prev: any) => {
+                                              const newFields = currentFields.map(f => 
+                                                f.fieldId === cf.fieldId ? { ...f, visible: !f.visible } : f
+                                              );
+                                              return {
+                                                ...prev,
+                                                master: {
+                                                  ...prev.master,
+                                                  cardFields: newFields
+                                                }
+                                              };
+                                            });
+                                          }}
+                                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded text-zinc-500 transition-colors"
+                                        >
+                                          {cf.visible !== false ? <Eye size={12} /> : <EyeOff size={12} />}
+                                        </button>
+
+                                        {/* Remove from cardFields */}
+                                        <button
+                                          onClick={() => {
+                                            setInterfaceSettings((prev: any) => {
+                                              const newFields = currentFields.filter(f => f.fieldId !== cf.fieldId);
+                                              return {
+                                                ...prev,
+                                                master: {
+                                                  ...prev.master,
+                                                  cardFields: newFields
+                                                }
+                                              };
+                                            });
+                                          }}
+                                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded text-rose-500 transition-colors"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
                           </div>
                         </div>
                       )}
