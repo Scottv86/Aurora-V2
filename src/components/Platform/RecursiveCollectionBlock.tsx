@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Search, Eye, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNestedRecords } from '../../hooks/useNestedRecords';
 import { useModalStack } from '../../context/ModalStackContext';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -25,6 +25,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   label,
   field
 }) => {
+  const queryClient = useQueryClient();
   const { records, loading, refetch } = useNestedRecords(parentRecordId);
   const { pushModal } = useModalStack();
   const { tenant } = usePlatform();
@@ -90,11 +91,37 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   const handleLinkRecord = async (childRecord: any) => {
     if (!tenant?.id) return;
     
-    // Get current associations or default to empty array
+    // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+    await queryClient.cancelQueries({ queryKey: ['nestedRecords', tenant.id, parentRecordId] });
+
     const currentAssociations = childRecord.associations || [];
-    
-    // Add parent association
     const updatedAssociations = [...currentAssociations, { record_id: parentRecordId }];
+    
+    const originalRecords = records;
+    const originalAllModuleRecords = allModuleRecords;
+    
+    const updatedChildRecord = {
+      ...childRecord,
+      associations: updatedAssociations
+    };
+    
+    // Optimistic UI updates
+    // 1. Update React Query cache
+    queryClient.setQueryData(
+      ['nestedRecords', tenant?.id, parentRecordId],
+      (old: any[] | undefined) => {
+        const list = old || [];
+        if (list.some((r: any) => r.id === childRecord.id)) return list;
+        return [...list, updatedChildRecord];
+      }
+    );
+    
+    // 2. Remove from unassociated list
+    setAllModuleRecords(prev => prev.filter(r => r.id !== childRecord.id));
+    
+    // 3. Instantly close search/input
+    setShowMirrorSearch(false);
+    setSearchQuery('');
     
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -113,13 +140,14 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
       
       if (res.ok) {
         toast.success(`Successfully linked ${childRecord.name || childRecord.title || 'record'}`);
-        setShowMirrorSearch(false);
-        setSearchQuery('');
         refetch();
       } else {
         throw new Error("Failed to link record");
       }
     } catch (err: any) {
+      // Rollback on failure
+      queryClient.setQueryData(['nestedRecords', tenant?.id, parentRecordId], originalRecords);
+      setAllModuleRecords(originalAllModuleRecords);
       toast.error(err.message || "Error linking record");
     }
   };
@@ -127,11 +155,33 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   const handleUnlinkRecord = async (childRecord: any) => {
     if (!tenant?.id) return;
     
+    // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+    await queryClient.cancelQueries({ queryKey: ['nestedRecords', tenant.id, parentRecordId] });
+
     const currentAssociations = childRecord.associations || [];
-    // Remove parent association
     const updatedAssociations = currentAssociations.filter(
       (assoc: any) => assoc.record_id !== parentRecordId
     );
+    
+    const originalRecords = records;
+    const originalAllModuleRecords = allModuleRecords;
+    
+    // Optimistic UI updates
+    // 1. Remove from query cache
+    queryClient.setQueryData(
+      ['nestedRecords', tenant?.id, parentRecordId],
+      (old: any[] | undefined) => (old || []).filter((r: any) => r.id !== childRecord.id)
+    );
+    
+    // 2. Add back to available unassociated list
+    const unlinkedChildRecord = {
+      ...childRecord,
+      associations: updatedAssociations
+    };
+    setAllModuleRecords(prev => {
+      if (prev.some(r => r.id === childRecord.id)) return prev;
+      return [...prev, unlinkedChildRecord];
+    });
     
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -155,6 +205,9 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
         throw new Error("Failed to unlink record");
       }
     } catch (err: any) {
+      // Rollback on failure
+      queryClient.setQueryData(['nestedRecords', tenant?.id, parentRecordId], originalRecords);
+      setAllModuleRecords(originalAllModuleRecords);
       toast.error(err.message || "Error unlinking record");
     }
   };
