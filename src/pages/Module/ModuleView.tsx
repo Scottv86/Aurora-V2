@@ -13,8 +13,16 @@ import {
   Trash2,
   Search,
   Filter,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  AreaChart, Area
+} from 'recharts';
+import L from 'leaflet';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -974,6 +982,776 @@ export const ModuleView = () => {
     );
   };
 
+  const LeafletMapWrapper = ({
+    records,
+    interfaceSettings,
+    navigate,
+    moduleId,
+    displayFields
+  }: any) => {
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const mapRef = useRef<L.Map | null>(null);
+    const markersRef = useRef<L.Marker[]>([]);
+    const [selectedRecord, setSelectedRecord] = useState<any>(null);
+    const [mapSearch, setMapSearch] = useState('');
+    
+    // Coordinate cache to avoid hitting Nominatim rate limits/network delays on every render
+    const [coordsCache, setCoordsCache] = useState<Record<string, [number, number]>>({});
+    const [loadingGeocode, setLoadingGeocode] = useState(false);
+
+    // Address field ID
+    const addressFieldId = interfaceSettings.master.mapAddressFieldId || '_record_key';
+
+    // 1. Dynamic CSS injection
+    useEffect(() => {
+      const linkId = 'leaflet-css-link';
+      if (!document.getElementById(linkId)) {
+        const link = document.createElement('link');
+        link.id = linkId;
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+    }, []);
+
+    // 2. Geocoding helper
+    const geocodeAddress = async (addressText: string, recordId: string): Promise<[number, number]> => {
+      // Check cache
+      if (coordsCache[recordId]) return coordsCache[recordId];
+      
+      // Deterministic fallback (San Francisco center by default, offset based on hash of recordId)
+      const getFallback = (): [number, number] => {
+        let hash = 0;
+        for (let i = 0; i < recordId.length; i++) {
+          hash = recordId.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const latOffset = (hash % 1000) / 15000;
+        const lngOffset = ((hash >> 3) % 1000) / 15000;
+        return [37.7749 + latOffset, -122.4194 + lngOffset]; // San Francisco area
+      };
+
+      if (!addressText || addressText === '-' || addressText === recordId) {
+        return getFallback();
+      }
+
+      // Try Nominatim API
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addressText)}`;
+        const res = await fetch(url, {
+          headers: {
+            'Accept-Language': 'en'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lng = parseFloat(data[0].lon);
+            const coords: [number, number] = [lat, lng];
+            setCoordsCache(prev => ({ ...prev, [recordId]: coords }));
+            return coords;
+          }
+        }
+      } catch (e) {
+        console.warn("Geocoding failed, using deterministic fallback", e);
+      }
+
+      const fallback = getFallback();
+      setCoordsCache(prev => ({ ...prev, [recordId]: fallback }));
+      return fallback;
+    };
+
+    // 3. Geocode all records
+    useEffect(() => {
+      const geocodeAll = async () => {
+        setLoadingGeocode(true);
+        for (const record of records) {
+          const addressText = record[addressFieldId] || record._record_key || '';
+          await geocodeAddress(addressText, record.id);
+        }
+        setLoadingGeocode(false);
+      };
+      geocodeAll();
+    }, [records, addressFieldId]);
+
+    // 4. Initialize Map
+    useEffect(() => {
+      if (!mapContainerRef.current) return;
+      
+      // Create map centered in San Francisco
+      const map = L.map(mapContainerRef.current).setView([37.7749, -122.4194], 13);
+      mapRef.current = map;
+
+      // Add clean tiles (Voyager dark/light matching dashboard)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+      }).addTo(map);
+
+      return () => {
+        map.remove();
+        mapRef.current = null;
+      };
+    }, []);
+
+    // 5. Update Markers when coordinates are geocoded
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      // Clear previous markers
+      markersRef.current.forEach(m => m.remove());
+      markersRef.current = [];
+
+      const bounds: [number, number][] = [];
+
+      records.forEach((record: any) => {
+        const coords = coordsCache[record.id];
+        if (!coords) return;
+
+        bounds.push(coords);
+
+        // Create styled divIcon marker
+        const markerHtml = `
+          <div class="relative flex items-center justify-center">
+            <div class="w-8 h-8 rounded-full bg-indigo-600/20 animate-ping absolute"></div>
+            <div class="w-6 h-6 rounded-full bg-white dark:bg-zinc-900 border-2 border-indigo-600 shadow-lg flex items-center justify-center relative z-10">
+              <div class="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>
+            </div>
+          </div>
+        `;
+
+        const customIcon = L.divIcon({
+          html: markerHtml,
+          className: 'custom-map-marker-icon',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        const marker = L.marker(coords, { icon: customIcon }).addTo(map);
+        markersRef.current.push(marker);
+
+        // Marker click popup
+        marker.on('click', () => {
+          setSelectedRecord(record);
+          map.setView(coords, Math.max(map.getZoom(), 15));
+        });
+      });
+
+      // Auto-fit bounds if we have markers
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      }
+    }, [records, coordsCache]);
+
+    const filteredList = useMemo(() => {
+      if (!mapSearch) return records;
+      const query = mapSearch.toLowerCase();
+      return records.filter((r: any) => 
+        String(r._record_key || '').toLowerCase().includes(query) ||
+        String(r[addressFieldId] || '').toLowerCase().includes(query)
+      );
+    }, [records, mapSearch, addressFieldId]);
+
+    const handlePanToRecord = (record: any) => {
+      const coords = coordsCache[record.id];
+      const map = mapRef.current;
+      if (coords && map) {
+        setSelectedRecord(record);
+        map.setView(coords, 16);
+      }
+    };
+
+    return (
+      <div className="flex flex-col lg:flex-row h-[600px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] overflow-hidden shadow-sm">
+        {/* Sidebar Record list */}
+        <div className="w-full lg:w-80 flex flex-col border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20">
+          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search locations..."
+                value={mapSearch}
+                onChange={(e) => setMapSearch(e.target.value)}
+                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">
+              Source: <span className="text-indigo-500 font-bold">{addressFieldId === '_record_key' ? 'Record Key' : addressFieldId}</span>
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+            {filteredList.map((record: any) => {
+              const isSelected = selectedRecord?.id === record.id;
+              return (
+                <div 
+                  key={record.id}
+                  onClick={() => handlePanToRecord(record)}
+                  className={cn(
+                    "p-4 rounded-2xl border cursor-pointer transition-all",
+                    isSelected
+                      ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-900 dark:text-white font-semibold"
+                      : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">{record._record_key || 'Record'}</span>
+                    {loadingGeocode && !coordsCache[record.id] && (
+                      <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
+                    {record[displayFields[0]?.id] || record[displayFields[0]?.name] || 'Untitled'}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 mt-1 truncate">
+                    {record[addressFieldId] || 'No location address'}
+                  </p>
+                </div>
+              );
+            })}
+            {filteredList.length === 0 && (
+              <p className="text-center text-[10px] text-zinc-400 uppercase tracking-widest py-8">No records mapped</p>
+            )}
+          </div>
+        </div>
+
+        {/* Leaflet Canvas */}
+        <div className="flex-1 relative h-full min-h-[300px]">
+          <div ref={mapContainerRef} className="w-full h-full z-10" />
+
+          {/* Floating Details Overlay */}
+          <AnimatePresence>
+            {selectedRecord && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="absolute bottom-6 left-6 right-6 lg:left-auto lg:right-6 lg:w-96 p-5 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-2xl z-20 flex flex-col gap-3"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{selectedRecord._record_key}</span>
+                    <h4 className="text-sm font-bold text-zinc-950 dark:text-white mt-0.5">
+                      {selectedRecord[displayFields[0]?.id] || selectedRecord[displayFields[0]?.name] || 'Untitled Record'}
+                    </h4>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedRecord(null)}
+                    className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 rounded-lg"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-zinc-600 dark:text-zinc-400 space-y-1 bg-zinc-50/50 dark:bg-zinc-900/50 p-3 rounded-2xl">
+                  {displayFields.slice(1, 4).map((f: any) => {
+                    const val = selectedRecord[f.id] || selectedRecord[f.name];
+                    if (val === undefined || val === null || val === '') return null;
+                    return (
+                      <div key={f.id} className="flex justify-between gap-4">
+                        <span className="font-bold text-zinc-500">{f.label || f.name}:</span>
+                        <span className="truncate">{String(val)}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex justify-between gap-4 border-t border-zinc-100 dark:border-zinc-800/50 pt-1.5 mt-1.5">
+                    <span className="font-bold text-zinc-500">Address:</span>
+                    <span className="truncate" title={selectedRecord[addressFieldId]}>{selectedRecord[addressFieldId] || '-'}</span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${selectedRecord.id}`)}
+                  className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+                >
+                  Open Details
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMapView = () => {
+    return (
+      <LeafletMapWrapper 
+        records={filteredRecords}
+        interfaceSettings={interfaceSettings}
+        members={members}
+        navigate={navigate}
+        moduleId={moduleId}
+        displayFields={displayFields}
+      />
+    );
+  };
+
+  const renderCardsView = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search cards..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredRecords.map((record: any) => {
+            const statusField = allFields.find(f => f.id === 'status' || f.name === 'status');
+            const status = record.status || record[statusField?.id || ''] || '-';
+            
+            const assignee = members?.find((m: any) => m.id === record.assigneeId);
+
+            return (
+              <div 
+                key={record.id}
+                onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/[0.03] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key || 'Key'}</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
+                      {status}
+                    </span>
+                  </div>
+
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-4 line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
+                    {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || 'Untitled') : 'Record'}
+                  </h4>
+
+                  <div className="mt-4 space-y-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                    {displayFields.slice(1, 4).map((f: any) => {
+                      const val = record[f.id] || record[f.name];
+                      if (val === undefined || val === null || val === '') return null;
+                      return (
+                        <p key={f.id} className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate flex items-center justify-between">
+                          <span className="font-bold text-zinc-400">{f.label || f.name}:</span>
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">{String(val)}</span>
+                        </p>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-6 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                  <span className="text-[9px] text-zinc-400 font-bold">{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
+                  
+                  {assignee ? (
+                    <div className="flex items-center gap-1.5" title={`Assignee: ${assignee.name}`}>
+                      <div className="w-5 h-5 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 flex items-center justify-center text-[9px] font-bold">
+                        {assignee.avatarUrl ? (
+                          <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
+                        ) : (
+                          assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400">
+                      <LucideIcons.User size={8} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {filteredRecords.length === 0 && (
+            <div className="col-span-full py-16 text-center text-zinc-400 font-bold text-xs uppercase tracking-widest">No cards found</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTimelineView = () => {
+    const dateFieldId = interfaceSettings.master.timelineDateFieldId || 'createdAt';
+    
+    const sortedTimelineRecords = [...filteredRecords].sort((a, b) => {
+      const dateA = new Date(a[dateFieldId] || a.createdAt || 0).getTime();
+      const dateB = new Date(b[dateFieldId] || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search timeline..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+            Timeline Date: <span className="text-indigo-500 font-black">{dateFieldId === 'createdAt' ? 'Created Date' : (allFields.find(f => f.id === dateFieldId)?.label || dateFieldId)}</span>
+          </div>
+        </div>
+
+        <div className="relative border-l border-zinc-200 dark:border-zinc-800 pl-8 ml-4 space-y-8 py-4">
+          {sortedTimelineRecords.map((record: any) => {
+            const rawDate = record[dateFieldId] || record.createdAt;
+            const dateObj = rawDate ? new Date(rawDate) : new Date();
+            const dateStr = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            const timeStr = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            
+            const assignee = members?.find((m: any) => m.id === record.assigneeId);
+            const status = record.status || '-';
+
+            return (
+              <div key={record.id} className="relative group animate-in slide-in-from-left-4 duration-300">
+                <div className="absolute -left-[41px] top-1.5 w-6 h-6 rounded-full bg-white dark:bg-zinc-950 border-2 border-indigo-600 shadow-md flex items-center justify-center z-10 transition-transform group-hover:scale-125 duration-200">
+                  <div className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
+                </div>
+
+                <div 
+                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                  className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-mono text-zinc-400">{dateStr} • {timeStr}</span>
+                      <span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[9px] font-bold text-indigo-500 uppercase tracking-widest">
+                        {status}
+                      </span>
+                    </div>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight">
+                      {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || 'Untitled') : 'Record'}
+                    </h4>
+                    <p className="text-[10px] text-zinc-400 font-mono">
+                      ID: {record._record_key || record.id}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    {assignee && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                        <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
+                          {assignee.avatarUrl ? (
+                            <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-indigo-600 text-white flex items-center justify-center text-[8px] font-bold">
+                              {assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300">{assignee.name}</span>
+                      </div>
+                    )}
+                    <ChevronRight size={16} className="text-zinc-400 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {sortedTimelineRecords.length === 0 && (
+            <p className="text-center text-zinc-400 uppercase tracking-widest text-xs py-8">No records on the timeline</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderGanttView = () => {
+    const startFieldId = interfaceSettings.master.ganttStartDateFieldId || 'createdAt';
+    const endFieldId = interfaceSettings.master.ganttEndDateFieldId || 'createdAt';
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+    const prevMonth = () => {
+      setCurrentDate(new Date(year, month - 1, 1));
+    };
+
+    const nextMonth = () => {
+      setCurrentDate(new Date(year, month + 1, 1));
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={prevMonth}
+              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <h3 className="text-base font-black uppercase tracking-wider text-zinc-900 dark:text-white min-w-[150px] text-center">
+              {monthNames[month]} {year}
+            </h3>
+            <button 
+              onClick={nextMonth}
+              className="p-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl border border-zinc-200 dark:border-zinc-800 transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest space-x-4">
+            <span>Start: <span className="text-indigo-500 font-bold">{startFieldId === 'createdAt' ? 'Created Date' : (allFields.find(f => f.id === startFieldId)?.label || startFieldId)}</span></span>
+            <span>End: <span className="text-indigo-500 font-bold">{endFieldId === 'createdAt' ? 'Created Date' : (allFields.find(f => f.id === endFieldId)?.label || endFieldId)}</span></span>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-sm flex flex-col">
+          <div className="flex overflow-x-auto custom-scrollbar border-b border-zinc-200 dark:border-zinc-800 min-w-full">
+            <div className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-4 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              Tasks
+            </div>
+            
+            <div className="flex-1 flex min-w-[700px]">
+              {daysArray.map((day) => (
+                <div key={day} className="flex-1 min-w-[32px] text-center py-4 border-r border-zinc-100 dark:border-zinc-800 text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono">
+                  {day}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="divide-y divide-zinc-200 dark:divide-zinc-800 max-h-[450px] overflow-y-auto custom-scrollbar">
+            {filteredRecords.map((record: any) => {
+              const rStart = record[startFieldId] || record.createdAt;
+              const rEnd = record[endFieldId] || record.createdAt;
+
+              const dateStart = rStart ? new Date(rStart) : new Date(year, month, 1);
+              const dateEnd = rEnd ? new Date(rEnd) : new Date(year, month, daysInMonth);
+
+              let startIdx = 1;
+              if (dateStart.getFullYear() === year && dateStart.getMonth() === month) {
+                startIdx = dateStart.getDate();
+              } else if (dateStart.getTime() > new Date(year, month, daysInMonth).getTime()) {
+                return null;
+              }
+
+              let endIdx = daysInMonth;
+              if (dateEnd.getFullYear() === year && dateEnd.getMonth() === month) {
+                endIdx = dateEnd.getDate();
+              } else if (dateEnd.getTime() < new Date(year, month, 1).getTime()) {
+                return null;
+              }
+
+              startIdx = Math.max(1, startIdx);
+              endIdx = Math.min(daysInMonth, Math.max(startIdx, endIdx));
+
+              const dayWidth = 100 / daysInMonth;
+              const barLeft = (startIdx - 1) * dayWidth;
+              const barWidth = (endIdx - startIdx + 1) * dayWidth;
+
+              const status = record.status || '-';
+
+              return (
+                <div 
+                  key={record.id} 
+                  onClick={() => navigate(`/workspace/modules/${moduleId}/records/${record.id}`)}
+                  className="flex min-w-full items-center group hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 cursor-pointer transition-colors"
+                >
+                  <div className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 p-4 truncate">
+                    <span className="block text-[9px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key}</span>
+                    <span className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate mt-0.5 group-hover:text-indigo-500 transition-colors">
+                      {record[displayFields[0]?.id] || record[displayFields[0]?.name] || 'Untitled'}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 flex min-w-[700px] h-12 relative items-center">
+                    {daysArray.map((day) => (
+                      <div key={day} className="absolute top-0 bottom-0 border-r border-zinc-100 dark:border-zinc-800/40 pointer-events-none" style={{ left: `${(day - 1) * dayWidth}%`, width: `${dayWidth}%` }} />
+                    ))}
+
+                    <div 
+                      className="absolute h-6 rounded-lg bg-indigo-600 text-white text-[9px] font-black uppercase tracking-wider flex items-center px-3 truncate transition-all shadow-md group-hover:shadow-lg shadow-indigo-600/10 border border-indigo-500/20"
+                      style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
+                    >
+                      <span className="truncate">{status}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {filteredRecords.length === 0 && (
+              <p className="text-center text-zinc-400 uppercase tracking-widest text-xs py-12">No tasks available</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const analyticsData = useMemo(() => {
+    const statusCounts: Record<string, number> = {};
+    const assigneeCounts: Record<string, number> = {};
+    const dateCounts: Record<string, number> = {};
+
+    records.forEach(r => {
+      const status = r.status || 'Active';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+      if (r.assigneeId) {
+        const member = members?.find((m: any) => m.id === r.assigneeId);
+        const name = member ? member.name : 'Unknown';
+        assigneeCounts[name] = (assigneeCounts[name] || 0) + 1;
+      } else {
+        assigneeCounts['Unassigned'] = (assigneeCounts['Unassigned'] || 0) + 1;
+      }
+
+      if (r.createdAt) {
+        const dStr = new Date(r.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        dateCounts[dStr] = (dateCounts[dStr] || 0) + 1;
+      }
+    });
+
+    const statusData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+    const assigneeData = Object.entries(assigneeCounts).map(([name, value]) => ({ name, value }));
+    const trendData = Object.entries(dateCounts)
+      .map(([date, count]) => ({ date, count }))
+      .slice(-10);
+
+    const todoCounts = statusCounts['Todo'] || statusCounts['Pending'] || 0;
+    const progressCounts = statusCounts['In Progress'] || statusCounts['Active'] || 0;
+    const doneCounts = statusCounts['Done'] || statusCounts['Completed'] || 0;
+
+    return {
+      total: records.length,
+      todoCounts,
+      progressCounts,
+      doneCounts,
+      statusData,
+      assigneeData,
+      trendData
+    };
+  }, [records, members]);
+
+  const renderAnalyticsView = () => {
+    const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-300">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Total Records</span>
+            <span className="text-3xl font-black text-zinc-900 dark:text-white mt-4">{analyticsData.total}</span>
+            <span className="text-[9px] text-emerald-500 font-bold mt-2 flex items-center gap-1">
+              Active volume
+            </span>
+          </div>
+
+          <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">To Do / Pending</span>
+            <span className="text-3xl font-black text-zinc-900 dark:text-white mt-4">{analyticsData.todoCounts}</span>
+            <span className="text-[9px] text-zinc-400 font-bold mt-2">Requires attention</span>
+          </div>
+
+          <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">In Progress</span>
+            <span className="text-3xl font-black text-zinc-900 dark:text-white mt-4">{analyticsData.progressCounts}</span>
+            <span className="text-[9px] text-indigo-500 font-bold mt-2">Currently being processed</span>
+          </div>
+
+          <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Completed / Done</span>
+            <span className="text-3xl font-black text-zinc-900 dark:text-white mt-4">{analyticsData.doneCounts}</span>
+            <span className="text-[9px] text-emerald-500 font-bold mt-2">Successfully closed</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col">
+            <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Status Breakdown</h4>
+            <div className="h-64 flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={analyticsData.statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {analyticsData.statusData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ background: '#18181b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }} 
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4">
+              {analyticsData.statusData.map((entry, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                  <span>{entry.name}: {entry.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col">
+            <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Creation Activity Trend</h4>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analyticsData.trendData}>
+                  <defs>
+                    <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e720" />
+                  <XAxis dataKey="date" tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
+                  <YAxis tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
+                  <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }} />
+                  <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorTrend)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col lg:col-span-2">
+            <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Workload distribution by Member</h4>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analyticsData.assigneeData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e720" />
+                  <XAxis dataKey="name" tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
+                  <YAxis tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
+                  <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }} />
+                  <Bar dataKey="value" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={48}>
+                    {analyticsData.assigneeData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTableView = () => {
     const densityClass = (() => {
       const d = interfaceSettings.master.density || 'standard';
@@ -1445,6 +2223,16 @@ export const ModuleView = () => {
           renderKanbanView()
         ) : interfaceSettings.master.layoutType === 'calendar' ? (
           renderCalendarView()
+        ) : interfaceSettings.master.layoutType === 'map' ? (
+          renderMapView()
+        ) : interfaceSettings.master.layoutType === 'cards' ? (
+          renderCardsView()
+        ) : interfaceSettings.master.layoutType === 'timeline' ? (
+          renderTimelineView()
+        ) : interfaceSettings.master.layoutType === 'gantt' ? (
+          renderGanttView()
+        ) : interfaceSettings.master.layoutType === 'analytics' ? (
+          renderAnalyticsView()
         ) : (
           renderTableView()
         )

@@ -1444,20 +1444,25 @@ export const ModuleEditor = () => {
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
   const [interfaceSettings, setInterfaceSettings] = useState({
     master: {
-      layoutType: 'table' as 'table' | 'kanban' | 'calendar',
+      layoutType: 'table' as 'table' | 'kanban' | 'calendar' | 'map' | 'cards' | 'timeline' | 'gantt' | 'analytics',
       columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string }[],
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       pagination: {
         enabled: true,
         pageSize: 25,
         showSizeChanger: true
-      }
+      },
+      timelineDateFieldId: 'createdAt',
+      ganttStartDateFieldId: 'createdAt',
+      ganttEndDateFieldId: 'createdAt',
+      mapAddressFieldId: '_record_key'
     },
     detail: {
-      layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar',
+      layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar' | 'process' | 'accordion',
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       showWorkflow: true,
-      showTabIcons: false
+      showTabIcons: false,
+      wizardSaveMode: 'step' as 'step' | 'end'
     },
     filters: [] as { fieldId: string, type: string }[],
     actions: [
@@ -1988,10 +1993,24 @@ export const ModuleEditor = () => {
         if (data.interfaceSettings) {
           setInterfaceSettings({
             ...data.interfaceSettings,
+            master: {
+              ...data.interfaceSettings.master,
+              layoutType: data.interfaceSettings.master?.layoutType || 'table',
+              columns: data.interfaceSettings.master?.columns || [],
+              density: data.interfaceSettings.master?.density || 'standard',
+              pagination: data.interfaceSettings.master?.pagination || { enabled: true, pageSize: 25 },
+              timelineDateFieldId: data.interfaceSettings.master?.timelineDateFieldId || 'createdAt',
+              ganttStartDateFieldId: data.interfaceSettings.master?.ganttStartDateFieldId || 'createdAt',
+              ganttEndDateFieldId: data.interfaceSettings.master?.ganttEndDateFieldId || 'createdAt',
+              mapAddressFieldId: data.interfaceSettings.master?.mapAddressFieldId || '_record_key'
+            },
             detail: {
               ...data.interfaceSettings.detail,
+              layoutType: data.interfaceSettings.detail?.layoutType || 'tabs',
+              density: data.interfaceSettings.detail?.density || 'standard',
               showWorkflow: data.interfaceSettings.detail?.showWorkflow !== false,
-              showTabIcons: !!data.interfaceSettings.detail?.showTabIcons
+              showTabIcons: !!data.interfaceSettings.detail?.showTabIcons,
+              wizardSaveMode: data.interfaceSettings.detail?.wizardSaveMode || 'step'
             }
           });
         }
@@ -3091,12 +3110,19 @@ export const ModuleEditor = () => {
                       <option value="table">Table View</option>
                       <option value="kanban">Kanban Board</option>
                       <option value="calendar">Calendar View</option>
+                      <option value="map">Map View</option>
+                      <option value="cards">Cards Grid</option>
+                      <option value="timeline">Timeline View</option>
+                      <option value="gantt">Gantt Chart</option>
+                      <option value="analytics">Analytics View</option>
                     </>
                   ) : (
                     <>
                       <option value="tabs">Tabbed Layout</option>
                       <option value="split">Split View</option>
                       <option value="sidebar">Single Page</option>
+                      <option value="process">Process Wizard</option>
+                      <option value="accordion">Accordion Stack</option>
                     </>
                   )}
                 </select>
@@ -8605,7 +8631,7 @@ export const ModuleEditor = () => {
                       <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Detail Layout</label>
                         <div className="grid grid-cols-3 gap-2">
-                          {(['tabs', 'split', 'sidebar'] as const).map(l => (
+                          {(['tabs', 'split', 'sidebar', 'process', 'accordion'] as const).map(l => (
                             <button
                               key={l}
                               onClick={() => setInterfaceSettings(prev => ({
@@ -8619,12 +8645,57 @@ export const ModuleEditor = () => {
                                   : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                               )}
                             >
-                              {l === 'tabs' ? <Layout size={14} /> : l === 'split' ? <Columns size={14} /> : <Sidebar size={14} />}
-                              <span className="truncate w-full">{l === 'tabs' ? 'Top Tabs' : l === 'split' ? 'Split View' : 'Single Page'}</span>
+                              {l === 'tabs' ? <Layout size={14} /> : 
+                               l === 'split' ? <Columns size={14} /> : 
+                               l === 'sidebar' ? <Sidebar size={14} /> : 
+                               l === 'process' ? <ListOrdered size={14} /> : 
+                               <Layers size={14} />}
+                              <span className="truncate w-full">
+                                {l === 'tabs' ? 'Top Tabs' : 
+                                 l === 'split' ? 'Split View' : 
+                                 l === 'sidebar' ? 'Single Page' : 
+                                 l === 'process' ? 'Wizard' : 
+                                 'Accordion'}
+                              </span>
                             </button>
                           ))}
                         </div>
                       </div>
+
+                      {/* Wizard Save Mode (Only for process layout) */}
+                      {interfaceSettings.detail.layoutType === 'process' && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Wizard Save Mode</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {([
+                              { value: 'step', label: 'Step by Step' },
+                              { value: 'end', label: 'Save at End' }
+                            ] as const).map(sm => (
+                              <button
+                                key={sm.value}
+                                onClick={() => setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  detail: { 
+                                    ...prev.detail, 
+                                    wizardSaveMode: sm.value 
+                                  }
+                                }))}
+                                className={cn(
+                                  "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                  (interfaceSettings.detail.wizardSaveMode || 'step') === sm.value
+                                    ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                    : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                )}
+                              >
+                                {sm.label}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="text-[8px] text-zinc-400 px-1 leading-normal block">
+                            "Step by Step" auto-saves fields on focus loss. "Save at End" holds changes locally until you complete the wizard.
+                          </span>
+                        </div>
+                      )}
 
                       {/* Tab Icons Toggle */}
                       <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
@@ -8751,6 +8822,105 @@ export const ModuleEditor = () => {
                           </select>
                         </div>
                       </div>
+
+                      {/* Timeline View specific settings */}
+                      {interfaceSettings.master.layoutType === 'timeline' && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Timeline Settings</label>
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Date field source</label>
+                            <select 
+                              value={interfaceSettings.master.timelineDateFieldId || 'createdAt'}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  timelineDateFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="createdAt">Created Date (System)</option>
+                              <option value="updatedAt">Updated Date (System)</option>
+                              {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Gantt View specific settings */}
+                      {interfaceSettings.master.layoutType === 'gantt' && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Gantt Chart Settings</label>
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1 block">Start Date Field</label>
+                            <select 
+                              value={interfaceSettings.master.ganttStartDateFieldId || 'createdAt'}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  ganttStartDateFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer mb-2"
+                            >
+                              <option value="createdAt">Created Date (System)</option>
+                              <option value="updatedAt">Updated Date (System)</option>
+                              {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1 block">End Date Field</label>
+                            <select 
+                              value={interfaceSettings.master.ganttEndDateFieldId || 'createdAt'}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  ganttEndDateFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="createdAt">Created Date (System)</option>
+                              <option value="updatedAt">Updated Date (System)</option>
+                              {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Map View specific settings */}
+                      {interfaceSettings.master.layoutType === 'map' && (
+                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Map Settings</label>
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Location/Address Field</label>
+                            <select 
+                              value={interfaceSettings.master.mapAddressFieldId || '_record_key'}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  mapAddressFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="_record_key">Record Key (Text)</option>
+                              {displayFields.filter((f: any) => ['text', 'longText', 'address', 'connector', 'lookup'].includes(f.type)).map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Quick Actions Panel */}
                       <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900">

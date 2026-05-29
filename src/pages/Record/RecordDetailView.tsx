@@ -84,6 +84,7 @@ export const RecordDetailView = () => {
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeStepIdx, setActiveStepIdx] = useState(0);
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -508,8 +509,13 @@ export const RecordDetailView = () => {
     return withCalculations;
   };
 
-  const handleUpdateEntry = async (dataToSave?: any, specificFieldId?: string, silent: boolean = true) => {
+  const handleUpdateEntry = async (dataToSave?: any, specificFieldId?: string, silent: boolean = true, forceBulk: boolean = false) => {
     if (!tenant?.id || !moduleId || !recordId || !moduleData) return;
+    
+    const isWizardEndMode = interfaceSettings.detail?.layoutType === 'process' && interfaceSettings.detail?.wizardSaveMode === 'end';
+    if (isWizardEndMode && !forceBulk) {
+      return;
+    }
     
     // Use the latest data from ref if not provided
     const currentData = dataToSave || editDataRef.current;
@@ -1196,6 +1202,179 @@ export const RecordDetailView = () => {
     );
   };
 
+  const validateStepFields = (tabId: string): boolean => {
+    const steps = visibleTabs;
+    const tabFields = allFields.filter(f => f.tabId === tabId || (!f.tabId && tabId === steps[0]?.id));
+    for (const field of tabFields) {
+      if (field.required) {
+        const isVisible = isFieldVisible(field, editData, visibilityContext);
+        if (isVisible) {
+          const val = getFieldValue(editData, field.id);
+          if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) {
+            toast.error(`"${field.label || field.name}" is required to proceed`);
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  };
+
+  const renderProcessWizardView = () => {
+    const steps = visibleTabs;
+    if (steps.length === 0) return <div className="text-zinc-500 text-sm italic p-8 text-center">No steps configured</div>;
+    
+    const activeStep = steps[activeStepIdx] || steps[0];
+    const isLastStep = activeStepIdx === steps.length - 1;
+    const progressPercent = ((activeStepIdx + 1) / steps.length) * 100;
+    
+    const handleNext = async () => {
+      if (!validateStepFields(activeStep.id)) return;
+      
+      const isWizardStepMode = interfaceSettings.detail?.wizardSaveMode === 'step' || !interfaceSettings.detail?.wizardSaveMode;
+      if (isWizardStepMode) {
+        await handleUpdateEntry(editData, undefined, true, true);
+      }
+      
+      setActiveStepIdx(p => Math.min(steps.length - 1, p + 1));
+    };
+
+    const handleBack = () => {
+      setActiveStepIdx(p => Math.max(0, p - 1));
+    };
+
+    const handleFinish = async () => {
+      if (!validateStepFields(activeStep.id)) return;
+      
+      await handleUpdateEntry(editData, undefined, false, true);
+      toast.success("Process completed successfully!");
+      navigate(`/workspace/modules/${moduleId}`);
+    };
+
+    return (
+      <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden flex flex-col animate-in fade-in duration-300">
+        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Guided Process Wizard</span>
+              <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase mt-0.5">Step {activeStepIdx + 1} of {steps.length}: {activeStep.label}</h3>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+              {steps.map((step: any, idx: number) => {
+                const isActive = activeStepIdx === idx;
+                const isCompleted = activeStepIdx > idx;
+                return (
+                  <div key={step.id} className="flex items-center">
+                    {idx > 0 && <span className="w-4 h-px bg-zinc-200 dark:bg-zinc-800 mx-1" />}
+                    <div 
+                      onClick={() => {
+                        if (isCompleted || idx === activeStepIdx) {
+                          setActiveStepIdx(idx);
+                        } else if (idx === activeStepIdx + 1) {
+                          handleNext();
+                        }
+                      }}
+                      className={cn(
+                        "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all cursor-pointer",
+                        isActive
+                          ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                          : isCompleted
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                            : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400"
+                      )}
+                    >
+                      {isCompleted ? <LucideIcons.Check size={10} strokeWidth={4} /> : idx + 1}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full mt-6 overflow-hidden">
+            <div 
+              className="h-full bg-indigo-600 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="p-8 flex-1">
+          {renderFieldsGrid(activeStep.id)}
+        </div>
+
+        <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex justify-between gap-4">
+          <button
+            onClick={handleBack}
+            disabled={activeStepIdx === 0}
+            className="px-6 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest transition-colors"
+          >
+            Back
+          </button>
+          
+          {isLastStep ? (
+            <button
+              onClick={handleFinish}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+            >
+              Finish & Save
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+            >
+              Next Step
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAccordionView = () => {
+    return (
+      <div className="space-y-6">
+        {visibleTabs.map((tab: any) => {
+          const isCollapsed = collapsedGroups[tab.id] ?? false;
+          return (
+            <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden transition-all">
+              <div 
+                onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
+                className="p-6 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-3">
+                  {interfaceSettings.detail?.showTabIcons ? (
+                    <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  )}
+                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                </div>
+                <LucideIcons.ChevronDown size={16} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
+              </div>
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="p-8">
+                      {renderFieldsGrid(tab.id)}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (loading || platformLoading) return <RecordDetailSkeleton />;
 
 
@@ -1571,7 +1750,11 @@ export const RecordDetailView = () => {
       </div>
 
       <div className="w-full space-y-8">
-        {interfaceSettings.detail?.layoutType === 'split' ? (
+        {interfaceSettings.detail?.layoutType === 'process' ? (
+          renderProcessWizardView()
+        ) : interfaceSettings.detail?.layoutType === 'accordion' ? (
+          renderAccordionView()
+        ) : interfaceSettings.detail?.layoutType === 'split' ? (
           <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6 items-start">
             {/* Left Navigation Menu */}
             <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
