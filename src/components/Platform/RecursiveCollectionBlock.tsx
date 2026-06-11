@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Search, Eye, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -402,13 +402,25 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   }, [moduleData, field]);
 
   const navigate = useNavigate();
+  const { 
+    moduleId: routeModuleId, 
+    recordId: routeRecordId, 
+    parentModuleId: routeParentModuleId, 
+    parentRecordId: routeParentRecordId 
+  } = useParams();
 
   const handleRecordOpen = (childRecord: any) => {
     const detailViewMode = field?.detailViewMode || 'modal';
     const detailLayoutType = field?.detailLayoutType || 'sidebar';
 
     if (detailViewMode === 'page') {
-      navigate(`/workspace/modules/${childRecord.moduleId}/records/${childRecord.id}`);
+      const activeParentModId = routeParentModuleId || routeModuleId;
+      const activeParentRecId = routeParentRecordId || routeRecordId || parentRecordId;
+      if (activeParentModId && activeParentRecId) {
+        navigate(`/workspace/modules/${activeParentModId}/records/${activeParentRecId}/sub/${childRecord.moduleId}/${childRecord.id}`);
+      } else {
+        navigate(`/workspace/modules/${childRecord.moduleId}/records/${childRecord.id}`);
+      }
     } else {
       pushModal({ 
         moduleId: childRecord.moduleId, 

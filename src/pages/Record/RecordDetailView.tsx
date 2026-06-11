@@ -66,7 +66,7 @@ export const RecordDetailView = ({
   isModal?: boolean;
   onClose?: () => void;
 } = {}) => {
-  const { moduleId: routeModuleId, recordId: routeRecordId } = useParams();
+  const { moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
   const moduleId = moduleIdProp || routeModuleId;
   const recordId = recordIdProp || routeRecordId;
   const navigate = useNavigate();
@@ -348,6 +348,21 @@ export const RecordDetailView = ({
           
           if (recordId && recData._record_key) {
             setBreadcrumbOverride(recordId, recData._record_key);
+          }
+
+          if (parentRecordId) {
+            const parentRecRes = await fetch(`${DATA_API_URL}/records/${parentRecordId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': tenant.id
+              }
+            });
+            if (parentRecRes.ok) {
+              const parentRecData = await parentRecRes.json();
+              if (parentRecData._record_key) {
+                setBreadcrumbOverride(parentRecordId, parentRecData._record_key);
+              }
+            }
           }
 
           // Trigger AI summary update once on load if field exists
@@ -852,7 +867,11 @@ export const RecordDetailView = ({
       if (isModal && onClose) {
         onClose();
       } else {
-        navigate(`/workspace/modules/${moduleId}`);
+        if (parentModuleId && parentRecordId) {
+          navigate(`/workspace/modules/${parentModuleId}/records/${parentRecordId}`);
+        } else {
+          navigate(`/workspace/modules/${moduleId}`);
+        }
       }
     } catch (error: any) {
       console.error("Delete Error:", error);
@@ -1267,7 +1286,11 @@ export const RecordDetailView = ({
       if (isModal && onClose) {
         onClose();
       } else {
-        navigate(`/workspace/modules/${moduleId}`);
+        if (parentModuleId && parentRecordId) {
+          navigate(`/workspace/modules/${parentModuleId}/records/${parentRecordId}`);
+        } else {
+          navigate(`/workspace/modules/${moduleId}`);
+        }
       }
     };
 
@@ -1423,7 +1446,7 @@ export const RecordDetailView = ({
             </button>
           ) : (
             <Link 
-              to={`/workspace/modules/${moduleId}`}
+              to={parentModuleId && parentRecordId ? `/workspace/modules/${parentModuleId}/records/${parentRecordId}` : `/workspace/modules/${moduleId}`}
               className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
             >
               <ArrowLeft size={20} />

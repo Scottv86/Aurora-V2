@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -50,7 +49,11 @@ export const Breadcrumbs = () => {
     if (breadcrumbOverrides[segment]) return breadcrumbOverrides[segment];
 
     // 2. Check modules if it's a module ID (these are loaded globally)
-    if (pathnames[index - 1] === 'modules' || pathnames[index - 1] === 'builder') {
+    if (
+      pathnames[index - 1] === 'modules' || 
+      pathnames[index - 1] === 'builder' || 
+      pathnames[index - 1] === 'sub'
+    ) {
       const mod = modules.find(m => m.id === segment);
       if (mod) return mod.name;
     }
@@ -65,13 +68,17 @@ export const Breadcrumbs = () => {
   };
 
   const breadcrumbItems = pathnames.map((segment, index) => {
-    const to = `/${pathnames.slice(0, index + 1).join('/')}`;
+    let to = `/${pathnames.slice(0, index + 1).join('/')}`;
+    // If it's a nested module segment following 'sub', link to the standalone module view instead
+    if (index > 0 && pathnames[index - 1] === 'sub') {
+      to = `/workspace/modules/${segment}`;
+    }
     return {
       segment,
       to,
       label: getLabel(segment, index)
     };
-  }).filter(item => item.segment !== 'records');
+  }).filter(item => item.segment !== 'records' && item.segment !== 'sub');
 
   if (breadcrumbItems.length === 0) return null;
 

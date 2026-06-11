@@ -132,6 +132,7 @@ const App = () => {
                 {/* Dynamic Module Routes */}
                 <Route path="modules/:moduleId" element={<ModuleView />} />
                 <Route path="modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
+                <Route path="modules/:parentModuleId/records/:parentRecordId/sub/:moduleId/:recordId" element={<RecordDetailView />} />
                 
                 {/* Platform Operations */}
                 <Route path="my-work" element={<WorkQueue />} />
