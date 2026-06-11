@@ -1,7 +1,7 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useModalStack, ModalEntry } from '../../context/ModalStackContext';
-import { X, ChevronRight, Home, ArrowLeft, Loader2, Layers } from 'lucide-react';
+import { X, ChevronRight, Home, ArrowLeft, Loader2, Layers, Table, Grid3X3, Columns, Sidebar, ListOrdered, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -68,6 +68,20 @@ const RecordModal = ({
   const [moduleData, setModuleData] = useState<any>(null);
   const [record, setRecord] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const tabs = useMemo(() => {
+    return moduleData?.tabs || [{ id: 'default-tab', label: 'General' }];
+  }, [moduleData]);
+  const [activeTabId, setActiveTabId] = useState<string>('');
+  const [activeStepIdx, setActiveStepIdx] = useState<number>(0);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  // Initialize activeTabId once moduleData is loaded
+  useEffect(() => {
+    if (tabs.length > 0 && !activeTabId) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
 
   const handleSave = async () => {
     // Validate required fields
@@ -218,107 +232,374 @@ const RecordModal = ({
           ) : (
 
             <div className="w-full">
-               <div className={cn(
-                 "w-full space-y-12",
-                 (entry.moduleId === 'virtual' || !moduleData?.nestedCollections?.length) ? "w-full" : "lg:grid lg:grid-cols-12 lg:gap-12"
-               )}>
-                  <div className={cn(
-                    "grid grid-cols-12 gap-x-4 gap-y-6 w-full",
-                    (entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length) && "lg:col-span-8"
-                  )}>
-                    {moduleData?.layout ? (
-                      (() => {
-                        const visibleFields = compactLayout(
-                          (moduleData.layout || []).filter((f: any) => isFieldVisible(f, record, { user }))
-                        );
+              {(() => {
+                const detailLayoutType = entry.detailLayoutType || moduleData?.interfaceSettings?.detail?.layoutType || 'sidebar';
 
-                        return visibleFields.map((field: any, idx: number) => (
-                          <div 
-                            key={field.id} 
-                            className={cn(
-                              "group/field transition-all relative min-w-0 w-full",
-                              (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6"
-                            )}
-                            style={{
-                              gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
-                              gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
-                            }}
-                          >
-                            <div className="w-full transition-all duration-300 rounded-2xl p-4 -m-4 border-2 border-transparent hover:bg-zinc-500/5 hover:border-zinc-500/10 relative">
-                              {field.type === 'sub_module' ? (
-                                <RecursiveCollectionBlock 
-                                  parentRecordId={entry.recordId!}
-                                  moduleId={field.targetModuleId}
-                                  label={field.label}
-                                  field={field}
-                                />
-                              ) : field.type === 'repeatableGroup' ? (
-                                <RepeatableGroupBlock 
-                                   field={field}
-                                   value={record?.[field.id] || []}
-                                   onChange={(newVal) => setRecord({ ...record, [field.id]: newVal })}
-                                />
-                              ) : (
-                                <div className="space-y-1 w-full">
-                                  <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                                    {field.label}
-                                    {field.required && <span className="text-rose-500">*</span>}
-                                  </label>
-                                  <div className="w-full">
-                                    {entry.type !== 'view' && (entry.type === 'edit' || entry.moduleId === 'virtual') ? (
-                                      <FieldInput 
-                                        field={field}
-                                        value={record?.[field.id] ?? ''}
-                                        onChange={(val) => setRecord({ ...record, [field.id]: val })}
-                                        autoFocus={idx === 0}
-                                      />
-                                    ) : (
-                                      <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem] px-1">
-                                         {record?.[field.id] || '-'}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ));
-                      })()
-                    ) : (
-                      <p className="text-zinc-500 italic">No layout defined for this module.</p>
-                    )}
-                  </div>
+                const renderModalFieldsGrid = (tabId: string) => {
+                  if (!moduleData) return null;
+                  
+                  const allFields = flattenFields(moduleData.layout || []);
+                  const visibleFields = compactLayout(
+                    allFields.filter((field: any) => {
+                      const isVisible = isFieldVisible(field, record, { user });
+                      const fieldTabId = field.tabId || tabs[0]?.id;
+                      return fieldTabId === tabId && isVisible;
+                    })
+                  );
 
-                  {entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length && (
-                    <div className="lg:col-span-4 space-y-10">
-                        {record?.associations?.length > 0 && (
-                          <div className="space-y-3">
-                            <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Mirrored In</h3>
-                            <div className="flex flex-wrap gap-2">
-                                {record.associations.map((assoc: any, idx: number) => (
-                                  <div key={idx} className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2">
-                                    <Layers size={10} className="text-indigo-400" />
-                                    <span className="text-[10px] font-bold text-indigo-400">{assoc.role || 'Parent'}</span>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
+                  if (visibleFields.length === 0) {
+                    return (
+                      <div className="col-span-12 text-center py-8 text-xs font-bold uppercase tracking-widest text-zinc-400">
+                        No fields configured for this section
+                      </div>
+                    );
+                  }
 
-                        <div className="space-y-8">
-                          {(moduleData?.nestedCollections || []).map((coll: any, idx: number) => (
-                            <RecursiveCollectionBlock 
-                                key={idx}
+                  return (
+                    <div className="grid grid-cols-12 gap-x-4 gap-y-6 w-full">
+                      {visibleFields.map((field: any, idx: number) => (
+                        <div 
+                          key={field.id} 
+                          className={cn(
+                            "group/field transition-all relative min-w-0 w-full",
+                            (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6"
+                          )}
+                          style={{
+                            gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                            gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                          }}
+                        >
+                          <div className="w-full transition-all duration-305 rounded-2xl p-4 -m-4 border-2 border-transparent hover:bg-zinc-500/5 hover:border-zinc-500/10 relative">
+                            {field.type === 'sub_module' ? (
+                              <RecursiveCollectionBlock 
                                 parentRecordId={entry.recordId!}
-                                moduleId={coll.targetModuleId}
-                                label={coll.label}
-                                field={coll}
-                            />
+                                moduleId={field.targetModuleId}
+                                label={field.label}
+                                field={field}
+                              />
+                            ) : field.type === 'repeatableGroup' ? (
+                              <RepeatableGroupBlock 
+                                 field={field}
+                                 value={record?.[field.id] || []}
+                                 onChange={(newVal) => setRecord({ ...record, [field.id]: newVal })}
+                              />
+                            ) : (
+                              <div className="space-y-1 w-full">
+                                <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                                  {field.label}
+                                  {field.required && <span className="text-rose-500">*</span>}
+                                </label>
+                                <div className="w-full">
+                                  {entry.type !== 'view' && (entry.type === 'edit' || entry.moduleId === 'virtual') ? (
+                                    <FieldInput 
+                                      field={field}
+                                      value={record?.[field.id] ?? ''}
+                                      onChange={(val) => setRecord({ ...record, [field.id]: val })}
+                                      autoFocus={idx === 0}
+                                    />
+                                  ) : (
+                                    <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem] px-1">
+                                       {record?.[field.id] || '-'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                };
+
+                // Virtual / Flat layout (e.g. repeatableGroup items)
+                if (entry.moduleId === 'virtual') {
+                  const visibleFields = compactLayout(
+                    (moduleData.layout || []).filter((f: any) => isFieldVisible(f, record, { user }))
+                  );
+                  return (
+                    <div className="grid grid-cols-12 gap-x-4 gap-y-6 w-full">
+                      {visibleFields.map((field: any, idx: number) => (
+                        <div 
+                          key={field.id}
+                          className="group/field transition-all relative min-w-0 w-full"
+                          style={{
+                            gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                            gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                          }}
+                        >
+                          <div className="w-full transition-all duration-300 rounded-2xl p-4 -m-4 border-2 border-transparent hover:bg-zinc-500/5 hover:border-zinc-500/10 relative">
+                            <div className="space-y-1 w-full">
+                              <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                                {field.label}
+                                {field.required && <span className="text-rose-500">*</span>}
+                              </label>
+                              <div className="w-full">
+                                {entry.type !== 'view' && (entry.type === 'edit' || entry.moduleId === 'virtual') ? (
+                                  <FieldInput 
+                                    field={field}
+                                    value={record?.[field.id] ?? ''}
+                                    onChange={(val) => setRecord({ ...record, [field.id]: val })}
+                                    autoFocus={idx === 0}
+                                  />
+                                ) : (
+                                  <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem] px-1">
+                                     {record?.[field.id] || '-'}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                // Render main workspace tabs/wizard/accordion/split view layout if configured
+                const contentArea = (() => {
+                  switch (detailLayoutType) {
+                    case 'tabs':
+                      return (
+                        <div className="space-y-6">
+                          <div className="flex gap-2 p-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-2xl overflow-x-auto no-scrollbar">
+                            {tabs.map((tab: any) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setActiveTabId(tab.id)}
+                                className={cn(
+                                  "px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
+                                  activeTabId === tab.id
+                                    ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl"
+                                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                                )}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                          {renderModalFieldsGrid(activeTabId || tabs[0]?.id)}
+                        </div>
+                      );
+                    case 'split':
+                      return (
+                        <div className="grid grid-cols-12 gap-8 items-start">
+                          <aside className="col-span-12 lg:col-span-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 space-y-1 shadow-inner">
+                            {tabs.map((tab: any) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setActiveTabId(tab.id)}
+                                className={cn(
+                                  "w-full px-4 py-2.5 rounded-xl text-left text-xs font-bold transition-all whitespace-nowrap block",
+                                  activeTabId === tab.id
+                                    ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-md"
+                                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                                )}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </aside>
+                          <div className="col-span-12 lg:col-span-9">
+                            {renderModalFieldsGrid(activeTabId || tabs[0]?.id)}
+                          </div>
+                        </div>
+                      );
+                    case 'process':
+                      const activeStep = tabs[activeStepIdx] || tabs[0];
+                      const isFirstStep = activeStepIdx === 0;
+                      const isLastStep = activeStepIdx === tabs.length - 1;
+                      return (
+                        <div className="space-y-8">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-zinc-50 dark:bg-zinc-950/35 border border-zinc-150 dark:border-zinc-800 rounded-[2rem]">
+                            <div>
+                              <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">Step {activeStepIdx + 1} of {tabs.length}</span>
+                              <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase mt-0.5">{activeStep?.label}</h3>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {tabs.map((step: any, idx: number) => (
+                                <div key={step.id} className="flex items-center">
+                                  {idx > 0 && <span className="w-3 h-px bg-zinc-200 dark:bg-zinc-800 mx-1" />}
+                                  <button
+                                    type="button"
+                                    onClick={() => idx <= activeStepIdx && setActiveStepIdx(idx)}
+                                    className={cn(
+                                      "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all",
+                                      activeStepIdx === idx
+                                        ? "bg-indigo-600 border-indigo-600 text-white shadow-lg"
+                                        : activeStepIdx > idx
+                                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                                          : "bg-zinc-150 dark:bg-zinc-900 border-zinc-250 dark:border-zinc-800 text-zinc-400"
+                                    )}
+                                  >
+                                    {idx + 1}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          {renderModalFieldsGrid(activeStep?.id)}
+                          
+                          <div className="flex justify-between items-center pt-6 border-t border-zinc-150 dark:border-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() => setActiveStepIdx(p => Math.max(0, p - 1))}
+                              disabled={isFirstStep}
+                              className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-650 dark:text-zinc-400 rounded-xl text-xs font-bold transition-all disabled:opacity-40"
+                            >
+                              Back
+                            </button>
+                            {!isLastStep && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveStepIdx(p => Math.min(tabs.length - 1, p + 1))}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/10"
+                              >
+                                Next Step
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    case 'accordion':
+                      return (
+                        <div className="space-y-4">
+                          {tabs.map((tab: any) => {
+                            const isCollapsed = collapsedGroups[tab.id] ?? false;
+                            return (
+                              <div key={tab.id} className="border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden bg-white/5 dark:bg-zinc-950/20">
+                                <div
+                                  onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
+                                  className="p-4 bg-zinc-55/50 dark:bg-zinc-900/30 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+                                >
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-755 dark:text-zinc-300">{tab.label}</h4>
+                                  <ChevronDown size={14} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
+                                </div>
+                                {!isCollapsed && (
+                                  <div className="p-6">
+                                    {renderModalFieldsGrid(tab.id)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    case 'sidebar':
+                    default:
+                      // Render all fields vertically (default)
+                      const allFields = flattenFields(moduleData.layout || []);
+                      const visibleFields = compactLayout(
+                        allFields.filter((f: any) => isFieldVisible(f, record, { user }))
+                      );
+                      return (
+                        <div className="grid grid-cols-12 gap-x-4 gap-y-6 w-full">
+                          {visibleFields.map((field: any, idx: number) => (
+                            <div 
+                              key={field.id} 
+                              className={cn(
+                                "group/field transition-all relative min-w-0 w-full",
+                                (field.type === 'sub_module' || field.type === 'repeatableGroup') && "col-span-full mt-6"
+                              )}
+                              style={{
+                                gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                                gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                              }}
+                            >
+                              <div className="w-full transition-all duration-300 rounded-2xl p-4 -m-4 border-2 border-transparent hover:bg-zinc-500/5 hover:border-zinc-500/10 relative">
+                                {field.type === 'sub_module' ? (
+                                  <RecursiveCollectionBlock 
+                                    parentRecordId={entry.recordId!}
+                                    moduleId={field.targetModuleId}
+                                    label={field.label}
+                                    field={field}
+                                  />
+                                ) : field.type === 'repeatableGroup' ? (
+                                  <RepeatableGroupBlock 
+                                     field={field}
+                                     value={record?.[field.id] || []}
+                                     onChange={(newVal) => setRecord({ ...record, [field.id]: newVal })}
+                                  />
+                                ) : (
+                                  <div className="space-y-1 w-full">
+                                    <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                                      {field.label}
+                                      {field.required && <span className="text-rose-500">*</span>}
+                                    </label>
+                                    <div className="w-full">
+                                      {entry.type !== 'view' && (entry.type === 'edit' || entry.moduleId === 'virtual') ? (
+                                        <FieldInput 
+                                          field={field}
+                                          value={record?.[field.id] ?? ''}
+                                          onChange={(val) => setRecord({ ...record, [field.id]: val })}
+                                          autoFocus={idx === 0}
+                                        />
+                                      ) : (
+                                        <div className="text-sm text-zinc-900 dark:text-white font-medium min-h-[1.5rem] px-1">
+                                           {record?.[field.id] || '-'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           ))}
                         </div>
-                    </div>
-                  )}
-               </div>
+                      );
+                  }
+                })();
+
+                return (
+                  <div className={cn(
+                    "w-full space-y-12",
+                    (entry.moduleId === 'virtual' || !moduleData?.nestedCollections?.length) ? "w-full" : "lg:grid lg:grid-cols-12 lg:gap-12"
+                  )}>
+                     <div className={cn(
+                       "w-full",
+                       (entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length) && "lg:col-span-8"
+                     )}>
+                       {moduleData?.layout ? (
+                         contentArea
+                       ) : (
+                         <p className="text-zinc-500 italic">No layout defined for this module.</p>
+                       )}
+                     </div>
+
+                     {entry.moduleId !== 'virtual' && !!moduleData?.nestedCollections?.length && (
+                       <div className="lg:col-span-4 space-y-10">
+                           {record?.associations?.length > 0 && (
+                             <div className="space-y-3">
+                               <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] px-1">Mirrored In</h3>
+                               <div className="flex flex-wrap gap-2">
+                                   {record.associations.map((assoc: any, idx: number) => (
+                                     <div key={idx} className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center gap-2">
+                                       <Layers size={10} className="text-indigo-400" />
+                                       <span className="text-[10px] font-bold text-indigo-400">{assoc.role || 'Parent'}</span>
+                                     </div>
+                                   ))}
+                               </div>
+                             </div>
+                           )}
+
+                           <div className="space-y-8">
+                             {(moduleData?.nestedCollections || []).map((coll: any, idx: number) => (
+                               <RecursiveCollectionBlock 
+                                   key={idx}
+                                   parentRecordId={entry.recordId!}
+                                   moduleId={coll.targetModuleId}
+                                   label={coll.label}
+                                   field={coll}
+                               />
+                             ))}
+                           </div>
+                       </div>
+                     )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

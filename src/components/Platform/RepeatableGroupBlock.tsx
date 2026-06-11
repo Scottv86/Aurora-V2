@@ -69,6 +69,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       title: `New ${field.label} Item`,
       localData: {},
       localSchema: field.fields,
+      detailLayoutType: field.detailLayoutType,
       onSaveLocal: (updatedRow) => {
         // Use ref so we always append to the latest rows, not a stale snapshot
         const finalRows = [...valueRef.current, updatedRow];
@@ -103,6 +104,7 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       title: `${field.label} Detail`,
       localData: row,
       localSchema: field.fields,
+      detailLayoutType: field.detailLayoutType,
       onSaveLocal: isReadOnly ? undefined : (updatedRow) => {
         // Use ref so we always update the latest snapshot
         const newRows = [...valueRef.current];

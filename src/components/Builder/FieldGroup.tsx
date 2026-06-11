@@ -26,6 +26,8 @@ export interface Field {
   showIcon?: boolean;
   iconName?: string;
   visibilityRule?: any;
+  detailViewMode?: 'page' | 'modal';
+  detailLayoutType?: 'tabs' | 'split' | 'sidebar' | 'process' | 'accordion';
 }
 
 import { DynamicIcon } from '../UI/DynamicIcon';

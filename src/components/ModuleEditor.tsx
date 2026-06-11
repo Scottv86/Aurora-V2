@@ -162,6 +162,103 @@ export const GRID_CONFIG = {
   cols: 12
 };
 
+// --- Mock Sub-module Renderer ---
+const renderSubmoduleMock = (block: any) => {
+  const variant = block.variant || 'table';
+  
+  return (
+    <div className="pt-2 flex-1 flex flex-col justify-between">
+      <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
+        {/* Inner Toolbar */}
+        <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
+          <div className="flex-1 max-w-[140px] relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
+            <input 
+              type="text"
+              placeholder={`Search ${block.label || 'Sub-module'}...`}
+              disabled
+              className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
+              <Search size={10} />
+              <span>Link Existing</span>
+            </div>
+            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
+              <Plus size={10} />
+              <span>Add Record</span>
+            </div>
+          </div>
+        </div>
+
+        {variant === 'cards' ? (
+          <div className="p-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 scrollbar-hide min-h-[95px]">
+            {[1, 2].map(i => (
+              <div key={i} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col justify-between gap-1 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">REC-00{i}</span>
+                  <span className="px-1 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[6px] font-bold border border-indigo-500/20">Active</span>
+                </div>
+                <h5 className="text-[9px] font-bold text-zinc-900 dark:text-white truncate">Example Record Item {i === 1 ? 'A' : 'B'}</h5>
+                <div className="h-0.5 w-1/2 bg-zinc-100 dark:bg-zinc-855 rounded-full mt-1" />
+              </div>
+            ))}
+          </div>
+        ) : variant === 'list' ? (
+          <div className="p-3 space-y-2 overflow-y-auto flex-1 scrollbar-hide min-h-[95px]">
+            {[1, 2].map(i => (
+              <div key={i} className="p-2.5 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[8px] font-black text-indigo-500 shrink-0">REC-00{i}</span>
+                  <h5 className="text-[9px] font-bold text-zinc-900 dark:text-white truncate">{i === 1 ? 'Example Associated Record A' : 'Example Associated Record B'}</h5>
+                </div>
+                <span className="px-1 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[6px] font-bold border border-indigo-500/20 shrink-0">Active</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
+                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
+                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
+                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
+                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
+                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                {[1, 2].map(i => (
+                  <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
+                    <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-00{i}</td>
+                    <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">
+                      {i === 1 ? 'Example Associated Record A' : 'Example Associated Record B'}
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
+                    </td>
+                    <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
+                    <td className="px-4 py-1.5 text-right">
+                      <div className="flex justify-end gap-1 opacity-60">
+                        <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
+                        <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
+                        <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 // --- Filter Builder Component ---
 const FilterBuilder = ({ field, updateField, modules, teams, positions, permissionGroups }: any) => {
   const { lookupSource, platformEntity, targetModuleId, targetPlatformModuleId, lookupFilters = [], userFilters } = field;
@@ -518,6 +615,8 @@ export interface Field {
   iconName?: string;
   showIcon?: boolean;
   icon?: any;
+  detailViewMode?: 'page' | 'modal';
+  detailLayoutType?: 'tabs' | 'split' | 'sidebar' | 'process' | 'accordion';
   // Auto-number settings
   autonumberPrefix?: string;
   autonumberSuffix?: string;
@@ -3982,79 +4081,7 @@ export const ModuleEditor = () => {
                   <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
                 </div>
               ) : block.type === 'sub_module' ? (
-                <div className="pt-2 flex-1 flex flex-col justify-between">
-                  <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
-                    {/* Inner Toolbar */}
-                    <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
-                      <div className="flex-1 max-w-[140px] relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
-                        <input 
-                          type="text"
-                          placeholder={`Search ${block.label}...`}
-                          disabled
-                          className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
-                          <Search size={10} />
-                          <span>Link Existing</span>
-                        </div>
-                        <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
-                          <Plus size={10} />
-                          <span>Add Record</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Table layout (Mock) */}
-                    <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
-                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
-                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
-                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
-                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
-                            <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
-                          <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
-                            <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-001</td>
-                            <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record A</td>
-                            <td className="px-4 py-1.5">
-                              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
-                            </td>
-                            <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
-                            <td className="px-4 py-1.5 text-right">
-                              <div className="flex justify-end gap-1 opacity-60">
-                                <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
-                                <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
-                                <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
-                            <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-002</td>
-                            <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record B</td>
-                            <td className="px-4 py-1.5">
-                              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
-                            </td>
-                            <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-550 font-medium">5/25/2026</td>
-                            <td className="px-4 py-1.5 text-right">
-                              <div className="flex justify-end gap-1 opacity-60">
-                                <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
-                                <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
-                                <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
-                              </div>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
+                renderSubmoduleMock(block)
               ) : block.type === 'lookup' ? (
                 <div className="pt-2">
                   <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
@@ -5829,79 +5856,7 @@ export const ModuleEditor = () => {
                                           <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
                                         </div>
                                       ) : block.type === 'sub_module' ? (
-                                        <div className="pt-2 flex-1 flex flex-col justify-between">
-                                          <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
-                                            {/* Inner Toolbar */}
-                                            <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
-                                              <div className="flex-1 max-w-[140px] relative">
-                                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
-                                                <input 
-                                                  type="text"
-                                                  placeholder={`Search ${block.label}...`}
-                                                  disabled
-                                                  className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
-                                                />
-                                              </div>
-                                              <div className="flex items-center gap-1.5 shrink-0">
-                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
-                                                  <Search size={10} />
-                                                  <span>Link Existing</span>
-                                                </div>
-                                                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
-                                                  <Plus size={10} />
-                                                  <span>Add Record</span>
-                                                </div>
-                                              </div>
-                                            </div>
-
-                                            {/* Table layout (Mock) */}
-                                            <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
-                                              <table className="w-full text-left border-collapse">
-                                                <thead>
-                                                  <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
-                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
-                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
-                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
-                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
-                                                    <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
-                                                  <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
-                                                    <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-001</td>
-                                                    <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record A</td>
-                                                    <td className="px-4 py-1.5">
-                                                      <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
-                                                    </td>
-                                                    <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
-                                                    <td className="px-4 py-1.5 text-right">
-                                                      <div className="flex justify-end gap-1 opacity-60">
-                                                        <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
-                                                        <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
-                                                        <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
-                                                      </div>
-                                                    </td>
-                                                  </tr>
-                                                  <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
-                                                    <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-002</td>
-                                                    <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record B</td>
-                                                    <td className="px-4 py-1.5">
-                                                      <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
-                                                    </td>
-                                                    <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
-                                                    <td className="px-4 py-1.5 text-right">
-                                                      <div className="flex justify-end gap-1 opacity-60">
-                                                        <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
-                                                        <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
-                                                        <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
-                                                      </div>
-                                                    </td>
-                                                  </tr>
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          </div>
-                                        </div>
+                                        renderSubmoduleMock(block)
                                       ) : block.type === 'lookup' ? (
                                         <div className="pt-2">
                                           <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
@@ -6951,79 +6906,7 @@ export const ModuleEditor = () => {
                                         <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
                                       </div>
                                     ) : block.type === 'sub_module' ? (
-                                      <div className="pt-2 flex-1 flex flex-col justify-between">
-                                        <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
-                                          {/* Inner Toolbar */}
-                                          <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
-                                            <div className="flex-1 max-w-[140px] relative">
-                                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={12} />
-                                              <input 
-                                                type="text"
-                                                placeholder={`Search ${block.label}...`}
-                                                disabled
-                                                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
-                                              />
-                                            </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                              <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
-                                                <Search size={10} />
-                                                <span>Link Existing</span>
-                                              </div>
-                                              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
-                                                <Plus size={10} />
-                                                <span>Add Record</span>
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          {/* Table layout (Mock) */}
-                                          <div className="overflow-y-auto flex-1 scrollbar-hide min-h-[90px]">
-                                            <table className="w-full text-left border-collapse">
-                                              <thead>
-                                                <tr className="bg-zinc-50/50 dark:bg-zinc-800/30 border-b border-zinc-100 dark:border-zinc-800">
-                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key</th>
-                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Name</th>
-                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status</th>
-                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400">Created</th>
-                                                  <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
-                                                </tr>
-                                              </thead>
-                                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
-                                                <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
-                                                  <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-001</td>
-                                                  <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record A</td>
-                                                  <td className="px-4 py-1.5">
-                                                    <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
-                                                  </td>
-                                                  <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
-                                                  <td className="px-4 py-1.5 text-right">
-                                                    <div className="flex justify-end gap-1 opacity-60">
-                                                      <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
-                                                      <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
-                                                      <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
-                                                    </div>
-                                                  </td>
-                                                </tr>
-                                                <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
-                                                  <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-002</td>
-                                                  <td className="px-4 py-1.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">Example Associated Record B</td>
-                                                  <td className="px-4 py-1.5">
-                                                    <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-bold border border-indigo-500/20">Active</span>
-                                                  </td>
-                                                  <td className="px-4 py-1.5 text-[9px] text-zinc-550 dark:text-zinc-500">5/25/2026</td>
-                                                  <td className="px-4 py-1.5 text-right">
-                                                    <div className="flex justify-end gap-1 opacity-60">
-                                                      <div className="p-0.5 text-zinc-400 rounded"><Eye size={10} /></div>
-                                                      <div className="p-0.5 text-zinc-400 rounded"><Edit2 size={10} /></div>
-                                                      <div className="p-0.5 text-zinc-400 rounded"><Trash2 size={10} /></div>
-                                                    </div>
-                                                  </td>
-                                                </tr>
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </div>
-                                      </div>
+                                      renderSubmoduleMock(block)
                                     ) : block.type === 'lookup' ? (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 gap-2 shadow-sm dark:shadow-none">
                                         <Search size={14} className="text-zinc-400 dark:text-zinc-600" />
@@ -12299,19 +12182,6 @@ export const ModuleEditor = () => {
                                 <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                                   {selectedField.type === 'repeatableGroup' ? 'Collection Properties' : 'Nested Elements'}
                                 </label>
-                                {selectedField.type === 'repeatableGroup' && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[9px] font-bold text-zinc-400 uppercase">View:</span>
-                                    <select 
-                                      value={selectedField.variant || 'table'}
-                                      onChange={(e) => updateField(selectedField.id, { variant: e.target.value })}
-                                      className="bg-zinc-100 dark:bg-zinc-800 border-none rounded-md px-2 py-0.5 text-[9px] font-bold text-zinc-600 dark:text-zinc-400 focus:ring-0"
-                                    >
-                                      <option value="table">Table</option>
-                                      <option value="list">Master/Detail</option>
-                                    </select>
-                                  </div>
-                                )}
                               </div>
                               <div className="space-y-2">
                                 {(selectedField.fields || []).map((nestedField, idx) => (
@@ -12373,6 +12243,65 @@ export const ModuleEditor = () => {
                                   <Plus size={14} />
                                   Add Nested Element
                                 </button>
+
+                                {selectedField.type === 'repeatableGroup' && (
+                                  <div className="space-y-4 pt-4 border-t border-zinc-150 dark:border-zinc-800 mt-4">
+                                    {/* Layout Preset */}
+                                    <div className="space-y-3">
+                                      <label className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest block">Layout Preset</label>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {[
+                                          { value: 'table', label: 'Table', icon: Table },
+                                          { value: 'list', label: 'Grid Cards', icon: Grid3X3 }
+                                        ].map(opt => (
+                                          <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => updateField(selectedField.id, { variant: opt.value })}
+                                            className={cn(
+                                              "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
+                                              (selectedField.variant || 'table') === opt.value
+                                                ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                                : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                            )}
+                                          >
+                                            <opt.icon size={14} />
+                                            <span className="truncate w-full">{opt.label}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Detail View Layout */}
+                                    <div className="space-y-3 pt-3 border-t border-zinc-150 dark:border-zinc-800">
+                                      <label className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest block">Detail View Layout</label>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                          { value: 'tabs', label: 'Top Tabs', icon: Layout },
+                                          { value: 'split', icon: Columns, label: 'Split View' },
+                                          { value: 'sidebar', icon: Sidebar, label: 'Single Page' },
+                                          { value: 'process', icon: ListOrdered, label: 'Wizard' },
+                                          { value: 'accordion', icon: Layers, label: 'Accordion' }
+                                        ].map(opt => (
+                                          <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => updateField(selectedField.id, { detailLayoutType: opt.value })}
+                                            className={cn(
+                                              "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
+                                              (selectedField.detailLayoutType || 'sidebar') === opt.value
+                                                ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                                : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                            )}
+                                          >
+                                            <opt.icon size={14} />
+                                            <span className="truncate w-full">{opt.label}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -12769,6 +12698,90 @@ export const ModuleEditor = () => {
                                 >
                                   Change Setup...
                                 </button>
+
+                                <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                                  {/* Layout Preset */}
+                                  <div className="space-y-3">
+                                    <label className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest block">Layout Preset</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      {[
+                                        { value: 'table', label: 'Table', icon: Table },
+                                        { value: 'cards', label: 'Cards', icon: Grid3X3 },
+                                        { value: 'list', label: 'List', icon: Layers }
+                                      ].map(opt => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() => updateField(selectedField.id, { variant: opt.value })}
+                                          className={cn(
+                                            "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
+                                            (selectedField.variant || 'table') === opt.value
+                                              ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                              : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                          )}
+                                        >
+                                          <opt.icon size={14} />
+                                          <span className="truncate w-full">{opt.label}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Detail Open Action */}
+                                  <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-900">
+                                    <label className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest block">Detail Open Action</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {[
+                                        { value: 'modal', label: 'Modal Stack', icon: Layers },
+                                        { value: 'page', label: 'Full Page', icon: ExternalLink }
+                                      ].map(opt => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() => updateField(selectedField.id, { detailViewMode: opt.value })}
+                                          className={cn(
+                                            "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
+                                            (selectedField.detailViewMode || 'modal') === opt.value
+                                              ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                              : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                          )}
+                                        >
+                                          <opt.icon size={14} />
+                                          <span className="truncate w-full">{opt.label}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Detail View Layout */}
+                                  <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-900">
+                                    <label className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest block">Detail View Layout</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      {[
+                                        { value: 'tabs', label: 'Top Tabs', icon: Layout },
+                                        { value: 'split', label: 'Split View', icon: Columns },
+                                        { value: 'sidebar', label: 'Single Page', icon: Sidebar },
+                                        { value: 'process', label: 'Wizard', icon: ListOrdered },
+                                        { value: 'accordion', label: 'Accordion', icon: Layers }
+                                      ].map(opt => (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          onClick={() => updateField(selectedField.id, { detailLayoutType: opt.value })}
+                                          className={cn(
+                                            "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
+                                            (selectedField.detailLayoutType || 'sidebar') === opt.value
+                                              ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                              : "bg-zinc-50 dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                                          )}
+                                        >
+                                          <opt.icon size={14} />
+                                          <span className="truncate w-full">{opt.label}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             ) : (
                               <div className="p-5 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-center space-y-4">

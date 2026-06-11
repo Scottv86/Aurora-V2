@@ -25,6 +25,9 @@ import { initSocket } from './socket';
 
 dotenv.config();
 
+// Bypass self-signed SSL/TLS verification issues (UNABLE_TO_VERIFY_LEAF_SIGNATURE) in development
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const app = express();
 const httpServer = http.createServer(app);
 const PORT = 3001;

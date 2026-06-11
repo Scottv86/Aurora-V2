@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Eye, Edit2, Trash2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -266,6 +267,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
                   recordId: record.id, 
                   type: 'view', 
                   title: record.name || record.title || record.id,
+                  detailLayoutType: field?.detailLayoutType,
                   onSave: () => {
                     refetch();
                   }
@@ -284,6 +286,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
                   recordId: record.id, 
                   type: 'edit', 
                   title: record.name || record.title || record.id,
+                  detailLayoutType: field?.detailLayoutType,
                   onSave: () => {
                     refetch();
                   }
@@ -398,6 +401,166 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
     ];
   }, [moduleData, field]);
 
+  const navigate = useNavigate();
+
+  const handleRecordOpen = (childRecord: any) => {
+    const detailViewMode = field?.detailViewMode || 'modal';
+    const detailLayoutType = field?.detailLayoutType || 'sidebar';
+
+    if (detailViewMode === 'page') {
+      navigate(`/workspace/modules/${childRecord.moduleId}/records/${childRecord.id}`);
+    } else {
+      pushModal({ 
+        moduleId: childRecord.moduleId, 
+        recordId: childRecord.id, 
+        type: 'edit', 
+        title: childRecord.name || childRecord.title || childRecord.id,
+        detailLayoutType,
+        onSave: () => {
+          refetch();
+        }
+      });
+    }
+  };
+
+  const renderCardsView = () => {
+    return (
+      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {searchedRecords.map((rec: any) => {
+          const titleField = moduleData?.layout?.[0];
+          const recordTitle = rec[titleField?.id] || rec.name || rec.title || rec.id;
+          const status = rec.status || 'Active';
+          
+          const customFields = (moduleData?.layout || []).filter(
+            (f: any) => f.type !== 'sub_module' && f.type !== 'repeatableGroup' && f.showInTable !== false
+          ).slice(0, 3);
+
+          return (
+            <div
+              key={rec.id}
+              onClick={() => handleRecordOpen(rec)}
+              className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/[0.03] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[190px]"
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{rec._record_key || 'REC'}</span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
+                    {status}
+                  </span>
+                </div>
+
+                <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-4 line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
+                  {recordTitle}
+                </h4>
+
+                <div className="mt-4 space-y-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                  {customFields.map((f: any) => {
+                    const val = rec[f.id];
+                    if (val === undefined || val === null || val === '') return null;
+                    return (
+                      <div key={f.id} className="text-[10px] text-zinc-550 dark:text-zinc-400 flex items-center justify-between gap-2">
+                        <span className="font-bold text-zinc-400">{f.label || f.name}:</span>
+                        <span className="font-medium truncate">{String(val)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mt-6 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                <span className="text-[9px] text-zinc-400 font-bold">
+                  {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : 'Just now'}
+                </span>
+
+                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRecordOpen(rec);
+                    }}
+                    className="p-1.5 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-550 dark:text-zinc-455 rounded-lg transition-all"
+                  >
+                    <Eye size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveClick(rec);
+                    }}
+                    className="p-1.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-500 rounded-lg transition-all"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderListView = () => {
+    return (
+      <div className="p-6 space-y-3">
+        {searchedRecords.map((rec: any) => {
+          const titleField = moduleData?.layout?.[0];
+          const recordTitle = rec[titleField?.id] || rec.name || rec.title || rec.id;
+          const status = rec.status || 'Active';
+
+          return (
+            <div
+              key={rec.id}
+              onClick={() => handleRecordOpen(rec)}
+              className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl p-4 hover:shadow-xl hover:shadow-indigo-500/[0.02] cursor-pointer transition-all duration-200 flex items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest shrink-0">
+                  {rec._record_key || 'REC'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate group-hover:text-indigo-500 transition-colors">
+                    {recordTitle}
+                  </h4>
+                  <p className="text-[9px] text-zinc-400 mt-0.5">
+                    Created {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : 'Just now'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 shrink-0">
+                <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[8px] font-bold uppercase tracking-wider">
+                  {status}
+                </span>
+
+                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRecordOpen(rec);
+                    }}
+                    className="p-1.5 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-550 dark:text-zinc-455 rounded-lg transition-all"
+                  >
+                    <Eye size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveClick(rec);
+                    }}
+                    className="p-1.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-500 rounded-lg transition-all"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full">
          {loading || moduleLoading ? (
@@ -470,6 +633,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
                     type: 'edit', 
                     title: `New ${label}`,
                     parentAssociation: { recordId: parentRecordId, moduleId: '' },
+                    detailLayoutType: field?.detailLayoutType,
                     onSave: () => {
                       refetch();
                     }
@@ -522,23 +686,21 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
             )}
 
             {filteredRecords.length > 0 ? (
-              <Table 
-                data={searchedRecords}
-                onRowClick={(record: any) => pushModal({ 
-                  moduleId: record.moduleId, 
-                  recordId: record.id, 
-                  type: 'edit', 
-                  title: record.name || record.title || record.id,
-                  onSave: () => {
-                    refetch();
-                  }
-                })}
-                className="bg-transparent dark:bg-transparent border-none shadow-none"
-                noContainer={true}
-                pagination={true}
-                density={field?.density || 'standard'}
-                columns={tableColumns}
-              />
+              field?.variant === 'cards' ? (
+                renderCardsView()
+              ) : field?.variant === 'list' ? (
+                renderListView()
+              ) : (
+                <Table 
+                  data={searchedRecords}
+                  onRowClick={(record: any) => handleRecordOpen(record)}
+                  className="bg-transparent dark:bg-transparent border-none shadow-none"
+                  noContainer={true}
+                  pagination={true}
+                  density={field?.density || 'standard'}
+                  columns={tableColumns}
+                />
+              )
             ) : (
               /* Empty Initialize State Card */
               <div className="p-8 flex flex-col items-center justify-center text-center">
@@ -548,6 +710,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
                     type: 'edit', 
                     title: `New ${label}`,
                     parentAssociation: { recordId: parentRecordId, moduleId: '' },
+                    detailLayoutType: field?.detailLayoutType,
                     onSave: () => {
                       refetch();
                     }

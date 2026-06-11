@@ -14,6 +14,7 @@ export interface ModalEntry {
     moduleId: string;
   };
   onSave?: (data: any) => void;
+  detailLayoutType?: string;
 }
 
 interface ModalStackContextType {
