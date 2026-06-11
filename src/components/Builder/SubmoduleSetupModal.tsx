@@ -46,6 +46,8 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [newModuleName, setNewModuleName] = useState('');
   const [newModuleIcon, setNewModuleIcon] = useState('Layers');
+  const [newModulePrefix, setNewModulePrefix] = useState('');
+  const [hasManuallyEditedPrefix, setHasManuallyEditedPrefix] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -58,12 +60,37 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
       .filter(m => m.name?.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [modules, currentModuleId, searchQuery]);
 
+  const generateDefaultPrefix = (name: string): string => {
+    const cleaned = name.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    if (cleaned.length >= 3) {
+      return cleaned.substring(0, 3);
+    }
+    if (cleaned.length > 0) {
+      return (cleaned + 'KEY').substring(0, 3);
+    }
+    return '';
+  };
+
+  const handleNameChange = (val: string) => {
+    setNewModuleName(val);
+    if (!hasManuallyEditedPrefix) {
+      setNewModulePrefix(generateDefaultPrefix(val));
+    }
+  };
+
+  const handlePrefixChange = (val: string) => {
+    setNewModulePrefix(val.toUpperCase().slice(0, 5));
+    setHasManuallyEditedPrefix(true);
+  };
+
   const handleReset = () => {
     setStep('source');
     setSourceType(null);
     setSelectedModuleId('');
     setNewModuleName('');
     setNewModuleIcon('Layers');
+    setNewModulePrefix('');
+    setHasManuallyEditedPrefix(false);
     setSearchQuery('');
     setIsProcessing(false);
   };
@@ -115,6 +142,9 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
           type: 'RECORD',
           status: 'ACTIVE',
           enabled: true,
+          recordKeyPrefix: newModulePrefix.trim().toUpperCase() || 'SUB',
+          recordKeySuffix: '',
+          nextKeyNumber: 1000,
           layout: [
             {
               id: 'name',
@@ -348,15 +378,27 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
                     exit={{ opacity: 0, x: -10 }}
                     className="h-full flex flex-col gap-6"
                   >
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Sub-tasks, Relatives, Deliverables..."
-                        value={newModuleName}
-                        onChange={(e) => setNewModuleName(e.target.value)}
-                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all animate-none"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="md:col-span-2 space-y-2">
+                        <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Sub-tasks, Relatives, Deliverables..."
+                          value={newModuleName}
+                          onChange={(e) => handleNameChange(e.target.value)}
+                          className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all animate-none"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Key Prefix</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. SUB"
+                          value={newModulePrefix}
+                          onChange={(e) => handlePrefixChange(e.target.value)}
+                          className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all animate-none"
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -396,11 +438,11 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
                     </div>
                     <div className="space-y-2 max-w-md">
                       <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">Ready to Link Sub-module</h3>
-                      <p className="text-xs text-zinc-500 leading-relaxed">
+                      <p className="text-xs text-zinc-550 leading-relaxed">
                         {sourceType === 'existing' ? (
                           <>You are linking the existing module <strong>{selectedModuleName}</strong> to this submodule field.</>
                         ) : (
-                          <>We will bootstrap a new custom module named <strong>{selectedModuleName}</strong> and establish the parent relationship.</>
+                          <>We will bootstrap a new custom module named <strong>{selectedModuleName}</strong> (using key prefix <strong>{newModulePrefix}</strong>) and establish the parent relationship.</>
                         )}
                       </p>
                     </div>
@@ -436,7 +478,7 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
               {step !== 'confirm' ? (
                 <button
                   onClick={handleNext}
-                  disabled={(step === 'source' && !sourceType) || (step === 'configure' && sourceType === 'existing' && !selectedModuleId) || (step === 'configure' && sourceType === 'new' && !newModuleName.trim())}
+                  disabled={(step === 'source' && !sourceType) || (step === 'configure' && sourceType === 'existing' && !selectedModuleId) || (step === 'configure' && sourceType === 'new' && (!newModuleName.trim() || !newModulePrefix.trim()))}
                   className="px-5 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-xs font-bold hover:bg-indigo-600 dark:hover:bg-white hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-md"
                 >
                   <span>Continue</span>
