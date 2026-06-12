@@ -3,13 +3,15 @@ import {
   X, 
   Sparkles, 
   Play, 
-  Info,
   CheckCircle,
   AlertTriangle,
   Loader2,
-  Code
+  Code,
+  Hash,
+  Search,
+  Info
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { ValidationRule, evaluateRuleExpression } from '../../lib/validationEngine';
 import { generateExpression } from '../../services/aiService';
@@ -58,7 +60,216 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
   const [sandboxData, setSandboxData] = useState<Record<string, any>>({});
   const [sandboxResult, setSandboxResult] = useState<{ success: boolean; error?: string } | null>(null);
 
+  // Sidebar State
+  const [sidebarTab, setSidebarTab] = useState<'fields' | 'functions'>('fields');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Suggestions State
+  const [suggestions, setSuggestions] = useState<{ label: string; value: string; type: 'variable' | 'function'; description?: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [suggestionPos, setSuggestionPos] = useState({ top: 0, left: 0 });
+  const [suggestionTrigger, setSuggestionTrigger] = useState<{ type: 'variable' | 'function'; index: number } | null>(null);
+  
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case 'number': return { label: 'NUM', color: 'bg-amber-500/10 text-amber-500 border-amber-500/20' };
+      case 'currency': return { label: 'CUR', color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' };
+      case 'text':
+      case 'longText': return { label: 'TXT', color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' };
+      case 'calculation': return { label: 'CALC', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' };
+      case 'lookup': return { label: 'REL', color: 'bg-purple-500/10 text-purple-500 border-purple-500/20' };
+      case 'repeatableGroup': return { label: 'LIST', color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' };
+      default: return { label: 'VAR', color: 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20' };
+    }
+  };
+
+  // Suggestions Effects & Handlers
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSuggestions]);
+
+  const applySuggestion = (suggestion: any) => {
+    if (!suggestionTrigger || !textareaRef.current) return;
+    
+    const textarea = textareaRef.current;
+    const start = suggestionTrigger.index;
+    const end = textarea.selectionStart;
+    const currentVal = textarea.value;
+    
+    const func = suggestion.type === 'function' ? COMMON_FUNCTIONS.find(f => f.name.split('(')[0] === suggestion.label) : null;
+    const isZeroArg = func?.template?.endsWith('()');
+    
+    const insertion = suggestion.type === 'variable' ? `{${suggestion.label}}` : `${suggestion.label}()`;
+    const cursorOffset = (suggestion.type === 'function' && !isZeroArg) ? insertion.length - 1 : insertion.length;
+    const newVal = currentVal.substring(0, start) + insertion + currentVal.substring(end);
+    
+    setExpression(newVal);
+    setShowSuggestions(false);
+    setSuggestionTrigger(null);
+    
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+    }, 0);
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newVal = e.target.value;
+    const cursorIndex = e.target.selectionStart;
+    setExpression(newVal);
+
+    // IntelliSense Triggering
+    const lastChar = newVal[cursorIndex - 1];
+    const textBeforeCursor = newVal.substring(0, cursorIndex);
+    const words = textBeforeCursor.split(/[\s+\-*/%(),]/);
+    const lastWord = words[words.length - 1];
+
+    if (lastChar === '{') {
+      setSuggestionTrigger({ type: 'variable', index: cursorIndex - 1 });
+      updateSuggestions('variable', '');
+      setTimeout(() => updateSuggestionPos(cursorIndex), 0);
+    } else if (suggestionTrigger?.type === 'variable') {
+      const match = textBeforeCursor.substring(suggestionTrigger.index + 1);
+      if (match.includes('}') || match.includes('\n')) {
+        setShowSuggestions(false);
+        setSuggestionTrigger(null);
+      } else {
+        updateSuggestions('variable', match);
+        setTimeout(() => updateSuggestionPos(suggestionTrigger.index + 1), 0);
+      }
+    } else if (/^[A-Za-z]$/.test(lastChar) && (words.length === 1 || /[\s+\-*/%(),]/.test(newVal[cursorIndex - 2]))) {
+      setSuggestionTrigger({ type: 'function', index: cursorIndex - lastWord.length });
+      updateSuggestions('universal', lastWord);
+      setTimeout(() => updateSuggestionPos(cursorIndex - lastWord.length), 0);
+    } else if (suggestionTrigger?.type === 'function') {
+      if (/[\s+\-*/%(),]/.test(lastChar) || lastChar === undefined) {
+        setShowSuggestions(false);
+        setSuggestionTrigger(null);
+      } else {
+        updateSuggestions('universal', lastWord);
+        setTimeout(() => updateSuggestionPos(suggestionTrigger.index), 0);
+      }
+    } else {
+      setShowSuggestions(false);
+      setSuggestionTrigger(null);
+    }
+  };
+
+  const updateSuggestions = (type: 'variable' | 'function' | 'universal', query: string) => {
+    const q = query.toLowerCase();
+    let matches: any[] = [];
+    
+    const availableVariables = fields
+      .filter(f => f.type !== 'heading' && f.type !== 'divider' && f.type !== 'spacer')
+      .map(f => ({
+        label: f.name || f.label,
+        value: f.name || f.label,
+        type: 'variable' as const,
+        description: `${f.label} (${f.type.toUpperCase()})`
+      }));
+
+    const availableFunctions = COMMON_FUNCTIONS.map(f => ({
+      label: f.name.split('(')[0],
+      value: f.template,
+      type: 'function' as const,
+      description: f.desc
+    }));
+
+    if (type === 'variable') {
+      matches = availableVariables.filter(v => v.label.toLowerCase().includes(q));
+    } else if (type === 'function') {
+      matches = availableFunctions.filter(f => f.label.toLowerCase().includes(q));
+    } else {
+      const vMatches = availableVariables.filter(v => v.label.toLowerCase().includes(q));
+      const fMatches = availableFunctions.filter(f => f.label.toLowerCase().includes(q));
+      matches = [...vMatches, ...fMatches];
+    }
+    
+    setSuggestions(matches);
+    setShowSuggestions(matches.length > 0);
+    setSelectedIndex(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showSuggestions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applySuggestion(suggestions[selectedIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowSuggestions(false);
+        return;
+      }
+    }
+  };
+
+  const updateSuggestionPos = (index: number) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const mirror = document.createElement('div');
+    const style = window.getComputedStyle(textarea);
+    
+    mirror.style.position = 'absolute';
+    mirror.style.visibility = 'hidden';
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.wordWrap = 'break-word';
+    mirror.style.width = style.width;
+    mirror.style.padding = style.padding;
+    mirror.style.lineHeight = style.lineHeight;
+    mirror.style.fontSize = style.fontSize;
+    mirror.style.fontFamily = style.fontFamily;
+    mirror.style.fontWeight = style.fontWeight;
+    mirror.style.letterSpacing = style.letterSpacing;
+    mirror.style.textTransform = style.textTransform;
+    mirror.style.border = style.border;
+    
+    textarea.parentElement?.appendChild(mirror);
+    
+    const textBefore = textarea.value.substring(0, index);
+    const span = document.createElement('span');
+    span.textContent = textBefore;
+    mirror.appendChild(span);
+    
+    const caret = document.createElement('span');
+    caret.textContent = '|';
+    mirror.appendChild(caret);
+    
+    const rect = caret.getBoundingClientRect();
+    const textareaRect = textarea.getBoundingClientRect();
+    textarea.parentElement?.removeChild(mirror);
+
+    setSuggestionPos({
+      top: rect.top - textareaRect.top + textarea.scrollTop + 20,
+      left: rect.left - textareaRect.left + textarea.scrollLeft
+    });
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -170,6 +381,21 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Filter fields and functions based on search query
+  const filteredFields = fields
+    .filter(f => f.type !== 'heading' && f.type !== 'divider' && f.type !== 'spacer')
+    .filter(f => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return (f.label || '').toLowerCase().includes(q) || (f.name || '').toLowerCase().includes(q);
+    });
+
+  const filteredFunctions = COMMON_FUNCTIONS.filter(func => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return func.name.toLowerCase().includes(q) || func.desc.toLowerCase().includes(q);
+  });
+
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -183,15 +409,15 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
 
       {/* Modal Card */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, scale: 0.96, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-5xl h-[85vh] bg-white dark:bg-zinc-900 rounded-[32px] shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden"
+        exit={{ opacity: 0, scale: 0.96, y: 15 }}
+        className="relative w-full max-w-[92vw] h-[90vh] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col"
       >
         {/* Header */}
         <div className="px-8 py-5 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-zinc-50/50 dark:bg-zinc-900/50">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-600 dark:text-indigo-400">
+            <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-650 dark:text-indigo-400">
               <Code size={18} />
             </div>
             <div>
@@ -212,11 +438,118 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
         {/* Content Body */}
         <div className="flex-1 overflow-hidden flex divide-x divide-zinc-200 dark:divide-zinc-800">
           
-          {/* Left: Configuration Form */}
+          {/* Left Sidebar: Variables & Functions */}
+          <aside className="w-72 shrink-0 flex flex-col bg-zinc-50/30 dark:bg-zinc-900/10 h-full">
+            {/* Tabs */}
+            <div className="p-3 flex gap-1 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-950/40">
+              <button 
+                type="button"
+                onClick={() => { setSidebarTab('fields'); setSearchQuery(''); }}
+                className={cn(
+                  "flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all border flex flex-col items-center justify-center gap-1",
+                  sidebarTab === 'fields' 
+                    ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 dark:border-indigo-500/10 shadow-sm" 
+                    : "text-zinc-500 border-transparent hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50"
+                )}
+              >
+                <Hash size={12} />
+                <span>Variables</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setSidebarTab('functions'); setSearchQuery(''); }}
+                className={cn(
+                  "flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all border flex flex-col items-center justify-center gap-1",
+                  sidebarTab === 'functions' 
+                    ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 dark:border-indigo-500/10 shadow-sm" 
+                    : "text-zinc-500 border-transparent hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50"
+                )}
+              >
+                <Code size={12} />
+                <span>Functions</span>
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="p-3 border-b border-zinc-150 dark:border-zinc-800 bg-white/30 dark:bg-zinc-950/10">
+              <div className="relative">
+                <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input 
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={sidebarTab === 'fields' ? "Search variables..." : "Search functions..."}
+                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl pl-8 pr-4 py-2 text-[10px] font-bold focus:outline-none focus:border-indigo-500/50 transition-all shadow-sm dark:text-white"
+                />
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar">
+              {sidebarTab === 'fields' ? (
+                <div className="space-y-2">
+                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest px-1">Fields (Slugs)</p>
+                  {filteredFields.map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => handleInsertToken(`{${f.name || f.label}}`)}
+                      className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] rounded-2xl transition-all flex items-center gap-3 group shadow-sm"
+                    >
+                      <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 transition-colors shrink-0">
+                        {f.type === 'currency' ? <span className="text-[10px] font-bold">$</span> :
+                         f.type === 'number' || f.type === 'calculation' ? <Hash size={12} /> :
+                         <Hash size={12} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <p className="text-[11px] font-bold text-zinc-950 dark:text-zinc-100 truncate">{f.label}</p>
+                          <span className={cn("px-1 py-0.5 rounded text-[7px] font-black border uppercase shrink-0", getTypeBadge(f.type).color)}>
+                            {getTypeBadge(f.type).label}
+                          </span>
+                        </div>
+                        {f.name && (
+                          <p className="text-[8.5px] font-mono text-zinc-450 dark:text-zinc-500 truncate mt-0.5">{f.name}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                  {filteredFields.length === 0 && (
+                    <p className="text-[10px] text-zinc-450 text-center py-4">No fields found</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest px-1">Formulas</p>
+                  {filteredFunctions.map((func, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleInsertToken(func.template)}
+                      className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] rounded-2xl transition-all flex flex-col gap-1 group shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 transition-colors shrink-0">
+                          <Code size={12} />
+                        </div>
+                        <span className="text-[11px] font-mono font-bold text-zinc-950 dark:text-zinc-50 truncate">{func.name.split('(')[0]}</span>
+                      </div>
+                      <span className="text-[8.5px] text-zinc-500 dark:text-zinc-400 pl-9 leading-tight">{func.desc}</span>
+                    </button>
+                  ))}
+                  {filteredFunctions.length === 0 && (
+                    <p className="text-[10px] text-zinc-450 text-center py-4">No functions found</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* Center: Configuration Form */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
             
             {/* AI Generator Panel */}
-            <div className="p-5 bg-indigo-600 rounded-2xl relative overflow-hidden shadow-md shrink-0">
+            <div className="p-5 bg-gradient-to-r from-indigo-650 to-indigo-800 rounded-2xl relative overflow-hidden shadow-lg shadow-indigo-500/10 shrink-0">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-2xl -mr-16 -mt-16" />
               <div className="relative z-10 space-y-3">
                 <div className="flex items-center gap-2 text-white">
@@ -235,7 +568,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                   <button 
                     onClick={handleGenerateAI}
                     disabled={isGenerating || !aiPrompt.trim()}
-                    className="px-4 py-2 bg-white text-indigo-600 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-50 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-4 py-2 bg-white text-indigo-650 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-zinc-50 transition-all flex items-center gap-1.5 disabled:opacity-50"
                   >
                     {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                     <span>Generate</span>
@@ -247,23 +580,23 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
             {/* General Fields */}
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Rule Name</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Rule Name</label>
                   <input 
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Total Budget Cap Check"
-                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 dark:text-white"
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-4 py-3 text-xs dark:text-white"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Severity</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Severity</label>
                     <select
                       value={severity}
                       onChange={(e) => setSeverity(e.target.value as any)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-3 text-xs focus:outline-none focus:border-indigo-500 dark:text-white"
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-3 py-3 text-xs dark:text-white cursor-pointer"
                     >
                       <option value="error">Error (Blocks Save)</option>
                       <option value="warning">Warning (Prompts User)</option>
@@ -275,146 +608,186 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                       id="isActive"
                       checked={isActive}
                       onChange={(e) => setIsActive(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500"
+                      className="w-4 h-4 text-indigo-650 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                     />
-                    <label htmlFor="isActive" className="text-xs font-bold text-zinc-700 dark:text-zinc-350 select-none">Active</label>
+                    <label htmlFor="isActive" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Active</label>
                   </div>
                 </div>
               </div>
 
               {/* Expression Textarea */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center px-1">
-                  <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Rule Expression</label>
-                  <span className="text-[9px] text-zinc-400 font-medium italic">Evaluates to TRUE when valid</span>
+                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Rule Expression</label>
+                  <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium italic">Evaluates to TRUE when valid</span>
                 </div>
-                <textarea 
-                  ref={textareaRef}
-                  value={expression}
-                  onChange={(e) => setExpression(e.target.value)}
-                  placeholder="e.g. {Total Cost} <= {Allowed Budget}"
-                  rows={4}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-indigo-500 dark:text-white resize-none"
-                />
+                <div className="relative">
+                  <textarea 
+                    ref={textareaRef}
+                    value={expression}
+                    onChange={handleTextChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder="e.g. {Total Cost} <= {Allowed Budget}"
+                    rows={4}
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-4 py-3 text-xs font-mono dark:text-white resize-none"
+                  />
+                  {/* IntelliSense Dropdown */}
+                  <AnimatePresence>
+                    {showSuggestions && (
+                      <motion.div 
+                        ref={suggestionsRef}
+                        initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        style={{ top: suggestionPos.top, left: suggestionPos.left }}
+                        className="absolute z-[2000] w-72 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] overflow-hidden animate-in zoom-in-95 duration-200"
+                      >
+                        <div className="p-1.5 space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
+                          {suggestions.map((s, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => applySuggestion(s)}
+                              onMouseEnter={() => setSelectedIndex(i)}
+                              className={cn(
+                                "w-full flex items-center gap-2 p-2 rounded-xl text-left transition-all group/sug",
+                                i === selectedIndex 
+                                  ? "bg-indigo-650 text-white shadow-lg shadow-indigo-500/30" 
+                                  : "text-zinc-650 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                                i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-850"
+                              )}>
+                                {s.type === 'variable' ? <Hash size={10} /> : <Code size={10} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <p className={cn("text-[10px] font-bold truncate", i === selectedIndex ? "text-white" : "text-zinc-900 dark:text-white")}>
+                                    {s.label}
+                                  </p>
+                                  <span className={cn(
+                                    "text-[6px] font-black uppercase tracking-widest px-1 py-0.5 rounded border shrink-0",
+                                    i === selectedIndex ? "bg-white/20 border-white/30 text-white" : "bg-zinc-100 dark:bg-zinc-800 border-zinc-250 dark:border-zinc-700 text-zinc-400"
+                                  )}>
+                                    {s.type === 'variable' ? 'VAR' : 'FUNC'}
+                                  </span>
+                                </div>
+                                {s.description && (
+                                  <p className={cn("text-[8px] truncate mt-0.5", i === selectedIndex ? "text-white/60" : "text-zinc-500")}>
+                                    {s.description}
+                                  </p>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
               {/* Error Message */}
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Custom Error Message</label>
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Custom Error Message</label>
                 <input 
                   type="text"
                   value={errorMessage}
                   onChange={(e) => setErrorMessage(e.target.value)}
                   placeholder="e.g. Total cost cannot exceed allowed budget!"
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-indigo-500 dark:text-white"
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-4 py-3 text-xs dark:text-white"
                 />
               </div>
             </div>
           </div>
 
-          {/* Right Panel: Side Panel (Autocomplete & Sandbox) */}
-          <div className="w-[380px] shrink-0 overflow-y-auto bg-zinc-50/50 dark:bg-zinc-950/20 flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800 h-full custom-scrollbar">
-            
-            {/* Section 1: Tokens / Field Picker */}
-            <div className="p-6 space-y-3 shrink-0">
+          {/* Right Panel: Live Sandbox Tester */}
+          <div className="w-[360px] shrink-0 overflow-y-auto bg-zinc-50/55 dark:bg-zinc-950/20 flex flex-col p-6 h-full custom-scrollbar gap-4">
+            <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Info size={12} />
-                <span>Field Placeholders</span>
+                <Play size={12} className="text-emerald-500" />
+                <span>Sandbox Tester</span>
               </h4>
-              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl custom-scrollbar">
-                {fields.filter(f => f.type !== 'heading' && f.type !== 'divider' && f.type !== 'spacer').map(f => (
-                  <button 
-                    key={f.id}
-                    onClick={() => handleInsertToken(`{${f.label}}`)}
-                    className="px-2 py-1 bg-zinc-50 dark:bg-zinc-800 hover:bg-indigo-500 hover:text-white text-[10px] font-bold text-zinc-650 dark:text-zinc-350 rounded border border-zinc-150 dark:border-zinc-700 transition-all"
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+              <button 
+                onClick={runSandboxTest}
+                disabled={!expression}
+                className="px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all shadow-md shadow-indigo-500/10 disabled:opacity-50"
+              >
+                <Play size={10} fill="currentColor" />
+                <span>Run Test</span>
+              </button>
             </div>
 
-            {/* Section 2: Function Autocomplete */}
-            <div className="p-6 space-y-3 shrink-0">
-              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Code size={12} />
-                <span>Formula Functions</span>
-              </h4>
-              <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl custom-scrollbar">
-                {COMMON_FUNCTIONS.map((func, i) => (
-                  <button 
-                    key={i}
-                    onClick={() => handleInsertToken(func.template)}
-                    title={func.desc}
-                    className="p-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-indigo-500 hover:text-white text-left text-[9px] font-bold text-zinc-650 dark:text-zinc-350 rounded border border-zinc-150 dark:border-zinc-700 transition-all flex flex-col"
-                  >
-                    <span className="font-mono">{func.name.split('(')[0]}</span>
-                    <span className="text-[7px] text-zinc-400 group-hover:text-indigo-100 truncate">{func.desc}</span>
-                  </button>
-                ))}
+            {/* Sandbox Test Result Indicator */}
+            {sandboxResult && (
+              <div className={cn(
+                "p-4 rounded-2xl border flex gap-3 items-start text-xs font-medium leading-relaxed animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm",
+                sandboxResult.success 
+                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400" 
+                  : sandboxResult.error
+                    ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400"
+                    : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-450"
+              )}>
+                {sandboxResult.success ? (
+                  <>
+                    <CheckCircle size={16} className="shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-emerald-800 dark:text-emerald-350">Test Passed</p>
+                      <p className="text-[10px] opacity-80">Constraint is satisfied. Data is valid.</p>
+                    </div>
+                  </>
+                ) : sandboxResult.error ? (
+                  <>
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-800 dark:text-amber-350">Syntax Error</p>
+                      <p className="text-[10px] opacity-80">{sandboxResult.error}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <X size={16} className="shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-800 dark:text-rose-350">Validation Triggered</p>
+                      <p className="text-[10px] opacity-80">Constraint violated. Message: &quot;{errorMessage || 'Validation failed.'}&quot;</p>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Section 3: Live Sandbox Tester */}
-            <div className="p-6 flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-              <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Play size={12} className="text-emerald-500" />
-                  <span>Sandbox Tester</span>
-                </h4>
-                <button 
-                  onClick={runSandboxTest}
-                  disabled={!expression}
-                  className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1 transition-all disabled:opacity-50"
-                >
-                  <Play size={10} />
-                  <span>Run Test</span>
-                </button>
-              </div>
+            {/* Sandbox Mock Inputs */}
+            <div className="flex-1 space-y-3 overflow-y-auto max-h-[420px] p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl custom-scrollbar pr-2 shadow-sm">
+              {(() => {
+                const usedFields = fields.filter(f => {
+                  if (f.type === 'heading' || f.type === 'divider' || f.type === 'spacer') return false;
+                  const escapedName = f.name ? f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+                  const escapedId = f.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  const idPattern = new RegExp(`\\{\\{${escapedId}\\}\\}`, 'i');
+                  const namePattern1 = escapedName ? new RegExp(`\\{${escapedName}\\}`, 'i') : null;
+                  const namePattern2 = escapedName ? new RegExp(`\\{\\{${escapedName}\\}\\}`, 'i') : null;
+                  return idPattern.test(expression) || 
+                         (namePattern1 ? namePattern1.test(expression) : false) || 
+                         (namePattern2 ? namePattern2.test(expression) : false);
+                });
 
-              {/* Sandbox Test Result Indicator */}
-              {sandboxResult && (
-                <div className={cn(
-                  "p-3 rounded-xl border flex gap-2.5 items-start text-xs font-medium leading-relaxed animate-in fade-in slide-in-from-top-2 duration-300",
-                  sandboxResult.success 
-                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400" 
-                    : sandboxResult.error
-                      ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400"
-                      : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-450"
-                )}>
-                  {sandboxResult.success ? (
-                    <>
-                      <CheckCircle size={16} className="shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-emerald-800 dark:text-emerald-300">Test Passed</p>
-                        <p className="text-[10px] opacity-80">Constraint is satisfied. Data is valid.</p>
-                      </div>
-                    </>
-                  ) : sandboxResult.error ? (
-                    <>
-                      <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-amber-800 dark:text-amber-300">Syntax Error</p>
-                        <p className="text-[10px] opacity-80">{sandboxResult.error}</p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <X size={16} className="shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-rose-800 dark:text-rose-300">Validation Triggered</p>
-                        <p className="text-[10px] opacity-80">Constraint violated. Message: &quot;{errorMessage || 'Validation failed.'}&quot;</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                if (usedFields.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-400 dark:text-zinc-500 px-4 space-y-2">
+                      <Info size={20} className="opacity-40" />
+                      <p className="text-[10px] font-bold uppercase tracking-wider">No variables in use</p>
+                      <p className="text-[9px] leading-relaxed max-w-[200px]">Insert variables (e.g. <code>&#123;quantity&#125;</code>) from the sidebar to test them in the sandbox.</p>
+                    </div>
+                  );
+                }
 
-              {/* Sandbox Mock Inputs */}
-              <div className="flex-1 space-y-3 overflow-y-auto max-h-80 p-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl custom-scrollbar pr-2">
-                {fields.filter(f => f.type !== 'heading' && f.type !== 'divider' && f.type !== 'spacer').map(f => (
-                  <div key={f.id} className="space-y-1">
-                    <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-wide px-1">{f.label}</label>
+                return usedFields.map(f => (
+                  <div key={f.id} className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <label className="text-[8.5px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide px-1">
+                      {f.label}{f.name ? ` (${f.name})` : ''}
+                    </label>
                     <input 
                       type={f.type === 'number' || f.type === 'currency' ? 'number' : 'text'}
                       value={sandboxData[f.id] ?? ''}
@@ -425,15 +798,13 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                         setSandboxResult(null);
                       }}
                       placeholder={`Mock ${f.label} value`}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] focus:outline-none dark:text-white"
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-250 dark:border-zinc-800/85 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-3 py-2 text-[10.5px] dark:text-white"
                     />
                   </div>
-                ))}
-              </div>
+                ));
+              })()}
             </div>
-
           </div>
-
         </div>
 
         {/* Footer Actions */}

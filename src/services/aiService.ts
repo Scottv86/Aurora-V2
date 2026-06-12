@@ -382,8 +382,15 @@ export const evaluateCalculations = (
         try {
           let logic = field.calculationLogic;
           
-          // Replace both {{field_id}} and {Field Label} with actual values
-          fields.forEach(f => {
+          // Sort fields to prevent partial replacements
+          const sortedFields = [...fields].sort((a, b) => {
+            const lenA = Math.max(a.label?.length || 0, a.name?.length || 0);
+            const lenB = Math.max(b.label?.length || 0, b.name?.length || 0);
+            return lenB - lenA;
+          });
+
+          // Replace both {{field_id}}, {Field Label}, {field_slug}, and {{field_slug}} with actual values
+          sortedFields.forEach(f => {
             let value = previousData[f.id];
             
             // Handle nested fields in groups
@@ -404,14 +411,18 @@ export const evaluateCalculations = (
               value = numericTypes.includes(f.type) ? 0 : "";
             }
 
-            // Escaped label for regex - make case-insensitive to be more robust
-            const escapedLabel = f.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const labelRegex = new RegExp(`\\{${escapedLabel}\\}`, 'gi');
             const idRegex = new RegExp(`\\{\\{${f.id}\\}\\}`, 'g');
             
             const safeReplacement = typeof value === 'number' ? value.toString() : `"${value.toString().replace(/"/g, '\\"')}"`;
             
-            logic = logic.replace(idRegex, safeReplacement).replace(labelRegex, safeReplacement);
+            logic = logic.replace(idRegex, safeReplacement);
+
+            if (f.name) {
+              const escapedSlug = f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const slugRegex1 = new RegExp(`\\{${escapedSlug}\\}`, 'gi');
+              const slugRegex2 = new RegExp(`\\{\\{${escapedSlug}\\}\\}`, 'g');
+              logic = logic.replace(slugRegex1, safeReplacement).replace(slugRegex2, safeReplacement);
+            }
           });
 
           // Handle system fields like Record Key

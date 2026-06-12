@@ -28,10 +28,14 @@ export const evaluateRuleExpression = (
     // We only replace '=' if it is not preceded by '<', '>', '!', or '=' and not followed by '='.
     logic = logic.replace(/(?<![<>!=])=(?!=)/g, '==');
 
-    // 1. Sort fields by label length descending to prevent partial replacements (e.g. "{Total Budget}" vs "{Total}")
-    const sortedFields = [...fields].sort((a, b) => b.label.length - a.label.length);
+    // 1. Sort fields by max of label or slug length descending to prevent partial replacements (e.g. "{Total Budget}" vs "{Total}")
+    const sortedFields = [...fields].sort((a, b) => {
+      const lenA = Math.max(a.label?.length || 0, a.name?.length || 0);
+      const lenB = Math.max(b.label?.length || 0, b.name?.length || 0);
+      return lenB - lenA;
+    });
 
-    // 2. Replace placeholders (both {Field Label} and {{field_id}}) with actual values
+    // 2. Replace placeholders (both {Field Label}, {{field_id}}, {field_slug}, and {{field_slug}}) with actual values
     sortedFields.forEach(f => {
       let value = data[f.id];
 
@@ -53,13 +57,18 @@ export const evaluateRuleExpression = (
         value = numericTypes.includes(f.type) ? 0 : "";
       }
 
-      const escapedLabel = f.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const labelRegex = new RegExp(`\\{${escapedLabel}\\}`, 'gi');
       const idRegex = new RegExp(`\\{\\{${f.id}\\}\\}`, 'g');
 
       const safeReplacement = typeof value === 'number' ? value.toString() : `"${value.toString().replace(/"/g, '\\"')}"`;
 
-      logic = logic.replace(idRegex, safeReplacement).replace(labelRegex, safeReplacement);
+      logic = logic.replace(idRegex, safeReplacement);
+
+      if (f.name) {
+        const escapedSlug = f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const slugRegex1 = new RegExp(`\\{${escapedSlug}\\}`, 'gi');
+        const slugRegex2 = new RegExp(`\\{\\{${escapedSlug}\\}\\}`, 'g');
+        logic = logic.replace(slugRegex1, safeReplacement).replace(slugRegex2, safeReplacement);
+      }
     });
 
     // 3. Replace system fields
