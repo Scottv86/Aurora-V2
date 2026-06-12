@@ -9,7 +9,8 @@ import {
   Code,
   Hash,
   Search,
-  Info
+  Info,
+  FunctionSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -114,7 +115,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
     const func = suggestion.type === 'function' ? COMMON_FUNCTIONS.find(f => f.name.split('(')[0] === suggestion.label) : null;
     const isZeroArg = func?.template?.endsWith('()');
     
-    const insertion = suggestion.type === 'variable' ? `{${suggestion.label}}` : `${suggestion.label}()`;
+    const insertion = suggestion.type === 'variable' ? suggestion.value : `${suggestion.label}()`;
     const cursorOffset = (suggestion.type === 'function' && !isZeroArg) ? insertion.length - 1 : insertion.length;
     const newVal = currentVal.substring(0, start) + insertion + currentVal.substring(end);
     
@@ -125,13 +126,45 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + cursorOffset, start + cursorOffset);
+      handleCursorMove();
     }, 0);
+  };
+
+  const handleCursorMove = () => {
+    if (!textareaRef.current) return;
+    const cursorIndex = textareaRef.current.selectionStart;
+    const currentVal = textareaRef.current.value;
+    
+    if (showSuggestions && suggestionTrigger) {
+      const textBeforeCursor = currentVal.substring(0, cursorIndex);
+      if (suggestionTrigger.type === 'variable') {
+        const match = textBeforeCursor.substring(suggestionTrigger.index + 1);
+        if (match.includes('}') || match.includes('\n') || cursorIndex <= suggestionTrigger.index) {
+          setShowSuggestions(false);
+          setSuggestionTrigger(null);
+        } else {
+          updateSuggestions('variable', match);
+          setTimeout(() => updateSuggestionPos(suggestionTrigger.index + 1), 0);
+        }
+      } else if (suggestionTrigger.type === 'function') {
+        const words = textBeforeCursor.split(/[\s+\-*/%(),]/);
+        const lastWord = words[words.length - 1];
+        if (cursorIndex <= suggestionTrigger.index) {
+          setShowSuggestions(false);
+          setSuggestionTrigger(null);
+        } else {
+          updateSuggestions('universal', lastWord);
+          setTimeout(() => updateSuggestionPos(suggestionTrigger.index), 0);
+        }
+      }
+    }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value;
     const cursorIndex = e.target.selectionStart;
     setExpression(newVal);
+    setTimeout(handleCursorMove, 0);
 
     // IntelliSense Triggering
     const lastChar = newVal[cursorIndex - 1];
@@ -176,12 +209,15 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
     
     const availableVariables = fields
       .filter(f => f.type !== 'heading' && f.type !== 'divider' && f.type !== 'spacer')
-      .map(f => ({
-        label: f.name || f.label,
-        value: f.name || f.label,
-        type: 'variable' as const,
-        description: `${f.label} (${f.type.toUpperCase()})`
-      }));
+      .map(f => {
+        const hasSlug = !!f.name;
+        return {
+          label: f.name || f.label || f.id,
+          value: hasSlug ? `{${f.name}}` : `{{${f.id}}}`,
+          type: 'variable' as const,
+          description: `${f.label} (${f.type.toUpperCase()})`
+        };
+      });
 
     const availableFunctions = COMMON_FUNCTIONS.map(f => ({
       label: f.name.split('(')[0],
@@ -266,7 +302,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
     textarea.parentElement?.removeChild(mirror);
 
     setSuggestionPos({
-      top: rect.top - textareaRect.top + textarea.scrollTop + 20,
+      top: rect.top - textareaRect.top + textarea.scrollTop + 22,
       left: rect.left - textareaRect.left + textarea.scrollLeft
     });
   };
@@ -493,7 +529,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                     <button
                       key={f.id}
                       type="button"
-                      onClick={() => handleInsertToken(`{${f.name || f.label}}`)}
+                      onClick={() => handleInsertToken(f.name ? `{${f.name}}` : `{{f.id}}`)}
                       className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] rounded-2xl transition-all flex items-center gap-3 group shadow-sm"
                     >
                       <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 transition-colors shrink-0">
@@ -619,73 +655,138 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center px-1">
                   <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Rule Expression</label>
-                  <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium italic">Evaluates to TRUE when valid</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium italic">Evaluates to TRUE when valid</span>
+                    <button 
+                      type="button"
+                      onClick={() => setExpression('')}
+                      className="px-2.5 py-1 bg-zinc-100 hover:bg-rose-500/10 hover:text-rose-605 dark:bg-zinc-905 text-zinc-500 text-[8px] font-black uppercase rounded-lg transition-all border border-zinc-200 dark:border-zinc-800 hover:border-rose-500/30"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
-                <div className="relative">
-                  <textarea 
-                    ref={textareaRef}
-                    value={expression}
-                    onChange={handleTextChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder="e.g. {Total Cost} <= {Allowed Budget}"
-                    rows={4}
-                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-4 py-3 text-xs font-mono dark:text-white resize-none"
-                  />
-                  {/* IntelliSense Dropdown */}
-                  <AnimatePresence>
-                    {showSuggestions && (
-                      <motion.div 
-                        ref={suggestionsRef}
-                        initial={{ opacity: 0, y: 5, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        style={{ top: suggestionPos.top, left: suggestionPos.left }}
-                        className="absolute z-[2000] w-72 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] overflow-hidden animate-in zoom-in-95 duration-200"
-                      >
-                        <div className="p-1.5 space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
-                          {suggestions.map((s, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => applySuggestion(s)}
-                              onMouseEnter={() => setSelectedIndex(i)}
-                              className={cn(
-                                "w-full flex items-center gap-2 p-2 rounded-xl text-left transition-all group/sug",
-                                i === selectedIndex 
-                                  ? "bg-indigo-650 text-white shadow-lg shadow-indigo-500/30" 
-                                  : "text-zinc-650 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                              )}
-                            >
-                              <div className={cn(
-                                "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                                i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-850"
-                              )}>
-                                {s.type === 'variable' ? <Hash size={10} /> : <Code size={10} />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-1.5">
-                                  <p className={cn("text-[10px] font-bold truncate", i === selectedIndex ? "text-white" : "text-zinc-900 dark:text-white")}>
-                                    {s.label}
-                                  </p>
-                                  <span className={cn(
-                                    "text-[6px] font-black uppercase tracking-widest px-1 py-0.5 rounded border shrink-0",
-                                    i === selectedIndex ? "bg-white/20 border-white/30 text-white" : "bg-zinc-100 dark:bg-zinc-800 border-zinc-250 dark:border-zinc-700 text-zinc-400"
-                                  )}>
-                                    {s.type === 'variable' ? 'VAR' : 'FUNC'}
-                                  </span>
-                                </div>
-                                {s.description && (
-                                  <p className={cn("text-[8px] truncate mt-0.5", i === selectedIndex ? "text-white/60" : "text-zinc-500")}>
-                                    {s.description}
-                                  </p>
+                <div className="flex bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all rounded-2xl overflow-hidden relative h-48 shadow-inner">
+                  {/* Line Number Gutter */}
+                  <div className="w-10 bg-zinc-100/50 dark:bg-zinc-900/20 border-r border-zinc-200 dark:border-zinc-850 flex flex-col pt-4 text-right pr-2.5 select-none pointer-events-none overflow-hidden">
+                    {expression.split('\n').map((_, i) => (
+                      <div key={i} className="text-[10px] font-mono leading-[22px] text-zinc-300 dark:text-zinc-650 h-[22px]">
+                        {i + 1}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 relative overflow-hidden">
+                    {/* Highlighting Overlay */}
+                    <div 
+                      aria-hidden="true"
+                      className="absolute inset-0 p-4 text-xs font-mono leading-[22px] pointer-events-none whitespace-pre overflow-x-auto overflow-y-auto custom-scrollbar"
+                      style={{ color: 'transparent' }}
+                    >
+                      {expression.split(/(\/\*[\s\S]*?\*\/|\/\/.*|\{[^{}]+\}|[A-Z_]+(?=\()|[()\[\],]|"[^"]*"|'[^']*'|\b\d+(?:\.\d+)?\b|[+\-*/%=<>!&|]+|\b[a-zA-Z_][a-zA-Z0-9_]*\b)/g).map((part, i) => {
+                         let colorClass = "text-zinc-500 dark:text-zinc-650"; // Default punctuation / syntax
+                         
+                         if (/^\{[^}]+\}$/.test(part)) {
+                           colorClass = "text-indigo-650 dark:text-indigo-400 font-bold";
+                         } else if (/^[A-Z_]+$/.test(part)) {
+                           colorClass = "text-emerald-650 dark:text-emerald-400 font-bold";
+                         } else if (/^[()\[\],]$/.test(part)) {
+                           colorClass = "text-emerald-650 dark:text-emerald-400 font-bold";
+                         } else if (/^\d+(?:\.\d+)?$/.test(part)) {
+                           colorClass = "text-amber-600 dark:text-amber-450";
+                         } else if (/^'[^']*'$/.test(part) || /^"[^"]*"$/.test(part)) {
+                           colorClass = "text-rose-600 dark:text-rose-455";
+                         } else if (/^[+\-*/%=<>!&|]+$/.test(part)) {
+                           colorClass = "text-zinc-900 dark:text-zinc-200 font-bold";
+                         } else if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(part)) {
+                           colorClass = "text-zinc-900 dark:text-zinc-100";
+                         }
+
+                         return <span key={i} className={colorClass}>{part}</span>;
+                       })}
+                    </div>
+
+                    {/* Actual Textarea */}
+                    <textarea
+                      ref={textareaRef}
+                      value={expression}
+                      onChange={handleTextChange}
+                      onKeyDown={handleKeyDown}
+                      onClick={handleCursorMove}
+                      onKeyUp={handleCursorMove}
+                      onScroll={(e) => {
+                        const overlay = e.currentTarget.previousElementSibling;
+                        const gutter = e.currentTarget.parentElement?.previousElementSibling;
+                        if (overlay) {
+                          overlay.scrollTop = e.currentTarget.scrollTop;
+                          overlay.scrollLeft = e.currentTarget.scrollLeft;
+                        }
+                        if (gutter) {
+                          gutter.scrollTop = e.currentTarget.scrollTop;
+                        }
+                        if (showSuggestions) setShowSuggestions(false);
+                      }}
+                      placeholder="e.g. {total_cost} <= {allowed_budget}"
+                      spellCheck={false}
+                      className="absolute inset-0 w-full h-full bg-transparent p-4 text-xs font-mono text-transparent caret-zinc-900 dark:caret-white placeholder:text-zinc-350 dark:placeholder:text-zinc-750 focus:outline-none resize-none leading-[22px] whitespace-pre overflow-x-auto overflow-y-auto custom-scrollbar"
+                    />
+
+                    {/* IntelliSense Dropdown */}
+                    <AnimatePresence>
+                      {showSuggestions && (
+                        <motion.div 
+                          ref={suggestionsRef}
+                          initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          style={{ top: suggestionPos.top, left: suggestionPos.left }}
+                          className="absolute z-[2000] w-80 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] overflow-hidden animate-in zoom-in-95 duration-200"
+                        >
+                          <div className="p-1.5 space-y-0.5 max-h-56 overflow-y-auto custom-scrollbar">
+                            {suggestions.map((s, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => applySuggestion(s)}
+                                onMouseEnter={() => setSelectedIndex(i)}
+                                className={cn(
+                                  "w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all group/sug",
+                                  i === selectedIndex 
+                                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" 
+                                    : "text-zinc-655 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                                 )}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                              >
+                                <div className={cn(
+                                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                                  i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-850"
+                                )}>
+                                  {s.type === 'variable' ? <Hash size={14} /> : <FunctionSquare size={14} />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className={cn("text-[11px] font-bold truncate", i === selectedIndex ? "text-white" : "text-zinc-900 dark:text-white")}>
+                                      {s.label}
+                                    </p>
+                                    <span className={cn(
+                                      "text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0",
+                                      i === selectedIndex ? "bg-white/20 border-white/30 text-white" : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400"
+                                    )}>
+                                      {s.type === 'variable' ? 'VAR' : 'FUNC'}
+                                    </span>
+                                  </div>
+                                  {s.description && (
+                                    <p className={cn("text-[8.5px] truncate mt-0.5", i === selectedIndex ? "text-white/60" : "text-zinc-500")}>
+                                      {s.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
 
