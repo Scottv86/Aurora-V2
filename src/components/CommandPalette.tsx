@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Command, ArrowRight, Zap, Play, Settings, Plus } from 'lucide-react';
+import { Search, Command, ArrowRight, Zap, Play, Settings, Plus, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { FIELD_CATEGORIES } from './ModuleEditor';
 
@@ -14,7 +14,7 @@ interface CommandPaletteProps {
   activeTab: string;
 }
 
-export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs, layout, activeTab }: CommandPaletteProps) => {
+export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs: _tabs, layout, activeTab: _activeTab }: CommandPaletteProps) => {
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -33,12 +33,13 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs,
     { id: 'tab:schema', label: 'Go to Schema', icon: Play, shortcut: 'G S', type: 'nav' },
     { id: 'tab:builder', label: 'Go to Builder', icon: Zap, shortcut: 'G B', type: 'nav' },
     { id: 'tab:workflow', label: 'Go to Workflow', icon: Play, shortcut: 'G W', type: 'nav' },
-    { id: 'tab:rules', label: 'Go to Rules', icon: Play, shortcut: 'G R', type: 'nav' },
+    { id: 'tab:validations', label: 'Go to Validations', icon: ShieldCheck, shortcut: 'G V', type: 'nav' },
+    { id: 'tab:automation', label: 'Go to Automation', icon: Zap, shortcut: 'G A', type: 'nav' },
     { id: 'tab:experience', label: 'Go to Experience', icon: Play, shortcut: 'G E', type: 'nav' },
     { id: 'tab:security', label: 'Go to Security', icon: Play, shortcut: 'G SEC', type: 'nav' },
     { id: 'tab:localization', label: 'Go to Localization', icon: Play, shortcut: 'G LOC', type: 'nav' },
     { id: 'tab:map', label: 'Go to Dependency Map', icon: Play, shortcut: 'G M', type: 'nav' },
-    { id: 'tab:assets', label: 'Go to Assets', icon: Play, shortcut: 'G A', type: 'nav' },
+    { id: 'tab:assets', label: 'Go to Assets', icon: Play, shortcut: 'G AST', type: 'nav' },
     { id: 'tab:forms', label: 'Go to Forms', icon: Play, shortcut: 'G F', type: 'nav' },
     { id: 'tab:deployment', label: 'Go to Deployment', icon: Play, shortcut: 'G P', type: 'nav' },
   ];
@@ -49,12 +50,12 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs,
     { id: 'console', label: 'Toggle Console', icon: Plus, shortcut: 'C', type: 'action' },
   ];
 
-  const results = [
+  const results = ([
     ...navigationActions,
     ...systemActions,
     ...existingFields,
     ...blockTypes
-  ].filter(item => 
+  ] as any[]).filter(item => 
     (item.label || '').toLowerCase().includes(search.toLowerCase()) || 
     (item.category && item.category.toLowerCase().includes(search.toLowerCase()))
   );

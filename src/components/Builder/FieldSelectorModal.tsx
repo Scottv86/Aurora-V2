@@ -30,7 +30,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { Field, FieldType } from '../ModuleEditor';
+import { Field } from '../ModuleEditor';
+import { FieldType } from '../../types/platform';
 
 interface FieldSelectorModalProps {
   isOpen: boolean;

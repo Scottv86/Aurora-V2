@@ -11,7 +11,6 @@ import {
   Plus, 
   Layers,
   Sparkles,
-  Loader2,
   Monitor,
   Tablet,
   Smartphone,
@@ -148,7 +147,6 @@ import { DynamicIcon } from './UI/DynamicIcon';
 import { FieldSelectorModal } from './Builder/FieldSelectorModal';
 import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
 import { ValidationRule } from '../lib/validationEngine';
-import { generateExpression } from '../services/aiService';
 import { ValidationRuleModal } from './Builder/ValidationRuleModal';
 
 const METADATA_FIELDS = [
@@ -1728,11 +1726,8 @@ export const ModuleEditor = () => {
 
   // Validation Rules State
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
-  const [activeRulesSubTab, setActiveRulesSubTab] = useState<'validation' | 'triggers' | 'security'>('validation');
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<ValidationRule | null>(null);
-  const [isGeneratingRule, setIsGeneratingRule] = useState(false);
-  const [ruleAiPrompt, setRuleAiPrompt] = useState('');
 
   // Fetch Active Connectors & Registry
   useEffect(() => {
@@ -2277,7 +2272,7 @@ export const ModuleEditor = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleSave]);
   
-  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'rules' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
   const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'localization' | 'dependencies' | 'assets'>('general');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
@@ -4181,7 +4176,7 @@ export const ModuleEditor = () => {
       <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {(['details', 'builder', 'forms', 'workflow', 'rules', 'security', 'deployment'] as const).map((tab) => (
+            {(['details', 'builder', 'forms', 'workflow', 'validations', 'automation', 'security', 'deployment'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -8214,150 +8209,118 @@ export const ModuleEditor = () => {
                 )}
               </div>
             </div>
-          ) : activeTab === 'rules' ? (
-            <div className="flex h-full w-full overflow-hidden">
-              {/* Rules Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Logic & Validation</h3>
-                </div>
-                <button 
-                  onClick={() => setActiveRulesSubTab('validation')}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
-                    activeRulesSubTab === 'validation'
-                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-                      : "text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  )}
-                >
-                  <ShieldCheck size={14} />
-                  Validation Rules
-                </button>
-                <button 
-                  onClick={() => setActiveRulesSubTab('triggers')}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
-                    activeRulesSubTab === 'triggers'
-                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-                      : "text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  )}
-                >
-                  <Zap size={14} />
-                  Automation Triggers
-                </button>
-              </aside>
-
-              {/* Rules Content */}
-              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
+          ) : activeTab === 'validations' ? (
+            <div className="flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+              {/* Validations Content */}
+              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                 <div className="max-w-none mx-auto space-y-12 pb-20">
-                  
-                  {activeRulesSubTab === 'validation' ? (
-                    <div className="space-y-8">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Validation Rules</h2>
-                          <p className="text-zinc-500 text-sm">Define custom validation checks to maintain data integrity when saving records.</p>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            setEditingRule(null);
-                            setIsRuleModalOpen(true);
-                          }}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-md"
-                        >
-                          <Plus size={14} />
-                          <span>New Rule</span>
-                        </button>
+                  <div className="space-y-8">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Validation Rules</h2>
+                        <p className="text-zinc-500 text-sm">Define custom validation checks to maintain data integrity when saving records.</p>
                       </div>
+                      <button 
+                        onClick={() => {
+                          setEditingRule(null);
+                          setIsRuleModalOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-md"
+                      >
+                        <Plus size={14} />
+                        <span>New Rule</span>
+                      </button>
+                    </div>
 
-                      {/* Rules List */}
-                      {validationRules.length === 0 ? (
-                        <div className="p-10 bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center space-y-3">
-                          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">No validation rules defined yet.</p>
-                          <p className="text-xs text-zinc-400 max-w-sm mx-auto">Click <strong>+ New Rule</strong> to get started.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {validationRules.map((rule) => (
-                            <div 
-                              key={rule.id} 
-                              className="flex items-center justify-between p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/30 transition-all group"
-                            >
-                              <div className="flex items-center gap-4 flex-1 min-w-0 mr-4">
-                                <div className={cn(
-                                  "w-10 h-10 rounded-xl flex items-center justify-center border",
-                                  rule.isActive 
-                                    ? rule.severity === 'warning'
-                                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                                      : "bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
-                                    : "bg-zinc-50 text-zinc-400 border-zinc-200"
-                                )}>
-                                  <ShieldCheck size={18} />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-xs font-black text-zinc-900 dark:text-white truncate">{rule.name}</span>
-                                    <span className={cn(
-                                      "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border",
-                                      rule.severity === 'warning' 
-                                        ? "bg-amber-500/10 text-amber-600 border-amber-500/20" 
-                                        : "bg-rose-500/10 text-rose-600 border-rose-500/20"
-                                    )}>
-                                      {rule.severity || 'error'}
-                                    </span>
-                                  </div>
-                                  <p className="text-[10px] text-zinc-400 font-mono truncate bg-zinc-50 dark:bg-zinc-950 px-2 py-0.5 rounded inline-block">
-                                    {rule.expression}
-                                  </p>
-                                  <p className="text-[10px] text-zinc-500 mt-1 italic">&quot;{rule.errorMessage}&quot;</p>
-                                </div>
+                    {/* Rules List */}
+                    {validationRules.length === 0 ? (
+                      <div className="p-10 bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center space-y-3">
+                        <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">No validation rules defined yet.</p>
+                        <p className="text-xs text-zinc-400 max-w-sm mx-auto">Click <strong>+ New Rule</strong> to get started.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {validationRules.map((rule) => (
+                          <div 
+                            key={rule.id} 
+                            className="flex items-center justify-between p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/30 transition-all group"
+                          >
+                            <div className="flex items-center gap-4 flex-1 min-w-0 mr-4">
+                              <div className={cn(
+                                "w-10 h-10 rounded-xl flex items-center justify-center border",
+                                rule.isActive 
+                                  ? rule.severity === 'warning'
+                                    ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                    : "bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
+                                  : "bg-zinc-50 text-zinc-400 border-zinc-200"
+                              )}>
+                                <ShieldCheck size={18} />
                               </div>
-                              
-                              <div className="flex items-center gap-3 shrink-0">
-                                <div className="flex items-center gap-2 mr-2">
-                                  <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{rule.isActive ? 'Active' : 'Inactive'}</span>
-                                  <input 
-                                    type="checkbox"
-                                    checked={rule.isActive}
-                                    onChange={() => {
-                                      setValidationRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r));
-                                    }}
-                                    className="w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500 cursor-pointer"
-                                  />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-xs font-black text-zinc-900 dark:text-white truncate">{rule.name}</span>
+                                  <span className={cn(
+                                    "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border",
+                                    rule.severity === 'warning' 
+                                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20" 
+                                      : "bg-rose-500/10 text-rose-600 border-rose-500/20"
+                                  )}>
+                                    {rule.severity || 'error'}
+                                  </span>
                                 </div>
-                                <button 
-                                  onClick={() => {
-                                    setEditingRule(rule);
-                                    setIsRuleModalOpen(true);
-                                  }}
-                                  className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-500/10 transition-all bg-white dark:bg-zinc-900"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    setValidationRules(prev => prev.filter(r => r.id !== rule.id));
-                                    toast.success("Validation rule deleted");
-                                  }}
-                                  className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-600 hover:bg-rose-500/10 transition-all bg-white dark:bg-zinc-900"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
+                                <p className="text-[10px] text-zinc-400 font-mono truncate bg-zinc-50 dark:bg-zinc-950 px-2 py-0.5 rounded inline-block">
+                                  {rule.expression}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 mt-1 italic">&quot;{rule.errorMessage}&quot;</p>
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-
-                    </div>
-                  ) : (
-                    <div className="space-y-4 text-center py-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl">
-                      <Zap className="mx-auto text-zinc-400" size={48} />
-                      <h3 className="text-lg font-bold text-zinc-850 dark:text-zinc-200">Automation Triggers</h3>
-                      <p className="text-zinc-500 text-xs max-w-sm mx-auto">Define actions that execute when records are created or updated. Triggers configuration is coming in a future release.</p>
-                    </div>
-                  )}
-
+                            
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="flex items-center gap-2 mr-2">
+                                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{rule.isActive ? 'Active' : 'Inactive'}</span>
+                                <input 
+                                  type="checkbox"
+                                  checked={rule.isActive}
+                                  onChange={() => {
+                                    setValidationRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r));
+                                  }}
+                                  className="w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500 cursor-pointer"
+                                />
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  setEditingRule(rule);
+                                  setIsRuleModalOpen(true);
+                                }}
+                                className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-500/10 transition-all bg-white dark:bg-zinc-900"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setValidationRules(prev => prev.filter(r => r.id !== rule.id));
+                                  toast.success("Validation rule deleted");
+                                }}
+                                className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-600 hover:bg-rose-500/10 transition-all bg-white dark:bg-zinc-900"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'automation' ? (
+            <div className="flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950 p-12">
+              <div className="max-w-none mx-auto space-y-12 pb-20 flex-1 overflow-y-auto custom-scrollbar">
+                <div className="space-y-4 text-center py-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl">
+                  <Zap className="mx-auto text-zinc-400" size={48} />
+                  <h3 className="text-lg font-bold text-zinc-850 dark:text-zinc-200">Automation Triggers</h3>
+                  <p className="text-zinc-500 text-xs max-w-sm mx-auto">Define actions that execute when records are created or updated. Triggers configuration is coming in a future release.</p>
                 </div>
               </div>
             </div>
