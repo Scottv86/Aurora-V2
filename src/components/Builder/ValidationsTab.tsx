@@ -80,6 +80,13 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
     return validationRules.find(r => r.id === selectedRuleId) || null;
   }, [validationRules, selectedRuleId]);
 
+  // Auto-select the first rule on load/mount if none is currently selected
+  useEffect(() => {
+    if (!selectedRuleId && validationRules && validationRules.length > 0) {
+      setSelectedRuleId(validationRules[0].id);
+    }
+  }, [validationRules, selectedRuleId]);
+
   // Load selected rule into form
   useEffect(() => {
     if (selectedRule) {
