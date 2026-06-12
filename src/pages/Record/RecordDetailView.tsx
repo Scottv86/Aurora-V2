@@ -757,6 +757,16 @@ export const RecordDetailView = ({
       console.error("Update Error:", error);
       toast.error(error.message || "Failed to update record");
       
+      if (fieldIdBeingSaved) {
+        setValidationErrorField({
+          fieldId: fieldIdBeingSaved,
+          message: error.message || "Failed to update record"
+        });
+        setTimeout(() => {
+          setValidationErrorField(prev => prev?.fieldId === fieldIdBeingSaved ? null : prev);
+        }, 4000);
+      }
+      
       // REVERT on failure
       setRecord(previousRecord);
       setEditData(previousEditData);
@@ -993,17 +1003,6 @@ export const RecordDetailView = ({
           }
         }}
       >
-        <style>{`
-          @keyframes shake-field {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-            20%, 40%, 60%, 80% { transform: translateX(4px); }
-          }
-          .animate-shake-field {
-            animation: shake-field 0.4s ease-in-out;
-          }
-        `}</style>
-
         {activeFieldId === nestedField.id && savingFieldId === nestedField.id && (
           <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
             <Loader2 size={10} className="animate-spin" />
@@ -1043,9 +1042,9 @@ export const RecordDetailView = ({
             return calculateDefaultValue(nestedField, editData);
           })()}
           onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
-          onBlur={() => handleUpdateEntry()}
+          onBlur={() => handleUpdateEntry(undefined, nestedField.id)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleUpdateEntry();
+            if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
             if (e.key === 'Escape') setActiveFieldId(null);
           }}
           readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
@@ -1113,44 +1112,48 @@ export const RecordDetailView = ({
         style={{ gap: `${ds.gapY} ${ds.gapX}` }}
       >
         <AnimatePresence mode="popLayout">
-          {visibleFields.map((field: ModuleField) => (
-            <motion.div 
-              key={field.id} 
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ 
-                type: "spring",
-                stiffness: 300,
-                damping: 30,
-                layout: { duration: 0.3 }
-              }}
-              data-field-id={field.id}
-              data-active-field={activeFieldId === field.id ? field.id : undefined}
-              className={cn(
-                "group/field transition-all relative min-w-0",
-                !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) && "cursor-pointer"
-              )}
-              style={{
-                gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
-                gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
-              }}
-              onClick={() => {
-                if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type)) {
-                  setActiveFieldId(field.id);
-                }
-              }}
-            >
-            <div className={cn(
-              "w-full transition-all duration-200 border-2 relative",
-              ds.cardPaddingAndRounding,
-              activeFieldId === field.id 
-                ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) 
-                  ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
-                  : "border-transparent"
-            )}>
+          {visibleFields.map((field: ModuleField) => {
+            const isErrorField = validationErrorField?.fieldId === field.id;
+            return (
+              <motion.div 
+                key={field.id} 
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ 
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 30,
+                  layout: { duration: 0.3 }
+                }}
+                data-field-id={field.id}
+                data-active-field={activeFieldId === field.id ? field.id : undefined}
+                className={cn(
+                  "group/field transition-all relative min-w-0",
+                  !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) && "cursor-pointer"
+                )}
+                style={{
+                  gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
+                  gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
+                }}
+                onClick={() => {
+                  if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type)) {
+                    setActiveFieldId(field.id);
+                  }
+                }}
+              >
+              <div className={cn(
+                "w-full transition-all duration-200 border-2 relative",
+                ds.cardPaddingAndRounding,
+                isErrorField
+                  ? "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10"
+                  : activeFieldId === field.id 
+                    ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
+                    : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) 
+                      ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
+                      : "border-transparent"
+              )}>
               {activeFieldId === field.id && savingFieldId === field.id && (
                 <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
                   <Loader2 size={10} className="animate-spin" />
@@ -1281,23 +1284,29 @@ export const RecordDetailView = ({
                     return calculateDefaultValue(field, editData);
                   })()}
                   onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
-                  onBlur={() => handleUpdateEntry()}
+                  onBlur={() => handleUpdateEntry(undefined, field.id)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleUpdateEntry();
+                    if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
                     if (e.key === 'Escape') setActiveFieldId(null);
                   }}
                   readonly={savingFieldId === field.id || activeFieldId !== field.id}
                   recordData={editData}
                   allFields={allFields}
                 />
-                {field.helperText && (
+                {isErrorField && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200">
+                    <AlertCircle size={10} className="shrink-0" />
+                    <span>{validationErrorField.message}</span>
+                  </div>
+                )}
+                {field.helperText && !isErrorField && (
                   <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>
                 )}
               </div>
             )}
             </div>
           </motion.div>
-        ))}
+        )})}
         </AnimatePresence>
       </div>
     );
@@ -1501,6 +1510,16 @@ export const RecordDetailView = ({
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-20 space-y-8">
+      <style>{`
+        @keyframes shake-field {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+          20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+        .animate-shake-field {
+          animation: shake-field 0.4s ease-in-out;
+        }
+      `}</style>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           {isModal ? (
