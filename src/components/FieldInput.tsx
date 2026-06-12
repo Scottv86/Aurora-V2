@@ -328,17 +328,24 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     onChange(val, metadata);
   };
 
+  const prevValueRef = React.useRef(value);
+
   // Sync with external value prop when not actively focused/editing
   React.useEffect(() => {
+    const valuePropChanged = JSON.stringify(value) !== JSON.stringify(prevValueRef.current);
+    prevValueRef.current = value;
+
     if (!isFocused) {
       // If the incoming value matches what we just sent, we are in sync
       if (JSON.stringify(value) === JSON.stringify(lastSentValueRef.current)) {
         lastSentValueRef.current = null;
       }
       
-      // Only overwrite local value if we aren't waiting for a sync 
-      // or if the external value is actually different from our last sent value
-      if (lastSentValueRef.current === null) {
+      // If the external value prop was actively changed/reverted by the parent, force sync
+      if (valuePropChanged) {
+        lastSentValueRef.current = null;
+        updateLocalValue(value);
+      } else if (lastSentValueRef.current === null) {
         updateLocalValue(value);
       }
     }

@@ -104,6 +104,7 @@ export const RecordDetailView = ({
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [validationErrorField, setValidationErrorField] = useState<{ fieldId: string; message: string } | null>(null);
   const isSavingRef = useRef(false);
   const pendingUpdateRef = useRef<{ data: any, fieldId: string | null } | null>(null);
   const editDataRef = useRef<Record<string, any>>({});
@@ -599,6 +600,23 @@ export const RecordDetailView = ({
             setSavingFieldId(null);
             // Clear pending since this one failed validation
             pendingUpdateRef.current = null;
+            
+            if (fieldIdBeingSaved) {
+              setValidationErrorField({
+                fieldId: fieldIdBeingSaved,
+                message: `${field.label || 'Field'} is required`
+              });
+              setTimeout(() => {
+                setValidationErrorField(prev => prev?.fieldId === fieldIdBeingSaved ? null : prev);
+              }, 4000);
+            }
+
+            if (record) {
+              setTimeout(() => {
+                setEditData(record);
+                editDataRef.current = record;
+              }, 0);
+            }
             return;
           }
         }
@@ -627,6 +645,23 @@ export const RecordDetailView = ({
       toast.error(validationErrors.join(' | '));
       setSavingFieldId(null);
       pendingUpdateRef.current = null;
+      
+      if (fieldIdBeingSaved) {
+        setValidationErrorField({
+          fieldId: fieldIdBeingSaved,
+          message: validationErrors[0]
+        });
+        setTimeout(() => {
+          setValidationErrorField(prev => prev?.fieldId === fieldIdBeingSaved ? null : prev);
+        }, 4000);
+      }
+
+      if (record) {
+        setTimeout(() => {
+          setEditData(record);
+          editDataRef.current = record;
+        }, 0);
+      }
       return;
     }
 
@@ -933,6 +968,7 @@ export const RecordDetailView = ({
     if (!isFieldVisible(nestedField, editData || record || {}, visibilityContext)) return null;
     const density = (interfaceSettings.detail as any)?.density || 'standard';
     const ds = getDensityStyles(density);
+    const isErrorField = validationErrorField?.fieldId === nestedField.id;
     
     return (
       <div 
@@ -941,9 +977,11 @@ export const RecordDetailView = ({
           "transition-all relative border-2 group/nestedField",
           ds.padding,
           ds.rounded,
-          activeFieldId === nestedField.id 
-            ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
-            : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
+          isErrorField
+            ? "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10"
+            : activeFieldId === nestedField.id 
+              ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
+              : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
           !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
         )}
         data-field-id={nestedField.id}
@@ -955,6 +993,17 @@ export const RecordDetailView = ({
           }
         }}
       >
+        <style>{`
+          @keyframes shake-field {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+            20%, 40%, 60%, 80% { transform: translateX(4px); }
+          }
+          .animate-shake-field {
+            animation: shake-field 0.4s ease-in-out;
+          }
+        `}</style>
+
         {activeFieldId === nestedField.id && savingFieldId === nestedField.id && (
           <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
             <Loader2 size={10} className="animate-spin" />
@@ -1004,7 +1053,13 @@ export const RecordDetailView = ({
           allFields={allFields}
           density={density}
         />
-        {nestedField.helperText && (
+        {isErrorField && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200">
+            <AlertCircle size={10} className="shrink-0" />
+            <span>{validationErrorField.message}</span>
+          </div>
+        )}
+        {nestedField.helperText && !isErrorField && (
           <p className={cn(ds.fontSize, "text-zinc-500 mt-1.5 font-medium px-0.5 italic")}>{nestedField.helperText}</p>
         )}
       </div>
