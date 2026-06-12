@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Shield, Plus, MoreVertical, Trash2, Edit2, Users, CheckCircle2, Search } from 'lucide-react';
+import { useState } from 'react';
+import { Shield, Trash2, Edit2, CheckCircle2, Search } from 'lucide-react';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
 import { Table } from '../../UI/Table';
 import { Badge, Button } from '../../UI/Primitives';

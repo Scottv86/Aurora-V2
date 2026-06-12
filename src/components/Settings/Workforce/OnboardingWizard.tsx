@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, 
@@ -6,11 +6,8 @@ import {
   Shield, 
   Mail, 
   ArrowRight, 
-  ArrowLeft,
   Sparkles,
   Briefcase,
-  Calendar,
-  CreditCard,
   UserPlus,
   Smile,
   CheckCircle2,

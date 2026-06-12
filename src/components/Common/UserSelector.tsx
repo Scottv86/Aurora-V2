@@ -3,7 +3,7 @@ import { Search, ChevronDown, Check, User as UserIcon, Users, Bot, ArrowRight } 
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useUsers, TenantMember } from '../../hooks/useUsers';
-import { useTeams, Team } from '../../hooks/useTeams';
+import { useTeams } from '../../hooks/useTeams';
 
 interface UserSelectorProps {
   value?: string;
@@ -31,7 +31,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
   const [activeIndex, setActiveIndex] = useState(0);
 
   const { members, loading: usersLoading } = useUsers();
-  const { teams, loading: teamsLoading } = useTeams();
+  const { loading: teamsLoading } = useTeams();
 
   const loading = usersLoading || teamsLoading;
 

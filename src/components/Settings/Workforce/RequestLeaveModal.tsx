@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Clock, Calendar, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { X, Clock, Calendar, CheckCircle2 } from 'lucide-react';
 import { Button, Input, Select } from '../../UI/Primitives';
 
 interface RequestLeaveModalProps {
@@ -10,7 +10,7 @@ interface RequestLeaveModalProps {
   onSuccess: () => void;
 }
 
-export const RequestLeaveModal = ({ isOpen, onClose, memberId, onSuccess }: RequestLeaveModalProps) => {
+export const RequestLeaveModal = ({ isOpen, onClose, memberId: _memberId, onSuccess }: RequestLeaveModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   

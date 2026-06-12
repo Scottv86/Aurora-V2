@@ -70,7 +70,7 @@ const resolveVariable = (token: string, context?: any): any => {
     const ids = [user.id, user.memberId, user.userRecordId, user.cuid].filter(Boolean);
     
     // Safety Net: Scan all string properties for CUIDs (cmn...)
-    Object.entries(user).forEach(([key, val]) => {
+    Object.entries(user).forEach(([_, val]) => {
       if (typeof val === 'string' && val.startsWith('cmn') && !ids.includes(val)) {
         ids.push(val);
       }
@@ -212,7 +212,7 @@ export const evaluateFormula = (formula: string, data: any): string | number => 
   
   try {
     // Replace {fieldId} with actual values from data
-    const expression = formula.replace(/\{(\w+)\}/g, (match, fieldId) => {
+    const expression = formula.replace(/\{(\w+)\}/g, (_, fieldId) => {
       const val = data?.[fieldId];
       return val !== undefined ? (isNaN(Number(val)) ? `"${val}"` : val) : '0';
     });

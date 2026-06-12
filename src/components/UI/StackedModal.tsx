@@ -1,53 +1,23 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useModalStack, ModalEntry } from '../../context/ModalStackContext';
-import { X, ChevronRight, Home, ArrowLeft, Loader2, Layers, Table, Grid3X3, Columns, Sidebar, ListOrdered, ChevronDown } from 'lucide-react';
+import { X, Loader2, Layers, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL } from '../../config';
 import { MODULES } from '../../constants/modules';
 import { FieldInput } from '../FieldInput';
-import { flattenFields, isFieldVisible, calculateHeight } from '../../lib/utils';
+import { flattenFields, isFieldVisible } from '../../lib/utils';
 import { compactLayout } from '../../lib/layoutEngine';
-import { evaluateCalculations } from '../../services/aiService';
 import { toast } from 'sonner';
+import { validateRecordRules } from '../../lib/validationEngine';
 import { RecursiveCollectionBlock } from '../Platform/RecursiveCollectionBlock';
 import { RepeatableGroupBlock } from '../Platform/RepeatableGroupBlock';
 import { RecordModalSkeleton } from '../Platform/RecordModalSkeleton';
 
 
 // --- Components ---
-
-const Breadcrumbs = ({ stack, onNavigate }: { stack: ModalEntry[], onNavigate: (id: string) => void }) => {
-  return (
-    <div className="flex items-center gap-2 px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-      <button 
-        onClick={() => onNavigate(stack[0].id)}
-        className="p-1 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-      >
-        <Home size={14} />
-      </button>
-      {stack.map((entry, i) => (
-        <React.Fragment key={entry.id}>
-          <ChevronRight size={12} className="text-zinc-300 dark:text-zinc-700" />
-          <button
-            onClick={() => onNavigate(entry.id)}
-            disabled={i === stack.length - 1}
-            className={cn(
-              "text-[10px] font-bold uppercase tracking-widest transition-colors",
-              i === stack.length - 1 
-                ? "text-indigo-500 cursor-default" 
-                : "text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-          >
-            {entry.title || (entry.type === 'view' ? 'View Record' : 'Edit Record')}
-          </button>
-        </React.Fragment>
-      ))}
-    </div>
-  );
-};
 
 const RecordModal = ({ 
   entry, 
@@ -97,6 +67,17 @@ const RecordModal = ({
 
       if (missingFields.length > 0) {
         toast.error(`Please fill in required fields: ${missingFields.map((f: any) => f.label || f.id).join(', ')}`);
+        return;
+      }
+    }
+
+    // Validate business validation rules
+    if (moduleData) {
+      const allFields = flattenFields(moduleData.layout || []);
+      const rules = moduleData.config?.validationRules || moduleData.validationRules || [];
+      const validationErrors = validateRecordRules(record, rules, allFields);
+      if (validationErrors.length > 0) {
+        toast.error(validationErrors.join(' | '));
         return;
       }
     }

@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  List as ListIcon, 
   Search, 
   Plus, 
   History, 
@@ -13,16 +12,8 @@ import {
   ChevronLeft,
   Clock, 
   Database, 
-  AlertCircle,
   MoreVertical,
-  Activity,
-  Box,
-  Eye,
-  EyeOff,
-  Columns,
-  Type,
-  Settings2,
-  Save,
+  Type, 
   PlusCircle,
   Hash,
   Calendar,
@@ -31,18 +22,9 @@ import {
   LayoutGrid,
   GripVertical,
   ArrowLeft,
-  Filter,
-  ArrowRight,
   Info,
-  User,
-  ExternalLink,
-  ShieldCheck,
   AlertTriangle,
-  Settings,
-  GripHorizontal,
   Archive,
-  RefreshCcw,
-  UserCheck,
   ListFilter,
   ArrowUp,
   ArrowDown
@@ -50,33 +32,27 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   DndContext, 
-  closestCenter, 
   PointerSensor, 
   useSensor, 
   useSensors,
   DragEndEvent,
-  DragOverlay,
   DragStartEvent,
-  defaultDropAnimationSideEffects,
   rectIntersection
 } from '@dnd-kit/core';
 import { 
   arrayMove, 
   SortableContext, 
-  sortableKeyboardCoordinates, 
   verticalListSortingStrategy,
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 import { useGlobalLists, useGlobalList, GlobalListItem, ListColumn } from '../../../hooks/useGlobalList';
-import { usePlatform } from '../../../hooks/usePlatform';
 import { PageHeader } from '../../UI/PageHeader';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 
 export const GlobalListsSettings = () => {
-  const { modules } = usePlatform();
   const { lists, loading: listsLoading, createList, deleteList, refetch: refetchLists } = useGlobalLists();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -100,7 +76,6 @@ export const GlobalListsSettings = () => {
   const { 
     list: activeList,
     items: dbItems, 
-    loading: itemsLoading, 
     addItem, 
     editItem, 
     retireItem,
@@ -354,7 +329,7 @@ export const GlobalListsSettings = () => {
                              <th className="p-0 w-16 text-center border-r border-white/10 dark:border-zinc-800 bg-white/5 dark:bg-zinc-900/50">#</th>
                              {activeList.columns.map((col, idx) => (
                                <th key={col.id} className="p-0 text-[10px] font-black text-zinc-400 relative group/th border-r border-zinc-100 dark:border-zinc-800 bg-white dark:bg-white/5 dark:backdrop-blur-md column-header-container context-menu-trigger" style={{ width: columnWidths[col.id] || 200 }} onContextMenu={(e) => onHeaderContextMenu(e, col.id, idx)}>
-                                 <ColumnHeader column={col} index={idx} isMenuOpen={activeMenuColumnId === col.id} onToggleMenu={(open) => setActiveMenuColumnId(open ? col.id : null)} onUpdate={(updates) => handleColumnUpdate(col.id, updates)} onDelete={() => setConfirmDeleteColumnId(col.id)} onResize={(width) => handleResizeColumn(col.id, width)} onInsertLeft={() => handleAddColumn(idx)} onInsertRight={() => handleAddColumn(idx + 1)} disabled={showHistory} />
+                                 <ColumnHeader column={col} isMenuOpen={activeMenuColumnId === col.id} onToggleMenu={(open: boolean) => setActiveMenuColumnId(open ? col.id : null)} onUpdate={(updates: Partial<ListColumn>) => handleColumnUpdate(col.id, updates)} onDelete={() => setConfirmDeleteColumnId(col.id)} onResize={(width: number) => handleResizeColumn(col.id, width)} onInsertLeft={() => handleAddColumn(idx)} onInsertRight={() => handleAddColumn(idx + 1)} disabled={showHistory} />
                                </th>
                              ))}
 
@@ -376,10 +351,10 @@ export const GlobalListsSettings = () => {
                                  onCellChange={(colId: string, val: any) => handleCellChange(item, colId, val)} 
                                  showHistory={showHistory}
                                  activeEditingColId={activeEditingCell?.itemId === item.id ? activeEditingCell.colId : null}
-                                 setActiveEditingColId={(colId) => setActiveEditingCell(colId ? { itemId: item.id, colId } : null)}
+                                 setActiveEditingColId={(colId: string | null) => setActiveEditingCell(colId ? { itemId: item.id, colId } : null)}
                                  onTab={(colId: string, shift: boolean) => handleTab(item.id, colId, shift)}
                                  isMenuOpen={activeMenuRowId === item.id}
-                                 onToggleMenu={(open) => setActiveMenuRowId(open ? item.id : null)}
+                                 onToggleMenu={(open: boolean) => setActiveMenuRowId(open ? item.id : null)}
                                  onInsertAbove={() => handleAddRow(idx)}
                                  onInsertBelow={() => handleAddRow(idx + 1)}
                                  onRetire={() => setConfirmRetireItemId(item.id)}
@@ -461,7 +436,7 @@ const ContextMenuPortal = ({ x, y, type, onClose, actions }: any) => {
   );
 };
 
-const ColumnHeader = ({ column, index, isMenuOpen, onToggleMenu, onUpdate, onDelete, onResize, onInsertLeft, onInsertRight, disabled }: any) => {
+const ColumnHeader = ({ column, isMenuOpen, onToggleMenu, onUpdate, onDelete, onResize, onInsertLeft, onInsertRight, disabled }: any) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [localName, setLocalName] = useState(column.name);
   const [newOption, setNewOption] = useState('');
@@ -544,7 +519,6 @@ const SortableRow = ({ item, index, columns, columnWidths, rowHeight, onInspect,
 const CellEditor = ({ column, value, onChange, disabled, isEditing, setIsEditing, onTab }: any) => {
   const [localValue, setLocalValue] = useState<any>(value);
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const isInvalid = column.required && (value === null || value === undefined || value === '');
   const lastCommittedValue = useRef<any>(value);
   useEffect(() => { if (!isEditing) { setLocalValue(value); lastCommittedValue.current = value; } }, [value, isEditing]);
@@ -659,7 +633,7 @@ const ConfirmationModal = ({ title, message, confirmLabel, onConfirm, onCancel }
     <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-[2.5rem] shadow-2xl p-10 text-center space-y-8">
       <div className="w-20 h-20 bg-rose-500/10 text-rose-500 rounded-3xl flex items-center justify-center mx-auto border border-rose-500/20 shadow-inner"><AlertTriangle size={36} /></div>
       <div className="space-y-3"><h3 className="text-2xl font-black text-white uppercase">{title}</h3><p className="text-sm text-zinc-400 leading-relaxed">{message}</p></div>
-      <div className="flex gap-4"><button onClick={onCancel} className="flex-1 px-6 py-4 bg-zinc-800 text-white rounded-2xl text-sm font-bold transition-all">Cancel</button><button onClick={onConfirm} className="flex-1 px-6 py-4 bg-rose-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-rose-500/20">Confirm</button></div>
+      <div className="flex gap-4"><button onClick={onCancel} className="flex-1 px-6 py-4 bg-zinc-800 text-white rounded-2xl text-sm font-bold transition-all">Cancel</button><button onClick={onConfirm} className="flex-1 px-6 py-4 bg-rose-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-rose-500/20">{confirmLabel || 'Confirm'}</button></div>
     </motion.div>
   </div>
 );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Receipt, Calendar, Briefcase, DollarSign, CheckCircle2 } from 'lucide-react';
-import { Button, Input, Select, Badge } from '../../UI/Primitives';
+import { Button, Input, Select } from '../../UI/Primitives';
 
 interface CreateContractModalProps {
   isOpen: boolean;
@@ -11,7 +11,7 @@ interface CreateContractModalProps {
   onSuccess: () => void;
 }
 
-export const CreateContractModal = ({ isOpen, onClose, memberId, memberName, onSuccess }: CreateContractModalProps) => {
+export const CreateContractModal = ({ isOpen, onClose, memberId: _memberId, memberName, onSuccess }: CreateContractModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   

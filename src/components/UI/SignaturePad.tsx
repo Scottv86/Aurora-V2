@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { cn } from '../../lib/utils';
-import { Eraser, Download, Check } from 'lucide-react';
+import { Eraser, Check } from 'lucide-react';
 
 interface SignaturePadProps {
   value: string;

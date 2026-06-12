@@ -5,11 +5,7 @@ import {
   ArrowRight, 
   CheckCircle2, 
   AlertCircle,
-  X,
-  Mail,
-  Briefcase,
-  Globe,
-  Calendar
+  Mail
 } from 'lucide-react';
 import { Modal } from '../UI/TabsAndModal';
 import { Button, Input, Select } from '../UI/Primitives';

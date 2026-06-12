@@ -1,9 +1,8 @@
-import React from 'react';
 import { NodeResizer } from '@xyflow/react';
 import { cn } from '../../../lib/utils';
 import { Layout } from 'lucide-react';
 
-export const CustomWorkflowZone = ({ data, selected, id }: any) => {
+export const CustomWorkflowZone = ({ data, selected, id: _id }: any) => {
   const colorMap: Record<string, string> = {
     indigo: 'border-indigo-500/50 bg-indigo-500/5 text-indigo-500',
     emerald: 'border-emerald-500/50 bg-emerald-500/5 text-emerald-500',

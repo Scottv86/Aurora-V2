@@ -1,16 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  LayoutDashboard, 
-  Settings, 
-  Users, 
-  FileText, 
-  Search, 
-  ChevronRight, 
-  ChevronDown, 
-  Plus, 
-  Trash2, 
-  GripVertical,
   Palette,
   Columns,
   Rows,
@@ -18,7 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '../../components/UI/PageHeader';
-import { Button, Input } from '../../components/UI/Primitives';
+import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { NavigationArchitect } from '../../components/Settings/NavigationArchitect';
@@ -39,7 +29,7 @@ interface MenuItem {
 type LayoutStyle = 'sidebar' | 'top';
 
 export const AppearanceSettings = () => {
-  const { tenant, refetchContext, updateTenant } = usePlatform();
+  const { tenant, refetchContext } = usePlatform();
   const { session } = useAuth();
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([
@@ -324,13 +314,4 @@ const TopMenuPreview = () => (
   </div>
 );
 
-const IconRenderer = ({ name, ...props }: { name: string } & any) => {
-  const icons: any = {
-    LayoutDashboard,
-    Settings,
-    Users,
-    FileText
-  };
-  const Icon = icons[name] || FileText;
-  return <Icon {...props} />;
-};
+

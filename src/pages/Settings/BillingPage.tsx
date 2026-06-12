@@ -24,7 +24,7 @@ import { Invoice } from '../../types/platform';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { useUsers, TenantMember } from '../../hooks/useUsers';
-import { Table } from '../../components/UI/Table';
+import { Table, Column } from '../../components/UI/Table';
 
 import { PageHeader } from '../../components/UI/PageHeader';
 
@@ -98,7 +98,7 @@ export const BillingPage = () => {
     m.licenceType?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const licenseColumns = [
+  const licenseColumns: Column<TenantMember>[] = [
     {
       header: 'Member',
       sortable: true,
@@ -206,7 +206,7 @@ export const BillingPage = () => {
     {
       header: '',
       className: 'text-right',
-      accessor: (inv: Invoice) => (
+      accessor: () => (
         <button className="p-2 text-zinc-400 hover:text-blue-500 transition-colors">
           <Download size={18} />
         </button>

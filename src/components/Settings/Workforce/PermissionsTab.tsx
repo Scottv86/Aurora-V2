@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Plus, X, Check, Fingerprint, Info, TreeDeciduous, Crown, Zap } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Shield, Plus, X, Fingerprint, Info, TreeDeciduous, Crown } from 'lucide-react';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
 import { Button, Badge } from '../../UI/Primitives';
 import { useAuth } from '../../../hooks/useAuth';

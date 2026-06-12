@@ -87,9 +87,6 @@ export const TimePicker: React.FC<TimePickerProps> = ({
     onChange('');
   };
 
-  const hourOptions = Array.from({ length: 12 }, (_, i) => i + 1);
-  const minuteOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-
   return (
     <div className={cn("relative w-full", className)} ref={containerRef}>
       <div 

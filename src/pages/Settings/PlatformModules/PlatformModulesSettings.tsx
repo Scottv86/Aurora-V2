@@ -2,7 +2,6 @@ import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, 
-  Cpu,
   ArrowLeft
 } from 'lucide-react';
 import { PageHeader } from '../../../components/UI/PageHeader';

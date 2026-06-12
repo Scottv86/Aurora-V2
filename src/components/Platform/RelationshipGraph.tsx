@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { usePlatform } from '../../hooks/usePlatform';
-import { Building2, User, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
@@ -128,7 +128,7 @@ export const RelationshipGraph = ({ rootId, rootName, rootType }: { rootId?: str
       .selectAll('g')
       .data(nodes)
       .join('g')
-      .call(d3.drag<any, any>()
+      .call(d3.drag()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended));

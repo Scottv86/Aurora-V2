@@ -2,6 +2,7 @@ import express from 'express';
 import { emitTenantUpdate } from '../socket';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { RLS_CONTEXT } from '../lib/prisma';
+import { validateRecordRules } from '../../src/lib/validationEngine';
 
 const router = express.Router();
 
@@ -324,6 +325,16 @@ router.post('/records', async (req: TenantRequest, res) => {
         error: `Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}` 
       });
     }
+
+    // Custom Validation Rules check
+    if (config.validationRules && Array.isArray(config.validationRules)) {
+      const validationErrors = validateRecordRules(data, config.validationRules, allFields);
+      if (validationErrors.length > 0) {
+        return res.status(400).json({ 
+          error: `Validation failed: ${validationErrors.join(' | ')}` 
+        });
+      }
+    }
     let finalData = { ...data };
     
     if (module) {
@@ -477,6 +488,16 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       if (missingFields.length > 0) {
         return res.status(400).json({ error: `Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}` });
       }
+
+      // Custom Validation Rules check
+      if (config.validationRules && Array.isArray(config.validationRules)) {
+        const validationErrors = validateRecordRules(updatedData, config.validationRules, allFields);
+        if (validationErrors.length > 0) {
+          return res.status(400).json({ 
+            error: `Validation failed: ${validationErrors.join(' | ')}` 
+          });
+        }
+      }
     }
 
     const updatePayload: any = {
@@ -598,6 +619,16 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
 
       if (missing.length > 0) {
         return res.status(400).json({ error: `Validation failed: ${missing.map(f => f.label || f.id).join(', ')} is required` });
+      }
+
+      // Custom Validation Rules check
+      if (config.validationRules && Array.isArray(config.validationRules)) {
+        const validationErrors = validateRecordRules(updatedData, config.validationRules, allFields);
+        if (validationErrors.length > 0) {
+          return res.status(400).json({ 
+            error: `Validation failed: ${validationErrors.join(' | ')}` 
+          });
+        }
       }
     }
 

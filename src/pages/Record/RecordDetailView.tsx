@@ -31,6 +31,7 @@ import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+import { validateRecordRules } from '../../lib/validationEngine';
 
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
@@ -617,6 +618,16 @@ export const RecordDetailView = ({
         }
         return;
       }
+    }
+
+    // Validate business validation rules before saving
+    const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    const validationErrors = validateRecordRules(currentData, rules, allFields, lookupData);
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors.join(' | '));
+      setSavingFieldId(null);
+      pendingUpdateRef.current = null;
+      return;
     }
 
     setSavingFieldId(fieldIdBeingSaved || 'global');

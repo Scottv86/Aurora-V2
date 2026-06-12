@@ -8,8 +8,6 @@ import {
   useEdgesState,
   addEdge,
   Connection,
-  Edge,
-  Panel,
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
@@ -17,11 +15,11 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import '@xyflow/react/dist/style.css';
 import { 
-  GitFork, Zap, Activity, Clock, Play, Save, Settings2, Trash2, Bug, Info, ChevronRight, 
+  GitFork, Zap, Activity, Clock, Play, Settings2, Trash2, Bug, Info, ChevronRight, 
   Search, Layout as LayoutIcon, Wand2, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, X as CloseIcon,
   Bot
 } from 'lucide-react';
-import { Workflow, WorkflowNode, WorkflowEdge, WorkflowNodeType } from '../../../types/platform';
+import { Workflow, WorkflowNodeType } from '../../../types/platform';
 import { WorkflowDebugger } from './WorkflowDebugger';
 import { CustomWorkflowNode } from './CustomNode';
 import { CustomWorkflowEdge } from './CustomEdge';
@@ -87,6 +85,8 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       data: { 
         label: n.name, 
         type: n.type,
+        actionType: (n as any).actionType,
+        color: (n as any).color,
         onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
       },
       position: n.position || { x: 0, y: 0 },
@@ -136,7 +136,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       };
     });
 
-    setNodes(layoutedNodes);
+    setNodes(layoutedNodes as any);
   }, [getNodes, getEdges, setNodes]);
 
   const onConnect = useCallback(
@@ -155,6 +155,8 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       data: { 
         label: `New ${type}`, 
         type,
+        actionType: undefined as string | undefined,
+        color: undefined as string | undefined,
         onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
       },
       ...(type === 'ZONE' ? { width: 600, height: 400 } : {})
@@ -266,7 +268,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                 y: node.position.y + parent.position.y,
               },
               extent: undefined
-            };
+            } as any;
           }
           return n;
         }));
@@ -542,7 +544,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
             <Controls className="!bg-white !dark:bg-zinc-900 !border-zinc-200 !dark:border-zinc-800 !rounded-xl !shadow-2xl" />
             <MiniMap 
               className="!bg-zinc-900 !border-zinc-800 !rounded-xl !shadow-2xl overflow-hidden" 
-              nodeStrokeColor={(n: any) => '#18181b'}
+              nodeStrokeColor={() => '#18181b'}
               nodeColor={(n: any) => {
                 if (n.data?.type === 'STATUS') return '#4f46e5';
                 if (n.data?.type === 'DECISION') return '#f59e0b';

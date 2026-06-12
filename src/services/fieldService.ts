@@ -12,7 +12,6 @@ import {
   format,
   parse,
   isValid,
-  setYear,
   roundToNearestMinutes
 } from 'date-fns';
 import { ModuleField } from '../types/platform';

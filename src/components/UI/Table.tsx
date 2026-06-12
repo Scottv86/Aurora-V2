@@ -3,7 +3,7 @@ import { cn, Button } from './Primitives';
 import { ChevronLeft, ChevronRight, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { Skeleton } from './Skeleton';
 
-interface Column<T> {
+export interface Column<T> {
   header: string;
   accessor: keyof T | ((item: T) => React.ReactNode);
   sortable?: boolean;

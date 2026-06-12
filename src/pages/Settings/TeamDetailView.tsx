@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
   ChevronRight, 
-  Users, 
   Activity, 
   Trash2, 
   Save

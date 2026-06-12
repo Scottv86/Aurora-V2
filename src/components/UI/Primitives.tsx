@@ -140,7 +140,7 @@ export const Select = ({ className, label, options, icon, ...props }: SelectProp
 // Badge
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'blue' | 'zinc' | 'green' | 'red' | 'orange' | 'purple';
+  variant?: 'blue' | 'zinc' | 'green' | 'red' | 'orange' | 'purple' | 'amber' | 'indigo';
   className?: string;
 }
 
@@ -152,6 +152,8 @@ export const Badge = ({ children, variant = 'zinc', className }: BadgeProps) => 
     red: 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400',
     orange: 'bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400',
     purple: 'bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+    indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400',
   };
 
   return (

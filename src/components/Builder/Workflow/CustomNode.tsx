@@ -38,13 +38,14 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
     data.type === 'DELAY' ? "zinc" :
     data.type === 'END' ? "rose" : "zinc";
 
-  const accentHex = {
+  const accentHexMap = {
     indigo: "#6366f1",
     amber: "#f59e0b",
     emerald: "#10b981",
     zinc: "#71717a",
     rose: "#f43f5e"
-  }[accentColor as keyof typeof accentHex];
+  };
+  const accentHex = accentHexMap[accentColor as keyof typeof accentHexMap];
   
   return (
     <div className={cn(

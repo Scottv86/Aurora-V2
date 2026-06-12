@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../../UI/TabsAndModal';
 import { Button, Input } from '../../UI/Primitives';
 import { useTeams } from '../../../hooks/useTeams';
-import { Users, Shield, LayoutGrid, Type } from 'lucide-react';
+import { Users, LayoutGrid } from 'lucide-react';
 import { AvatarUpload } from '../../Common/AvatarUpload';
 
 interface CreateTeamModalProps {

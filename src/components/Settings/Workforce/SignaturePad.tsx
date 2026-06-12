@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Button } from '../../UI/Primitives';
 import { PenTool, Trash2, CheckCircle2, UploadCloud, Shield } from 'lucide-react';
 
@@ -9,8 +9,6 @@ interface SignaturePadProps {
 
 export const SignaturePad = ({ initialSignature, onSave }: SignaturePadProps) => {
   const [signature, setSignature] = useState(initialSignature || '');
-  const [isDrawing, setIsDrawing] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // In a real implementation, we would use a library like react-signature-canvas
   // For this demonstration, we'll provide a high-fidelity "Digital Signature" experience

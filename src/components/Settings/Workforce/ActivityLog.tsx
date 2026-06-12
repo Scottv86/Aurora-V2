@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Table } from '../../UI/Table';
-import { Shield, Clock, Info, ShieldCheck, UserCog, Database, Search } from 'lucide-react';
-import { Badge, Button } from '../../UI/Primitives';
+import { Clock, ShieldCheck, UserCog, Database, Search } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { API_BASE_URL } from '../../../config';
@@ -102,7 +101,7 @@ export const ActivityLog = ({ refreshTrigger, searchQuery = '', onSearchChange, 
     },
     {
       header: 'Status',
-      accessor: (l: any) => (
+      accessor: () => (
         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-wider dark:bg-green-500/10 dark:text-green-400">
           <ShieldCheck size={10} /> Success
         </div>

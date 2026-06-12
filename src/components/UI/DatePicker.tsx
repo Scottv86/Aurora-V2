@@ -9,17 +9,14 @@ import {
   endOfWeek, 
   isSameMonth, 
   isSameDay, 
-  addDays, 
   eachDayOfInterval,
   isToday,
-  parse,
   isValid,
   isWeekend,
   setYear,
   setMonth,
   isBefore,
-  isAfter,
-  startOfToday
+  isAfter
 } from 'date-fns';
 import { 
   ChevronLeft, 

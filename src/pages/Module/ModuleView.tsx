@@ -34,6 +34,7 @@ import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
+import { validateRecordRules } from '../../lib/validationEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
@@ -475,6 +476,15 @@ export const ModuleView = () => {
     try {
       let finalData = evaluateCalculations(newEntryData, allFields);
       
+      // Validate business validation rules before saving
+      const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+      const validationErrors = validateRecordRules(finalData, rules, allFields);
+      if (validationErrors.length > 0) {
+        toast.error(validationErrors.join(' | '));
+        setIsSubmitting(false);
+        return;
+      }
+      
       const hasAISummary = allFields.some(f => f.type === 'ai_summary');
       if (hasAISummary) {
         toast.info("Generating AI Summary...");
@@ -608,6 +618,15 @@ export const ModuleView = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ recordId, data }: { recordId: string; data: any }) => {
+      // Validate business validation rules before saving
+      const originalRecord = records.find(r => r.id === recordId) || {};
+      const fullRecord = { ...originalRecord, ...data };
+      const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+      const validationErrors = validateRecordRules(fullRecord, rules, allFields);
+      if (validationErrors.length > 0) {
+        throw new Error(validationErrors.join(' | '));
+      }
+
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
@@ -741,7 +760,7 @@ export const ModuleView = () => {
   };
 
   const pipelineConfig = useMemo(() => {
-    const statusField = allFields.find(f => f.type === 'status' || f.name === 'status');
+    const statusField = allFields.find(f => (f.type as string) === 'status' || f.name === 'status');
     const stages = statusField?.options || ['Lead', 'Qualification', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'];
     const fieldId = statusField?.id || 'status';
 
@@ -1071,7 +1090,7 @@ export const ModuleView = () => {
   };
 
   const renderPipelineView = () => {
-    const { stages, fieldId, valueFieldId, dateFieldId, grouped, columnTotals } = pipelineConfig;
+    const { stages, valueFieldId, dateFieldId, grouped, columnTotals } = pipelineConfig;
 
     const formatCurrency = (val: any) => {
       const parsed = parseFloat(val);
@@ -1754,7 +1773,6 @@ export const ModuleView = () => {
     records,
     interfaceSettings,
     handleRecordClick,
-    moduleId,
     displayFields
   }: any) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -2848,7 +2866,7 @@ export const ModuleView = () => {
         
         <Table 
           data={filteredRecords as any}
-          onRowClick={(record) => handleRecordClick(record.id)}
+          onRowClick={(record) => handleRecordClick(String(record.id))}
           className="bg-transparent dark:bg-transparent border-none shadow-none"
           noContainer={true}
           pagination={false}

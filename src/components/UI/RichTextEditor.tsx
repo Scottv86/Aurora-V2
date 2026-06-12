@@ -1,9 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { 
   Bold, Italic, List, ListOrdered, Link, 
-  AlignLeft, AlignCenter, AlignRight, 
-  Type, Quote, Code
+  AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 
 interface RichTextEditorProps {
@@ -76,7 +75,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           "p-5 min-h-[150px] text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none prose prose-zinc dark:prose-invert max-w-none",
           readonly && "cursor-default"
         )}
-        placeholder={placeholder}
+        {...{ placeholder }}
       />
     </div>
   );

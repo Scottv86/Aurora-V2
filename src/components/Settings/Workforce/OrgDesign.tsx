@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePositions, Position } from '../../../hooks/usePositions';
 import { Table } from '../../UI/Table';
 import { Badge, Button, Input } from '../../UI/Primitives';
 import { Modal } from '../../UI/TabsAndModal';
-import { Briefcase, Plus, Search, MapPin, Users, History, TreeLabels, ChevronRight } from 'lucide-react';
+import { Search, Users, ChevronRight } from 'lucide-react';
 
 interface OrgDesignProps {
   isModalOpen: boolean;

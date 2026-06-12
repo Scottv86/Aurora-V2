@@ -10,10 +10,8 @@ import {
   Layout,
   Users,
   Settings2,
-  Database,
   Terminal,
   Activity,
-  Plus,
   History,
   FilePlus,
   UserPlus

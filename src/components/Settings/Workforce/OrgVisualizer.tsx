@@ -1,14 +1,15 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as d3 from 'd3';
-import { usePositions, Position } from '../../../hooks/usePositions';
-import { Briefcase, Users, ZoomIn, ZoomOut, Maximize, Search, ChevronRight, User, Cpu } from 'lucide-react';
-import { Badge, Button } from '../../UI/Primitives';
-import { motion, AnimatePresence } from 'framer-motion';
+import { usePositions } from '../../../hooks/usePositions';
+import { Briefcase, Users, ZoomIn, ZoomOut, Maximize, Search, User, Cpu } from 'lucide-react';
+import { Badge } from '../../UI/Primitives';
+import { motion } from 'framer-motion';
 
-interface TreeNode extends d3.HierarchyNode<Position> {
+interface TreeNode {
   x: number;
   y: number;
+  [key: string]: any;
 }
 
 const NODE_WIDTH = 220;
@@ -42,11 +43,9 @@ export const OrgVisualizer = () => {
       }));
 
       let dataToStratify = [...cleanPositions];
-      let rootIdToUse = '';
 
       if (roots.length > 1) {
         // Multiple roots: Inject a virtual root
-        rootIdToUse = VIRTUAL_ROOT_ID;
         dataToStratify.push({
           id: VIRTUAL_ROOT_ID,
           title: 'Organization',
@@ -62,18 +61,18 @@ export const OrgVisualizer = () => {
           roots.some(r => r.id === p.id) ? { ...p, parentId: VIRTUAL_ROOT_ID } : p
         );
       } else if (roots.length === 1) {
-        rootIdToUse = roots[0].id;
+        // Real root identified
       } else {
         return null; // Should not happen with valid data
       }
 
-      const stratify = d3.stratify<any>()
-        .id(d => d.id)
-        .parentId(d => d.parentId);
+      const stratify = d3.stratify()
+        .id((d: any) => d.id)
+        .parentId((d: any) => d.parentId);
 
       const root = stratify(dataToStratify);
       
-      const treeLayout = d3.tree<any>()
+      const treeLayout = d3.tree()
         .nodeSize([VERTICAL_SPACING, HORIZONTAL_SPACING]);
         
       return treeLayout(root) as unknown as TreeNode;
@@ -88,9 +87,9 @@ export const OrgVisualizer = () => {
     if (!svgRef.current || !hierarchyData) return;
     
     const svg = d3.select(svgRef.current);
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
+    const zoom = d3.zoom()
       .scaleExtent([0.1, 2])
-      .on('zoom', (event) => {
+      .on('zoom', (event: any) => {
         d3.select(svgRef.current).select('g.transform-layer')
           .attr('transform', event.transform);
         setZoomLevel(event.transform.k);
@@ -145,21 +144,21 @@ export const OrgVisualizer = () => {
         <div className="flex items-center gap-2 p-1.5 rounded-2xl border border-zinc-200 bg-white/90 shadow-2xl shadow-zinc-200/50 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90 dark:shadow-none w-max">
           <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 transition-colors" onClick={() => {
             const svg = d3.select(svgRef.current!);
-            svg.transition().call(d3.zoom<SVGSVGElement, any>().scaleBy, 1.3);
+            svg.transition().call(d3.zoom().scaleBy, 1.3);
           }}>
             <ZoomIn size={18} />
           </button>
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
           <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 transition-colors" onClick={() => {
             const svg = d3.select(svgRef.current!);
-            svg.transition().call(d3.zoom<SVGSVGElement, any>().scaleBy, 0.7);
+            svg.transition().call(d3.zoom().scaleBy, 0.7);
           }}>
             <ZoomOut size={18} />
           </button>
           <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
           <button className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 transition-colors" onClick={() => {
              const { width, height } = containerRef.current?.getBoundingClientRect() || { width: 1000, height: 600 };
-             d3.select(svgRef.current!).transition().call(d3.zoom<SVGSVGElement, any>().transform, d3.zoomIdentity.translate(width / 4, height / 2).scale(0.8));
+             d3.select(svgRef.current!).transition().call(d3.zoom().transform, d3.zoomIdentity.translate(width / 4, height / 2).scale(0.8));
           }}>
             <Maximize size={18} />
           </button>
@@ -187,16 +186,16 @@ export const OrgVisualizer = () => {
         
         <g className="transform-layer">
           {/* Links */}
-          {hierarchyData.links()
-            .filter(link => link.source.data.id !== VIRTUAL_ROOT_ID)
-            .map((link, i) => {
+          {(hierarchyData as any).links()
+            .filter((link: any) => link.source.data.id !== VIRTUAL_ROOT_ID)
+            .map((link: any, i: number) => {
               const start = link.source as TreeNode;
               const end = link.target as TreeNode;
               
               // Cubic Bezier for smooth flow
-              const pathData = d3.linkHorizontal<any, TreeNode>()
-                .x(d => d.y)
-                .y(d => d.x)
+              const pathData = d3.linkHorizontal()
+                .x((d: any) => d.y)
+                .y((d: any) => d.x)
                 ({ source: start, target: end });
 
               return (
@@ -212,9 +211,9 @@ export const OrgVisualizer = () => {
             })}
 
           {/* Nodes */}
-          {hierarchyData.descendants()
-            .filter(node => node.data.id !== VIRTUAL_ROOT_ID)
-            .map((node: any, i) => (
+          {(hierarchyData as any).descendants()
+            .filter((node: any) => node.data.id !== VIRTUAL_ROOT_ID)
+            .map((node: any) => (
               <g key={`node-${node.data.id}`} transform={`translate(${node.y}, ${node.x})`}>
               <foreignObject 
                 x={-NODE_WIDTH / 2} 

@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUsers, TenantMember } from '../../../hooks/useUsers';
 import { Table } from '../../UI/Table';
-import { Badge, Button, cn } from '../../UI/Primitives';
-import { User, Bot, Mail, Shield, Users, Clock, Plus, Zap, Briefcase, FileBadge, Search } from 'lucide-react';
-import { CapabilityGate } from '../../Auth/CapabilityGate';
+import { Badge, cn } from '../../UI/Primitives';
+import { User, Bot, Mail, Users, Clock, Zap, Briefcase, FileBadge, Search } from 'lucide-react';
 
 interface PeopleCenterProps {
   searchQuery?: string;

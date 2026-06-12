@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { Modal } from '../../UI/TabsAndModal';
 import { Button, Input } from '../../UI/Primitives';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
@@ -103,17 +103,7 @@ export const CreateEditGroupModal = ({ isOpen, onClose, group }: CreateEditGroup
     }
   };
 
-  const getCategoryFromKey = (key: string) => key.split(':')[0];
-
   const toggleCategoryMaster = (category: string) => {
-    // Current keys for this category in our CAPABILITIES list
-    const categoryPrefixMap: Record<string, string> = {
-      'Staff Management': 'staff',
-      'Team & Structure': 'teams', // simplified for matching
-      'Platform & Security': 'settings', // simplified
-      'Data & Modules': 'records' // simplified
-    };
-    
     // Actually, it's easier to find the items in the cat
     const catObj = CAPABILITIES.find(c => c.category === category);
     if (!catObj) return;

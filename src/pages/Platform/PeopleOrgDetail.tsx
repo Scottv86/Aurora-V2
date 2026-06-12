@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -11,11 +11,8 @@ import {
   Calendar,
   Shield,
   Clock,
-  ExternalLink,
   Plus,
   GitBranch,
-  Mail,
-  MapPin,
   Building
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -23,7 +20,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
-import { Button, Input, Select, Badge, cn, AuroraSpinner } from '../../components/UI/Primitives';
+import { Button, Input, Select, Badge, AuroraSpinner } from '../../components/UI/Primitives';
 import { Skeleton } from '../../components/UI/Skeleton';
 import { Tabs, Modal } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
@@ -44,7 +41,6 @@ export const PeopleOrgDetail = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [relationships, setRelationships] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [loadingExtras, setLoadingExtras] = useState(false);
   const [isAddRelationshipModalOpen, setIsAddRelationshipModalOpen] = useState(false);
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   
@@ -72,7 +68,6 @@ export const PeopleOrgDetail = () => {
 
   const fetchExtras = async () => {
     try {
-      setLoadingExtras(true);
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const headers = { 
         'Authorization': `Bearer ${token}`,
@@ -89,8 +84,6 @@ export const PeopleOrgDetail = () => {
       
     } catch (err) {
       console.error('Failed to fetch extras:', err);
-    } finally {
-      setLoadingExtras(false);
     }
   };
 
@@ -545,7 +538,7 @@ export const PeopleOrgDetail = () => {
                 <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Activity Timeline</h3>
                 
                 <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-zinc-200 dark:before:via-zinc-800 before:to-transparent">
-                   {auditLogs.map((log, idx) => (
+                   {auditLogs.map(log => (
                       <div key={log.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
                         <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white dark:border-zinc-900 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
                           <Clock size={16} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   DndContext, 
   closestCenter,
@@ -18,9 +18,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, Trash2, LayoutDashboard, FileText, Users, Settings, ChevronRight } from 'lucide-react';
+import { GripVertical, Plus, Trash2, LayoutDashboard, FileText, Users, Settings } from 'lucide-react';
 import { Button } from '../UI/Primitives';
-import { motion, AnimatePresence } from 'motion/react';
 
 interface MenuItem {
   id: string;
@@ -110,7 +109,7 @@ export const NavigationArchitect = ({ items, onChange, layout }: Props) => {
                   item={item} 
                   layout={layout}
                   onRemove={() => removeItem(item.id)}
-                  onUpdate={(updates) => updateItem(item.id, updates)}
+                  onUpdate={(updates: Partial<MenuItem>) => updateItem(item.id, updates)}
                 />
               ))}
             </div>

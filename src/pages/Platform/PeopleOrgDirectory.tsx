@@ -6,23 +6,17 @@ import {
   Search, 
   Filter, 
   Plus, 
-  MoreHorizontal, 
-  GitBranch, 
   Inbox, 
   Building2, 
   User,
   ShieldCheck,
-  Clock,
-  ExternalLink,
   ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
-import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
-import { RelationshipGraph } from '../../components/Platform/RelationshipGraph';
 import { PendingApprovals } from '../../components/Platform/PendingApprovals';
 import { Table } from '../../components/UI/Table';
 import { CreatePartyModal } from '../../components/Platform/CreatePartyModal';
@@ -44,7 +38,6 @@ export const PeopleOrgDirectory = () => {
   });
 
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
@@ -73,7 +66,6 @@ export const PeopleOrgDirectory = () => {
           const uniqueNew = newEntities.filter((e: any) => !existingIds.has(e.id));
           return [...prev, ...uniqueNew];
         });
-        setTotal(data.total || newEntities.length);
         setHasMore(data.total ? (entities.length + newEntities.length < data.total) : (newEntities.length >= 50));
       }
     } catch (err) {

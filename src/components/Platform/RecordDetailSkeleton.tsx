@@ -1,5 +1,4 @@
 import { Skeleton } from '../UI/Skeleton';
-import { cn } from '../../lib/utils';
 
 export const RecordDetailSkeleton = () => {
   return (

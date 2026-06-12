@@ -1,20 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  Settings, 
   Tags, 
   Shapes, 
   Database, 
   Plus, 
   Trash2, 
   Edit3, 
-  Save,
   Info,
-  ChevronRight,
-  AlertCircle,
-  Loader2,
-  Zap
+  Loader2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';

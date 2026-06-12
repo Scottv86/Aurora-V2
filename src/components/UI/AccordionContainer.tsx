@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, Plus, Minus } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { DynamicIcon } from './DynamicIcon';
 import { cn } from '../../lib/utils';
 import { ModuleField } from '../../types/platform';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -6,8 +6,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Building2,
-  User,
-  ArrowRight
+  User
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';

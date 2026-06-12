@@ -7,30 +7,25 @@ import {
   CheckCircle2, 
   Circle, 
   ArrowRight, 
-  Puzzle,
-  ExternalLink,
-  ShieldCheck,
-  Zap,
-  Layout,
-  Play,
-  Loader2,
-  AlertCircle,
-  Plus,
-  ArrowLeft,
-  ArrowRightLeft,
-  ChevronDown,
-  Save
+  ShieldCheck, 
+  Zap, 
+  Layout, 
+  Play, 
+  Loader2, 
+  AlertCircle, 
+  Plus, 
+  ArrowLeft, 
+  ArrowRightLeft
 } from 'lucide-react';
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
-import { FieldCreationModal } from '../../components/Builder/FieldCreationModal';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
 import { PageHeader } from '../../components/UI/PageHeader';
-import { Button, Input } from '../../components/UI/Primitives';
+import { Button } from '../../components/UI/Primitives';
 import { clsx } from 'clsx';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 
 interface Connector {

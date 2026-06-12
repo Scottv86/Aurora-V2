@@ -23,6 +23,7 @@ export interface Tenant {
     useTenantBranding?: boolean;
     aiEnabled?: boolean;
     forceDarkMode?: boolean;
+    layout_style?: string;
   };
   localization?: {
     timezone?: string;
@@ -43,6 +44,7 @@ export interface Tenant {
     autoCategorization?: boolean;
     archivingPolicyDays?: number;
   };
+  menuConfig?: any;
 }
 
 export interface Capability {
@@ -221,6 +223,7 @@ export interface Module {
   nextKeyNumber?: number;
 
   config?: ModuleConfig;
+  connectorMappings?: Record<string, Record<string, string>>;
 }
 
 
@@ -399,6 +402,7 @@ export interface IndustryBlueprint {
     lists?: string[];
     connections?: { sourceModule: string; targetModule: string; type: string }[];
   };
+  dependencies?: string[];
   createdAt: string;
   updatedAt: string;
 }

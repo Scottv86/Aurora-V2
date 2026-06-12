@@ -1,8 +1,7 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTeams, Team } from '../../../hooks/useTeams';
-import { Button, cn } from '../../UI/Primitives';
-import { Users, Bot, User, Plus, MoreHorizontal, ArrowUpRight, Network, Search } from 'lucide-react';
+import { Button } from '../../UI/Primitives';
+import { Bot, User, Plus, MoreHorizontal, ArrowUpRight, Network, Search } from 'lucide-react';
 
 interface TeamHubProps {
   onCreateTeam?: () => void;

@@ -11,6 +11,7 @@ import {
   Plus, 
   Layers,
   Sparkles,
+  Loader2,
   Monitor,
   Tablet,
   Smartphone,
@@ -146,6 +147,9 @@ import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
 import { FieldSelectorModal } from './Builder/FieldSelectorModal';
 import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
+import { ValidationRule } from '../lib/validationEngine';
+import { generateExpression } from '../services/aiService';
+import { ValidationRuleModal } from './Builder/ValidationRuleModal';
 
 const METADATA_FIELDS = [
   { id: 'createdAt', label: 'Created Date', type: 'date', tabId: 'metadata' },
@@ -1722,6 +1726,14 @@ export const ModuleEditor = () => {
   const [showConnectorModal, setShowConnectorModal] = useState(false);
   const [showSubmoduleWizard, setShowSubmoduleWizard] = useState(false);
 
+  // Validation Rules State
+  const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
+  const [activeRulesSubTab, setActiveRulesSubTab] = useState<'validation' | 'triggers' | 'security'>('validation');
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<ValidationRule | null>(null);
+  const [isGeneratingRule, setIsGeneratingRule] = useState(false);
+  const [ruleAiPrompt, setRuleAiPrompt] = useState('');
+
   // Fetch Active Connectors & Registry
   useEffect(() => {
     if (!tenant?.id) return;
@@ -1828,6 +1840,20 @@ export const ModuleEditor = () => {
       console.error("Config save failed:", err);
       toast.error("Failed to vault secrets");
     }
+  };
+
+  const handleSaveRule = (rule: ValidationRule) => {
+    setValidationRules(prev => {
+      const exists = prev.some(r => r.id === rule.id);
+      if (exists) {
+        return prev.map(r => r.id === rule.id ? rule : r);
+      } else {
+        return [...prev, rule];
+      }
+    });
+    setIsRuleModalOpen(false);
+    setEditingRule(null);
+    toast.success(editingRule ? "Validation rule updated! Don't forget to save changes." : "New validation rule added! Don't forget to save changes.");
   };
 
   const handleActivateConnector = async (connectorId: string) => {
@@ -2133,6 +2159,7 @@ export const ModuleEditor = () => {
           setLayout(normalizeLayout(data.layout));
         }
         if (data.tabs) setTabs(data.tabs);
+        if (data.validationRules) setValidationRules(data.validationRules);
         if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
         if (data.workflows && data.workflows.length > 0) {
           setWorkflow(data.workflows[0]);
@@ -2192,7 +2219,8 @@ export const ModuleEditor = () => {
         forms,
         connectorMappings,
         workflows: workflow ? [workflow] : [],
-        interfaceSettings
+        interfaceSettings,
+        validationRules
       };
 
       const url = isNew 
@@ -2231,7 +2259,7 @@ export const ModuleEditor = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient]);
+  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient, validationRules]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -8193,73 +8221,143 @@ export const ModuleEditor = () => {
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Logic & Validation</h3>
                 </div>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all text-left">
+                <button 
+                  onClick={() => setActiveRulesSubTab('validation')}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
+                    activeRulesSubTab === 'validation'
+                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                      : "text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  )}
+                >
                   <ShieldCheck size={14} />
                   Validation Rules
                 </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
+                <button 
+                  onClick={() => setActiveRulesSubTab('triggers')}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
+                    activeRulesSubTab === 'triggers'
+                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                      : "text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  )}
+                >
                   <Zap size={14} />
                   Automation Triggers
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <Lock size={14} />
-                  Access Control
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <FileCode size={14} />
-                  Advanced Logic
                 </button>
               </aside>
 
               {/* Rules Content */}
               <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
                 <div className="max-w-none mx-auto space-y-12 pb-20">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Business Rules</h2>
-                    <p className="text-zinc-500 text-sm">Define global validation, automation, and processing rules for this module.</p>
-                  </div>
                   
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {[
-                      { title: 'Validation Rules', desc: 'Ensure data integrity with custom logic constraints.', icon: CheckSquare, count: 0 },
-                      { title: 'Automation Triggers', desc: 'Execute actions when records are created or updated.', icon: Zap, count: 0 },
-                      { title: 'Access Control', desc: 'Manage row-level security and field permissions.', icon: Lock, count: 2 }
-                    ].map((card, i) => (
-                      <div key={i} className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-4 hover:border-indigo-500/50 transition-all group">
-                        <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
-                          <card.icon size={24} />
-                        </div>
+                  {activeRulesSubTab === 'validation' ? (
+                    <div className="space-y-8">
+                      <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <h4 className="font-bold text-zinc-900 dark:text-white">{card.title}</h4>
-                          <p className="text-xs text-zinc-500 leading-relaxed">{card.desc}</p>
+                          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Validation Rules</h2>
+                          <p className="text-zinc-500 text-sm">Define custom validation checks to maintain data integrity when saving records.</p>
                         </div>
-                        <div className="pt-2 flex items-center justify-between">
-                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{card.count} Active</span>
-                          <button className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-400">Configure</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="bg-indigo-600 rounded-[2.5rem] p-10 relative overflow-hidden shadow-2xl shadow-indigo-500/20">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-3xl -mr-32 -mt-32" />
-                    <div className="relative z-10 space-y-6">
-                      <div className="space-y-2">
-                        <h3 className="text-xl font-black text-white tracking-tight">New Rule Discovery</h3>
-                        <p className="text-white/70 text-sm max-w-xl">Our Shadow Architect can help you generate complex validation logic using natural language. Try describing a rule you need.</p>
-                      </div>
-                      <div className="flex gap-4">
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Total amount cannot exceed budget field by more than 10%..."
-                          className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-6 py-4 text-sm text-white placeholder:text-white/40 focus:outline-none focus:bg-white/20 transition-all"
-                        />
-                        <button className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl">
-                          Generate Rule
+                        <button 
+                          onClick={() => {
+                            setEditingRule(null);
+                            setIsRuleModalOpen(true);
+                          }}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-md"
+                        >
+                          <Plus size={14} />
+                          <span>New Rule</span>
                         </button>
                       </div>
+
+                      {/* Rules List */}
+                      {validationRules.length === 0 ? (
+                        <div className="p-10 bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center space-y-3">
+                          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">No validation rules defined yet.</p>
+                          <p className="text-xs text-zinc-400 max-w-sm mx-auto">Click <strong>+ New Rule</strong> to get started.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {validationRules.map((rule) => (
+                            <div 
+                              key={rule.id} 
+                              className="flex items-center justify-between p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/30 transition-all group"
+                            >
+                              <div className="flex items-center gap-4 flex-1 min-w-0 mr-4">
+                                <div className={cn(
+                                  "w-10 h-10 rounded-xl flex items-center justify-center border",
+                                  rule.isActive 
+                                    ? rule.severity === 'warning'
+                                      ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                      : "bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
+                                    : "bg-zinc-50 text-zinc-400 border-zinc-200"
+                                )}>
+                                  <ShieldCheck size={18} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-xs font-black text-zinc-900 dark:text-white truncate">{rule.name}</span>
+                                    <span className={cn(
+                                      "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border",
+                                      rule.severity === 'warning' 
+                                        ? "bg-amber-500/10 text-amber-600 border-amber-500/20" 
+                                        : "bg-rose-500/10 text-rose-600 border-rose-500/20"
+                                    )}>
+                                      {rule.severity || 'error'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-zinc-400 font-mono truncate bg-zinc-50 dark:bg-zinc-950 px-2 py-0.5 rounded inline-block">
+                                    {rule.expression}
+                                  </p>
+                                  <p className="text-[10px] text-zinc-500 mt-1 italic">&quot;{rule.errorMessage}&quot;</p>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-3 shrink-0">
+                                <div className="flex items-center gap-2 mr-2">
+                                  <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{rule.isActive ? 'Active' : 'Inactive'}</span>
+                                  <input 
+                                    type="checkbox"
+                                    checked={rule.isActive}
+                                    onChange={() => {
+                                      setValidationRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r));
+                                    }}
+                                    className="w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500 cursor-pointer"
+                                  />
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    setEditingRule(rule);
+                                    setIsRuleModalOpen(true);
+                                  }}
+                                  className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-500/10 transition-all bg-white dark:bg-zinc-900"
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setValidationRules(prev => prev.filter(r => r.id !== rule.id));
+                                    toast.success("Validation rule deleted");
+                                  }}
+                                  className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-600 hover:bg-rose-500/10 transition-all bg-white dark:bg-zinc-900"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-4 text-center py-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl">
+                      <Zap className="mx-auto text-zinc-400" size={48} />
+                      <h3 className="text-lg font-bold text-zinc-850 dark:text-zinc-200">Automation Triggers</h3>
+                      <p className="text-zinc-500 text-xs max-w-sm mx-auto">Define actions that execute when records are created or updated. Triggers configuration is coming in a future release.</p>
+                    </div>
+                  )}
+
                 </div>
               </div>
             </div>
@@ -12286,7 +12384,7 @@ export const ModuleEditor = () => {
                                           <button
                                             key={opt.value}
                                             type="button"
-                                            onClick={() => updateField(selectedField.id, { detailLayoutType: opt.value })}
+                                            onClick={() => updateField(selectedField.id, { detailLayoutType: opt.value as any })}
                                             className={cn(
                                               "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
                                               (selectedField.detailLayoutType || 'sidebar') === opt.value
@@ -12738,7 +12836,7 @@ export const ModuleEditor = () => {
                                         <button
                                           key={opt.value}
                                           type="button"
-                                          onClick={() => updateField(selectedField.id, { detailViewMode: opt.value })}
+                                          onClick={() => updateField(selectedField.id, { detailViewMode: opt.value as any })}
                                           className={cn(
                                             "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
                                             (selectedField.detailViewMode || 'modal') === opt.value
@@ -12767,7 +12865,7 @@ export const ModuleEditor = () => {
                                         <button
                                           key={opt.value}
                                           type="button"
-                                          onClick={() => updateField(selectedField.id, { detailLayoutType: opt.value })}
+                                          onClick={() => updateField(selectedField.id, { detailLayoutType: opt.value as any })}
                                           className={cn(
                                             "px-1 py-2.5 rounded-xl border text-[8px] font-bold uppercase tracking-widest transition-all flex flex-col items-center gap-1.5 text-center min-w-0 truncate",
                                             (selectedField.detailLayoutType || 'sidebar') === opt.value
@@ -13589,6 +13687,17 @@ export const ModuleEditor = () => {
             updateField(selectedField.id, { lookupOutputMappings: newMappings });
           }
         }}
+      />
+
+      <ValidationRuleModal 
+        isOpen={isRuleModalOpen}
+        onClose={() => {
+          setIsRuleModalOpen(false);
+          setEditingRule(null);
+        }}
+        onSave={handleSaveRule}
+        rule={editingRule}
+        fields={flattenFields(layout)}
       />
 
     </div>

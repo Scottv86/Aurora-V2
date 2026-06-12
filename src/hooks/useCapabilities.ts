@@ -3,7 +3,7 @@ import { usePlatform } from './usePlatform';
 import { useAuth } from './useAuth';
 
 export const useCapabilities = () => {
-  const { user, tenant } = usePlatform();
+  const { user } = usePlatform();
   const { isSuperAdmin } = useAuth();
 
   const capabilities = useMemo(() => user?.capabilities || [], [user?.capabilities]);
@@ -19,7 +19,7 @@ export const useCapabilities = () => {
     if (capabilities.includes(requiredCap)) return true;
 
     // Wildcard check
-    const [category, action] = requiredCap.split(':');
+    const category = requiredCap.split(':')[0];
     if (capabilities.includes(`${category}:*`)) return true;
     if (capabilities.includes('*:*')) return true;
 

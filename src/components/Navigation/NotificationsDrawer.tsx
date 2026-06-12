@@ -7,8 +7,7 @@ import {
   Zap, 
   Shield, 
   UserPlus,
-  AlertCircle,
-  MoreVertical
+  AlertCircle
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';

@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus,
   ArrowRight,
   CheckCircle2,
   AlertCircle,
-  X,
   User,
   Building2,
-  GitBranch,
-  ShieldCheck,
   Search
 } from 'lucide-react';
 import { Modal } from '../UI/TabsAndModal';
 import { Button, Input, Select } from '../UI/Primitives';
-import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
