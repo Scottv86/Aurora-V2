@@ -1033,7 +1033,7 @@ export const CalculatorModal = ({
     
     const func = suggestion.type === 'function' ? FUNCTIONS.find(f => f.name === suggestion.label) : null;
     const isZeroArg = func?.template?.endsWith('()');
-    const insertion = suggestion.type === 'variable' ? `{${suggestion.label}}` : `${suggestion.label}()`;
+    const insertion = suggestion.type === 'variable' ? suggestion.value : `${suggestion.label}()`;
     const cursorOffset = (suggestion.type === 'function' && !isZeroArg) ? insertion.length - 1 : insertion.length;
     const newVal = currentVal.substring(0, start) + insertion + currentVal.substring(end);
     
@@ -1102,40 +1102,53 @@ export const CalculatorModal = ({
         const parentLabel = parts[0];
         const childQuery = parts.slice(1).join('.');
         
-        const parentField = availableFields.find(f => f.label.toLowerCase() === parentLabel);
+        const parentField = availableFields.find(f => (f.name && f.name.toLowerCase() === parentLabel) || (f.label && f.label.toLowerCase() === parentLabel));
         if (parentField) {
           if (parentField.fields) {
             matches = parentField.fields
-              .filter(f => f.label.toLowerCase().includes(childQuery))
-              .map(f => ({ 
-                label: `${parentField.label}.${f.label}`, 
-                value: `${parentField.id}.${f.id}`, 
-                type: 'variable',
-                description: `Sub-field of ${parentField.label}` 
-              }));
+              .filter(f => (f.name && f.name.toLowerCase().includes(childQuery)) || f.label.toLowerCase().includes(childQuery))
+              .map(f => {
+                const pSlug = parentField.name || parentField.id;
+                const cSlug = f.name || f.id;
+                const hasSlug = parentField.name && f.name;
+                return { 
+                  label: `${pSlug}.${cSlug}`, 
+                  value: hasSlug ? `{${pSlug}.${cSlug}}` : `{{${parentField.id}.${f.id}}}`, 
+                  type: 'variable',
+                  description: `Sub-field: ${parentField.label}.${f.label}` 
+                };
+              });
           } else if (parentField.type === 'lookup' && parentField.targetModuleId) {
             const relFields = relatedFields[parentField.targetModuleId];
             if (relFields) {
               matches = relFields
-                .filter(f => f.label.toLowerCase().includes(childQuery) && f.type !== 'group' && f.type !== 'fieldGroup')
-                .map(f => ({ 
-                  label: `${parentField.label}.${f.label}`, 
-                  value: `${parentField.id}.${f.id}`, 
-                  type: 'variable',
-                  description: `Field in related module` 
-                }));
+                .filter(f => ((f.name && f.name.toLowerCase().includes(childQuery)) || f.label.toLowerCase().includes(childQuery)) && f.type !== 'group' && f.type !== 'fieldGroup')
+                .map(f => {
+                  const pSlug = parentField.name || parentField.id;
+                  const cSlug = f.name || f.id;
+                  const hasSlug = parentField.name && f.name;
+                  return { 
+                    label: `${pSlug}.${cSlug}`, 
+                    value: hasSlug ? `{${pSlug}.${cSlug}}` : `{{${parentField.id}.${f.id}}}`, 
+                    type: 'variable',
+                    description: `Related: ${parentField.label}.${f.label}` 
+                  };
+                });
             }
           }
         }
       } else {
         matches = [...SYSTEM_FIELDS, ...availableFields]
-          .filter(f => f.label.toLowerCase().includes(q))
-          .map(f => ({ 
-            label: f.label, 
-            value: f.id, 
-            type: 'variable',
-            description: f.type.toUpperCase()
-          }));
+          .filter(f => (f.name && f.name.toLowerCase().includes(q)) || f.label.toLowerCase().includes(q) || f.id.toLowerCase().includes(q))
+          .map(f => {
+            const hasSlug = !!f.name;
+            return { 
+              label: f.name || f.label || f.id, 
+              value: hasSlug ? `{${f.name}}` : `{{${f.id}}}`, 
+              type: 'variable',
+              description: `${f.label} (${f.type.toUpperCase()})`
+            };
+          });
       }
     } else if (type === 'function') {
       matches = FUNCTIONS
@@ -1149,13 +1162,16 @@ export const CalculatorModal = ({
     } else {
       // Universal search
       const vMatches = [...SYSTEM_FIELDS, ...availableFields]
-        .filter(f => f.label.toLowerCase().includes(q))
-        .map(f => ({ 
-          label: f.label, 
-          value: f.id, 
-          type: 'variable',
-          description: f.type.toUpperCase()
-        }));
+        .filter(f => (f.name && f.name.toLowerCase().includes(q)) || f.label.toLowerCase().includes(q) || f.id.toLowerCase().includes(q))
+        .map(f => {
+          const hasSlug = !!f.name;
+          return { 
+            label: f.name || f.label || f.id, 
+            value: hasSlug ? `{${f.name}}` : `{{${f.id}}}`, 
+            type: 'variable',
+            description: `${f.label} (${f.type.toUpperCase()})`
+          };
+        });
       
       const fMatches = FUNCTIONS
         .filter(f => f.name.toLowerCase().includes(q))
@@ -1292,8 +1308,8 @@ export const CalculatorModal = ({
       const parts = path.split('.');
       const identifier = parts[0].toLowerCase().trim();
       const field = fields.find(f => 
-        (f.label && f.label.toLowerCase().trim() === identifier) || 
-        (f.name && f.name.toLowerCase().trim() === identifier)
+        (f.name && f.name.toLowerCase().trim() === identifier) ||
+        (f.id && f.id.toLowerCase().trim() === identifier)
       );
       
       if (!field) return false;
@@ -1613,7 +1629,7 @@ export const CalculatorModal = ({
 
     const isExpanded = expandedFields.has(field.id);
     const hasChildren = field.fields && field.fields.length > 0;
-    const identifier = field.name || field.label;
+    const identifier = field.name || field.id;
     const fullPath = parentPath ? `${parentPath}.${identifier}` : identifier;
 
     return (
@@ -2763,46 +2779,71 @@ export const CalculatorModal = ({
                       {/* Right: Variable Map */}
                       <div className="p-6 space-y-3 overflow-y-auto custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/10 min-h-0">
                         <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-4">Variable Map</p>
-                        
-                        {!logic.includes('{') ? (
+                                          {!logic.includes('{') ? (
                           <div className="flex flex-col items-center justify-center py-8 text-center space-y-2 opacity-50">
                             <Hash size={16} className="text-zinc-300" />
                             <p className="text-[9px] font-medium text-zinc-400 uppercase tracking-widest leading-tight">No external variables used.</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {Array.from(new Set(logic.match(/\{([^{}]+)\}/g) || [])).map((tag, i) => {
-                              const label = tag.slice(1, -1);
-                              const field = availableFields.find(f => f.label === label);
+                            {(() => {
+                              const usedFields = [...SYSTEM_FIELDS, ...availableFields].filter(f => {
+                                const escapedName = f.name ? f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+                                const escapedId = f.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                const idPattern = new RegExp(`\\{\\{${escapedId}\\}\\}`, 'i');
+                                const namePattern1 = escapedName ? new RegExp(`\\{${escapedName}\\}`, 'i') : null;
+                                const namePattern2 = escapedName ? new RegExp(`\\{\\{${escapedName}\\}\\}`, 'i') : null;
+                                return idPattern.test(logic) || 
+                                       (namePattern1 ? namePattern1.test(logic) : false) || 
+                                       (namePattern2 ? namePattern2.test(logic) : false);
+                              });
+                              
+                              if (usedFields.length === 0) {
+                                return (
+                                  <div className="flex flex-col items-center justify-center py-8 text-center space-y-1.5 opacity-55">
+                                    <Terminal size={16} className="text-zinc-350" />
+                                    <p className="text-[9px] font-medium text-zinc-400 uppercase tracking-widest leading-tight">No external variables used.</p>
+                                  </div>
+                                );
+                              }
+
                               return (
-                                <div key={i} className="flex items-center gap-4 p-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm group/var transition-all hover:border-indigo-500/30">
-                                   <div className="flex-1 min-w-0 flex items-center gap-3">
-                                      <div className="w-8 h-8 bg-zinc-50 dark:bg-zinc-900 rounded-lg flex items-center justify-center shrink-0">
-                                        <Hash size={14} className="text-zinc-400" />
+                                <div className="space-y-2">
+                                  {usedFields.map((field, i) => {
+                                    const keyName = field.name || field.id;
+                                    return (
+                                      <div key={i} className="flex items-center gap-4 p-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm group/var transition-all hover:border-indigo-500/30">
+                                         <div className="flex-1 min-w-0 flex items-center gap-3">
+                                            <div className="w-8 h-8 bg-zinc-50 dark:bg-zinc-900 rounded-lg flex items-center justify-center shrink-0">
+                                              <Hash size={14} className="text-zinc-400" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[11px] font-black text-zinc-900 dark:text-white truncate">{field.label || field.name}</span>
+                                                <span className={cn("px-1 py-0.5 rounded text-[7px] font-black uppercase", getTypeBadge(field.type).color)}>
+                                                  {getTypeBadge(field.type).label}
+                                                </span>
+                                              </div>
+                                              {field.name && (
+                                                <p className="text-[8.5px] font-mono text-zinc-450 dark:text-zinc-555 truncate mt-0.5">{field.name}</p>
+                                              )}
+                                            </div>
+                                         </div>
+                                         <div className="w-32 shrink-0">
+                                            <input 
+                                              type="text"
+                                              placeholder="Mock Value"
+                                              value={mockValues[keyName] || ''}
+                                              onChange={(e) => setMockValues(prev => ({ ...prev, [keyName]: e.target.value }))}
+                                              className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl text-[11px] font-mono focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-zinc-300"
+                                            />
+                                         </div>
                                       </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-[11px] font-black text-zinc-900 dark:text-white truncate">{label}</span>
-                                          {field && (
-                                            <span className={cn("px-1 py-0.5 rounded text-[7px] font-black uppercase", getTypeBadge(field.type).color)}>
-                                              {getTypeBadge(field.type).label}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                   </div>
-                                   <div className="w-32 shrink-0">
-                                      <input 
-                                        type="text"
-                                        placeholder="Mock Value"
-                                        value={mockValues[label] || ''}
-                                        onChange={(e) => setMockValues(prev => ({ ...prev, [label]: e.target.value }))}
-                                        className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl text-[11px] font-mono focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-zinc-300"
-                                      />
-                                   </div>
+                                    );
+                                  })}
                                 </div>
                               );
-                            })}
+                            })()}
                           </div>
                         )}
                       </div>
@@ -3038,8 +3079,18 @@ export const CalculatorModal = ({
                              </div>
                              <div className="flex flex-wrap gap-1.5">
                                 {(() => {
-                                   const activeVars = new Set((logic.match(/\{([^{}]+)\}/g) || []).map(t => t.slice(1, -1)));
-                                   const entries = Object.entries(mockValues).filter(([key]) => activeVars.has(key));
+                                   const usedFields = [...SYSTEM_FIELDS, ...availableFields].filter(f => {
+                                     const escapedName = f.name ? f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+                                     const escapedId = f.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                     const idPattern = new RegExp(`\\{\\{${escapedId}\\}\\}`, 'i');
+                                     const namePattern1 = escapedName ? new RegExp(`\\{${escapedName}\\}`, 'i') : null;
+                                     const namePattern2 = escapedName ? new RegExp(`\\{\\{${escapedName}\\}\\}`, 'i') : null;
+                                     return idPattern.test(logic) || 
+                                            (namePattern1 ? namePattern1.test(logic) : false) || 
+                                            (namePattern2 ? namePattern2.test(logic) : false);
+                                   });
+                                   const activeKeys = new Set(usedFields.map(f => f.name || f.id));
+                                   const entries = Object.entries(mockValues).filter(([key]) => activeKeys.has(key));
                                    
                                    if (entries.length === 0) {
                                       return <p className="text-[10px] text-zinc-400 italic">No mock data used in current expression...</p>;
