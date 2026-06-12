@@ -612,9 +612,9 @@ export const RecordDetailView = ({
             }
 
             if (record) {
+              editDataRef.current = record;
               setTimeout(() => {
                 setEditData(record);
-                editDataRef.current = record;
               }, 0);
             }
             return;
@@ -657,9 +657,9 @@ export const RecordDetailView = ({
       }
 
       if (record) {
+        editDataRef.current = record;
         setTimeout(() => {
           setEditData(record);
-          editDataRef.current = record;
         }, 0);
       }
       return;
@@ -768,6 +768,7 @@ export const RecordDetailView = ({
       }
       
       // REVERT on failure
+      editDataRef.current = previousEditData;
       setRecord(previousRecord);
       setEditData(previousEditData);
     } finally {
