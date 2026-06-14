@@ -47,17 +47,21 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
     syncWithGlobal();
   }, [listNames.join(',')]);
 
-  // Map slugs to IDs for field resolution (case-insensitive & trimmed)
-  const slugMap = useMemo(() => {
+  // Map slugs and labels to IDs for field resolution (case-insensitive & trimmed)
+  const { slugMap, labelMap } = useMemo(() => {
     const slugs: Record<string, string> = {};
+    const labels: Record<string, string> = {};
     
     fields.forEach(f => {
       if (f.name) {
         slugs[f.name.toLowerCase().trim()] = f.id;
       }
+      if (f.label) {
+        labels[f.label.toLowerCase().trim()] = f.id;
+      }
     });
     
-    return slugs;
+    return { slugMap: slugs, labelMap: labels };
   }, [fields]);
 
 
@@ -159,11 +163,14 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
       let executable = formula.replace(/\{([^{}]+)\}/g, (_match, identifier) => {
         const normalized = identifier.toLowerCase().trim();
         
-        // Priority: Slug -> ID
+        // Priority: Slug -> ID -> Label
         let fieldId = slugMap[normalized];
         if (!fieldId) {
           const fieldById = fields.find(f => f.id === identifier);
           if (fieldById) fieldId = fieldById.id;
+        }
+        if (!fieldId) {
+          fieldId = labelMap[normalized];
         }
         
         // Fallback to original identifier if no match found
@@ -192,7 +199,7 @@ export const useFormula = (formula: string, recordData: Record<string, any>, fie
       console.error('[useFormula] Eval Error:', err);
       return null;
     }
-  }, [formula, recordData, listNames, localCache, slugMap]);
+  }, [formula, recordData, listNames, localCache, slugMap, labelMap]);
 
   return {
     result,

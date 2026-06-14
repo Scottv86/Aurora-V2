@@ -69,6 +69,13 @@ export const evaluateRuleExpression = (
         const slugRegex2 = new RegExp(`\\{\\{${escapedSlug}\\}\\}`, 'g');
         logic = logic.replace(slugRegex1, safeReplacement).replace(slugRegex2, safeReplacement);
       }
+
+      if (f.label) {
+        const escapedLabel = f.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const labelRegex1 = new RegExp(`\\{${escapedLabel}\\}`, 'gi');
+        const labelRegex2 = new RegExp(`\\{\\{${escapedLabel}\\}\\}`, 'g');
+        logic = logic.replace(labelRegex1, safeReplacement).replace(labelRegex2, safeReplacement);
+      }
     });
 
     // 3. Replace system fields
