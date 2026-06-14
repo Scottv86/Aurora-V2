@@ -7,6 +7,9 @@ export interface ValidationRule {
   errorMessage: string;
   isActive: boolean;
   severity?: 'error' | 'warning';
+  showInline?: boolean; // default: true
+  showToast?: boolean;  // default: true
+  bypassMode?: 'none' | 'confirm'; // default: 'none'
 }
 
 /**
@@ -103,6 +106,7 @@ export const evaluateRuleExpression = (
 export interface ValidationError {
   message: string;
   severity: 'error' | 'warning';
+  ruleId?: string;
 }
 
 /**
@@ -113,18 +117,21 @@ export const validateRecordRules = (
   data: Record<string, any>,
   rules: ValidationRule[] | undefined,
   fields: any[],
-  globalListData: Record<string, any[]> = {}
+  globalListData: Record<string, any[]> = {},
+  bypassedRuleIds?: Set<string>
 ): ValidationError[] => {
   if (!rules || !Array.isArray(rules)) return [];
 
   const errors: ValidationError[] = [];
   rules.forEach(rule => {
+    if (bypassedRuleIds?.has(rule.id)) return;
     if (rule.isActive && rule.expression) {
       const isValid = evaluateRuleExpression(rule.expression, data, fields, globalListData);
       if (!isValid) {
         errors.push({
           message: rule.errorMessage || `Validation rule '${rule.name}' failed.`,
-          severity: rule.severity || 'error'
+          severity: rule.severity || 'error',
+          ruleId: rule.id
         });
       }
     }

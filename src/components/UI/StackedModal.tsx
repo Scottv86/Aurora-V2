@@ -77,12 +77,19 @@ const RecordModal = ({
       const rules = moduleData.config?.validationRules || moduleData.validationRules || [];
       const validationErrors = validateRecordRules(record, rules, allFields);
       if (validationErrors.length > 0) {
-        const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
-        const msg = validationErrors.map(e => e.message).join(' | ');
-        if (isWarningOnly) {
-          toast.warning(msg);
-        } else {
-          toast.error(msg);
+        const toastErrors = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return rule?.showToast !== false;
+        });
+
+        if (toastErrors.length > 0) {
+          const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
+          const msg = toastErrors.map(e => e.message).join(' | ');
+          if (isWarningOnly) {
+            toast.warning(msg);
+          } else {
+            toast.error(msg);
+          }
         }
         return;
       }

@@ -52,6 +52,9 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [severity, setSeverity] = useState<'error' | 'warning'>('error');
+  const [showInline, setShowInline] = useState<boolean>(true);
+  const [showToast, setShowToast] = useState<boolean>(true);
+  const [bypassMode, setBypassMode] = useState<'none' | 'confirm'>('none');
   
   // AI State
   const [aiPrompt, setAiPrompt] = useState('');
@@ -315,12 +318,18 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
         setErrorMessage(rule.errorMessage);
         setIsActive(rule.isActive);
         setSeverity(rule.severity || 'error');
+        setShowInline(rule.showInline !== false);
+        setShowToast(rule.showToast !== false);
+        setBypassMode(rule.bypassMode || 'none');
       } else {
         setName('');
         setExpression('');
         setErrorMessage('');
         setIsActive(true);
         setSeverity('error');
+        setShowInline(true);
+        setShowToast(true);
+        setBypassMode('none');
       }
       
       // Initialize sandbox data with default/mock values
@@ -411,7 +420,10 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
       expression,
       errorMessage,
       isActive,
-      severity
+      severity,
+      showInline,
+      showToast,
+      bypassMode: severity === 'warning' ? bypassMode : 'none'
     });
   };
 
@@ -648,6 +660,45 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                     />
                     <label htmlFor="isActive" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Active</label>
                   </div>
+                </div>
+              </div>
+
+              {/* Display Options */}
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl space-y-3">
+                <h5 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Display & Enforcement Options</h5>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox"
+                      id="showInline"
+                      checked={showInline}
+                      onChange={(e) => setShowInline(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-850 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                    />
+                    <label htmlFor="showInline" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Inline Error Message</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox"
+                      id="showToast"
+                      checked={showToast}
+                      onChange={(e) => setShowToast(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-850 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                    />
+                    <label htmlFor="showToast" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Toast Alert</label>
+                  </div>
+                  {severity === 'warning' && (
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox"
+                        id="bypassMode"
+                        checked={bypassMode === 'confirm'}
+                        onChange={(e) => setBypassMode(e.target.checked ? 'confirm' : 'none')}
+                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-850 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      />
+                      <label htmlFor="bypassMode" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Require confirmation popup to save anyway</label>
+                    </div>
+                  )}
                 </div>
               </div>
 

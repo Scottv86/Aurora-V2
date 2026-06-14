@@ -32,7 +32,7 @@ import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
-import { validateRecordRules } from '../../lib/validationEngine';
+import { validateRecordRules, ValidationError } from '../../lib/validationEngine';
 
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
@@ -106,6 +106,20 @@ export const RecordDetailView = ({
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [validationErrorField, setValidationErrorField] = useState<{ fieldId: string; message: string; severity?: 'error' | 'warning' } | null>(null);
+  const [bypassedRuleIds, setBypassedRuleIds] = useState<Set<string>>(new Set());
+  const bypassedRuleIdsRef = useRef<Set<string>>(new Set());
+  const [pendingBypassSave, setPendingBypassSave] = useState<{
+    data: any;
+    fieldId: string | null;
+    warnings: ValidationError[];
+  } | null>(null);
+
+  // Clear bypassed rules when recordId changes
+  useEffect(() => {
+    bypassedRuleIdsRef.current.clear();
+    setBypassedRuleIds(new Set());
+  }, [recordId]);
+
   const isSavingRef = useRef(false);
   const pendingUpdateRef = useRef<{ data: any, fieldId: string | null } | null>(null);
   const editDataRef = useRef<Record<string, any>>({});
@@ -242,6 +256,38 @@ export const RecordDetailView = ({
   const allFields = useMemo(() => {
     return flattenFields(moduleData?.layout || []) as ModuleField[];
   }, [moduleData]);
+
+  const activeValidations = useMemo(() => {
+    const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    return validateRecordRules(editData, rules, allFields, lookupData, bypassedRuleIds);
+  }, [editData, moduleData, allFields, lookupData, bypassedRuleIds]);
+
+  const failedTabSeverities = useMemo(() => {
+    const tabSeverities: Record<string, 'error' | 'warning'> = {};
+    const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    
+    activeValidations.forEach(err => {
+      const rule = rules.find((r: any) => r.id === err.ruleId);
+      if (!rule) return;
+      
+      allFields.forEach((f: any) => {
+        const idMatch = rule.expression.includes(`{{${f.id}}}`);
+        const nameMatch = f.name && (rule.expression.includes(`{${f.name}}`) || rule.expression.includes(`{{${f.name}}}`));
+        const labelMatch = f.label && (rule.expression.includes(`{${f.label}}`) || rule.expression.includes(`{{${f.label}}}`));
+        
+        if (idMatch || nameMatch || labelMatch) {
+          const tabId = f.tabId || visibleTabs[0]?.id;
+          if (tabId) {
+            if (err.severity === 'error' || !tabSeverities[tabId]) {
+              tabSeverities[tabId] = err.severity;
+            }
+          }
+        }
+      });
+    });
+    
+    return tabSeverities;
+  }, [activeValidations, allFields, moduleData, visibleTabs]);
 
   const fieldToGroupMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -641,36 +687,70 @@ export const RecordDetailView = ({
 
     // Validate business validation rules before saving
     const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
-    const validationErrors = validateRecordRules(currentData, rules, allFields, lookupData);
+    const validationErrors = validateRecordRules(currentData, rules, allFields, lookupData, bypassedRuleIdsRef.current);
     if (validationErrors.length > 0) {
-      const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
-      const msg = validationErrors.map(e => e.message).join(' | ');
-      if (isWarningOnly) {
-        toast.warning(msg);
-      } else {
-        toast.error(msg);
-      }
-      setSavingFieldId(null);
-      pendingUpdateRef.current = null;
-      
-      if (fieldIdBeingSaved) {
-        setValidationErrorField({
-          fieldId: fieldIdBeingSaved,
-          message: validationErrors[0].message,
-          severity: validationErrors[0].severity
+      const hardErrors = validationErrors.filter(e => e.severity === 'error');
+      const bypassableWarnings = validationErrors.filter(e => {
+        const rule = rules.find((r: any) => r.id === e.ruleId);
+        return e.severity === 'warning' && rule?.bypassMode === 'confirm';
+      });
+
+      const hasHardErrors = hardErrors.length > 0;
+      const hasBypassableWarnings = bypassableWarnings.length > 0;
+
+      if (hasHardErrors || (!hasBypassableWarnings && validationErrors.length > 0)) {
+        const toastErrors = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return rule?.showToast !== false;
         });
-        setTimeout(() => {
-          setValidationErrorField(prev => prev?.fieldId === fieldIdBeingSaved ? null : prev);
-        }, 4000);
+
+        if (toastErrors.length > 0) {
+          const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
+          const msg = toastErrors.map(e => e.message).join(' | ');
+          if (isWarningOnly) {
+            toast.warning(msg);
+          } else {
+            toast.error(msg);
+          }
+        }
+
+        setSavingFieldId(null);
+        pendingUpdateRef.current = null;
+        
+        const inlineError = validationErrors.find(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return rule?.showInline !== false;
+        });
+
+        if (fieldIdBeingSaved && inlineError) {
+          setValidationErrorField({
+            fieldId: fieldIdBeingSaved,
+            message: inlineError.message,
+            severity: inlineError.severity
+          });
+          setTimeout(() => {
+            setValidationErrorField(prev => prev?.fieldId === fieldIdBeingSaved ? null : prev);
+          }, 4000);
+        }
+
+        if (record) {
+          editDataRef.current = record;
+          setTimeout(() => {
+            setEditData(record);
+          }, 0);
+        }
+        return;
       }
 
-      if (record) {
-        editDataRef.current = record;
-        setTimeout(() => {
-          setEditData(record);
-        }, 0);
+      if (hasBypassableWarnings) {
+        setPendingBypassSave({
+          data: currentData,
+          fieldId: fieldIdBeingSaved,
+          warnings: bypassableWarnings
+        });
+        setSavingFieldId(null);
+        return;
       }
-      return;
     }
 
     setSavingFieldId(fieldIdBeingSaved || 'global');
@@ -1120,11 +1200,48 @@ export const RecordDetailView = ({
     const density = (interfaceSettings.detail as any)?.density || 'standard';
     const ds = getDensityStyles(density);
 
+    const steps = visibleTabs;
+    const tabValidations = activeValidations.filter(err => {
+      const rule = (moduleData?.config?.validationRules || (moduleData as any)?.validationRules || []).find((r: any) => r.id === err.ruleId);
+      if (!rule) return false;
+      return allFields.some((f: any) => {
+        const firstVisibleTabId = visibleTabs[0]?.id;
+        const fieldTabId = f.tabId || firstVisibleTabId;
+        if (fieldTabId !== tabId) return false;
+        const idMatch = rule.expression.includes(`{{${f.id}}}`);
+        const nameMatch = f.name && (rule.expression.includes(`{${f.name}}`) || rule.expression.includes(`{{${f.name}}}`));
+        const labelMatch = f.label && (rule.expression.includes(`{${f.label}}`) || rule.expression.includes(`{{${f.label}}}`));
+        return idMatch || nameMatch || labelMatch;
+      });
+    });
+
     return (
-      <div 
-        className="grid grid-cols-12 w-full"
-        style={{ gap: `${ds.gapY} ${ds.gapX}` }}
-      >
+      <div className="space-y-6">
+        {tabValidations.length > 0 && (
+          <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+            {tabValidations.map((val, idx) => {
+              const isWarning = val.severity === 'warning';
+              return (
+                <div 
+                  key={idx} 
+                  className={cn(
+                    "p-3 rounded-2xl border text-xs font-bold flex items-center gap-2.5",
+                    isWarning 
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
+                      : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+                  )}
+                >
+                  {isWarning ? <AlertTriangle size={14} className="shrink-0" /> : <AlertCircle size={14} className="shrink-0" />}
+                  <span>{val.message}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div 
+          className="grid grid-cols-12 w-full"
+          style={{ gap: `${ds.gapY} ${ds.gapX}` }}
+        >
         <AnimatePresence mode="popLayout">
           {visibleFields.map((field: ModuleField) => {
             const isErrorField = validationErrorField?.fieldId === field.id;
@@ -1327,6 +1444,7 @@ export const RecordDetailView = ({
           </motion.div>
         )})}
         </AnimatePresence>
+      </div>
       </div>
     );
   };
@@ -1939,6 +2057,8 @@ export const RecordDetailView = ({
               <div className="space-y-1">
                 {visibleTabs.map((tab: any) => {
                   const isActive = activeTabId === tab.id;
+                  const hasErrors = failedTabSeverities[tab.id] === 'error';
+                  const hasWarnings = failedTabSeverities[tab.id] === 'warning';
                   return (
                     <button
                       key={tab.id}
@@ -1955,6 +2075,8 @@ export const RecordDetailView = ({
                           <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
                         )}
                         <span className="truncate">{tab.label}</span>
+                        {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                        {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
                       </div>
                       <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
                     </button>
@@ -2015,23 +2137,29 @@ export const RecordDetailView = ({
                   onScroll={checkScroll}
                   className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
                 >
-                  {visibleTabs.map((tab: any) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTabId(tab.id)}
-                      className={cn(
-                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2",
-                        activeTabId === tab.id
-                          ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
-                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                      )}
-                    >
-                      {interfaceSettings.detail?.showTabIcons && (
-                        <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
-                      )}
-                      {tab.label}
-                    </button>
-                  ))}
+                  {visibleTabs.map((tab: any) => {
+                    const hasErrors = failedTabSeverities[tab.id] === 'error';
+                    const hasWarnings = failedTabSeverities[tab.id] === 'warning';
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTabId(tab.id)}
+                        className={cn(
+                          "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2",
+                          activeTabId === tab.id
+                            ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
+                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                        )}
+                      >
+                        {interfaceSettings.detail?.showTabIcons && (
+                          <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                        )}
+                        <span>{tab.label}</span>
+                        {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                        {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <AnimatePresence>
@@ -2174,6 +2302,68 @@ export const RecordDetailView = ({
           </div>
         )}
       </AnimatePresence>
+
+      {pendingBypassSave && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] max-w-md w-full p-8 shadow-2xl space-y-6 animate-in zoom-in-95 duration-300">
+            <div className="flex items-center gap-3 text-amber-500">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-tight text-zinc-900 dark:text-white">Validation Warnings</h4>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Confirmation Required</p>
+              </div>
+            </div>
+            
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">
+              The following warnings were triggered. Would you like to proceed and save anyway?
+            </p>
+            
+            <div className="space-y-2.5">
+              {pendingBypassSave.warnings.map((w, idx) => (
+                <div key={idx} className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-xs font-bold text-amber-600 dark:text-amber-400 flex items-start gap-2">
+                  <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                  <span>{w.message}</span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={() => {
+                  if (record) {
+                    editDataRef.current = record;
+                    setEditData(record);
+                  }
+                  setPendingBypassSave(null);
+                }}
+                className="flex-1 px-5 py-3 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-750 dark:text-zinc-300 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+              >
+                Go Back
+              </button>
+              <button 
+                onClick={() => {
+                  const warnings = pendingBypassSave.warnings;
+                  warnings.forEach(w => { if (w.ruleId) bypassedRuleIdsRef.current.add(w.ruleId); });
+                  setBypassedRuleIds(new Set(bypassedRuleIdsRef.current));
+                  
+                  const targetData = pendingBypassSave.data;
+                  const targetFieldId = pendingBypassSave.fieldId;
+                  setPendingBypassSave(null);
+                  
+                  setTimeout(() => {
+                    handleUpdateEntry(targetData, targetFieldId, true);
+                  }, 0);
+                }}
+                className="flex-1 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/20"
+              >
+                Save Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

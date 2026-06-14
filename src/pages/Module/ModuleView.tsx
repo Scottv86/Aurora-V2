@@ -480,12 +480,19 @@ export const ModuleView = () => {
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
       const validationErrors = validateRecordRules(finalData, rules, allFields);
       if (validationErrors.length > 0) {
-        const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
-        const msg = validationErrors.map(e => e.message).join(' | ');
-        if (isWarningOnly) {
-          toast.warning(msg);
-        } else {
-          toast.error(msg);
+        const toastErrors = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return rule?.showToast !== false;
+        });
+
+        if (toastErrors.length > 0) {
+          const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
+          const msg = toastErrors.map(e => e.message).join(' | ');
+          if (isWarningOnly) {
+            toast.warning(msg);
+          } else {
+            toast.error(msg);
+          }
         }
         setIsSubmitting(false);
         return;
@@ -630,9 +637,18 @@ export const ModuleView = () => {
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
       const validationErrors = validateRecordRules(fullRecord, rules, allFields);
       if (validationErrors.length > 0) {
-        const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
+        const toastErrors = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return rule?.showToast !== false;
+        });
+
+        if (toastErrors.length === 0) {
+          throw new Error("Silent: Validation failed");
+        }
+
+        const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
         const prefix = isWarningOnly ? "Warning: " : "";
-        throw new Error(prefix + validationErrors.map(e => e.message).join(' | '));
+        throw new Error(prefix + toastErrors.map(e => e.message).join(' | '));
       }
 
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -691,6 +707,9 @@ export const ModuleView = () => {
         setRecords(context.previousRecordsData.records);
       }
       const msg = error.message || "Failed to update record";
+      if (msg.startsWith("Silent:")) {
+        return;
+      }
       if (msg.startsWith("Warning: ")) {
         toast.warning(msg.replace("Warning: ", ""));
       } else {
