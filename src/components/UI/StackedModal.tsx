@@ -77,7 +77,13 @@ const RecordModal = ({
       const rules = moduleData.config?.validationRules || moduleData.validationRules || [];
       const validationErrors = validateRecordRules(record, rules, allFields);
       if (validationErrors.length > 0) {
-        toast.error(validationErrors.join(' | '));
+        const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
+        const msg = validationErrors.map(e => e.message).join(' | ');
+        if (isWarningOnly) {
+          toast.warning(msg);
+        } else {
+          toast.error(msg);
+        }
         return;
       }
     }

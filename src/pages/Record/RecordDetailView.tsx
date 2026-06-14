@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   History, 
   AlertCircle, 
+  AlertTriangle,
   GitFork,
   X,
   Zap,
@@ -104,7 +105,7 @@ export const RecordDetailView = ({
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [validationErrorField, setValidationErrorField] = useState<{ fieldId: string; message: string } | null>(null);
+  const [validationErrorField, setValidationErrorField] = useState<{ fieldId: string; message: string; severity?: 'error' | 'warning' } | null>(null);
   const isSavingRef = useRef(false);
   const pendingUpdateRef = useRef<{ data: any, fieldId: string | null } | null>(null);
   const editDataRef = useRef<Record<string, any>>({});
@@ -642,14 +643,21 @@ export const RecordDetailView = ({
     const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
     const validationErrors = validateRecordRules(currentData, rules, allFields, lookupData);
     if (validationErrors.length > 0) {
-      toast.error(validationErrors.join(' | '));
+      const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
+      const msg = validationErrors.map(e => e.message).join(' | ');
+      if (isWarningOnly) {
+        toast.warning(msg);
+      } else {
+        toast.error(msg);
+      }
       setSavingFieldId(null);
       pendingUpdateRef.current = null;
       
       if (fieldIdBeingSaved) {
         setValidationErrorField({
           fieldId: fieldIdBeingSaved,
-          message: validationErrors[0]
+          message: validationErrors[0].message,
+          severity: validationErrors[0].severity
         });
         setTimeout(() => {
           setValidationErrorField(prev => prev?.fieldId === fieldIdBeingSaved ? null : prev);
@@ -989,7 +997,9 @@ export const RecordDetailView = ({
           ds.padding,
           ds.rounded,
           isErrorField
-            ? "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10"
+            ? (validationErrorField?.severity === 'warning'
+                ? "bg-amber-500/5 border-amber-500 shadow-lg shadow-amber-500/10 animate-shake-field z-10"
+                : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
             : activeFieldId === nestedField.id 
               ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
               : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
@@ -1054,8 +1064,11 @@ export const RecordDetailView = ({
           density={density}
         />
         {isErrorField && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200">
-            <AlertCircle size={10} className="shrink-0" />
+          <div className={cn(
+            "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
+            validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
+          )}>
+            {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
             <span>{validationErrorField.message}</span>
           </div>
         )}
@@ -1148,7 +1161,9 @@ export const RecordDetailView = ({
                 "w-full transition-all duration-200 border-2 relative",
                 ds.cardPaddingAndRounding,
                 isErrorField
-                  ? "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10"
+                  ? (validationErrorField?.severity === 'warning'
+                      ? "bg-amber-500/5 border-amber-500 shadow-lg shadow-amber-500/10 animate-shake-field z-10"
+                      : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
                   : activeFieldId === field.id 
                     ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
                     : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) 
@@ -1295,8 +1310,11 @@ export const RecordDetailView = ({
                   allFields={allFields}
                 />
                 {isErrorField && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200">
-                    <AlertCircle size={10} className="shrink-0" />
+                  <div className={cn(
+                    "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
+                    validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
+                  )}>
+                    {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
                     <span>{validationErrorField.message}</span>
                   </div>
                 )}

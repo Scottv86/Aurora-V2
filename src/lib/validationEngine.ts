@@ -100,24 +100,32 @@ export const evaluateRuleExpression = (
   }
 };
 
+export interface ValidationError {
+  message: string;
+  severity: 'error' | 'warning';
+}
+
 /**
  * Validates a record against an array of validation rules.
- * Returns a list of failed rules (their error messages).
+ * Returns a list of failed rules.
  */
 export const validateRecordRules = (
   data: Record<string, any>,
   rules: ValidationRule[] | undefined,
   fields: any[],
   globalListData: Record<string, any[]> = {}
-): string[] => {
+): ValidationError[] => {
   if (!rules || !Array.isArray(rules)) return [];
 
-  const errors: string[] = [];
+  const errors: ValidationError[] = [];
   rules.forEach(rule => {
     if (rule.isActive && rule.expression) {
       const isValid = evaluateRuleExpression(rule.expression, data, fields, globalListData);
       if (!isValid) {
-        errors.push(rule.errorMessage || `Validation rule '${rule.name}' failed.`);
+        errors.push({
+          message: rule.errorMessage || `Validation rule '${rule.name}' failed.`,
+          severity: rule.severity || 'error'
+        });
       }
     }
   });

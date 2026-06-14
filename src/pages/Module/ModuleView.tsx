@@ -480,7 +480,13 @@ export const ModuleView = () => {
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
       const validationErrors = validateRecordRules(finalData, rules, allFields);
       if (validationErrors.length > 0) {
-        toast.error(validationErrors.join(' | '));
+        const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
+        const msg = validationErrors.map(e => e.message).join(' | ');
+        if (isWarningOnly) {
+          toast.warning(msg);
+        } else {
+          toast.error(msg);
+        }
         setIsSubmitting(false);
         return;
       }
@@ -624,7 +630,9 @@ export const ModuleView = () => {
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
       const validationErrors = validateRecordRules(fullRecord, rules, allFields);
       if (validationErrors.length > 0) {
-        throw new Error(validationErrors.join(' | '));
+        const isWarningOnly = validationErrors.every(e => e.severity === 'warning');
+        const prefix = isWarningOnly ? "Warning: " : "";
+        throw new Error(prefix + validationErrors.map(e => e.message).join(' | '));
       }
 
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -682,7 +690,12 @@ export const ModuleView = () => {
         queryClient.setQueryData(context.queryKey, context.previousRecordsData);
         setRecords(context.previousRecordsData.records);
       }
-      toast.error(error.message || "Failed to update record");
+      const msg = error.message || "Failed to update record";
+      if (msg.startsWith("Warning: ")) {
+        toast.warning(msg.replace("Warning: ", ""));
+      } else {
+        toast.error(msg);
+      }
     },
     onSettled: () => {
       // Refetch in the background to ensure data sync
