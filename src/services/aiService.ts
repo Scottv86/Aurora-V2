@@ -277,7 +277,7 @@ export const generateExpression = async (prompt: string, fields: any[], function
     const ai = getAI();
     if (!ai) return "// Gemini API Key missing. Please check your .env file.";
 
-    const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, type: f.type })), null, 2);
+    const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, key: f.name || f.id, type: f.type })), null, 2);
     const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
 
     const response = await ai.models.generateContent({
@@ -287,7 +287,7 @@ export const generateExpression = async (prompt: string, fields: any[], function
 
       USER REQUEST: "${prompt}"
 
-      AVAILABLE FIELDS (Always wrap in curly braces, e.g., {Price}. Special system fields: {Record Key}):
+      AVAILABLE FIELDS (Always wrap the Field Key (Slug) from the 'key' property in curly braces, e.g., {price}. Do NOT use the Field Label. Special system fields: {Record Key}):
       ${fieldsString}
 
       AVAILABLE FUNCTIONS:
@@ -325,7 +325,7 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
     const ai = getAI();
     if (!ai) return expression;
 
-    const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, type: f.type })), null, 2);
+    const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, key: f.name || f.id, type: f.type })), null, 2);
     const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
     const errorsString = JSON.stringify(errors, null, 2);
 
@@ -337,7 +337,7 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
       CURRENT EXPRESSION: "${expression}"
       ERRORS: ${errorsString}
 
-      AVAILABLE FIELDS (Special system fields: {Record Key}):
+      AVAILABLE FIELDS (Always wrap the Field Key (Slug) from the 'key' property in curly braces, e.g., {price}. Do NOT use the Field Label. Special system fields: {Record Key}):
       ${fieldsString}
 
       AVAILABLE FUNCTIONS:
@@ -346,9 +346,9 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
       STRICT RULES:
       1. Return ONLY the fixed expression string. No markdown, no comments, no intro.
       2. If you can't fix it, return the original expression.
-      3. Ensure all fields are wrapped in curly braces {}.
+      3. Ensure all Field Keys (Slugs) are wrapped in curly braces {}. Do NOT use the Field Label.
       4. Fix common syntax errors like missing commas, unbalanced parentheses, or wrong parameter counts.
-      5. Correct field names if they are slightly misspelled (fuzzy match).`,
+      5. Correct Field Keys if they are slightly misspelled (fuzzy match against the 'key' property).`,
     });
 
     return response.text.trim().replace(/^```[a-z]*\n|```$/gi, '');
