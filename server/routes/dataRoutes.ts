@@ -329,9 +329,10 @@ router.post('/records', async (req: TenantRequest, res) => {
     // Custom Validation Rules check
     if (config.validationRules && Array.isArray(config.validationRules)) {
       const validationErrors = validateRecordRules(data, config.validationRules, allFields);
-      if (validationErrors.length > 0) {
+      const hardErrors = validationErrors.filter(e => e.severity === 'error');
+      if (hardErrors.length > 0) {
         return res.status(400).json({ 
-          error: `Validation failed: ${validationErrors.join(' | ')}` 
+          error: `Validation failed: ${hardErrors.map(e => e.message).join(' | ')}` 
         });
       }
     }
@@ -492,9 +493,10 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       // Custom Validation Rules check
       if (config.validationRules && Array.isArray(config.validationRules)) {
         const validationErrors = validateRecordRules(updatedData, config.validationRules, allFields);
-        if (validationErrors.length > 0) {
+        const hardErrors = validationErrors.filter(e => e.severity === 'error');
+        if (hardErrors.length > 0) {
           return res.status(400).json({ 
-            error: `Validation failed: ${validationErrors.join(' | ')}` 
+            error: `Validation failed: ${hardErrors.map(e => e.message).join(' | ')}` 
           });
         }
       }
@@ -624,9 +626,10 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       // Custom Validation Rules check
       if (config.validationRules && Array.isArray(config.validationRules)) {
         const validationErrors = validateRecordRules(updatedData, config.validationRules, allFields);
-        if (validationErrors.length > 0) {
+        const hardErrors = validationErrors.filter(e => e.severity === 'error');
+        if (hardErrors.length > 0) {
           return res.status(400).json({ 
-            error: `Validation failed: ${validationErrors.join(' | ')}` 
+            error: `Validation failed: ${hardErrors.map(e => e.message).join(' | ')}` 
           });
         }
       }

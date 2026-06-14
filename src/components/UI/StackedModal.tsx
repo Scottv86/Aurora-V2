@@ -77,21 +77,43 @@ const RecordModal = ({
       const rules = moduleData.config?.validationRules || moduleData.validationRules || [];
       const validationErrors = validateRecordRules(record, rules, allFields);
       if (validationErrors.length > 0) {
-        const toastErrors = validationErrors.filter(e => {
+        const hardErrors = validationErrors.filter(e => e.severity === 'error');
+        const bypassableWarnings = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return e.severity === 'warning' && rule?.bypassMode === 'confirm';
+        });
+
+        if (hardErrors.length > 0) {
+          const toastErrors = hardErrors.filter(e => {
+            const rule = rules.find((r: any) => r.id === e.ruleId);
+            return rule?.showToast !== false;
+          });
+          if (toastErrors.length > 0) {
+            toast.error(toastErrors.map(e => e.message).join(' | '));
+          }
+          return;
+        }
+
+        if (bypassableWarnings.length > 0) {
+          const msg = bypassableWarnings.map(e => e.message).join('\n');
+          const confirmed = window.confirm(`Validation Warnings:\n\n${msg}\n\nDo you want to save anyway?`);
+          if (!confirmed) {
+            return;
+          }
+        }
+
+        // Show toast alerts for silent warnings if configured
+        const silentWarnings = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return e.severity === 'warning' && rule?.bypassMode !== 'confirm';
+        });
+        const toastWarnings = silentWarnings.filter(e => {
           const rule = rules.find((r: any) => r.id === e.ruleId);
           return rule?.showToast !== false;
         });
-
-        if (toastErrors.length > 0) {
-          const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
-          const msg = toastErrors.map(e => e.message).join(' | ');
-          if (isWarningOnly) {
-            toast.warning(msg);
-          } else {
-            toast.error(msg);
-          }
+        if (toastWarnings.length > 0) {
+          toast.warning(toastWarnings.map(e => e.message).join(' | '));
         }
-        return;
       }
     }
 

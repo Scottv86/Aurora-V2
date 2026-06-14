@@ -698,26 +698,21 @@ export const RecordDetailView = ({
       const hasHardErrors = hardErrors.length > 0;
       const hasBypassableWarnings = bypassableWarnings.length > 0;
 
-      if (hasHardErrors || (!hasBypassableWarnings && validationErrors.length > 0)) {
-        const toastErrors = validationErrors.filter(e => {
+      if (hasHardErrors) {
+        const toastErrors = hardErrors.filter(e => {
           const rule = rules.find((r: any) => r.id === e.ruleId);
           return rule?.showToast !== false;
         });
 
         if (toastErrors.length > 0) {
-          const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
           const msg = toastErrors.map(e => e.message).join(' | ');
-          if (isWarningOnly) {
-            toast.warning(msg);
-          } else {
-            toast.error(msg);
-          }
+          toast.error(msg);
         }
 
         setSavingFieldId(null);
         pendingUpdateRef.current = null;
         
-        const inlineError = validationErrors.find(e => {
+        const inlineError = hardErrors.find(e => {
           const rule = rules.find((r: any) => r.id === e.ruleId);
           return rule?.showInline !== false;
         });
@@ -750,6 +745,19 @@ export const RecordDetailView = ({
         });
         setSavingFieldId(null);
         return;
+      }
+
+      // Show toast alerts for warnings with bypassMode === 'none' (silent warnings) if configured
+      const silentWarnings = validationErrors.filter(e => {
+        const rule = rules.find((r: any) => r.id === e.ruleId);
+        return e.severity === 'warning' && rule?.bypassMode !== 'confirm';
+      });
+      const toastWarnings = silentWarnings.filter(e => {
+        const rule = rules.find((r: any) => r.id === e.ruleId);
+        return rule?.showToast !== false;
+      });
+      if (toastWarnings.length > 0) {
+        toast.warning(toastWarnings.map(e => e.message).join(' | '));
       }
     }
 

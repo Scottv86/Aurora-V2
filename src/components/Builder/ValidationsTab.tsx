@@ -52,6 +52,9 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [severity, setSeverity] = useState<'error' | 'warning'>('error');
+  const [showInline, setShowInline] = useState<boolean>(true);
+  const [showToast, setShowToast] = useState<boolean>(true);
+  const [bypassMode, setBypassMode] = useState<'none' | 'confirm'>('none');
   
   // AI State
   const [aiPrompt, setAiPrompt] = useState('');
@@ -98,12 +101,18 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
       setErrorMessage(selectedRule.errorMessage);
       setIsActive(selectedRule.isActive);
       setSeverity(selectedRule.severity || 'error');
+      setShowInline(selectedRule.showInline !== false);
+      setShowToast(selectedRule.showToast !== false);
+      setBypassMode(selectedRule.bypassMode || 'none');
     } else {
       setName('');
       setExpression('');
       setErrorMessage('');
       setIsActive(true);
       setSeverity('error');
+      setShowInline(true);
+      setShowToast(true);
+      setBypassMode('none');
     }
     setSandboxResult(null);
     setAiPrompt('');
@@ -534,7 +543,10 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                 expression: '',
                 errorMessage: 'Validation error: check your input.',
                 severity: 'error',
-                isActive: true
+                isActive: true,
+                showInline: true,
+                showToast: true,
+                bypassMode: 'none'
               };
               setValidationRules(prev => [...prev, newRule]);
               setSelectedRuleId(newId);
@@ -689,10 +701,59 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                         setIsActive(e.target.checked);
                         updateCurrentRule({ isActive: e.target.checked });
                       }}
-                      className="w-4 h-4 text-indigo-650 rounded border-zinc-350 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      className="w-4 h-4 text-indigo-650 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                     />
                     <label htmlFor="inlineIsActive" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Active</label>
                   </div>
+                </div>
+              </div>
+
+              {/* Display Options */}
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-855 rounded-xl space-y-3">
+                <h5 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Display & Enforcement Options</h5>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox"
+                      id="showInlineCheckbox"
+                      checked={showInline}
+                      onChange={(e) => {
+                        setShowInline(e.target.checked);
+                        updateCurrentRule({ showInline: e.target.checked });
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-855 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                    />
+                    <label htmlFor="showInlineCheckbox" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Inline Error Message</label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox"
+                      id="showToastCheckbox"
+                      checked={showToast}
+                      onChange={(e) => {
+                        setShowToast(e.target.checked);
+                        updateCurrentRule({ showToast: e.target.checked });
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-855 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                    />
+                    <label htmlFor="showToastCheckbox" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Toast Alert</label>
+                  </div>
+                  {severity === 'warning' && (
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox"
+                        id="bypassModeCheckbox"
+                        checked={bypassMode === 'confirm'}
+                        onChange={(e) => {
+                          const nextBypass = e.target.checked ? 'confirm' : 'none';
+                          setBypassMode(nextBypass);
+                          updateCurrentRule({ bypassMode: nextBypass });
+                        }}
+                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-855 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      />
+                      <label htmlFor="bypassModeCheckbox" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Require confirmation popup to save anyway</label>
+                    </div>
+                  )}
                 </div>
               </div>
 

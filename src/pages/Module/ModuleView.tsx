@@ -480,22 +480,45 @@ export const ModuleView = () => {
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
       const validationErrors = validateRecordRules(finalData, rules, allFields);
       if (validationErrors.length > 0) {
-        const toastErrors = validationErrors.filter(e => {
+        const hardErrors = validationErrors.filter(e => e.severity === 'error');
+        const bypassableWarnings = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return e.severity === 'warning' && rule?.bypassMode === 'confirm';
+        });
+
+        if (hardErrors.length > 0) {
+          const toastErrors = hardErrors.filter(e => {
+            const rule = rules.find((r: any) => r.id === e.ruleId);
+            return rule?.showToast !== false;
+          });
+          if (toastErrors.length > 0) {
+            toast.error(toastErrors.map(e => e.message).join(' | '));
+          }
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (bypassableWarnings.length > 0) {
+          const msg = bypassableWarnings.map(e => e.message).join('\n');
+          const confirmed = window.confirm(`Validation Warnings:\n\n${msg}\n\nDo you want to save anyway?`);
+          if (!confirmed) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
+        // Show toast alerts for silent warnings if configured
+        const silentWarnings = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return e.severity === 'warning' && rule?.bypassMode !== 'confirm';
+        });
+        const toastWarnings = silentWarnings.filter(e => {
           const rule = rules.find((r: any) => r.id === e.ruleId);
           return rule?.showToast !== false;
         });
-
-        if (toastErrors.length > 0) {
-          const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
-          const msg = toastErrors.map(e => e.message).join(' | ');
-          if (isWarningOnly) {
-            toast.warning(msg);
-          } else {
-            toast.error(msg);
-          }
+        if (toastWarnings.length > 0) {
+          toast.warning(toastWarnings.map(e => e.message).join(' | '));
         }
-        setIsSubmitting(false);
-        return;
       }
       
       const hasAISummary = allFields.some(f => f.type === 'ai_summary');
@@ -637,18 +660,43 @@ export const ModuleView = () => {
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
       const validationErrors = validateRecordRules(fullRecord, rules, allFields);
       if (validationErrors.length > 0) {
-        const toastErrors = validationErrors.filter(e => {
+        const hardErrors = validationErrors.filter(e => e.severity === 'error');
+        const bypassableWarnings = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return e.severity === 'warning' && rule?.bypassMode === 'confirm';
+        });
+
+        if (hardErrors.length > 0) {
+          const toastErrors = hardErrors.filter(e => {
+            const rule = rules.find((r: any) => r.id === e.ruleId);
+            return rule?.showToast !== false;
+          });
+          if (toastErrors.length === 0) {
+            throw new Error("Silent: Validation failed");
+          }
+          throw new Error(toastErrors.map(e => e.message).join(' | '));
+        }
+
+        if (bypassableWarnings.length > 0) {
+          const msg = bypassableWarnings.map(e => e.message).join('\n');
+          const confirmed = window.confirm(`Validation Warnings:\n\n${msg}\n\nDo you want to save anyway?`);
+          if (!confirmed) {
+            throw new Error("Silent: Validation bypassed by user cancel");
+          }
+        }
+
+        // Show toast alerts for silent warnings if configured
+        const silentWarnings = validationErrors.filter(e => {
+          const rule = rules.find((r: any) => r.id === e.ruleId);
+          return e.severity === 'warning' && rule?.bypassMode !== 'confirm';
+        });
+        const toastWarnings = silentWarnings.filter(e => {
           const rule = rules.find((r: any) => r.id === e.ruleId);
           return rule?.showToast !== false;
         });
-
-        if (toastErrors.length === 0) {
-          throw new Error("Silent: Validation failed");
+        if (toastWarnings.length > 0) {
+          toast.warning(toastWarnings.map(e => e.message).join(' | '));
         }
-
-        const isWarningOnly = toastErrors.every(e => e.severity === 'warning');
-        const prefix = isWarningOnly ? "Warning: " : "";
-        throw new Error(prefix + toastErrors.map(e => e.message).join(' | '));
       }
 
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
