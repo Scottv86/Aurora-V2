@@ -150,6 +150,7 @@ import { FieldSelectorModal } from './Builder/FieldSelectorModal';
 import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
 import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
+import { ConnectorsTab } from './Builder/ConnectorsTab';
 
 
 const METADATA_FIELDS = [
@@ -2306,7 +2307,7 @@ export const ModuleEditor = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleSave]);
   
-  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
   const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'localization' | 'dependencies' | 'assets'>('general');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
@@ -4319,7 +4320,7 @@ export const ModuleEditor = () => {
       <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-            {(['details', 'builder', 'forms', 'workflow', 'validations', 'automation', 'security', 'deployment'] as const).map((tab) => (
+            {(['details', 'builder', 'forms', 'workflow', 'validations', 'connectors', 'automation', 'security', 'deployment'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -8727,6 +8728,19 @@ export const ModuleEditor = () => {
               validationRules={validationRules}
               setValidationRules={setValidationRules}
               fields={flattenFields(layout)}
+            />
+          ) : activeTab === 'connectors' ? (
+            <ConnectorsTab 
+              layout={layout}
+              setLayout={setLayout}
+              activeConnectors={activeConnectors}
+              connectorRegistry={connectorRegistry}
+              connectorMappings={connectorMappings}
+              setConnectorMappings={setConnectorMappings}
+              setShowConnectorModal={setShowConnectorModal}
+              currentTabId={currentTabId}
+              handleForgeConnector={handleForgeConnector}
+              handleCreateCustomConnector={handleCreateCustomConnector}
             />
           ) : activeTab === 'automation' ? (
             <div className="flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950">
