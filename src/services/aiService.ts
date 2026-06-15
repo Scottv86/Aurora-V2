@@ -305,7 +305,7 @@ export const generateExpression = async (prompt: string, fields: any[], function
       1. Return ONLY the expression string. No markdown, no comments, no intro.
       2. If you don't understand the request, return a helpful comment starting with "// AI: " explaining why.
       3. Use single quotes for strings: 'Value'.
-      4. For boolean values, use true/false (no quotes).
+      4. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.
       5. Correctly handle singular vs plural requests (e.g. "first letter" = 1, "first 3 letters" = 3).
       6. For collection operations (SUM, AVG, COUNT), ensure the field is a list or repeatable group.`,
     });
@@ -348,7 +348,8 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
       2. If you can't fix it, return the original expression.
       3. Ensure all Field Keys (Slugs) are wrapped in curly braces {}. Do NOT use the Field Label.
       4. Fix common syntax errors like missing commas, unbalanced parentheses, or wrong parameter counts.
-      5. Correct Field Keys if they are slightly misspelled (fuzzy match against the 'key' property).`,
+      5. Correct Field Keys if they are slightly misspelled (fuzzy match against the 'key' property).
+      6. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.`,
     });
 
     return response.text.trim().replace(/^```[a-z]*\n|```$/gi, '');

@@ -681,12 +681,12 @@ router.delete('/records/:id', async (req: TenantRequest, res) => {
     const { id } = req.params;
 
     // RLS will ensure we can only delete if it belongs to current tenant
-    await db.record.delete({ where: { id } });
+    const result = await db.record.deleteMany({ where: { id } });
 
     // Websocket emit
     emitTenantUpdate(tenantId, 'record_deleted', id);
 
-    res.json({ success: true });
+    res.json({ success: true, count: result.count });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

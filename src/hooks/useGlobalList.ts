@@ -67,8 +67,13 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
   const includeItemId = options.includeItemId;
   const showAllHistory = options.showAllHistory || false;
 
-  const fetchListDetails = useCallback(async () => {
+  const fetchListDetails = useCallback(async (force = false) => {
     if (!listId || !tenant?.id) return;
+    
+    if (force) {
+      globalListDetailCache.delete(listId);
+      pendingDetailsRequests.delete(listId);
+    }
     
     // Check cache
     if (globalListDetailCache.has(listId)) {
@@ -111,10 +116,15 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
     setDetailLoading(false);
   }, [listId, tenant?.id]);
 
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async (force = false) => {
     if (!listId || !tenant?.id) {
       setItems([]);
       return;
+    }
+
+    if (force) {
+      globalListItemsCache.delete(listId);
+      pendingItemsRequests.delete(listId);
     }
 
     // Check cache (only for default active items, history/travel bypasses cache)
@@ -210,7 +220,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
       });
       if (rpcError) throw rpcError;
       toast.success('Record added successfully');
-      await fetchItems();
+      await fetchItems(true);
       return resultId;
     } catch (err: any) {
       toast.error(err.message);
@@ -231,7 +241,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
       
       // Don't show toast for every cell change to keep it clean, 
       // but return the result so the caller knows it succeeded
-      await fetchItems();
+      await fetchItems(true);
       return resultId;
     } catch (err: any) {
       toast.error(err.message);
@@ -248,7 +258,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
       });
       if (rpcError) throw rpcError;
       toast.success('Record retired');
-      await fetchItems();
+      await fetchItems(true);
     } catch (err: any) {
       toast.error(err.message);
       throw err;
@@ -264,7 +274,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
         p_order_map: itemOrder
       });
       if (rpcError) throw rpcError;
-      await fetchItems();
+      await fetchItems(true);
     } catch (err: any) {
       toast.error(err.message);
       throw err;
@@ -280,7 +290,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
         .eq('id', listId);
       if (error) throw error;
       toast.success('Schema updated successfully');
-      await fetchListDetails();
+      await fetchListDetails(true);
     } catch (err: any) {
       toast.error(err.message);
       throw err;
@@ -296,7 +306,7 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
         .eq('id', listId);
       if (error) throw error;
       toast.success('List updated successfully');
-      await fetchListDetails();
+      await fetchListDetails(true);
     } catch (err: any) {
       toast.error(err.message);
       throw err;
@@ -372,6 +382,8 @@ export const useGlobalLists = () => {
       const { error } = await supabase.from('global_lists').delete().eq('id', id);
       if (error) throw error;
       toast.success('List deleted');
+      globalListDetailCache.delete(id);
+      globalListItemsCache.delete(id);
       await fetchLists();
     } catch (err: any) {
       toast.error(err.message);

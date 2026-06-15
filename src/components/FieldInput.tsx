@@ -228,6 +228,7 @@ interface FieldInputProps {
   autoFocus?: boolean;
   density?: 'compact' | 'standard' | 'spacious';
   isMouseDownRef?: React.RefObject<boolean>;
+  disabled?: boolean;
 }
 
 const FieldInputInner: React.FC<FieldInputProps> = ({ 
@@ -242,7 +243,8 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   allFields = [],
   autoFocus = false,
   density = 'standard',
-  isMouseDownRef
+  isMouseDownRef,
+  disabled = false
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
 
@@ -322,8 +324,10 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         if (typeof inputRef.current.showPicker === 'function') {
           inputRef.current.showPicker();
         }
-      } catch (e) {
-        console.warn("showPicker is not supported or failed:", e);
+      } catch (e: any) {
+        if (e?.name !== 'NotAllowedError') {
+          console.warn("showPicker is not supported or failed:", e);
+        }
       }
     }
   }, [readonly, type]);
@@ -515,18 +519,21 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         onBlur={handleBlur}
       >
         {resolvedOptions?.map((opt: string, i: number) => (
-          <label 
+          <div 
             key={i} 
             className={cn(
               "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
               localValue === opt 
                 ? "border-transparent" 
-                : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
+                : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
+              disabled && "cursor-not-allowed opacity-60"
             )}
-            onClick={() => {
-              if (readonly) {
-                triggerImmediateChange(opt);
-              }
+            onClick={(e) => {
+              if (disabled) return;
+              triggerImmediateChange(opt);
+              const input = e.currentTarget.querySelector('input');
+              if (input) input.focus();
+              onBlur?.();
             }}
           >
             <div className={cn(
@@ -538,13 +545,13 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
             </div>
             <input 
               type="radio" 
-              className="hidden" 
+              className="sr-only" 
               checked={localValue === opt} 
-              disabled={readonly}
-              onChange={() => triggerImmediateChange(opt)} 
+              disabled={disabled}
+              onChange={() => {}} 
             />
             <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
-          </label>
+          </div>
         ))}
       </div>
     );
@@ -582,21 +589,23 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1"
         )}>
           {resolvedOptions?.map((opt: string, i: number) => (
-            <label 
+            <div 
               key={i} 
               className={cn(
                 "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
                 currentValues.includes(opt) 
                   ? "border-transparent" 
-                  : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
+                  : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
+                disabled && "cursor-not-allowed opacity-60"
               )}
-              onClick={() => {
-                if (readonly) {
-                  const newValues = currentValues.includes(opt)
-                    ? currentValues.filter(v => v !== opt)
-                    : [...currentValues, opt];
-                  triggerImmediateChange(newValues);
-                }
+              onClick={(e) => {
+                if (disabled) return;
+                const newValues = currentValues.includes(opt)
+                  ? currentValues.filter(v => v !== opt)
+                  : [...currentValues, opt];
+                triggerImmediateChange(newValues);
+                const input = e.currentTarget.querySelector('input');
+                if (input) input.focus();
               }}
             >
               <div className={cn(
@@ -608,29 +617,26 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
               </div>
               <input 
                 type="checkbox" 
-                className="hidden" 
+                className="sr-only" 
                 checked={currentValues.includes(opt)} 
-                disabled={readonly}
-                onChange={(e) => {
-                  const newValues = e.target.checked 
-                    ? [...currentValues, opt]
-                    : currentValues.filter(v => v !== opt);
-                  triggerImmediateChange(newValues);
-                }} 
+                disabled={disabled}
+                onChange={() => {}} 
               />
               <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
-            </label>
+            </div>
           ))}
         </div>
       </div>
     );
   }
 
-  if (type === 'toggle') {
+  if (type === 'toggle' || type === 'checkbox' || type === 'boolean') {
     return (
       <button
         type="button"
+        disabled={disabled}
         onClick={() => {
+          if (disabled) return;
           const newVal = !localValue;
           setIsFocused(true);
           triggerImmediateChange(newVal);
@@ -640,7 +646,8 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         className={cn(
           ds.switchContainer,
           "transition-all relative flex items-center px-1",
-          localValue ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+          localValue ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800",
+          disabled && "opacity-60 cursor-not-allowed"
         )}
       >
         <div className={cn(
@@ -659,10 +666,14 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           min={min || 0} 
           max={max || 100} 
           value={localValue || 0}
+          disabled={disabled}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
-          onChange={(e) => triggerImmediateChange(parseInt(e.target.value))}
-          className="w-full accent-indigo-600"
+          onChange={(e) => {
+            if (disabled) return;
+            triggerImmediateChange(parseInt(e.target.value));
+          }}
+          className={cn("w-full accent-indigo-600", disabled && "opacity-60 cursor-not-allowed")}
         />
         <div className="flex justify-between text-[10px] font-black text-zinc-400 uppercase tracking-widest">
           <span>{min || 0}</span>
@@ -684,7 +695,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   if (type === 'rating') {
     return (
       <div 
-        className="flex gap-2 outline-none"
+        className={cn("flex gap-2 outline-none", disabled && "pointer-events-none opacity-60")}
         tabIndex={0}
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
@@ -693,7 +704,11 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           <button 
             key={i} 
             type="button"
-            onClick={() => triggerImmediateChange(i)}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return;
+              triggerImmediateChange(i);
+            }}
             className={cn(
               "p-2 rounded-xl transition-all",
               (localValue || 0) >= i ? "text-amber-500 bg-amber-500/10" : "text-zinc-300 hover:text-zinc-400 bg-zinc-100 dark:bg-zinc-900"
@@ -886,7 +901,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   if (type === 'buttonGroup') {
     return (
       <div 
-        className={cn("flex flex-wrap gap-2 outline-none", readonly && "pointer-events-none")}
+        className={cn("flex flex-wrap gap-2 outline-none", disabled && "pointer-events-none opacity-60")}
         tabIndex={0}
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
@@ -895,8 +910,11 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           <button
             key={i}
             type="button"
-            disabled={readonly}
-            onClick={() => updateLocalValue(opt)}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return;
+              triggerImmediateChange(opt);
+            }}
             className={cn(
               "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
               localValue === opt 

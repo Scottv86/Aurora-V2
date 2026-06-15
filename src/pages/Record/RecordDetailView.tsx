@@ -1181,7 +1181,8 @@ export const RecordDetailView = ({
             if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
             if (e.key === 'Escape') setActiveFieldId(null);
           }}
-          readonly={savingFieldId === nestedField.id || activeFieldId !== nestedField.id}
+          readonly={activeFieldId !== nestedField.id}
+          disabled={savingFieldId === nestedField.id}
           recordData={editData}
           allFields={allFields}
           density={density}
@@ -1464,7 +1465,8 @@ export const RecordDetailView = ({
                     if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
                     if (e.key === 'Escape') setActiveFieldId(null);
                   }}
-                  readonly={savingFieldId === field.id || activeFieldId !== field.id}
+                  readonly={activeFieldId !== field.id}
+                  disabled={savingFieldId === field.id}
                   recordData={editData}
                   allFields={allFields}
                 />
