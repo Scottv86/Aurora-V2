@@ -11,6 +11,7 @@ import {
   ArrowLeft, 
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   History, 
   AlertCircle, 
   AlertTriangle,
@@ -98,7 +99,8 @@ export const RecordDetailView = ({
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [activeStepIdx, setActiveStepIdx] = useState(0);
+  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [hoveredTabRect, setHoveredTabRect] = useState<{ bottom: number, left: number } | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -214,9 +216,40 @@ export const RecordDetailView = ({
   
   const visibleTabs = useMemo(() => {
     if (!moduleData?.tabs) return [];
-    const filtered = moduleData.tabs.filter(tab => isFieldVisible(tab, editData || record || {}, visibilityContext));
-    return filtered;
+    
+    // 1. Filter tabs by visibility rules individually
+    const individuallyVisible = moduleData.tabs.filter(tab => 
+      isFieldVisible(tab, editData || record || {}, visibilityContext)
+    );
+    
+    // 2. Filter out subtabs whose parents are hidden
+    const tabsWithParentCheck = individuallyVisible.filter(tab => {
+      if (!tab.parentId) return true;
+      return individuallyVisible.some(p => p.id === tab.parentId);
+    });
+    
+    // 3. Filter out parent tabs if none of their subtabs are visible
+    return tabsWithParentCheck.filter(tab => {
+      if (tab.parentId) return true;
+      const hasAnySubtabs = moduleData.tabs.some(t => t.parentId === tab.id);
+      if (!hasAnySubtabs) return true;
+      const hasVisibleSubtabs = tabsWithParentCheck.some(t => t.parentId === tab.id);
+      return hasVisibleSubtabs;
+    });
   }, [moduleData?.tabs, editData, record, visibilityContext]);
+
+  const sortedVisibleTabs = useMemo(() => {
+    const sorted: any[] = [];
+    const topLevel = visibleTabs.filter((t: any) => !t.parentId);
+    topLevel.forEach((parent: any) => {
+      sorted.push(parent);
+      const children = visibleTabs.filter((t: any) => t.parentId === parent.id);
+      sorted.push(...children);
+    });
+    const orphans = visibleTabs.filter((t: any) => t.parentId && !visibleTabs.some((p: any) => p.id === t.parentId));
+    sorted.push(...orphans);
+    return sorted;
+  }, [visibleTabs]);
 
   // Tab scrolling state
   const tabContainerRef = useRef<HTMLDivElement>(null);
@@ -248,8 +281,10 @@ export const RecordDetailView = ({
   }, [checkScroll, visibleTabs]);
 
   useEffect(() => {
+    const isParent = (id: string) => visibleTabs.some(t => t.parentId === id);
+    const selectable = visibleTabs.find(t => !isParent(t.id));
     if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find(t => t.id === activeTabId))) {
-      setActiveTabId(visibleTabs[0].id);
+      setActiveTabId(selectable ? selectable.id : visibleTabs[0].id);
     }
   }, [visibleTabs, activeTabId]);
 
@@ -1208,7 +1243,6 @@ export const RecordDetailView = ({
     const density = (interfaceSettings.detail as any)?.density || 'standard';
     const ds = getDensityStyles(density);
 
-    const steps = visibleTabs;
     const tabValidations = activeValidations.filter(err => {
       const rule = (moduleData?.config?.validationRules || (moduleData as any)?.validationRules || []).find((r: any) => r.id === err.ruleId);
       if (!rule) return false;
@@ -1476,30 +1510,43 @@ export const RecordDetailView = ({
   };
 
   const renderProcessWizardView = () => {
-    const steps = visibleTabs;
+    const steps = visibleTabs.filter(t => !t.parentId);
     if (steps.length === 0) return <div className="text-zinc-500 text-sm italic p-8 text-center">No steps configured</div>;
     
-    const activeStep = steps[activeStepIdx] || steps[0];
-    const isLastStep = activeStepIdx === steps.length - 1;
-    const progressPercent = ((activeStepIdx + 1) / steps.length) * 100;
+    const activeStepTab = visibleTabs.find(t => t.id === activeTabId);
+    const activeParentId = activeStepTab?.parentId || activeTabId;
+    const safeActiveIdx = Math.max(0, steps.findIndex(t => t.id === activeParentId));
+    const currentStep = steps[safeActiveIdx] || steps[0];
+    const isLastStep = safeActiveIdx === steps.length - 1;
+    const progressPercent = ((safeActiveIdx + 1) / steps.length) * 100;
     
     const handleNext = async () => {
-      if (!validateStepFields(activeStep.id)) return;
+      if (!validateStepFields(activeTabId)) return;
       
       const isWizardStepMode = interfaceSettings.detail?.wizardSaveMode === 'step' || !interfaceSettings.detail?.wizardSaveMode;
       if (isWizardStepMode) {
         await handleUpdateEntry(editData, undefined, true, true);
       }
       
-      setActiveStepIdx(p => Math.min(steps.length - 1, p + 1));
+      const nextStepIdx = Math.min(steps.length - 1, safeActiveIdx + 1);
+      if (nextStepIdx !== safeActiveIdx) {
+        const nextStepTab = steps[nextStepIdx];
+        const children = visibleTabs.filter(t => t.parentId === nextStepTab.id);
+        setActiveTabId(children.length > 0 ? children[0].id : nextStepTab.id);
+      }
     };
 
     const handleBack = () => {
-      setActiveStepIdx(p => Math.max(0, p - 1));
+      const prevStepIdx = Math.max(0, safeActiveIdx - 1);
+      if (prevStepIdx !== safeActiveIdx) {
+        const prevStepTab = steps[prevStepIdx];
+        const children = visibleTabs.filter(t => t.parentId === prevStepTab.id);
+        setActiveTabId(children.length > 0 ? children[0].id : prevStepTab.id);
+      }
     };
 
     const handleFinish = async () => {
-      if (!validateStepFields(activeStep.id)) return;
+      if (!validateStepFields(activeTabId)) return;
       
       await handleUpdateEntry(editData, undefined, false, true);
       toast.success("Process completed successfully!");
@@ -1519,24 +1566,26 @@ export const RecordDetailView = ({
         <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Guided Process Wizard</span>
-              <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase mt-0.5">Step {activeStepIdx + 1} of {steps.length}: {activeStep.label}</h3>
+              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Guided Process Wizard</span>
+              <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase mt-0.5">Step {safeActiveIdx + 1} of {steps.length}: {currentStep.label}</h3>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
               {steps.map((step: any, idx: number) => {
-                const isActive = activeStepIdx === idx;
-                const isCompleted = activeStepIdx > idx;
+                const isActive = safeActiveIdx === idx;
+                const isCompleted = safeActiveIdx > idx;
                 return (
                   <div key={step.id} className="flex items-center">
                     {idx > 0 && <span className="w-4 h-px bg-zinc-200 dark:bg-zinc-800 mx-1" />}
                     <div 
                       onClick={() => {
-                        if (isCompleted || idx === activeStepIdx) {
-                          setActiveStepIdx(idx);
-                        } else if (idx === activeStepIdx + 1) {
+                        if (isCompleted || idx === safeActiveIdx) {
+                          const children = visibleTabs.filter(t => t.parentId === step.id);
+                          setActiveTabId(children.length > 0 ? children[0].id : step.id);
+                        } else if (idx === safeActiveIdx + 1) {
                           handleNext();
                         }
                       }}
+                      title={step.label}
                       className={cn(
                         "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all cursor-pointer",
                         isActive
@@ -1562,14 +1611,47 @@ export const RecordDetailView = ({
           </div>
         </div>
 
-        <div className="p-8 flex-1">
-          {renderFieldsGrid(activeStep.id)}
+        <div className="p-8 flex-1 space-y-6">
+          {(() => {
+            const subtabs = visibleTabs.filter((t: any) => t.parentId === currentStep.id);
+            if (subtabs.length > 0) {
+              return (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                    {subtabs.map((sub: any) => {
+                      const isSubActive = activeTabId === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          onClick={() => setActiveTabId(sub.id)}
+                          className={cn(
+                            "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 border",
+                            isSubActive
+                              ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                              : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          {interfaceSettings.detail?.showTabIcons && (
+                            <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                          )}
+                          <span>{sub.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {renderFieldsGrid(activeTabId)}
+                </div>
+              );
+            } else {
+              return renderFieldsGrid(currentStep.id);
+            }
+          })()}
         </div>
 
         <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex justify-between gap-4">
           <button
             onClick={handleBack}
-            disabled={activeStepIdx === 0}
+            disabled={safeActiveIdx === 0}
             className="px-6 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest transition-colors"
           >
             Back
@@ -1596,10 +1678,13 @@ export const RecordDetailView = ({
   };
 
   const renderAccordionView = () => {
+    const accordionTabs = visibleTabs.filter(t => !visibleTabs.some(sub => sub.parentId === t.id));
     return (
       <div className="space-y-6">
-        {visibleTabs.map((tab: any) => {
+        {accordionTabs.map((tab: any) => {
           const isCollapsed = collapsedGroups[tab.id] ?? false;
+          const parentTab = tab.parentId ? visibleTabs.find(t => t.id === tab.parentId) : null;
+          const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
           return (
             <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden transition-all">
               <div 
@@ -1612,7 +1697,7 @@ export const RecordDetailView = ({
                   ) : (
                     <span className="w-2 h-2 rounded-full bg-indigo-500" />
                   )}
-                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
                 </div>
                 <LucideIcons.ChevronDown size={16} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
               </div>
@@ -2063,30 +2148,44 @@ export const RecordDetailView = ({
             <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
               <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
               <div className="space-y-1">
-                {visibleTabs.map((tab: any) => {
-                  const isActive = activeTabId === tab.id;
-                  const hasErrors = failedTabSeverities[tab.id] === 'error';
-                  const hasWarnings = failedTabSeverities[tab.id] === 'warning';
+                {sortedVisibleTabs.map((tab: any) => {
+                  const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+                  const isParent = subtabs.length > 0;
+                  const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+                  const isActive = activeTabId === tab.id || isParentActive;
+                  const isSubtab = !!tab.parentId && sortedVisibleTabs.some((p: any) => p.id === tab.parentId);
+                  
+                  const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+                  const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTabId(tab.id)}
+                      onClick={() => {
+                        if (isParent) {
+                          setActiveTabId(subtabs[0].id);
+                        } else {
+                          setActiveTabId(tab.id);
+                        }
+                      }}
                       className={cn(
                         "w-full text-left px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between group",
                         isActive
                           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900",
+                        isSubtab && "pl-8 border-l border-zinc-200 dark:border-zinc-800 ml-4 rounded-l-none"
                       )}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {interfaceSettings.detail?.showTabIcons && (
-                          <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                          <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
                         )}
                         <span className="truncate">{tab.label}</span>
                         {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
                         {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
                       </div>
-                      <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
+                      {!isParent && <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />}
+                      {isParent && <ChevronDown size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400")} />}
                     </button>
                   );
                 })}
@@ -2102,19 +2201,23 @@ export const RecordDetailView = ({
           </div>
         ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
           <div className="space-y-8">
-            {visibleTabs.map((tab: any) => (
-              <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
-                <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
-                  {interfaceSettings.detail?.showTabIcons ? (
-                    <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
-                  ) : (
-                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                  )}
-                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+            {visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id)).map((tab: any) => {
+              const parentTab = tab.parentId ? visibleTabs.find(t => t.id === tab.parentId) : null;
+              const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+              return (
+                <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
+                  <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+                    {interfaceSettings.detail?.showTabIcons ? (
+                      <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    )}
+                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
+                  </div>
+                  {renderFieldsGrid(tab.id)}
                 </div>
-                {renderFieldsGrid(tab.id)}
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
@@ -2145,27 +2248,106 @@ export const RecordDetailView = ({
                   onScroll={checkScroll}
                   className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
                 >
-                  {visibleTabs.map((tab: any) => {
-                    const hasErrors = failedTabSeverities[tab.id] === 'error';
-                    const hasWarnings = failedTabSeverities[tab.id] === 'warning';
+                  {sortedVisibleTabs.filter((t: any) => !t.parentId).map((tab: any) => {
+                    const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+                    const isParent = subtabs.length > 0;
+                    const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+                    const isActive = activeTabId === tab.id || isParentActive;
+
+                    const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+                    const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
                     return (
-                      <button
+                      <div 
                         key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={cn(
-                          "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2",
-                          activeTabId === tab.id
-                            ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
-                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                        )}
+                        className="relative"
+                        onMouseEnter={(e) => {
+                          setHoveredTabId(tab.id);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredTabId(null);
+                          setHoveredTabRect(null);
+                        }}
                       >
-                        {interfaceSettings.detail?.showTabIcons && (
-                          <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
+                        <button
+                          onClick={() => {
+                            if (isParent) {
+                              setActiveTabId(subtabs[0].id);
+                            } else {
+                              setActiveTabId(tab.id);
+                            }
+                          }}
+                          className={cn(
+                            "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border",
+                            isActive
+                              ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5 border-zinc-200/50 dark:border-zinc-800/80"
+                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white border-transparent"
+                          )}
+                        >
+                          {interfaceSettings.detail?.showTabIcons && (
+                            <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
+                          )}
+                          <span>{tab.label}</span>
+                          {isParent && <ChevronDown size={10} className={cn("ml-1 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
+                          {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                          {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                        </button>
+
+                        {/* Mega Menu Dropdown */}
+                        {isParent && hoveredTabId === tab.id && hoveredTabRect && (
+                          <div 
+                            style={{
+                              position: 'fixed',
+                              top: `${hoveredTabRect.bottom}px`,
+                              left: `${hoveredTabRect.left}px`,
+                            }}
+                            className="w-48 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-[9999] animate-in fade-in slide-in-from-top-1 duration-200 flex flex-col gap-0.5"
+                            onMouseEnter={() => {
+                              setHoveredTabId(tab.id);
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredTabId(null);
+                              setHoveredTabRect(null);
+                            }}
+                          >
+                            {subtabs.map((sub: any) => {
+                              const subHasErrors = failedTabSeverities[sub.id] === 'error';
+                              const subHasWarnings = failedTabSeverities[sub.id] === 'warning';
+                              return (
+                                <button
+                                  key={sub.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTabId(sub.id);
+                                    setHoveredTabId(null);
+                                    setHoveredTabRect(null);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between",
+                                    activeTabId === sub.id
+                                      ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
+                                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {interfaceSettings.detail?.showTabIcons && (
+                                      <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                    )}
+                                    <span>{sub.label}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    {subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                                    {subHasWarnings && !subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                                    {activeTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         )}
-                        <span>{tab.label}</span>
-                        {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                        {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

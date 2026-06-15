@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Save, 
   Eye, 
@@ -103,6 +104,7 @@ import * as LucideIcons from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { WorkflowGraphEditor } from './Builder/Workflow/GraphEditor';
 import { Workflow, FieldType, Tab, VisibilityRule } from '../types/platform';
+export type { Tab, VisibilityRule };
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import {
   DndContext,
@@ -675,6 +677,19 @@ export interface Row {
 }
 
 export type Layout = Field[];
+
+export const getSortedTabs = (tabsList: Tab[]): Tab[] => {
+  const sorted: Tab[] = [];
+  const topLevel = tabsList.filter(t => !t.parentId);
+  topLevel.forEach(parent => {
+    sorted.push(parent);
+    const children = tabsList.filter(t => t.parentId === parent.id);
+    sorted.push(...children);
+  });
+  const orphans = tabsList.filter(t => t.parentId && !tabsList.some(p => p.id === t.parentId));
+  sorted.push(...orphans);
+  return sorted;
+};
 
 // --- Constants ---
 
@@ -1595,6 +1610,9 @@ export const ModuleEditor = () => {
   const [realRecords, setRealRecords] = useState<any[]>([]);
   const [isFetchingRealRecords, setIsFetchingRealRecords] = useState(false);
   const [isEditingTab, setIsEditingTab] = useState<string | null>(null);
+  const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
+  const [hoveredTabRect, setHoveredTabRect] = useState<{ bottom: number, left: number } | null>(null);
+  const [isDraggingSubtab, setIsDraggingSubtab] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [showMappingModal, setShowMappingModal] = useState(false);
@@ -2320,7 +2338,9 @@ export const ModuleEditor = () => {
       const isCurrentTabVisible = visibleTabs.some(t => t.id === currentTabId);
       
       if (!isCurrentTabVisible && visibleTabs.length > 0) {
-        setCurrentTabId(visibleTabs[0].id);
+        const isParent = (id: string) => tabs.some(t => t.parentId === id);
+        const firstSelectable = visibleTabs.find(t => !isParent(t.id)) || visibleTabs[0];
+        setCurrentTabId(firstSelectable?.id || visibleTabs[0].id);
       }
     }
   }, [activeTab, moduleState, tabs, currentTabId]);
@@ -3186,6 +3206,13 @@ export const ModuleEditor = () => {
   const selectedTab = selectedId ? tabs.find(t => t.id === selectedId) : null;
 
   const updateTab = (tabId: string, updates: Partial<Tab>) => {
+    if (updates.parentId) {
+      const parentId = updates.parentId;
+      const targetAlreadyHasSubtabs = tabs.some(t => t.parentId === parentId);
+      if (!targetAlreadyHasSubtabs) {
+        setLayout(prev => prev.map(f => f.tabId === parentId ? { ...f, tabId } : f));
+      }
+    }
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, ...updates } : t));
   };
 
@@ -5044,78 +5071,203 @@ export const ModuleEditor = () => {
                       >
                         <Reorder.Group 
                           axis="x" 
-                          values={tabs} 
-                          onReorder={setTabs}
+                          values={tabs.filter(t => !t.parentId)} 
+                          onReorder={(newTopLevel) => {
+                            const newFullTabs: Tab[] = [];
+                            newTopLevel.forEach(parent => {
+                              newFullTabs.push(parent);
+                              const children = tabs.filter(t => t.parentId === parent.id);
+                              newFullTabs.push(...children);
+                            });
+                            const orphans = tabs.filter(t => t.parentId && !tabs.some(p => p.id === t.parentId));
+                            newFullTabs.push(...orphans);
+                            setTabs(newFullTabs);
+                          }}
                           className="flex items-center gap-1.5"
                         >
-                          {tabs.map((tab) => (
-                            <Reorder.Item 
-                              key={tab.id} 
-                              value={tab}
-                              dragListener={isEditingTab !== tab.id}
-                              className="group relative flex-shrink-0"
-                            >
-                              {isEditingTab === tab.id ? (
-                                <input
-                                  autoFocus
-                                  className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg"
-                                  value={tab.label}
-                                  onChange={(e) => {
-                                    const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                                    setTabs(newTabs);
-                                  }}
-                                  onBlur={() => setIsEditingTab(null)}
-                                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                                />
-                              ) : (
-                                <div className="flex items-center">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setCurrentTabId(tab.id);
-                                      setSelectedId(tab.id);
+                          {tabs.filter(t => !t.parentId).map((tab) => {
+                            const subtabs = tabs.filter(sub => sub.parentId === tab.id);
+                            const isParent = subtabs.length > 0;
+                            const isParentActive = isParent && subtabs.some(sub => sub.id === currentTabId);
+                            const isActive = currentTabId === tab.id || isParentActive;
+
+                            return (
+                              <Reorder.Item 
+                                key={tab.id} 
+                                value={tab}
+                                dragListener={isEditingTab !== tab.id}
+                                className="group relative flex-shrink-0"
+                              >
+                                {isEditingTab === tab.id ? (
+                                  <input
+                                    autoFocus
+                                    className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
+                                    value={tab.label}
+                                    onChange={(e) => {
+                                      const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                      setTabs(newTabs);
                                     }}
-                                    onDoubleClick={() => setIsEditingTab(tab.id)}
-                                    className={cn(
-                                      "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border whitespace-nowrap",
-                                      currentTabId === tab.id
-                                        ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                        : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
-                                    )}
+                                    onBlur={() => setIsEditingTab(null)}
+                                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                  />
+                                ) : (
+                                  <div 
+                                    className="relative"
+                                    onMouseEnter={(e) => {
+                                      setHoveredTabId(tab.id);
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
+                                    }}
+                                    onMouseLeave={() => {
+                                      if (!isDraggingSubtab) {
+                                        setHoveredTabId(null);
+                                        setHoveredTabRect(null);
+                                      }
+                                    }}
                                   >
-                                    {interfaceSettings.detail?.showTabIcons && (
-                                      <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
-                                    )}
-                                    {tab.label}
-                                    {currentTabId === tab.id && (
-                                      <Settings2 
-                                        size={12} 
-                                        className="ml-1 opacity-60 hover:opacity-100 transition-opacity" 
+                                    <div className="flex items-center">
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setSelectedId(tab.id);
+                                          if (isParent) {
+                                            setCurrentTabId(subtabs[0].id);
+                                            setSelectedId(subtabs[0].id);
+                                          } else {
+                                            setCurrentTabId(tab.id);
+                                            setSelectedId(tab.id);
+                                          }
                                         }}
-                                      />
+                                        onDoubleClick={() => setIsEditingTab(tab.id)}
+                                        className={cn(
+                                          "px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border whitespace-nowrap",
+                                          isActive
+                                            ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                            : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                                        )}
+                                      >
+                                        {interfaceSettings.detail?.showTabIcons && (
+                                          <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
+                                        )}
+                                        {tab.label}
+                                        {isParent && <ChevronDown size={10} className={cn("ml-1 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
+                                        <Settings2 
+                                          size={12} 
+                                          className={cn(
+                                            "ml-1 opacity-60 hover:opacity-100 transition-opacity", 
+                                            isActive ? "text-white" : "text-zinc-400 opacity-0 group-hover:opacity-100"
+                                          )} 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedId(tab.id);
+                                          }}
+                                        />
+                                      </button>
+                                      {tabs.length > 1 && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const newTabs = tabs.filter(t => t.id !== tab.id).map(t => t.parentId === tab.id ? { ...t, parentId: undefined } : t);
+                                            setTabs(newTabs);
+                                            if (currentTabId === tab.id || (isParent && subtabs.some(sub => sub.id === currentTabId))) {
+                                              const selectable = newTabs.find(t => !newTabs.some(sub => sub.parentId === t.id));
+                                              setCurrentTabId(selectable ? selectable.id : newTabs[0]?.id || '');
+                                            }
+                                            setLayout(layout.filter(field => field.tabId !== tab.id && (!isParent || !subtabs.some(sub => sub.id === field.tabId))));
+                                          }}
+                                          className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                        >
+                                          <X size={8} />
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {isParent && hoveredTabId === tab.id && hoveredTabRect && createPortal(
+                                      <div 
+                                        style={{
+                                          position: 'fixed',
+                                          top: `${hoveredTabRect.bottom}px`,
+                                          left: `${hoveredTabRect.left}px`,
+                                        }}
+                                        className="w-56 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-2 z-[9999] flex flex-col gap-0.5"
+                                        onMouseEnter={() => {
+                                          setHoveredTabId(tab.id);
+                                        }}
+                                        onMouseLeave={() => {
+                                          if (!isDraggingSubtab) {
+                                            setHoveredTabId(null);
+                                            setHoveredTabRect(null);
+                                          }
+                                        }}
+                                      >
+                                        <Reorder.Group
+                                          axis="y"
+                                          values={subtabs}
+                                          onReorder={(newSubtabs) => {
+                                            let subIdx = 0;
+                                            const updatedTabs = tabs.map(t => {
+                                              if (t.parentId === tab.id) {
+                                                return newSubtabs[subIdx++];
+                                              }
+                                              return t;
+                                            });
+                                            setTabs(updatedTabs);
+                                          }}
+                                          className="flex flex-col gap-0.5"
+                                        >
+                                          {subtabs.map(sub => (
+                                            <Reorder.Item
+                                              key={sub.id}
+                                              value={sub}
+                                              dragListener={isEditingTab !== sub.id}
+                                              onDragStart={() => setIsDraggingSubtab(true)}
+                                              onDragEnd={() => setIsDraggingSubtab(false)}
+                                              className="w-full relative"
+                                            >
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setCurrentTabId(sub.id);
+                                                  setSelectedId(sub.id);
+                                                  setHoveredTabId(null);
+                                                  setHoveredTabRect(null);
+                                                }}
+                                                className={cn(
+                                                  "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between group/sub cursor-pointer",
+                                                  currentTabId === sub.id
+                                                    ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
+                                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                                )}
+                                              >
+                                                <div className="flex items-center gap-2">
+                                                  <GripVertical size={12} className="text-zinc-400 opacity-0 group-hover/sub:opacity-100 cursor-grab active:cursor-grabbing transition-opacity shrink-0" />
+                                                  {interfaceSettings.detail?.showTabIcons && (
+                                                    <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                                  )}
+                                                  <span>{sub.label}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                  <Settings2 
+                                                    size={10} 
+                                                    className="opacity-0 group-hover/sub:opacity-100 text-zinc-400 hover:text-indigo-600 transition-opacity cursor-pointer"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setSelectedId(sub.id);
+                                                    }}
+                                                  />
+                                                  {currentTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
+                                                </div>
+                                              </button>
+                                            </Reorder.Item>
+                                          ))}
+                                        </Reorder.Group>
+                                      </div>,
+                                      document.body
                                     )}
-                                  </button>
-                                  {tabs.length > 1 && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const newTabs = tabs.filter(t => t.id !== tab.id);
-                                        setTabs(newTabs);
-                                        if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                        setLayout(layout.filter(field => field.tabId !== tab.id));
-                                      }}
-                                      className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
-                                    >
-                                      <X size={8} />
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </Reorder.Item>
-                          ))}
+                                  </div>
+                                )}
+                              </Reorder.Item>
+                            );
+                          })}
                         </Reorder.Group>
                       </div>
 
@@ -5289,78 +5441,202 @@ export const ModuleEditor = () => {
                             >
                               <Reorder.Group 
                                 axis="x" 
-                                values={tabs} 
-                                onReorder={setTabs}
+                                values={tabs.filter(t => !t.parentId)} 
+                                onReorder={(newTopLevel) => {
+                                  const newFullTabs: Tab[] = [];
+                                  newTopLevel.forEach(parent => {
+                                    newFullTabs.push(parent);
+                                    const children = tabs.filter(t => t.parentId === parent.id);
+                                    newFullTabs.push(...children);
+                                  });
+                                  const orphans = tabs.filter(t => t.parentId && !tabs.some(p => p.id === t.parentId));
+                                  newFullTabs.push(...orphans);
+                                  setTabs(newFullTabs);
+                                }}
                                 className="flex items-center gap-1.5"
                               >
-                                {tabs.map((tab) => (
-                                  <Reorder.Item 
-                                    key={tab.id} 
-                                    value={tab}
-                                    dragListener={isEditingTab !== tab.id}
-                                    className="group relative flex-shrink-0"
-                                  >
-                                    {isEditingTab === tab.id ? (
-                                      <input
-                                        autoFocus
-                                        className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
-                                        value={tab.label}
-                                        onChange={(e) => {
-                                          const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                                          setTabs(newTabs);
-                                        }}
-                                        onBlur={() => setIsEditingTab(null)}
-                                        onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                                      />
-                                    ) : (
-                                      <div className="flex items-center">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setCurrentTabId(tab.id);
-                                            setSelectedId(tab.id);
+                                {tabs.filter(t => !t.parentId).map((tab) => {
+                                  const subtabs = tabs.filter(sub => sub.parentId === tab.id);
+                                  const isParent = subtabs.length > 0;
+                                  const isParentActive = isParent && subtabs.some(sub => sub.id === currentTabId);
+                                  const isActive = currentTabId === tab.id || isParentActive;
+
+                                  return (
+                                    <Reorder.Item 
+                                      key={tab.id} 
+                                      value={tab}
+                                      dragListener={isEditingTab !== tab.id}
+                                      className="group relative flex-shrink-0"
+                                    >
+                                      {isEditingTab === tab.id ? (
+                                        <input
+                                          autoFocus
+                                          className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
+                                          value={tab.label}
+                                          onChange={(e) => {
+                                            const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                            setTabs(newTabs);
                                           }}
-                                          onDoubleClick={() => setIsEditingTab(tab.id)}
-                                          className={cn(
-                                            "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border whitespace-nowrap",
-                                            currentTabId === tab.id
-                                              ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                              : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                                          )}
+                                          onBlur={() => setIsEditingTab(null)}
+                                          onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                        />
+                                      ) : (
+                                        <div 
+                                          className="relative"
+                                          onMouseEnter={(e) => {
+                                            setHoveredTabId(tab.id);
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
+                                          }}
+                                          onMouseLeave={() => {
+                                            if (!isDraggingSubtab) {
+                                              setHoveredTabId(null);
+                                              setHoveredTabRect(null);
+                                            }
+                                          }}
                                         >
-                                          {interfaceSettings.detail?.showTabIcons && (
-                                            <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
-                                          )}
-                                          <span>{tab.label}</span>
-                                          {currentTabId === tab.id && (
-                                            <Settings2 
-                                              size={11} 
-                                              className="opacity-60 hover:opacity-100 transition-opacity" 
+                                          <div className="flex items-center">
+                                            <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                setSelectedId(tab.id);
+                                                if (isParent) {
+                                                  setCurrentTabId(subtabs[0].id);
+                                                  setSelectedId(subtabs[0].id);
+                                                } else {
+                                                  setCurrentTabId(tab.id);
+                                                  setSelectedId(tab.id);
+                                                }
                                               }}
-                                            />
+                                              onDoubleClick={() => setIsEditingTab(tab.id)}
+                                              className={cn(
+                                                "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border whitespace-nowrap",
+                                                isActive
+                                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                                              )}
+                                            >
+                                              {interfaceSettings.detail?.showTabIcons && (
+                                                <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
+                                              )}
+                                              <span>{tab.label}</span>
+                                              {isParent && <ChevronDown size={10} className={cn("ml-1 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
+                                              {(isActive || currentTabId === tab.id) && (
+                                                <Settings2 
+                                                  size={11} 
+                                                  className="opacity-60 hover:opacity-100 transition-opacity" 
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedId(tab.id);
+                                                  }}
+                                                />
+                                              )}
+                                            </button>
+                                            {tabs.length > 1 && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const newTabs = tabs.filter(t => t.id !== tab.id).map(t => t.parentId === tab.id ? { ...t, parentId: undefined } : t);
+                                                  setTabs(newTabs);
+                                                  if (currentTabId === tab.id || (isParent && subtabs.some(sub => sub.id === currentTabId))) {
+                                                    const selectable = newTabs.find(t => !newTabs.some(sub => sub.parentId === t.id));
+                                                    setCurrentTabId(selectable ? selectable.id : newTabs[0]?.id || '');
+                                                  }
+                                                  setLayout(layout.filter(field => field.tabId !== tab.id && (!isParent || !subtabs.some(sub => sub.id === field.tabId))));
+                                                }}
+                                                className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                              >
+                                                <X size={8} />
+                                              </button>
+                                            )}
+                                          </div>
+
+                                          {isParent && hoveredTabId === tab.id && hoveredTabRect && createPortal(
+                                            <div 
+                                              style={{
+                                                position: 'fixed',
+                                                top: `${hoveredTabRect.bottom}px`,
+                                                left: `${hoveredTabRect.left}px`,
+                                              }}
+                                              className="w-56 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-2 z-[9999] flex flex-col gap-0.5"
+                                              onMouseEnter={() => {
+                                                setHoveredTabId(tab.id);
+                                              }}
+                                              onMouseLeave={() => {
+                                                if (!isDraggingSubtab) {
+                                                  setHoveredTabId(null);
+                                                  setHoveredTabRect(null);
+                                                }
+                                              }}
+                                            >
+                                              <Reorder.Group
+                                                axis="y"
+                                                values={subtabs}
+                                                onReorder={(newSubtabs) => {
+                                                  let subIdx = 0;
+                                                  const updatedTabs = tabs.map(t => {
+                                                    if (t.parentId === tab.id) {
+                                                      return newSubtabs[subIdx++];
+                                                    }
+                                                    return t;
+                                                  });
+                                                  setTabs(updatedTabs);
+                                                }}
+                                                className="flex flex-col gap-0.5"
+                                              >
+                                                {subtabs.map(sub => (
+                                                  <Reorder.Item
+                                                    key={sub.id}
+                                                    value={sub}
+                                                    dragListener={isEditingTab !== sub.id}
+                                                    onDragStart={() => setIsDraggingSubtab(true)}
+                                                    onDragEnd={() => setIsDraggingSubtab(false)}
+                                                    className="w-full relative"
+                                                  >
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setCurrentTabId(sub.id);
+                                                        setSelectedId(sub.id);
+                                                        setHoveredTabId(null);
+                                                        setHoveredTabRect(null);
+                                                      }}
+                                                      className={cn(
+                                                        "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between group/sub cursor-pointer",
+                                                        currentTabId === sub.id
+                                                          ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
+                                                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                                      )}
+                                                    >
+                                                      <div className="flex items-center gap-2">
+                                                        <GripVertical size={12} className="text-zinc-400 opacity-0 group-hover/sub:opacity-100 cursor-grab active:cursor-grabbing transition-opacity shrink-0" />
+                                                        {interfaceSettings.detail?.showTabIcons && (
+                                                          <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                                        )}
+                                                        <span>{sub.label}</span>
+                                                      </div>
+                                                      <div className="flex items-center gap-1.5">
+                                                        <Settings2 
+                                                          size={10} 
+                                                          className="opacity-0 group-hover/sub:opacity-100 text-zinc-400 hover:text-indigo-600 transition-opacity cursor-pointer"
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedId(sub.id);
+                                                          }}
+                                                        />
+                                                        {currentTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
+                                                      </div>
+                                                    </button>
+                                                  </Reorder.Item>
+                                                ))}
+                                              </Reorder.Group>
+                                            </div>,
+                                            document.body
                                           )}
-                                        </button>
-                                        {tabs.length > 1 && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              const newTabs = tabs.filter(t => t.id !== tab.id);
-                                              setTabs(newTabs);
-                                              if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                              setLayout(layout.filter(field => field.tabId !== tab.id));
-                                            }}
-                                            className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
-                                          >
-                                            <X size={8} />
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </Reorder.Item>
-                                ))}
+                                        </div>
+                                      )}
+                                    </Reorder.Item>
+                                  );
+                                })}
                               </Reorder.Group>
                             </div>
 
@@ -5396,51 +5672,124 @@ export const ModuleEditor = () => {
                     </div>
                   )}
 
-                  {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (
-                    <div className="px-8 py-5 bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex flex-col gap-4 select-none">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                          <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Guided Process Wizard Preview</span>
-                          <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase mt-0.5">
-                            Step {(tabs.findIndex(t => t.id === currentTabId) + 1) || 1} of {tabs.length}: {tabs.find(t => t.id === currentTabId)?.label || 'Step'}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-                          {tabs.map((tab: any, idx: number) => {
-                            const isCurrent = currentTabId === tab.id;
-                            const isCompleted = tabs.findIndex(t => t.id === currentTabId) > idx;
-                            return (
-                              <div key={tab.id} className="flex items-center">
-                                {idx > 0 && <span className="w-4 h-px bg-zinc-200 dark:bg-zinc-800 mx-1" />}
-                                <div 
-                                  onClick={() => {
-                                    setCurrentTabId(tab.id);
-                                    setSelectedId(tab.id);
-                                  }}
-                                  className={cn(
-                                    "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all cursor-pointer",
-                                    isCurrent
-                                      ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                                      : isCompleted
-                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
-                                        : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400"
-                                  )}
-                                >
-                                  {isCompleted ? <LucideIcons.Check size={8} strokeWidth={4} /> : idx + 1}
+                  {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (() => {
+                    const steps = tabs.filter(t => !t.parentId);
+                    const currentStep = tabs.find(t => t.id === currentTabId);
+                    const currentParentId = currentStep?.parentId || currentStep?.id;
+                    const safeActiveIdx = Math.max(0, steps.findIndex(t => t.id === currentParentId));
+                    const activeStep = steps[safeActiveIdx] || steps[0];
+                    const subtabs = tabs.filter(sub => sub.parentId === activeStep?.id);
+
+                    return (
+                      <div className="px-8 py-5 bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex flex-col gap-4 select-none">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div>
+                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Guided Process Wizard Preview</span>
+                            <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase mt-0.5">
+                              Step {safeActiveIdx + 1} of {steps.length}: {activeStep?.label || 'Step'}
+                            </h3>
+                          </div>
+                          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                            {steps.map((step: any, idx: number) => {
+                              const isCurrent = safeActiveIdx === idx;
+                              const isCompleted = safeActiveIdx > idx;
+                              return (
+                                <div key={step.id} className="flex items-center">
+                                  {idx > 0 && <span className="w-4 h-px bg-zinc-200 dark:bg-zinc-800 mx-1" />}
+                                  <div 
+                                    onClick={() => {
+                                      const children = tabs.filter(t => t.parentId === step.id);
+                                      const targetTabId = children.length > 0 ? children[0].id : step.id;
+                                      setCurrentTabId(targetTabId);
+                                      setSelectedId(targetTabId);
+                                    }}
+                                    title={step.label}
+                                    className={cn(
+                                      "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all cursor-pointer",
+                                      isCurrent
+                                        ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                                        : isCompleted
+                                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                                          : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400"
+                                    )}
+                                  >
+                                    {isCompleted ? <LucideIcons.Check size={8} strokeWidth={4} /> : idx + 1}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
+                        <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-600 transition-all duration-300"
+                            style={{ width: `${((safeActiveIdx + 1) / steps.length) * 100}%` }}
+                          />
+                        </div>
+
+                        {subtabs.length > 0 && (
+                          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-1">
+                            <Reorder.Group
+                              axis="x"
+                              values={subtabs}
+                              onReorder={(newSubtabs) => {
+                                let subIdx = 0;
+                                const updatedTabs = tabs.map(t => {
+                                  if (t.parentId === activeStep?.id) {
+                                    return newSubtabs[subIdx++];
+                                  }
+                                  return t;
+                                });
+                                setTabs(updatedTabs);
+                              }}
+                              className="flex items-center gap-1.5"
+                            >
+                              {subtabs.map((sub: any) => {
+                                const isSubActive = currentTabId === sub.id;
+                                return (
+                                  <Reorder.Item
+                                    key={sub.id}
+                                    value={sub}
+                                    dragListener={isEditingTab !== sub.id}
+                                    className="group relative flex-shrink-0"
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        setCurrentTabId(sub.id);
+                                        setSelectedId(sub.id);
+                                      }}
+                                      className={cn(
+                                        "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 border cursor-pointer",
+                                        isSubActive
+                                          ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                          : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                                      )}
+                                    >
+                                      <GripVertical size={11} className="text-zinc-400 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity shrink-0" />
+                                      {interfaceSettings.detail?.showTabIcons && (
+                                        <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                      )}
+                                      <span>{sub.label}</span>
+                                      {isSubActive && (
+                                        <Settings2 
+                                          size={11} 
+                                          className="opacity-60 hover:opacity-100 transition-opacity cursor-pointer" 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedId(sub.id);
+                                          }}
+                                        />
+                                      )}
+                                    </button>
+                                  </Reorder.Item>
+                                );
+                              })}
+                            </Reorder.Group>
+                          </div>
+                        )}
                       </div>
-                      <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-600 transition-all duration-300"
-                          style={{ width: `${((tabs.findIndex(t => t.id === currentTabId) + 1) / tabs.length) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Horizontal split container for Left Sidebar + Main Grid + Right Workflow Panel */}
                   <div className="flex w-full items-stretch flex-1">
@@ -5464,71 +5813,100 @@ export const ModuleEditor = () => {
                               <div className="flex-1 overflow-y-auto px-1.5 pt-1.5 pb-2 custom-scrollbar">
                                 <Reorder.Group 
                                   axis="y" 
-                                  values={tabs} 
-                                  onReorder={setTabs}
+                                  values={getSortedTabs(tabs)} 
+                                  onReorder={(newSortedOrder) => {
+                                    setTabs(newSortedOrder);
+                                  }}
                                   className="space-y-1.5"
                                 >
-                                  {tabs.map((tab) => (
-                                    <Reorder.Item 
-                                      key={tab.id} 
-                                      value={tab}
-                                      dragListener={isEditingTab !== tab.id}
-                                      className="group relative"
-                                    >
-                                      {isEditingTab === tab.id ? (
-                                        <input
-                                          autoFocus
-                                          className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none shadow-lg text-zinc-900 dark:text-white"
-                                          value={tab.label}
-                                          onChange={(e) => {
-                                            const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
-                                            setTabs(newTabs);
-                                          }}
-                                          onBlur={() => setIsEditingTab(null)}
-                                          onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
-                                        />
-                                      ) : (
-                                        <div className="flex items-center">
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setCurrentTabId(tab.id);
-                                              setSelectedId(tab.id);
+                                  {getSortedTabs(tabs).map((tab) => {
+                                    const subtabs = tabs.filter(sub => sub.parentId === tab.id);
+                                    const isParent = subtabs.length > 0;
+                                    const isParentActive = isParent && subtabs.some(sub => sub.id === currentTabId);
+                                    const isActive = currentTabId === tab.id || isParentActive;
+                                    const isSubtab = !!tab.parentId && tabs.some(p => p.id === tab.parentId);
+
+                                    return (
+                                      <Reorder.Item 
+                                        key={tab.id} 
+                                        value={tab}
+                                        dragListener={isEditingTab !== tab.id}
+                                        className={cn("group relative", isSubtab && "pl-5 border-l border-zinc-200 dark:border-zinc-800 ml-3.5")}
+                                      >
+                                        {isEditingTab === tab.id ? (
+                                          <input
+                                            autoFocus
+                                            className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none shadow-lg text-zinc-900 dark:text-white"
+                                            value={tab.label}
+                                            onChange={(e) => {
+                                              const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
+                                              setTabs(newTabs);
                                             }}
-                                            onDoubleClick={() => setIsEditingTab(tab.id)}
-                                            className={cn(
-                                              "w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group",
-                                              currentTabId === tab.id
-                                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                            )}
-                                          >
-                                            <div className="flex items-center gap-2 min-w-0">
-                                              {interfaceSettings.detail?.showTabIcons && (
-                                                <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
-                                              )}
-                                              <span className="truncate">{tab.label}</span>
-                                            </div>
-                                            <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", currentTabId === tab.id ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
-                                          </button>
-                                          {tabs.length > 1 && (
+                                            onBlur={() => setIsEditingTab(null)}
+                                            onKeyDown={(e) => e.key === 'Enter' && setIsEditingTab(null)}
+                                          />
+                                        ) : (
+                                          <div className="flex items-center">
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                const newTabs = tabs.filter(t => t.id !== tab.id);
-                                                setTabs(newTabs);
-                                                if (currentTabId === tab.id) setCurrentTabId(newTabs[0].id);
-                                                setLayout(layout.filter(field => field.tabId !== tab.id));
+                                                if (isParent) {
+                                                  setCurrentTabId(subtabs[0].id);
+                                                  setSelectedId(subtabs[0].id);
+                                                } else {
+                                                  setCurrentTabId(tab.id);
+                                                  setSelectedId(tab.id);
+                                                }
                                               }}
-                                              className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                              onDoubleClick={() => setIsEditingTab(tab.id)}
+                                              className={cn(
+                                                "w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group",
+                                                isActive
+                                                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                                                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                              )}
                                             >
-                                              <X size={8} />
+                                              <div className="flex items-center gap-2 min-w-0">
+                                                {interfaceSettings.detail?.showTabIcons && (
+                                                  <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
+                                                )}
+                                                <span className="truncate">{tab.label}</span>
+                                              </div>
+                                              <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
                                             </button>
-                                          )}
-                                        </div>
-                                      )}
-                                    </Reorder.Item>
-                                  ))}
+                                            <Settings2 
+                                              size={12} 
+                                              className={cn(
+                                                "absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-20 cursor-pointer",
+                                                isActive ? "text-white" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                                              )}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedId(tab.id);
+                                              }}
+                                            />
+                                            {tabs.length > 1 && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const newTabs = tabs.filter(t => t.id !== tab.id).map(t => t.parentId === tab.id ? { ...t, parentId: undefined } : t);
+                                                  setTabs(newTabs);
+                                                  if (currentTabId === tab.id || (isParent && subtabs.some(sub => sub.id === currentTabId))) {
+                                                    const selectable = newTabs.find(t => !newTabs.some(sub => sub.parentId === t.id));
+                                                    setCurrentTabId(selectable ? selectable.id : newTabs[0]?.id || '');
+                                                  }
+                                                  setLayout(layout.filter(field => field.tabId !== tab.id && (!isParent || !subtabs.some(sub => sub.id === field.tabId))));
+                                                }}
+                                                className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
+                                              >
+                                                <X size={8} />
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </Reorder.Item>
+                                    );
+                                  })}
                                 </Reorder.Group>
                               </div>
                             </div>
@@ -5552,27 +5930,31 @@ export const ModuleEditor = () => {
                       </div>
                     )}
 
-                    {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'accordion' ? (
-                      <div className="flex-1 p-8 pb-32 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] custom-scrollbar select-none">
-                        {tabs.map((tab) => {
-                          const isCollapsed = collapsedGroups[tab.id] ?? false;
-                          return (
-                            <div 
-                              key={tab.id} 
-                              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[24px] shadow-sm overflow-hidden transition-all"
-                            >
+                    {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'accordion' ? (() => {
+                      const accordionTabs = tabs.filter(t => !tabs.some(sub => sub.parentId === t.id));
+                      return (
+                        <div className="flex-1 p-8 pb-32 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] custom-scrollbar select-none">
+                          {accordionTabs.map((tab) => {
+                            const isCollapsed = collapsedGroups[tab.id] ?? false;
+                            const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
+                            const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+                            return (
                               <div 
-                                onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
-                                className="p-5 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+                                key={tab.id} 
+                                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[24px] shadow-sm overflow-hidden transition-all"
                               >
-                                <div className="flex items-center gap-3">
-                                  {interfaceSettings.detail?.showTabIcons ? (
-                                    <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="text-indigo-500 shrink-0" />
-                                  ) : (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                  )}
-                                  <h3 className="text-[10px] font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
-                                </div>
+                                <div 
+                                  onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
+                                  className="p-5 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {interfaceSettings.detail?.showTabIcons ? (
+                                      <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="text-indigo-500 shrink-0" />
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                    )}
+                                    <h3 className="text-[10px] font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
+                                  </div>
                                 <LucideIcons.ChevronDown size={14} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
                               </div>
                               
@@ -5600,7 +5982,8 @@ export const ModuleEditor = () => {
                           );
                         })}
                       </div>
-                    ) : (
+                    );
+                  })() : (
                       <div 
                         id="main-grid-container"
                       className={cn(
@@ -5932,8 +6315,11 @@ export const ModuleEditor = () => {
                             });
                           };
 
-                          return tabs.map((tab) => {
+                          const displayTabs = tabs.filter(t => !tabs.some(sub => sub.parentId === t.id));
+                          return displayTabs.map((tab) => {
                             const tabFields = displayLayout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id)));
+                            const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
+                            const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
 
                             return (
                               <div 
@@ -5947,7 +6333,7 @@ export const ModuleEditor = () => {
                                     ) : (
                                       <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
                                     )}
-                                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{tab.label}</h3>
+                                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
                                   </div>
                                   <button
                                     onClick={() => setSelectedId(tab.id)}
@@ -7068,38 +7454,48 @@ export const ModuleEditor = () => {
                   }
                   </div>
 
-                  {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (
-                    <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex justify-between gap-4 select-none">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const idx = tabs.findIndex(t => t.id === currentTabId);
-                          if (idx > 0) {
-                            setCurrentTabId(tabs[idx - 1].id);
-                            setSelectedId(tabs[idx - 1].id);
-                          }
-                        }}
-                        disabled={tabs.findIndex(t => t.id === currentTabId) === 0}
-                        className="px-5 py-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest transition-colors"
-                      >
-                        Back
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const idx = tabs.findIndex(t => t.id === currentTabId);
-                          if (idx < tabs.length - 1) {
-                            setCurrentTabId(tabs[idx + 1].id);
-                            setSelectedId(tabs[idx + 1].id);
-                          }
-                        }}
-                        disabled={tabs.findIndex(t => t.id === currentTabId) === tabs.length - 1}
-                        className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
-                      >
-                        {tabs.findIndex(t => t.id === currentTabId) === tabs.length - 1 ? 'Finish' : 'Next Step'}
-                      </button>
-                    </div>
-                  )}
+                  {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (() => {
+                    const steps = tabs.filter(t => !t.parentId);
+                    const currentStep = tabs.find(t => t.id === currentTabId);
+                    const currentParentId = currentStep?.parentId || currentStep?.id;
+                    const safeActiveIdx = Math.max(0, steps.findIndex(t => t.id === currentParentId));
+                    return (
+                      <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex justify-between gap-4 select-none">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (safeActiveIdx > 0) {
+                              const prevStepTab = steps[safeActiveIdx - 1];
+                              const children = tabs.filter(t => t.parentId === prevStepTab.id);
+                              const targetTabId = children.length > 0 ? children[0].id : prevStepTab.id;
+                              setCurrentTabId(targetTabId);
+                              setSelectedId(targetTabId);
+                            }
+                          }}
+                          disabled={safeActiveIdx === 0}
+                          className="px-5 py-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest transition-colors"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (safeActiveIdx < steps.length - 1) {
+                              const nextStepTab = steps[safeActiveIdx + 1];
+                              const children = tabs.filter(t => t.parentId === nextStepTab.id);
+                              const targetTabId = children.length > 0 ? children[0].id : nextStepTab.id;
+                              setCurrentTabId(targetTabId);
+                              setSelectedId(targetTabId);
+                            }
+                          }}
+                          disabled={safeActiveIdx === steps.length - 1}
+                          className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+                        >
+                          {safeActiveIdx === steps.length - 1 ? 'Finish' : 'Next Step'}
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -13177,6 +13573,47 @@ export const ModuleEditor = () => {
                             onChange={(iconName) => updateTab(selectedTab.id, { iconName })}
                           />
                         </div>
+                      )}
+
+                      {/* Parent Tab Selector */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Parent Tab</label>
+                        <select
+                          value={selectedTab.parentId || ''}
+                          onChange={(e) => {
+                            const parentId = e.target.value || undefined;
+                            updateTab(selectedTab.id, { parentId });
+                          }}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                        >
+                          <option value="">None (Top Level)</option>
+                          {tabs
+                            .filter(t => t.id !== selectedTab.id && !t.parentId && !tabs.some(sub => sub.parentId === selectedTab.id))
+                            .map(t => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))
+                          }
+                        </select>
+                      </div>
+
+                      {/* Add Sub-tab Button (only for top-level tabs) */}
+                      {!selectedTab.parentId && (
+                        <button
+                          onClick={() => {
+                            const newId = `tab-${Date.now()}`;
+                            const targetAlreadyHasSubtabs = tabs.some(t => t.parentId === selectedTab.id);
+                            if (!targetAlreadyHasSubtabs) {
+                              setLayout(prev => prev.map(f => f.tabId === selectedTab.id ? { ...f, tabId: newId } : f));
+                            }
+                            setTabs([...tabs, { id: newId, label: 'New Sub-tab', parentId: selectedTab.id }]);
+                            setCurrentTabId(newId);
+                            setSelectedId(newId);
+                          }}
+                          className="w-full py-2.5 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/50 dark:border-indigo-800/30 rounded-xl text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                        >
+                          <Plus size={12} />
+                          <span>Add Sub-tab</span>
+                        </button>
                       )}
 
                       <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">

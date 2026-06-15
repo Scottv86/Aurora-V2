@@ -189,6 +189,7 @@ export interface Tab {
   label: string;
   iconName?: string;
   visibilityRule?: VisibilityRule;
+  parentId?: string;
 }
 
 export interface ModuleConfig {
