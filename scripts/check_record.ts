@@ -23,9 +23,9 @@ async function main() {
          r.data?._record_key === searchTerm || 
          r.data?.key === searchTerm
        );
-       console.log(`Found ${matches.length} matches:`, matches.map(m => ({ id: m.id, key: m.data?._record_key, creator: m.createdBy })));
+       console.log(`Found ${matches.length} matches:`, matches);
     } else {
-       console.log(`Found ${records.length} matches:`, records.map(m => ({ id: m.id, key: m.data?._record_key, creator: m.createdBy })));
+       console.log(`Found ${records.length} matches:`, records);
     }
 
   } catch (error) {

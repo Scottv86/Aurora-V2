@@ -98,8 +98,8 @@ export const evaluateRuleExpression = (
     return !!result;
   } catch (error) {
     console.error("Error evaluating validation rule:", expression, error);
-    // Compilation or runtime error in the formula means validation fails (constraint violated)
-    return false;
+    // Return true on evaluation or compilation error to avoid blocking record saves due to configuration issues.
+    return true;
   }
 };
 

@@ -227,9 +227,10 @@ interface FieldInputProps {
   lookupData?: any;
   autoFocus?: boolean;
   density?: 'compact' | 'standard' | 'spacious';
+  isMouseDownRef?: React.RefObject<boolean>;
 }
 
-export const FieldInput: React.FC<FieldInputProps> = ({ 
+const FieldInputInner: React.FC<FieldInputProps> = ({ 
   field, 
   value, 
   onChange, 
@@ -240,7 +241,8 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   recordData = {},
   allFields = [],
   autoFocus = false,
-  density = 'standard'
+  density = 'standard',
+  isMouseDownRef
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
 
@@ -312,6 +314,20 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     }
   }, [autoFocus]);
 
+  // Auto-focus and open dropdown when select becomes active
+  React.useEffect(() => {
+    if (!readonly && type === 'select' && inputRef.current) {
+      inputRef.current.focus();
+      try {
+        if (typeof inputRef.current.showPicker === 'function') {
+          inputRef.current.showPicker();
+        }
+      } catch (e) {
+        console.warn("showPicker is not supported or failed:", e);
+      }
+    }
+  }, [readonly, type]);
+
   const [localValue, setLocalValue] = React.useState(value);
   const localValueRef = React.useRef(value);
   const [isFocused, setIsFocused] = React.useState(false);
@@ -361,6 +377,9 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   };
 
   const handleBlur = (e?: React.FocusEvent) => {
+    if (isMouseDownRef?.current) {
+      return;
+    }
     // If we're clicking inside a group (like radio buttons), don't blur yet
     if (e?.currentTarget && e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
       return;
@@ -489,20 +508,27 @@ export const FieldInput: React.FC<FieldInputProps> = ({
       <div 
         className={cn(
           "w-full outline-none", 
-          optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1",
-          readonly && "pointer-events-none"
+          optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1"
         )} 
         tabIndex={0} 
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
       >
         {resolvedOptions?.map((opt: string, i: number) => (
-          <label key={i} className={cn(
-            "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
-            localValue === opt 
-              ? "border-transparent" 
-              : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
-          )}>
+          <label 
+            key={i} 
+            className={cn(
+              "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
+              localValue === opt 
+                ? "border-transparent" 
+                : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
+            )}
+            onClick={() => {
+              if (readonly) {
+                triggerImmediateChange(opt);
+              }
+            }}
+          >
             <div className={cn(
               ds.radio,
               "rounded-full border-2 flex items-center justify-center transition-all",
@@ -528,7 +554,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
     const currentValues = Array.isArray(localValue) ? localValue : [];
     return (
       <div 
-        className={cn("space-y-2.5 w-full outline-none", readonly && "pointer-events-none")} 
+        className="space-y-2.5 w-full outline-none" 
         tabIndex={0} 
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
@@ -556,12 +582,23 @@ export const FieldInput: React.FC<FieldInputProps> = ({
           optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1"
         )}>
           {resolvedOptions?.map((opt: string, i: number) => (
-            <label key={i} className={cn(
-              "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
-              currentValues.includes(opt) 
-                ? "border-transparent" 
-                : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
-            )}>
+            <label 
+              key={i} 
+              className={cn(
+                "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
+                currentValues.includes(opt) 
+                  ? "border-transparent" 
+                  : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800"
+              )}
+              onClick={() => {
+                if (readonly) {
+                  const newValues = currentValues.includes(opt)
+                    ? currentValues.filter(v => v !== opt)
+                    : [...currentValues, opt];
+                  triggerImmediateChange(newValues);
+                }
+              }}
+            >
               <div className={cn(
                 ds.checkbox,
                 "border-2 flex items-center justify-center transition-all",
@@ -592,6 +629,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'toggle') {
     return (
       <button
+        type="button"
         onClick={() => {
           const newVal = !localValue;
           setIsFocused(true);
@@ -599,12 +637,10 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         }}
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
-        disabled={readonly}
         className={cn(
           ds.switchContainer,
           "transition-all relative flex items-center px-1",
-          localValue ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800",
-          readonly && "cursor-pointer pointer-events-none"
+          localValue ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
         )}
       >
         <div className={cn(
@@ -617,13 +653,12 @@ export const FieldInput: React.FC<FieldInputProps> = ({
 
   if (type === 'slider') {
     return (
-      <div className={cn("space-y-4", readonly && "pointer-events-none")}>
+      <div className="space-y-4">
         <input 
           type="range" 
           min={min || 0} 
           max={max || 100} 
           value={localValue || 0}
-          disabled={readonly}
           onFocus={() => setIsFocused(true)}
           onBlur={handleBlur}
           onChange={(e) => triggerImmediateChange(parseInt(e.target.value))}
@@ -649,7 +684,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
   if (type === 'rating') {
     return (
       <div 
-        className={cn("flex gap-2 outline-none", readonly && "pointer-events-none")}
+        className="flex gap-2 outline-none"
         tabIndex={0}
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
@@ -657,7 +692,7 @@ export const FieldInput: React.FC<FieldInputProps> = ({
         {[1, 2, 3, 4, 5].map(i => (
           <button 
             key={i} 
-            disabled={readonly}
+            type="button"
             onClick={() => triggerImmediateChange(i)}
             className={cn(
               "p-2 rounded-xl transition-all",
@@ -1067,3 +1102,43 @@ const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inpu
     />
   );
 };
+
+export const FieldInput: React.FC<FieldInputProps> = (props) => {
+  const isMouseDownRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setTimeout(() => {
+        isMouseDownRef.current = false;
+      }, 0);
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, []);
+
+  const { type } = props.field;
+  const isLayoutType = ['heading', 'divider', 'alert', 'html', 'button'].includes(type);
+
+  if (isLayoutType) {
+    return <FieldInputInner {...props} />;
+  }
+
+  const customOnBlur = props.onBlur ? () => {
+    if (isMouseDownRef.current) {
+      return;
+    }
+    props.onBlur?.();
+  } : undefined;
+
+  const needsPointerEventsNone = ['select', 'date', 'time', 'user', 'lookup', 'connector', 'number', 'currency', 'longText', 'email', 'phone', 'url', 'text'].includes(type) || !type;
+
+  return (
+    <div 
+      className={cn("w-full", (props.readonly && needsPointerEventsNone) && "pointer-events-none")}
+      onMouseDown={() => { isMouseDownRef.current = true; }}
+    >
+      <FieldInputInner {...props} onBlur={customOnBlur} isMouseDownRef={isMouseDownRef} />
+    </div>
+  );
+};
+

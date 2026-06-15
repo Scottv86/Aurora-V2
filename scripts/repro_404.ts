@@ -1,31 +1,32 @@
 import { getScopedPrisma } from '../server/lib/prisma';
 
 async function main() {
-  const tenantId = 'cmnsdi0eq00008on3rhqw2z7m'; // Acme Corp
-  const userId = '0a1369c3-48bd-49e7-b559-e91c9d2301cb'; // REAL user ID
-  const teamId = 'cmntukn5b00004on3dulsniea';
+  const tenantId = 'cmnx01q3s0000mon3pbr44ju4'; 
+  const userId = 'd23a087e-a868-4c28-b85f-69080a46a530'; 
+  const recordId = 'cmop73ulw0001j8n3vrgt45xh';
 
   console.log(`--- Repro 404 (with RLS) ---`);
   console.log(`Tenant: ${tenantId}`);
   console.log(`User ID: ${userId}`);
+  console.log(`Record ID: ${recordId}`);
 
-  const db = getScopedPrisma(tenantId, userId, false); // Real session scope
+  const db = getScopedPrisma(tenantId, userId, false); 
 
   try {
-    const team = await db.team.findFirst({
-      where: { id: teamId }
+    const record = await db.record.findUnique({
+      where: { id: recordId }
     });
 
-    if (team) {
-      console.log('SUCCESS: Team found!', team.name);
+    if (record) {
+      console.log('SUCCESS: Record found!', record.id);
     } else {
-      console.log('FAILURE: Team not found with scoped client.');
+      console.log('FAILURE: Record not found with scoped client.');
     }
     
     // Test direct global client
     const { globalPrisma } = await import('../server/lib/prisma');
-    const directTeam = await globalPrisma.team.findUnique({ where: { id: teamId } });
-    console.log('Direct Global Client result:', directTeam ? 'FOUND' : 'NOT FOUND');
+    const directRecord = await globalPrisma.record.findUnique({ where: { id: recordId } });
+    console.log('Direct Global Client result:', directRecord ? 'FOUND' : 'NOT FOUND');
 
   } catch (err) {
     console.error('Error during repro:', err);
