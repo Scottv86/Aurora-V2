@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Search, Eye, Edit2, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Eye, Edit2, Trash2, AlertCircle, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNestedRecords } from '../../hooks/useNestedRecords';
@@ -39,6 +39,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingRecord, setDeletingRecord] = useState<any>(null);
+  const [cardImgIndices, setCardImgIndices] = useState<Record<string, number>>({});
 
   const { data: moduleData, isLoading: moduleLoading } = useQuery({
     queryKey: ['module', tenant?.id, moduleId],
@@ -573,6 +574,175 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
     );
   };
 
+  const renderPortfolioView = () => {
+    return (
+      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {searchedRecords.map((rec: any, idx: number) => {
+          const titleField = moduleData?.layout?.[0];
+          const recordTitle = rec[titleField?.id] || rec.name || rec.title || rec.id;
+          const status = rec.status || 'Active';
+          
+          const customFields = (moduleData?.layout || []).filter(
+            (f: any) => f.type !== 'sub_module' && f.type !== 'repeatableGroup' && f.showInTable !== false
+          ).slice(0, 3);
+
+          // Auto-detect image
+          let images: string[] = [];
+          const fileFields = (moduleData?.layout || []).filter((f: any) => f.type === 'file' || f.type === 'url');
+          fileFields.forEach((f: any) => {
+            const val = rec[f.id];
+            if (val) {
+              if (typeof val === 'string') {
+                if (val.includes(',')) {
+                  images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
+                } else {
+                  images.push(val);
+                }
+              } else if (Array.isArray(val)) {
+                images.push(...val.filter(v => typeof v === 'string'));
+              }
+            }
+          });
+
+          if (images.length === 0) {
+            const fallbacks = [
+              "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80",
+              "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
+              "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=600&q=80",
+              "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=600&q=80"
+            ];
+            images.push(fallbacks[idx % fallbacks.length]);
+          }
+
+          const activeImgIdx = cardImgIndices[rec.id] || 0;
+
+          const handlePrevImage = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setCardImgIndices(prev => ({
+              ...prev,
+              [rec.id]: activeImgIdx === 0 ? images.length - 1 : activeImgIdx - 1
+            }));
+          };
+
+          const handleNextImage = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setCardImgIndices(prev => ({
+              ...prev,
+              [rec.id]: activeImgIdx === images.length - 1 ? 0 : activeImgIdx + 1
+            }));
+          };
+
+          return (
+            <div
+              key={rec.id}
+              onClick={() => handleRecordOpen(rec)}
+              className="group relative flex flex-col bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/55 hover:shadow-2xl hover:shadow-indigo-500/[0.04] hover:-translate-y-1 cursor-pointer transition-all duration-300 overflow-hidden min-h-[320px] rounded-[2.5rem]"
+            >
+              {/* Card Slider Header */}
+              <div className="h-40 w-full overflow-hidden relative border-b border-zinc-100 dark:border-zinc-800/80 group/gallery">
+                <img 
+                  src={images[activeImgIdx]} 
+                  alt={recordTitle}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                {images.length > 1 && (
+                  <>
+                    <button 
+                      onClick={handlePrevImage}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity backdrop-blur-md border border-white/10 z-10"
+                    >
+                      <ChevronRight className="rotate-180" size={12} />
+                    </button>
+                    <button 
+                      onClick={handleNextImage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity backdrop-blur-md border border-white/10 z-10"
+                    >
+                      <ChevronRight size={12} />
+                    </button>
+                  </>
+                )}
+                <div className="absolute top-4 left-4 px-2.5 py-1 bg-black/45 backdrop-blur-md border border-white/10 rounded-xl text-white text-[9px] font-black uppercase tracking-widest">
+                  {rec._record_key || 'REC'}
+                </div>
+                <div className="absolute top-4 right-4">
+                  <span className="px-2.5 py-1 rounded-xl bg-black/45 backdrop-blur-md border border-white/10 text-indigo-400 text-[9px] font-black uppercase tracking-wider">
+                    {status}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Details Content */}
+              <div className="p-6 flex-1 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug group-hover:text-indigo-500 transition-colors line-clamp-2">
+                    {recordTitle}
+                  </h4>
+                  
+                  {/* Highlights Grid */}
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                    {customFields.map((f: any) => {
+                      const val = rec[f.id];
+                      return (
+                        <div key={f.id} className="min-w-0">
+                          <span className="text-[9px] font-black text-zinc-450 uppercase tracking-wider block">{f.label || f.name}</span>
+                          <span className="text-[11px] font-bold text-zinc-650 dark:text-zinc-350 truncate block mt-0.5">
+                            {val !== undefined && val !== null && val !== '' ? String(val) : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Actions footer */}
+                <div className="flex items-center justify-between pt-4 mt-6 border-t border-zinc-100 dark:border-zinc-800/60">
+                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">
+                    {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : 'Just now'}
+                  </span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleRecordOpen(rec); }}
+                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
+                      title="View Details"
+                    >
+                      <Eye size={12} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pushModal({ 
+                          moduleId: rec.moduleId, 
+                          recordId: rec.id, 
+                          type: 'edit', 
+                          title: rec.name || rec.title || rec.id,
+                          detailLayoutType: field?.detailLayoutType,
+                          onSave: () => {
+                            refetch();
+                          }
+                        });
+                      }}
+                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
+                      title="Edit"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleRemoveClick(rec); }}
+                      className="p-2 bg-zinc-50 hover:bg-rose-500/10 dark:bg-zinc-850 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-500 rounded-xl transition-all"
+                      title="Remove"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full">
          {loading || moduleLoading ? (
@@ -698,7 +868,9 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
             )}
 
             {filteredRecords.length > 0 ? (
-              field?.variant === 'cards' ? (
+              field?.variant === 'portfolio' ? (
+                renderPortfolioView()
+              ) : field?.variant === 'cards' ? (
                 renderCardsView()
               ) : field?.variant === 'list' ? (
                 renderListView()

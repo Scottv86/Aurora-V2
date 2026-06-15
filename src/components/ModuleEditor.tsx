@@ -182,11 +182,11 @@ const renderSubmoduleMock = (block: any) => {
               type="text"
               placeholder={`Search ${block.label || 'Sub-module'}...`}
               disabled
-              className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-600 cursor-not-allowed"
+              className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-0.5 text-[9px] text-zinc-400 dark:text-zinc-650 cursor-not-allowed"
             />
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-450 cursor-not-allowed">
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-bold text-zinc-550 dark:text-zinc-455 cursor-not-allowed">
               <Search size={10} />
               <span>Link Existing</span>
             </div>
@@ -197,7 +197,36 @@ const renderSubmoduleMock = (block: any) => {
           </div>
         </div>
 
-        {variant === 'cards' ? (
+        {variant === 'portfolio' ? (
+          <div className="p-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 scrollbar-hide min-h-[160px]">
+            {[1, 2].map(i => (
+              <div key={i} className="flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+                <div className="h-16 w-full bg-zinc-100 dark:bg-zinc-800/80 relative flex items-center justify-center text-zinc-400 dark:text-zinc-650">
+                  <Image size={16} />
+                  <div className="absolute top-1 left-1 px-1 bg-black/40 rounded text-[6px] font-black uppercase text-white">
+                    REC-00{i}
+                  </div>
+                  <div className="absolute top-1 right-1 px-1 bg-indigo-500/10 border border-indigo-500/20 rounded text-[5px] font-bold text-indigo-400">
+                    Active
+                  </div>
+                </div>
+                <div className="p-2 flex flex-col justify-between gap-1 flex-1">
+                  <h5 className="text-[9px] font-bold text-zinc-900 dark:text-white truncate">Example Record {i === 1 ? 'A' : 'B'}</h5>
+                  <div className="grid grid-cols-2 gap-1 border-t border-zinc-100 dark:border-zinc-800/60 pt-1 mt-1">
+                    <div>
+                      <span className="text-[5px] font-black text-zinc-400 block uppercase">Price</span>
+                      <span className="text-[7px] font-bold text-zinc-600 dark:text-zinc-400 truncate block mt-0.5">$350,000</span>
+                    </div>
+                    <div>
+                      <span className="text-[5px] font-black text-zinc-400 block uppercase">Beds</span>
+                      <span className="text-[7px] font-bold text-zinc-600 dark:text-zinc-400 truncate block mt-0.5">3 Bed</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : variant === 'cards' ? (
           <div className="p-4 grid grid-cols-2 gap-3 overflow-y-auto flex-1 scrollbar-hide min-h-[95px]">
             {[1, 2].map(i => (
               <div key={i} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col justify-between gap-1 shadow-sm">
@@ -1565,7 +1594,7 @@ export const ModuleEditor = () => {
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
   const [interfaceSettings, setInterfaceSettings] = useState({
     master: {
-      layoutType: 'table' as 'table' | 'kanban' | 'calendar' | 'map' | 'cards' | 'timeline' | 'gantt' | 'analytics' | 'pipeline',
+      layoutType: 'table' as 'table' | 'kanban' | 'calendar' | 'map' | 'cards' | 'portfolio' | 'timeline' | 'gantt' | 'analytics' | 'pipeline',
       columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string }[],
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       pagination: {
@@ -3547,6 +3576,104 @@ export const ModuleEditor = () => {
     );
   };
 
+  const renderMasterPortfolioPreview = () => {
+    const portfolioSettings = interfaceSettings.master.portfolioSettings || {};
+    const keyInfoFields = portfolioSettings.keyInfoFieldIds || [];
+    const activeKeyFields = keyInfoFields.length > 0
+      ? keyInfoFields.map((fieldId: string) => displayFields.find(f => f.id === fieldId)).filter(Boolean)
+      : displayFields.slice(1, 4);
+
+    const mockGalleryPhotos = [
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=600&q=80",
+      "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=600&q=80"
+    ];
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Portfolio Grid Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">Portfolio Grid</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId('__table_settings');
+              }}
+              className={cn(
+                "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+                selectedId === '__table_settings'
+                  ? "bg-indigo-50 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                  : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-650 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              )}
+            >
+              <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+              Portfolio Settings
+            </button>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {mockRecords.slice(0, 4).map((r, idx) => (
+            <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between min-h-[320px]">
+              <div className="h-40 w-full overflow-hidden relative bg-zinc-150 dark:bg-zinc-800 border-b border-zinc-150 dark:border-zinc-850">
+                <img 
+                  src={mockGalleryPhotos[idx % mockGalleryPhotos.length]} 
+                  alt={r.title}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-4 left-4 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-lg text-white text-[8px] font-black uppercase tracking-widest">
+                  Photo Gallery
+                </div>
+              </div>
+              
+              <div className="p-6 flex-1 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black text-indigo-500 tracking-wider">{r._record_key}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400">{r.status}</span>
+                  </div>
+                  
+                  <h4 className="text-xs font-black uppercase tracking-wide text-zinc-800 dark:text-zinc-200 leading-tight">
+                    {displayFields[0] ? ((r as any)[displayFields[0].name] || (r as any)[displayFields[0].id] || r.title || 'Untitled') : r.title || 'Untitled'}
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 mt-2">
+                    {activeKeyFields.map((f: any) => {
+                      let val = (r as any)[f.id] || (r as any)[f.name];
+                      if (f.id === 'createdAt' || f.id === 'updatedAt') val = r.date;
+                      if (f.id === 'assigneeId') val = r.assignee;
+                      if (val === undefined || val === null || val === '') {
+                        if (f.type === 'currency') val = '$550,000';
+                        else if (f.type === 'number') val = '4';
+                        else if (f.type === 'date') val = r.date;
+                        else val = `Mock ${f.label || f.name}`;
+                      }
+                      return (
+                        <div key={f.id} className="min-w-0">
+                          <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest block">{f.label || f.name}</span>
+                          <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-350 truncate block mt-0.5">{String(val)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between mt-4">
+                  <span className="text-[8px] font-bold text-zinc-400">{r.date}</span>
+                  <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-black text-indigo-600">{r.assignee.substring(0, 2)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderMasterTimelinePreview = () => {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
@@ -3893,6 +4020,8 @@ export const ModuleEditor = () => {
         return renderMasterMapPreview();
       case 'cards':
         return renderMasterCardsPreview();
+      case 'portfolio':
+        return renderMasterPortfolioPreview();
       case 'timeline':
         return renderMasterTimelinePreview();
       case 'gantt':
@@ -4269,6 +4398,7 @@ export const ModuleEditor = () => {
                       <option value="calendar">Calendar View</option>
                       <option value="map">Map View</option>
                       <option value="cards">Cards Grid</option>
+                      <option value="portfolio">Portfolio Grid</option>
                       <option value="timeline">Timeline View</option>
                       <option value="gantt">Gantt Chart</option>
                       <option value="analytics">Analytics View</option>
@@ -10868,6 +10998,84 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
+                      {/* Portfolio Settings (Only for portfolio master layout) */}
+                      {interfaceSettings.master.layoutType === 'portfolio' && (
+                        <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block font-black mb-2">Gallery Image Field</label>
+                            <select 
+                              value={interfaceSettings.master.portfolioSettings?.galleryFieldId || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    portfolioSettings: {
+                                      ...prev.master.portfolioSettings,
+                                      galleryFieldId: val || undefined
+                                    }
+                                  }
+                                }));
+                              }}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-655 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">-- Auto-detect (File or URL fields) --</option>
+                              {displayFields
+                                .filter(f => ['file', 'url', 'text', 'longText'].includes(f.type))
+                                .map(f => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))
+                              }
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block font-black">Key Info Fields</label>
+                            <span className="text-[9px] text-zinc-400 block px-1 leading-normal mb-2">
+                              Select up to 4 fields to display as key attributes on the portfolio card.
+                            </span>
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 bg-zinc-50 dark:bg-zinc-950/30">
+                              {displayFields
+                                .filter(f => !['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'sub_module'].includes(f.type))
+                                .map(f => {
+                                  const keyInfoFields = interfaceSettings.master.portfolioSettings?.keyInfoFieldIds || [];
+                                  const isChecked = keyInfoFields.includes(f.id);
+                                  return (
+                                    <label key={f.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg cursor-pointer transition-colors text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                      <input 
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          setInterfaceSettings(prev => {
+                                            const currentList = prev.master.portfolioSettings?.keyInfoFieldIds || [];
+                                            const newList = currentList.includes(f.id)
+                                              ? currentList.filter(id => id !== f.id)
+                                              : [...currentList, f.id].slice(0, 4); // Limit to 4
+                                            return {
+                                              ...prev,
+                                              master: {
+                                                ...prev.master,
+                                                portfolioSettings: {
+                                                  ...prev.master.portfolioSettings,
+                                                  keyInfoFieldIds: newList
+                                                }
+                                              }
+                                            };
+                                          });
+                                        }}
+                                        className="rounded border-zinc-300 dark:border-zinc-800 text-indigo-600 focus:ring-indigo-500"
+                                      />
+                                      {f.label || f.name}
+                                    </label>
+                                  );
+                                })
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Quick Actions Panel */}
                       <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900">
                         <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 font-black">Quick Actions</label>
@@ -12679,7 +12887,8 @@ export const ModuleEditor = () => {
                                       <div className="grid grid-cols-2 gap-2">
                                         {[
                                           { value: 'table', label: 'Table', icon: Table },
-                                          { value: 'list', label: 'Grid Cards', icon: Grid3X3 }
+                                          { value: 'list', label: 'Grid Cards', icon: Grid3X3 },
+                                          { value: 'portfolio', label: 'Portfolio Grid', icon: LucideIcons.BookOpen }
                                         ].map(opt => (
                                           <button
                                             key={opt.value}
@@ -13134,7 +13343,8 @@ export const ModuleEditor = () => {
                                       {[
                                         { value: 'table', label: 'Table', icon: Table },
                                         { value: 'cards', label: 'Cards', icon: Grid3X3 },
-                                        { value: 'list', label: 'List', icon: Layers }
+                                        { value: 'list', label: 'List', icon: Layers },
+                                        { value: 'portfolio', label: 'Portfolio', icon: LucideIcons.BookOpen }
                                       ].map(opt => (
                                         <button
                                           key={opt.value}

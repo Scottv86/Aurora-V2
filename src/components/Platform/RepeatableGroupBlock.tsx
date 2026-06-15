@@ -25,9 +25,8 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  // Tracks the length of the array after a new row is added, so we can show a
-  // loading indicator in autonumber cells until the server responds with the value.
   const [savingRowCount, setSavingRowCount] = useState<number | null>(null);
+  const [cardImgIndices, setCardImgIndices] = useState<Record<string, number>>({});
 
   // Keep a ref to the latest value so modal callbacks never have stale closures.
   // We do NOT maintain a separate localRows state — the component is fully controlled
@@ -215,9 +214,180 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
   // Default to table if not specified
   const displayMode = field.variant || 'table';
 
+  const renderPortfolioView = () => {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {value.map((row, idx) => {
+          const subFields = field.fields || [];
+          const titleField = subFields[0];
+          const recordTitle = row[titleField?.id] || row[titleField?.name] || 'Untitled Record';
+          const rowId = row.id || `row-${idx}`;
+
+          // Auto-detect image
+          let images: string[] = [];
+          const fileFields = subFields.filter((f: any) => f.type === 'file' || f.type === 'url');
+          fileFields.forEach((f: any) => {
+            const val = row[f.id];
+            if (val) {
+              if (typeof val === 'string') {
+                if (val.includes(',')) {
+                  images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
+                } else {
+                  images.push(val);
+                }
+              } else if (Array.isArray(val)) {
+                images.push(...val.filter(v => typeof v === 'string'));
+              }
+            }
+          });
+
+          if (images.length === 0) {
+            const fallbacks = [
+              "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80",
+              "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
+              "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=600&q=80",
+              "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=600&q=80"
+            ];
+            images.push(fallbacks[idx % fallbacks.length]);
+          }
+
+          const activeImgIdx = cardImgIndices[rowId] || 0;
+
+          const handlePrevImage = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setCardImgIndices(prev => ({
+              ...prev,
+              [rowId]: activeImgIdx === 0 ? images.length - 1 : activeImgIdx - 1
+            }));
+          };
+
+          const handleNextImage = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setCardImgIndices(prev => ({
+              ...prev,
+              [rowId]: activeImgIdx === images.length - 1 ? 0 : activeImgIdx + 1
+            }));
+          };
+
+          const customFields = subFields
+            .filter((f: any) => f.id !== titleField?.id && f.type !== 'file' && f.type !== 'repeatableGroup' && f.type !== 'sub_module')
+            .slice(0, 3);
+
+          return (
+            <div
+              key={idx}
+              onClick={() => handleDrillDown(idx)}
+              className="group relative flex flex-col bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/55 hover:shadow-2xl hover:shadow-indigo-500/[0.04] hover:-translate-y-1 cursor-pointer transition-all duration-300 overflow-hidden min-h-[320px]"
+            >
+              {/* Card Slider Header */}
+              <div className="h-40 w-full overflow-hidden relative border-b border-zinc-100 dark:border-zinc-800/80 group/gallery">
+                <img 
+                  src={images[activeImgIdx]} 
+                  alt={recordTitle}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                {images.length > 1 && (
+                  <>
+                    <button 
+                      onClick={handlePrevImage}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity backdrop-blur-md border border-white/10 z-10"
+                    >
+                      <ChevronRight className="rotate-180" size={12} />
+                    </button>
+                    <button 
+                      onClick={handleNextImage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity backdrop-blur-md border border-white/10 z-10"
+                    >
+                      <ChevronRight size={12} />
+                    </button>
+                  </>
+                )}
+                <div className="absolute top-4 left-4 px-2.5 py-1 bg-black/45 backdrop-blur-md border border-white/10 rounded-xl text-white text-[9px] font-black uppercase tracking-widest">
+                  Item #{idx + 1}
+                </div>
+              </div>
+              
+              {/* Details Content */}
+              <div className="p-6 flex-1 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug group-hover:text-indigo-500 transition-colors line-clamp-2">
+                    {recordTitle}
+                  </h4>
+                  
+                  {/* Highlights Grid */}
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                    {customFields.map((f: any) => {
+                      const val = row[f.id];
+                      return (
+                        <div key={f.id} className="min-w-0">
+                          <span className="text-[9px] font-black text-zinc-450 uppercase tracking-wider block">{f.label || f.name}</span>
+                          <span className="text-[11px] font-bold text-zinc-650 dark:text-zinc-350 truncate block mt-0.5">
+                            {val !== undefined && val !== null && val !== '' ? String(val) : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Actions footer */}
+                <div className="flex items-center justify-between pt-4 mt-6 border-t border-zinc-100 dark:border-zinc-800/60">
+                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">Portfolio</span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDrillDown(idx, true); }}
+                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
+                      title="View Details"
+                    >
+                      <Eye size={12} />
+                    </button>
+                    {!readOnly && (
+                      <>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDrillDown(idx); }}
+                          className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
+                          title="Edit"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleRemove(idx); }}
+                          className="p-2 bg-zinc-50 hover:bg-rose-500/10 dark:bg-zinc-850 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-500 rounded-xl transition-all"
+                          title="Remove"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        
+        {!readOnly && (
+          <button 
+            onClick={handleAdd}
+            className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] group hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-center min-h-[320px]"
+          >
+            <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-indigo-500 group-hover:text-white transition-all shadow-inner">
+              <Plus size={20} className="text-zinc-400 group-hover:text-white" />
+            </div>
+            <p className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest group-hover:text-indigo-500 transition-colors">
+              Add Portfolio Item
+            </p>
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
-      {displayMode === 'list' ? (
+      {displayMode === 'portfolio' ? (
+        renderPortfolioView()
+      ) : displayMode === 'list' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {value.map((row, idx) => (
             <button

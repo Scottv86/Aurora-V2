@@ -616,6 +616,7 @@ export const ModuleView = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarViewMode, setCalendarViewMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
   const [activeDetailRecordId, setActiveDetailRecordId] = useState<string | null>(null);
+  const [cardImgIndices, setCardImgIndices] = useState<Record<string, number>>({});
 
   const interfaceSettings = useMemo(() => {
     return (moduleData as any)?.interfaceSettings || {
@@ -2269,6 +2270,228 @@ export const ModuleView = () => {
     );
   };
 
+  const renderPortfolioView = () => {
+    const portfolioSettings = interfaceSettings.master.portfolioSettings || {};
+    const galleryFieldId = portfolioSettings.galleryFieldId;
+    const keyInfoFieldIds = portfolioSettings.keyInfoFieldIds || [];
+
+    const activeKeyFields = keyInfoFieldIds.length > 0
+      ? keyInfoFieldIds.map((fieldId: string) => {
+          const customField = displayFields.find(f => f.id === fieldId);
+          const systemField = [
+            { id: 'createdAt', label: 'Created Date', type: 'date' },
+            { id: 'createdBy', label: 'Created By', type: 'user' },
+            { id: 'updatedAt', label: 'Updated Date', type: 'date' },
+            { id: 'status', label: 'Status', type: 'select' },
+            { id: 'assigneeId', label: 'Assignee', type: 'user' }
+          ].find(sf => sf.id === fieldId);
+          return customField || systemField;
+        }).filter(Boolean)
+      : displayFields.slice(1, 4);
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
+          <div className="flex items-center gap-4 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input 
+                type="text" 
+                placeholder="Search portfolio..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredRecords.map((record: any) => {
+            const statusField = allFields.find(f => f.id === 'status' || f.name === 'status');
+            const status = record.status || record[statusField?.id || ''] || '-';
+            const assignee = members?.find((m: any) => m.id === record.assigneeId);
+            
+            // Extract images from gallery image field or auto-detect
+            const images: string[] = [];
+            if (galleryFieldId && record[galleryFieldId]) {
+              const val = record[galleryFieldId];
+              if (Array.isArray(val)) {
+                images.push(...val.filter(v => typeof v === 'string'));
+              } else if (typeof val === 'string') {
+                if (val.includes(',')) {
+                  images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
+                } else {
+                  images.push(val);
+                }
+              }
+            } else {
+              // Auto-detect file/url fields that contain image URLs
+              allFields.forEach((field: any) => {
+                const val = record[field.id];
+                if (val && (field.type === 'file' || field.type === 'url')) {
+                  if (typeof val === 'string' && (val.startsWith('http') || val.includes('/uploads/') || val.includes('unsplash.com'))) {
+                    if (val.includes(',')) {
+                      images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
+                    } else {
+                      images.push(val);
+                    }
+                  } else if (Array.isArray(val)) {
+                    images.push(...val.filter(v => typeof v === 'string' && (v.startsWith('http') || v.includes('/uploads/'))));
+                  }
+                }
+              });
+            }
+
+            // Fallbacks if no image is available
+            if (images.length === 0) {
+              const fallbacks = [
+                "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=600&q=80",
+                "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=600&q=80"
+              ];
+              const charSum = record.id.split('').reduce((sum: number, char: string) => sum + char.charCodeAt(0), 0);
+              images.push(fallbacks[charSum % fallbacks.length]);
+            }
+
+            const activeImgIdx = cardImgIndices[record.id] || 0;
+
+            const handlePrevImage = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              setCardImgIndices(prev => ({
+                ...prev,
+                [record.id]: activeImgIdx === 0 ? images.length - 1 : activeImgIdx - 1
+              }));
+            };
+
+            const handleNextImage = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              setCardImgIndices(prev => ({
+                ...prev,
+                [record.id]: activeImgIdx === images.length - 1 ? 0 : activeImgIdx + 1
+              }));
+            };
+
+            return (
+              <div 
+                key={record.id}
+                onClick={() => handleRecordClick(record.id)}
+                className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/55 rounded-[2.5rem] overflow-hidden hover:shadow-2xl hover:shadow-indigo-500/[0.04] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[340px]"
+              >
+                {/* Picture Gallery Slider inside card header */}
+                <div className="h-44 w-full relative bg-zinc-150 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800/80 overflow-hidden group/gallery">
+                  <img 
+                    src={images[activeImgIdx]} 
+                    alt={record.name || 'Listing'} 
+                    className="w-full h-full object-cover select-none transition-transform duration-500 group-hover:scale-105"
+                  />
+                  {images.length > 1 && (
+                    <>
+                      <button 
+                        onClick={handlePrevImage}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity backdrop-blur-md border border-white/10 z-10"
+                      >
+                        <LucideIcons.ChevronLeft size={14} />
+                      </button>
+                      <button 
+                        onClick={handleNextImage}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity backdrop-blur-md border border-white/10 z-10"
+                      >
+                        <LucideIcons.ChevronRight size={14} />
+                      </button>
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+                        {images.map((_, i) => (
+                          <div 
+                            key={i} 
+                            className={cn(
+                              "w-1.5 h-1.5 rounded-full transition-all duration-300", 
+                              activeImgIdx === i ? "bg-white w-3" : "bg-white/40"
+                            )} 
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div className="absolute top-4 left-4 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-lg text-white text-[8px] font-black uppercase tracking-widest border border-white/10">
+                    {activeImgIdx + 1} / {images.length}
+                  </div>
+                </div>
+
+                <div className="p-6 flex-grow flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key || 'Key'}</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
+                        {status}
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-4 line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
+                      {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || 'Untitled') : 'Record'}
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                      {activeKeyFields.map((f: any) => {
+                        let val = record[f.id] || record[f.name];
+                        if (f.id === 'createdBy' && record.createdBy) {
+                          const creator = members?.find((m: any) => m.id === record.createdBy);
+                          if (creator) val = creator.name;
+                        }
+                        if (f.id === 'assigneeId' && record.assigneeId) {
+                          const assigneeUser = members?.find((m: any) => m.id === record.assigneeId);
+                          if (assigneeUser) val = assigneeUser.name;
+                        }
+                        if (f.id === 'createdAt' || f.id === 'updatedAt') {
+                          val = record[f.id] ? new Date(record[f.id]).toLocaleDateString() : '';
+                        }
+                        
+                        return (
+                          <div key={f.id} className="min-w-0">
+                            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest block">{f.label || f.name}</span>
+                            <span className="text-[10px] font-bold text-zinc-755 dark:text-zinc-350 truncate block mt-0.5">
+                              {val !== undefined && val !== null && val !== '' ? String(val) : '—'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {activeKeyFields.length === 0 && (
+                        <p className="col-span-2 text-[9px] text-zinc-400 italic text-center">No key info configured</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-6 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <span className="text-[9px] text-zinc-400 font-bold">{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
+                    
+                    {assignee ? (
+                      <div className="flex items-center gap-1.5" title={`Assignee: ${assignee.name}`}>
+                        <div className="w-5 h-5 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 flex items-center justify-center text-[9px] font-bold">
+                          {assignee.avatarUrl ? (
+                            <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
+                          ) : (
+                            assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400">
+                        <LucideIcons.User size={8} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filteredRecords.length === 0 && (
+            <div className="col-span-full py-16 text-center text-zinc-400 font-bold text-xs uppercase tracking-widest">No cards found</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderTimelineView = () => {
     const dateFieldId = interfaceSettings.master.timelineDateFieldId || 'createdAt';
     
@@ -3121,6 +3344,8 @@ export const ModuleView = () => {
           renderMapView()
         ) : interfaceSettings.master.layoutType === 'cards' ? (
           renderCardsView()
+        ) : interfaceSettings.master.layoutType === 'portfolio' ? (
+          renderPortfolioView()
         ) : interfaceSettings.master.layoutType === 'timeline' ? (
           renderTimelineView()
         ) : interfaceSettings.master.layoutType === 'gantt' ? (
