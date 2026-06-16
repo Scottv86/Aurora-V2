@@ -132,3 +132,4 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 httpServer.listen(PORT, () => {
   console.log(`🚀 Aurora Platform Server (with Real-time) running on http://localhost:${PORT}`);
 });
+// Trigger restart to reload server port 3001

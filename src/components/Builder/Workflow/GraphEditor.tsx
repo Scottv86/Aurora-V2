@@ -317,6 +317,8 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         data: { 
           label: n.name, 
           type: n.type,
+          actionType: (n as any).actionType,
+          color: (n as any).color,
           onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
         },
         position: n.position || { x: 0, y: 0 },

@@ -157,7 +157,7 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
           ],
           config: {
             titleFieldId: 'name',
-            subtitleFieldIds: []
+            subtitleFieldIds: [] as string[]
           },
           tabs: [
             { id: 'default-tab', label: 'General' }

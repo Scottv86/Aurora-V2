@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Check, Info, AlertTriangle, XCircle, 
   Smile, ArrowRight, Star, Trash2,
-  ChevronDown, Search, Zap, ArrowRightLeft
+  ChevronDown, Search, ArrowRightLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -15,6 +15,10 @@ import { TimePicker } from './UI/TimePicker';
 import { UserSelector } from './Common/UserSelector';
 import { resolveConstraint } from '../services/fieldService';
 import { useFormula } from '../hooks/useFormula';
+import { usePlatform } from '../hooks/usePlatform';
+import { useAuth } from '../hooks/useAuth';
+import { API_BASE_URL } from '../config';
+import { useParams } from 'react-router-dom';
 
 const SearchableLookup = ({ 
   value, 
@@ -26,13 +30,80 @@ const SearchableLookup = ({
   readonly,
   platformEntity,
   onBlur,
-  onKeyDown
+  onKeyDown,
+  field
 }: any) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [openUp, setOpenUp] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const { moduleId, id } = useParams();
+  const activeModuleId = moduleId || id;
+
+  const isConnector = field?.lookupSource === 'connector';
+  const [connectorResults, setConnectorResults] = React.useState<any[]>([]);
+  const [connectorLoading, setConnectorLoading] = React.useState(false);
+
+  // Debounced search for connector-backed lookups
+  React.useEffect(() => {
+    if (!isConnector || !field.connectorId || !isOpen) return;
+
+    const delayDebounceFn = setTimeout(async () => {
+      setConnectorLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const searchParam = field.connectorSearchParam || 'query';
+
+        const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify({
+            connectorId: field.connectorId,
+            moduleId: activeModuleId,
+            noReshape: true,
+            payload: {
+              [searchParam]: search
+            }
+          })
+        });
+
+        if (!res.ok) throw new Error("Connector search failed");
+        const json = await res.json();
+        const rawData = json.data || json;
+
+        const arrayData = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === 'object' && Object.keys(rawData).length > 0) ? [rawData] : [];
+
+        const mappedResults = arrayData.map((item: any, idx: number) => {
+          const rawItem = typeof item === 'object' ? item : { value: item };
+          const labelField = field.connectorLabelField || 'name';
+          const valueField = field.connectorValueField || 'id';
+
+          return {
+            id: String(rawItem[valueField] !== undefined ? rawItem[valueField] : (rawItem.id || rawItem.value || idx)),
+            name: String(rawItem[labelField] !== undefined ? rawItem[labelField] : (rawItem.name || rawItem.value || JSON.stringify(rawItem))),
+            raw: rawItem
+          };
+        });
+
+        setConnectorResults(mappedResults);
+      } catch (err) {
+        console.error("Connector lookup search error:", err);
+        setConnectorResults([]);
+      } finally {
+        setConnectorLoading(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, isOpen, isConnector, field?.connectorId, field?.connectorSearchParam, field?.connectorLabelField, field?.connectorValueField]);
 
   // Auto-focus when becoming editable
   React.useEffect(() => {
@@ -51,7 +122,14 @@ const SearchableLookup = ({
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [localName, setLocalName] = React.useState('');
 
-  const selectedItem = React.useMemo(() => results.find((r: any) => r.id === value), [results, value]);
+  const selectedItem = React.useMemo(() => {
+    const found = results.find((r: any) => r.id === value);
+    if (found) return found;
+    if (value && isConnector) {
+      return { id: value, name: value };
+    }
+    return null;
+  }, [results, value, isConnector]);
   
   // Sync local name with selected item when not focused
   React.useEffect(() => {
@@ -69,6 +147,10 @@ const SearchableLookup = ({
     setActiveIndex(0);
   }, [search]);
 
+  // Override results and loading
+  const displayResults = isConnector ? connectorResults : filteredResults;
+  const displayLoading = isConnector ? connectorLoading : loading;
+
   const handleLocalKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -81,18 +163,18 @@ const SearchableLookup = ({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setActiveIndex(prev => (filteredResults.length > 0 ? (prev + 1) % filteredResults.length : 0));
+        setActiveIndex(prev => (displayResults.length > 0 ? (prev + 1) % displayResults.length : 0));
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setActiveIndex(prev => (filteredResults.length > 0 ? (prev - 1 + filteredResults.length) % filteredResults.length : 0));
+        setActiveIndex(prev => (displayResults.length > 0 ? (prev - 1 + displayResults.length) % displayResults.length : 0));
         break;
       case 'Enter':
         e.preventDefault();
-        const item = filteredResults[activeIndex];
+        const item = displayResults[activeIndex];
         if (item) {
           setLocalName(item.name);
-          onChange(item.id, item);
+          onChange(item.id, item.raw || item);
           setIsOpen(false);
           setSearch('');
           if (inputRef.current) inputRef.current.blur();
@@ -125,7 +207,7 @@ const SearchableLookup = ({
         <input 
           ref={inputRef}
           type="text"
-          placeholder={loading ? 'Loading...' : placeholder || `Search ${platformEntity || 'records'}...`}
+          placeholder={displayLoading ? 'Loading...' : placeholder || `Search ${platformEntity || 'records'}...`}
           value={isOpen ? search : localName}
           onChange={(e) => setSearch(e.target.value)}
           onFocus={() => {
@@ -153,7 +235,7 @@ const SearchableLookup = ({
               <XCircle size={14} />
             </button>
           )}
-          {loading && <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />}
+          {displayLoading && <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />}
           <ChevronDown className={cn("text-zinc-400 transition-transform", isOpen && "rotate-180")} size={14} />
         </div>
       </div>
@@ -170,12 +252,12 @@ const SearchableLookup = ({
             )}
           >
             <div className="overflow-y-auto p-2 space-y-1 custom-scrollbar">
-              {filteredResults.length === 0 ? (
+              {displayResults.length === 0 ? (
                 <div className="p-4 text-center">
                   <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">No results found</p>
                 </div>
               ) : (
-                filteredResults.map((item: any, idx: number) => (
+                displayResults.map((item: any, idx: number) => (
                   <button
                     key={item.id}
                     onMouseDown={(e) => {
@@ -184,7 +266,7 @@ const SearchableLookup = ({
                     onClick={(e) => {
                       e.stopPropagation(); // Stop bubbling to wrapper
                       setLocalName(item.name);
-                      onChange(item.id, item);
+                      onChange(item.id, item.raw || item);
                       setIsOpen(false);
                       setSearch('');
                       if (inputRef.current) inputRef.current.blur();
@@ -1075,33 +1157,23 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
 };
 
 const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inputClasses, lookupResults, lookupLoading }: any) => {
-  const { lookupSource, connectorId, platformEntity } = field;
+  const { lookupSource, platformEntity } = field;
 
   if (lookupSource === 'connector') {
-    const isGoogleMaps = connectorId === 'google-maps-lookup';
     return (
-      <div className="relative group w-full">
-        {isGoogleMaps && <DynamicIcon name="GoogleMaps" size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />}
-        <input 
-          type="text"
-          placeholder={field.placeholder || (isGoogleMaps ? "Search address..." : "Enter lookup value...")}
-          value={value || ''}
-          onChange={(e) => {
-            // This is inside LookupInput, but LookupInput is wrapped by FieldInput which provides onChange
-            onChange(e.target.value);
-          }}
-          onBlur={onBlur}
-          onKeyDown={onKeyDown}
-          readOnly={readonly}
-          className={cn(inputClasses, isGoogleMaps && "pl-10")}
-        />
-        <div className="absolute right-4 top-1/2 -translate-y-1/2">
-          <div className="px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1">
-            <Zap size={8} />
-            Connector
-          </div>
-        </div>
-      </div>
+      <SearchableLookup
+        value={value}
+        onChange={onChange}
+        results={[]}
+        loading={false}
+        placeholder={field.placeholder || `Select ${field.label || 'option'}...`}
+        inputClasses={inputClasses}
+        readonly={readonly}
+        platformEntity={platformEntity}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        field={field}
+      />
     );
   }
 
@@ -1117,6 +1189,7 @@ const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inpu
       platformEntity={platformEntity}
       onBlur={onBlur}
       onKeyDown={onKeyDown}
+      field={field}
     />
   );
 };

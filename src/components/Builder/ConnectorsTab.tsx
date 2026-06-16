@@ -21,6 +21,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn, flattenFields } from '../../lib/utils';
 import { toast } from 'sonner';
 import { Field } from '../ModuleEditor';
+import { API_BASE_URL } from '../../config';
+import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 
 interface ConnectorsTabProps {
   layout: Field[];
@@ -47,6 +50,8 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
   handleForgeConnector,
   handleCreateCustomConnector
 }) => {
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
   const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -225,10 +230,18 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     setTestResponse(null);
 
     try {
-      const res = await fetch(selectedConnector.edgeFunctionUrl, {
+      const url = selectedConnector.edgeFunctionUrl.startsWith('/')
+        ? `${API_BASE_URL}${selectedConnector.edgeFunctionUrl}`
+        : selectedConnector.edgeFunctionUrl;
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
         },
         body: JSON.stringify({
           connectorId: selectedConnector.id,

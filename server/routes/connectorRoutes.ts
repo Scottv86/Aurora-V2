@@ -155,6 +155,33 @@ router.put('/:id/config', async (req: TenantRequest, res) => {
   }
 });
 
+// GET logs for a specific connector
+router.get('/:id/logs', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    console.log(`[ConnectorsAPI] Fetching logs for connector ${id} in tenant ${tenantId}`);
+
+    const logs = await db.connectorLog.findMany({
+      where: {
+        tenantId,
+        connectorId: id
+      },
+      orderBy: {
+        timestamp: 'desc'
+      },
+      take: 100
+    });
+
+    res.json(logs);
+  } catch (err: any) {
+    console.error('[ConnectorsAPI] GET /:id/logs Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch logs' });
+  }
+});
+
 // CREATE a custom connector
 router.post('/custom', async (req: TenantRequest, res) => {
   try {

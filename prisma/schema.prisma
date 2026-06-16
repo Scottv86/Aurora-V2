@@ -39,6 +39,7 @@ model Tenant {
   members                TenantMember[]
   usageLogs              UsageLog[]
   workspaces             Workspace[]
+  connectorLogs          ConnectorLog[]
 
   @@map("tenants")
 }
@@ -624,4 +625,21 @@ model IndustryBlueprint {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("industry_blueprints")
+}
+
+model ConnectorLog {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  connectorId   String   @map("connector_id")
+  connectorName String   @map("connector_name")
+  moduleId      String?  @map("module_id")
+  moduleName    String?  @map("module_name")
+  payload       Json?
+  response      Json?
+  status        String
+  errorMessage  String?  @map("error_message")
+  timestamp     DateTime @default(now()) @map("timestamp")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("connector_logs")
 }

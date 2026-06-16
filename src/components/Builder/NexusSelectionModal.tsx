@@ -203,7 +203,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                           />
                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-8 grid grid-cols-2 gap-4 items-start custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-8 grid grid-cols-2 gap-4 items-start content-start custom-scrollbar">
                        {filteredRegistry.map(conn => (
                          <button
                            key={conn.id}

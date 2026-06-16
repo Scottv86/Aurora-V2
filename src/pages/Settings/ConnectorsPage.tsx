@@ -15,7 +15,8 @@ import {
   AlertCircle, 
   Plus, 
   ArrowLeft, 
-  ArrowRightLeft
+  ArrowRightLeft,
+  FileText
 } from 'lucide-react';
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -54,7 +55,7 @@ export const ConnectorsPage = () => {
   const [activeConnectors, setActiveConnectors] = useState<TenantConnector[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'setup' | 'usage' | 'test' | 'mapping'>('setup');
+  const [activeTab, setActiveTab] = useState<'setup' | 'usage' | 'test' | 'mapping' | 'logs'>('setup');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchData = async () => {
@@ -366,6 +367,7 @@ export const ConnectorsPage = () => {
                   { id: 'mapping', label: 'Data Mapping', icon: ArrowRightLeft },
                   { id: 'usage', label: 'Usage & Placements', icon: Layout },
                   { id: 'test', label: 'Test Plug', icon: Play },
+                  { id: 'logs', label: 'Logs', icon: FileText },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -399,6 +401,9 @@ export const ConnectorsPage = () => {
                 )}
                 {activeTab === 'mapping' && selectedConnector && (
                   <ConnectorMapping connector={selectedConnector} />
+                )}
+                {activeTab === 'logs' && selectedConnector && (
+                  <ConnectorLogs connector={selectedConnector} />
                 )}
               </div>
             </div>
@@ -553,6 +558,8 @@ const ConnectorUsage = ({ usage }: { usage: any[] }) => {
 };
 
 const ConnectorTest = ({ connector }: { connector: Connector }) => {
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
   const [testData, setTestData] = useState<Record<string, any>>({});
   const [response, setResponse] = useState<any>(null);
   const [testing, setTesting] = useState(false);
@@ -563,11 +570,19 @@ const ConnectorTest = ({ connector }: { connector: Connector }) => {
     setTesting(true);
     setResponse(null);
     try {
+      const url = connector.edgeFunctionUrl.startsWith('/')
+        ? `${API_BASE_URL}${connector.edgeFunctionUrl}`
+        : connector.edgeFunctionUrl;
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+
       // Simulate calling the Edge Function proxy
-      const res = await fetch(connector.edgeFunctionUrl, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
         },
         body: JSON.stringify({
           connectorId: connector.id,
@@ -728,6 +743,169 @@ const ConnectorMapping = ({ connector }: { connector: Connector }) => {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ConnectorLogs = ({ connector }: { connector: Connector }) => {
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+  const fetchLogs = async () => {
+    if (!tenant?.id) return;
+    setLoading(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/connectors/${connector.id}/logs`, {
+        headers: {
+          'x-tenant-id': tenant.id,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch connector logs:', err);
+      toast.error('Failed to load execution logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [connector.id, tenant?.id]);
+
+  if (loading && logs.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 pb-20">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Execution History</h3>
+          <p className="text-xs text-zinc-500 mt-1">Real-time audit log of external API queries and executions.</p>
+        </div>
+        <button 
+          onClick={fetchLogs} 
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-bold transition-all"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 rotate-90" />}
+          Refresh
+        </button>
+      </div>
+
+      {logs.length > 0 ? (
+        <div className="space-y-4">
+          {logs.map((log) => {
+            const isExpanded = expandedLogId === log.id;
+            const dateStr = new Date(log.timestamp).toLocaleString();
+            const hasError = log.status === 'ERROR';
+
+            return (
+              <div 
+                key={log.id} 
+                className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900 rounded-2xl overflow-hidden transition-all shadow-sm hover:border-zinc-300 dark:hover:border-zinc-800"
+              >
+                {/* Header row */}
+                <div 
+                  onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                  className="p-5 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    {hasError ? (
+                      <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
+                        <AlertCircle size={16} />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                        <CheckCircle2 size={16} />
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-zinc-900 dark:text-white">
+                          {log.status === 'SUCCESS' ? 'Success' : 'Failed'}
+                        </span>
+                        {log.moduleName && (
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 text-[9px] font-bold uppercase tracking-wider">
+                            {log.moduleName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium mt-0.5">
+                        {dateStr}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className="text-[10px] text-zinc-500 font-mono font-medium">ID: {log.id}</span>
+                    <button className="text-xs text-indigo-500 hover:text-indigo-600 font-bold">
+                      {isExpanded ? 'Hide Details' : 'View Details'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="border-t border-zinc-200 dark:border-zinc-900 p-6 bg-zinc-50/50 dark:bg-black/20 space-y-6">
+                    {log.errorMessage && (
+                      <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-semibold whitespace-pre-wrap leading-relaxed">
+                        <p className="font-bold uppercase text-[9px] tracking-wider mb-1">Error Details</p>
+                        {log.errorMessage}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Payload/Request */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Payload/Request</span>
+                        <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-xl p-4 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-x-auto max-h-60 custom-scrollbar">
+                          {log.payload ? (
+                            <pre>{JSON.stringify(log.payload, null, 2)}</pre>
+                          ) : (
+                            <span className="italic text-zinc-400">Empty Payload</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Response */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Response</span>
+                        <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-xl p-4 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-x-auto max-h-60 custom-scrollbar">
+                          {log.response ? (
+                            <pre>{JSON.stringify(log.response, null, 2)}</pre>
+                          ) : (
+                            <span className="italic text-zinc-400">No Response</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="py-20 text-center bg-zinc-50 dark:bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-200 dark:border-white/10">
+          <FileText className="w-10 h-10 text-zinc-300 dark:text-zinc-800 mx-auto mb-4" />
+          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">No execution logs found for this connector yet.</p>
+          <p className="text-zinc-400 dark:text-zinc-600 text-xs mt-1">Logs will be created automatically whenever this connector is called.</p>
         </div>
       )}
     </div>

@@ -633,6 +633,9 @@ export interface Field {
   lookupFilters?: LookupFilter[];
   lookupDisplayField?: string;
   lookupOutputMappings?: { id: string; sourceFieldId: string; targetFieldId: string }[];
+  connectorSearchParam?: string;
+  connectorLabelField?: string;
+  connectorValueField?: string;
   // For nested fields (fieldGroup, repeatableGroup)
   fields?: Field[];
   visibilityRule?: VisibilityRule;
@@ -1611,7 +1614,11 @@ export const ModuleEditor = () => {
       detailViewMode: 'page' as 'page' | 'modal',
       pipelineValueFieldId: '',
       pipelineDateFieldId: '',
-      cardFields: [] as { fieldId: string, visible: boolean }[]
+      cardFields: [] as { fieldId: string, visible: boolean }[],
+      portfolioSettings: {
+        galleryFieldId: '',
+        keyInfoFieldIds: [] as string[]
+      }
     },
     detail: {
       layoutType: 'tabs' as 'split' | 'tabs' | 'sidebar' | 'process' | 'accordion',
@@ -3578,8 +3585,8 @@ export const ModuleEditor = () => {
   };
 
   const renderMasterPortfolioPreview = () => {
-    const portfolioSettings = interfaceSettings.master.portfolioSettings || {};
-    const keyInfoFields = portfolioSettings.keyInfoFieldIds || [];
+    const portfolioSettings = interfaceSettings.master.portfolioSettings;
+    const keyInfoFields = portfolioSettings?.keyInfoFieldIds || [];
     const activeKeyFields = keyInfoFields.length > 0
       ? keyInfoFields.map((fieldId: string) => displayFields.find(f => f.id === fieldId)).filter(Boolean)
       : displayFields.slice(1, 4);
@@ -11064,7 +11071,7 @@ export const ModuleEditor = () => {
                                           setInterfaceSettings(prev => {
                                             const currentList = prev.master.portfolioSettings?.keyInfoFieldIds || [];
                                             const newList = currentList.includes(f.id)
-                                              ? currentList.filter(id => id !== f.id)
+                                              ? currentList.filter((id: string) => id !== f.id)
                                               : [...currentList, f.id].slice(0, 4); // Limit to 4
                                             return {
                                               ...prev,
@@ -13116,18 +13123,158 @@ export const ModuleEditor = () => {
                           )}
 
                           {selectedField.lookupSource === 'connector' && (
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Source Connector</label>
-                              <select 
-                                value={selectedField.connectorId || ''}
-                                onChange={(e) => updateField(selectedField.id, { connectorId: e.target.value })}
-                                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
-                              >
-                                <option value="">Select Connector...</option>
-                                {activeConnectors.map((c: any) => (
-                                  <option key={c.connectorId} value={c.connectorId}>{c.displayName || c.name || c.label}</option>
-                                ))}
-                              </select>
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Source Connector</label>
+                                <button 
+                                  onClick={() => setShowConnectorModal(true)}
+                                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white flex items-center justify-between hover:border-indigo-500 transition-all group shadow-sm text-left"
+                                >
+                                  <span className={cn(selectedField.connectorId ? "text-zinc-900 dark:text-white font-medium" : "text-zinc-400 font-medium")}>
+                                    {activeConnectors.find(c => c.connectorId === selectedField.connectorId)?.displayName || 'Select Connector...'}
+                                  </span>
+                                  <ChevronRight size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+                                </button>
+                              </div>
+
+                              {selectedField.connectorId && (() => {
+                                const activeConn = activeConnectors.find((c: any) => c.connectorId === selectedField.connectorId);
+                                const connSchema = activeConn?.connector?.ioSchema || activeConn?.ioSchema || { inputs: [], outputs: [] };
+                                const connInputs = connSchema.inputs || [];
+                                const connOutputs = connSchema.outputs || [];
+
+                                return (
+                                  <div className="space-y-6 mt-4 p-5 bg-gradient-to-b from-indigo-500/5 to-transparent border border-indigo-500/15 rounded-2xl shadow-inner animate-in fade-in duration-300">
+                                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-zinc-150 dark:border-zinc-800">
+                                      <div className="w-6 h-6 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0">
+                                        <Sparkles size={12} className="animate-pulse" />
+                                      </div>
+                                      <div>
+                                        <h4 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-wider">Guided Setup Wizard</h4>
+                                        <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Connector Lookup Config</p>
+                                      </div>
+                                    </div>
+
+                                    {/* 1. Search Query Input Parameter */}
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+                                        Search Parameter <span className="text-red-500">*</span>
+                                      </label>
+                                      <select
+                                        value={selectedField.connectorSearchParam || ''}
+                                        onChange={(e) => updateField(selectedField.id, { connectorSearchParam: e.target.value })}
+                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                      >
+                                        <option value="">Select API Input...</option>
+                                        {connInputs.map((i: any) => (
+                                          <option key={i.name} value={i.name}>{i.label || i.name} ({i.name})</option>
+                                        ))}
+                                      </select>
+                                      <p className="text-[8px] text-zinc-500 px-1 leading-normal">
+                                        API parameter that receives the query typed by the user.
+                                      </p>
+                                    </div>
+
+                                    {/* 2. Display Label Output */}
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+                                        Display Label <span className="text-red-500">*</span>
+                                      </label>
+                                      <select
+                                        value={selectedField.connectorLabelField || ''}
+                                        onChange={(e) => updateField(selectedField.id, { connectorLabelField: e.target.value })}
+                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                      >
+                                        <option value="">Select API Output...</option>
+                                        {connOutputs.map((o: any) => (
+                                          <option key={o.name} value={o.name}>{o.label || o.name} ({o.name})</option>
+                                        ))}
+                                      </select>
+                                      <p className="text-[8px] text-zinc-500 px-1 leading-normal">
+                                        API property shown as the option label in the search dropdown list.
+                                      </p>
+                                    </div>
+
+                                    {/* 3. Option Value Output */}
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+                                        Option Value <span className="text-red-500">*</span>
+                                      </label>
+                                      <select
+                                        value={selectedField.connectorValueField || ''}
+                                        onChange={(e) => updateField(selectedField.id, { connectorValueField: e.target.value })}
+                                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                      >
+                                        <option value="">Select API Output...</option>
+                                        {connOutputs.map((o: any) => (
+                                          <option key={o.name} value={o.name}>{o.label || o.name} ({o.name})</option>
+                                        ))}
+                                      </select>
+                                      <p className="text-[8px] text-zinc-500 px-1 leading-normal">
+                                        API property stored as the lookup field's value in the database.
+                                      </p>
+                                    </div>
+
+                                    {/* 4. Auto-populate Mappings */}
+                                    <div className="space-y-3 pt-3 border-t border-zinc-150 dark:border-zinc-800">
+                                      <div>
+                                        <h5 className="text-[9px] font-black text-zinc-850 dark:text-zinc-200 uppercase tracking-wider">Field Auto-Populate</h5>
+                                        <p className="text-[8px] text-zinc-500 mt-0.5 leading-normal">
+                                          Optionally map other response outputs to auto-fill sister fields upon selection.
+                                        </p>
+                                      </div>
+
+                                      <div className="space-y-2.5">
+                                        {connOutputs.filter((o: any) => o.name !== selectedField.connectorValueField).map((output: any) => {
+                                          const mappings = selectedField.lookupOutputMappings || [];
+                                          const currentMapped = mappings.find((m: any) => m.sourceFieldId === output.name);
+                                          const currentMappedId = currentMapped?.targetFieldId || '';
+
+                                          return (
+                                            <div key={output.name} className="flex items-center justify-between gap-3 p-2 bg-white dark:bg-zinc-900/60 border border-zinc-150 dark:border-zinc-800 rounded-xl">
+                                              <div className="min-w-0">
+                                                <p className="text-[10px] font-bold text-zinc-900 dark:text-white truncate">{output.label || output.name}</p>
+                                                <p className="text-[8px] text-zinc-400 font-mono">.{output.name}</p>
+                                              </div>
+                                              <select
+                                                value={currentMappedId}
+                                                onChange={(e) => {
+                                                  const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                                                  const idx = newMappings.findIndex(m => m.sourceFieldId === output.name);
+                                                  
+                                                  if (e.target.value === '') {
+                                                    if (idx > -1) newMappings.splice(idx, 1);
+                                                  } else {
+                                                    if (idx > -1) {
+                                                      newMappings[idx].targetFieldId = e.target.value;
+                                                    } else {
+                                                      newMappings.push({
+                                                        id: Math.random().toString(36).substr(2, 9),
+                                                        sourceFieldId: output.name,
+                                                        targetFieldId: e.target.value
+                                                      });
+                                                    }
+                                                  }
+                                                  updateField(selectedField.id, { lookupOutputMappings: newMappings });
+                                                }}
+                                                className="w-32 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg py-1 px-2 text-[9px] focus:outline-none focus:border-indigo-500 text-zinc-700 dark:text-zinc-300"
+                                              >
+                                                <option value="">-- None --</option>
+                                                {allFields.filter((f: any) => 
+                                                  f.id !== selectedField.id && 
+                                                  !['heading', 'divider', 'spacer', 'alert', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(f.type)
+                                                ).map((f: any) => (
+                                                  <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
 
@@ -14121,113 +14268,216 @@ export const ModuleEditor = () => {
             const fullConnector = activeConnectors.find(c => c.connectorId === conn.connectorId) || 
                                 connectorRegistry.find(c => c.id === conn.connectorId);
 
-            updateField(selectedField.id, { 
-              connectorId: conn.connectorId,
-              label: conn.displayName,
-              icon: conn.icon || fullConnector?.icon
-            });
-            
             if (fullConnector) {
               const outputs = (fullConnector.ioSchema?.outputs) || (fullConnector.connector?.ioSchema?.outputs) || [];
-              
-              if (strategy === 'auto') {
-                toast.info(`Auto-provisioning ${outputs.length} fields...`);
-                
-                const newMappings: Record<string, string> = { ...(connectorMappings[conn.connectorId] || {}) };
-                
-                // CRITICAL: Apply the connector update to our local layout copy immediately
-                // to avoid it being overwritten by the batch update.
-                const currentLayout = layout.map(f => f.id === selectedField.id ? {
-                  ...f,
+              const inputs = (fullConnector.ioSchema?.inputs) || (fullConnector.connector?.ioSchema?.inputs) || [];
+
+              if (selectedField.type === 'lookup') {
+                const defaultSearchParam = inputs[0]?.name || '';
+                const defaultLabelField = outputs.find((o: any) => o.type === 'string')?.name || outputs[0]?.name || '';
+                const defaultValueField = outputs.find((o: any) => o.name.toLowerCase().includes('id'))?.name || outputs[0]?.name || '';
+
+                const updatedFieldAttrs: any = {
                   connectorId: conn.connectorId,
-                  label: conn.displayName
-                } : f);
-                
-                let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
-                let isLeft = true;
-                
-                for (const output of outputs) {
-                  if (newMappings[output.name]) continue;
-
-                  // Generate a unique ID for the new field
-                  const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
-                  
-                  // Create new field object for the layout
-                  const newField: any = {
-                    id: fieldId,
-                    label: output.label || output.name,
-                    type: output.type === 'number' ? 'number' : 
-                          output.type === 'boolean' ? 'checkbox' : 'text',
-                    required: false,
-                    colSpan: 6,
-                    startCol: isLeft ? 1 : 7,
-                    rowIndex: nextRow,
-                    tabId: currentTabId // Place on current active tab
-                  };
-
-                  currentLayout.push(newField);
-                  newMappings[output.name] = fieldId;
-                  
-                  // Toggle side and advance row if needed
-                  if (isLeft) {
-                    isLeft = false;
-                  } else {
-                    isLeft = true;
-                    nextRow++;
-                  }
-                }
-
-                // 1. Update local states so UI reflects changes immediately
-                setLayout(currentLayout);
-                setConnectorMappings(prev => ({ ...prev, [conn.connectorId]: newMappings }));
-
-                // 2. Persist the entire updated module in one go
-                const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-                const isNew = id === 'new' || MODULES.some(m => m.id === id);
-                
-                const payload = {
-                  ...moduleSettings,
-                  config: {
-                    titleFieldId: moduleSettings.titleFieldId
-                  },
-                  id: isNew && id !== 'new' ? id : undefined,
-                  enabled: moduleSettings.status === 'ACTIVE',
-                  layout: currentLayout || [],
-                  tabs: tabs || [],
-                  forms: forms || [],
-                  connectorMappings: {
-                    ...(connectorMappings || {}),
-                    [conn.connectorId]: newMappings
-                  },
-                  workflows: workflow ? [workflow] : []
+                  connectorSearchParam: defaultSearchParam,
+                  connectorLabelField: defaultLabelField,
+                  connectorValueField: defaultValueField,
+                  label: conn.displayName || selectedField.label,
                 };
 
-                try {
-                  const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
-                  const res = await fetch(url, {
-                    method: isNew ? 'POST' : 'PUT',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'x-tenant-id': tenant?.id || '',
-                      'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify(payload)
-                  });
+                if (strategy === 'auto') {
+                  toast.info(`Auto-provisioning lookup fields...`);
+                  
+                  const currentLayout = layout.map(f => f.id === selectedField.id ? {
+                    ...f,
+                    ...updatedFieldAttrs
+                  } : f);
 
-                  if (res.ok) {
-                    toast.success(`Successfully provisioned ${outputs.length} fields`);
-                    refreshModules();
-                  } else {
-                    throw new Error('Failed to save auto-provisioned fields');
+                  const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                  let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
+                  let isLeft = true;
+
+                  for (const output of outputs) {
+                    if (output.name === defaultValueField) continue;
+                    if (newMappings.some((m: any) => m.sourceFieldId === output.name)) continue;
+
+                    const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+                    const newField: any = {
+                      id: fieldId,
+                      label: output.label || output.name,
+                      type: output.type === 'number' ? 'number' : 
+                            output.type === 'boolean' ? 'checkbox' : 'text',
+                      required: false,
+                      colSpan: 6,
+                      startCol: isLeft ? 1 : 7,
+                      rowIndex: nextRow,
+                      tabId: currentTabId
+                    };
+
+                    currentLayout.push(newField);
+                    newMappings.push({
+                      id: Math.random().toString(36).substr(2, 9),
+                      sourceFieldId: output.name,
+                      targetFieldId: fieldId
+                    });
+
+                    if (isLeft) {
+                      isLeft = false;
+                    } else {
+                      isLeft = true;
+                      nextRow++;
+                    }
                   }
-                } catch (err) {
-                  console.error("Failed to save mappings:", err);
-                  toast.error("Failed to persist auto-provisioned fields");
+
+                  updatedFieldAttrs.lookupOutputMappings = newMappings;
+
+                  // 1. Update local states
+                  setLayout(currentLayout);
+                  updateField(selectedField.id, updatedFieldAttrs);
+
+                  // 2. Persist updated module
+                  const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+                  const isNew = id === 'new' || MODULES.some(m => m.id === id);
+                  const payload = {
+                    ...moduleSettings,
+                    config: {
+                      titleFieldId: moduleSettings.titleFieldId
+                    },
+                    id: isNew && id !== 'new' ? id : undefined,
+                    enabled: moduleSettings.status === 'ACTIVE',
+                    layout: currentLayout || [],
+                    tabs: tabs || [],
+                    forms: forms || [],
+                    connectorMappings: connectorMappings || {},
+                    workflows: workflow ? [workflow] : []
+                  };
+
+                  try {
+                    const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
+                    const res = await fetch(url, {
+                      method: isNew ? 'POST' : 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-tenant-id': tenant?.id || '',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                      toast.success(`Successfully provisioned lookup and ${newMappings.length} fields`);
+                      refreshModules();
+                    } else {
+                      throw new Error('Failed to save auto-provisioned lookup fields');
+                    }
+                  } catch (err) {
+                    console.error("Failed to save mappings:", err);
+                    toast.error("Failed to persist auto-provisioned fields");
+                  }
+                } else {
+                  // Manual Strategy
+                  updateField(selectedField.id, updatedFieldAttrs);
+                  setSelectedId(selectedField.id);
+                  setRightSidebarTab('inspector');
                 }
+
               } else {
-                // Manual Strategy: Select the block and open inspector
-                setSelectedId(selectedField.id);
-                setRightSidebarTab('inspector');
+                // Existing connector block strategy
+                updateField(selectedField.id, { 
+                  connectorId: conn.connectorId,
+                  label: conn.displayName,
+                  icon: conn.icon || fullConnector?.icon
+                });
+                
+                if (strategy === 'auto') {
+                  toast.info(`Auto-provisioning ${outputs.length} fields...`);
+                  
+                  const newMappings: Record<string, string> = { ...(connectorMappings[conn.connectorId] || {}) };
+                  
+                  const currentLayout = layout.map(f => f.id === selectedField.id ? {
+                    ...f,
+                    connectorId: conn.connectorId,
+                    label: conn.displayName
+                  } : f);
+                  
+                  let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
+                  let isLeft = true;
+                  
+                  for (const output of outputs) {
+                    if (newMappings[output.name]) continue;
+
+                    const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+                    const newField: any = {
+                      id: fieldId,
+                      label: output.label || output.name,
+                      type: output.type === 'number' ? 'number' : 
+                            output.type === 'boolean' ? 'checkbox' : 'text',
+                      required: false,
+                      colSpan: 6,
+                      startCol: isLeft ? 1 : 7,
+                      rowIndex: nextRow,
+                      tabId: currentTabId
+                    };
+
+                    currentLayout.push(newField);
+                    newMappings[output.name] = fieldId;
+                    
+                    if (isLeft) {
+                      isLeft = false;
+                    } else {
+                      isLeft = true;
+                      nextRow++;
+                    }
+                  }
+
+                  setLayout(currentLayout);
+                  setConnectorMappings(prev => ({ ...prev, [conn.connectorId]: newMappings }));
+
+                  const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+                  const isNew = id === 'new' || MODULES.some(m => m.id === id);
+                  const payload = {
+                    ...moduleSettings,
+                    config: {
+                      titleFieldId: moduleSettings.titleFieldId
+                    },
+                    id: isNew && id !== 'new' ? id : undefined,
+                    enabled: moduleSettings.status === 'ACTIVE',
+                    layout: currentLayout || [],
+                    tabs: tabs || [],
+                    forms: forms || [],
+                    connectorMappings: {
+                      ...(connectorMappings || {}),
+                      [conn.connectorId]: newMappings
+                    },
+                    workflows: workflow ? [workflow] : []
+                  };
+
+                  try {
+                    const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
+                    const res = await fetch(url, {
+                      method: isNew ? 'POST' : 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-tenant-id': tenant?.id || '',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                      toast.success(`Successfully provisioned ${outputs.length} fields`);
+                      refreshModules();
+                    } else {
+                      throw new Error('Failed to save auto-provisioned fields');
+                    }
+                  } catch (err) {
+                    console.error("Failed to save mappings:", err);
+                    toast.error("Failed to persist auto-provisioned fields");
+                  }
+                } else {
+                  setSelectedId(selectedField.id);
+                  setRightSidebarTab('inspector');
+                }
               }
             }
           }
