@@ -11,13 +11,14 @@ interface NexusSelectionModalProps {
   onClose: () => void;
   activeConnectors: any[];
   registry: any[];
-  onSelect: (connector: any, strategy: 'auto' | 'manual') => void;
+  onSelect: (connector: any, strategy: 'auto' | 'manual', triggerType?: 'lookup' | 'rule') => void;
   onActivate: (connectorId: string) => Promise<any>;
   onCreateCustom: (connector: any) => Promise<any>;
   onForge: (prompt: string) => Promise<any>;
+  selectedField?: any;
 }
 
-type ViewMode = 'selection' | 'library' | 'ai' | 'manual' | 'strategy';
+type ViewMode = 'selection' | 'library' | 'ai' | 'manual' | 'strategy' | 'trigger_type';
 
 export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   isOpen,
@@ -27,16 +28,27 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   onSelect,
   onActivate,
   onCreateCustom,
-  onForge
+  onForge,
+  selectedField
 }) => {
   const [view, setView] = useState<ViewMode>('selection');
   const [search, setSearch] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingConnector, setPendingConnector] = useState<any>(null);
+  const [pendingTriggerType, setPendingTriggerType] = useState<'lookup' | 'rule'>('lookup');
 
   const filteredRegistry = registry.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const showStrategyOrTriggerType = (connector: any) => {
+    setPendingConnector(connector);
+    if (!selectedField) {
+      setView('trigger_type');
+    } else {
+      setView('strategy');
+    }
+  };
 
   const handleForge = async (prompt: string) => {
     setIsProcessing(true);
@@ -45,8 +57,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
       if (forged) {
         const created = await onCreateCustom(forged);
         if (created) {
-          setPendingConnector(created.activation);
-          setView('strategy');
+          showStrategyOrTriggerType(created.activation);
         }
       }
     } catch (err) {
@@ -61,8 +72,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
     try {
       const created = await onCreateCustom(connector);
       if (created) {
-        setPendingConnector(created.activation);
-        setView('strategy');
+        showStrategyOrTriggerType(created.activation);
       }
     } catch (err) {
       console.error("Manual save failed:", err);
@@ -94,7 +104,13 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
               <div className="flex items-center gap-4">
                 {view !== 'selection' ? (
                   <button 
-                    onClick={() => setView('selection')}
+                    onClick={() => {
+                      if (view === 'strategy' && !selectedField) {
+                        setView('trigger_type');
+                      } else {
+                        setView('selection');
+                      }
+                    }}
                     className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 transition-all"
                   >
                     <ArrowLeft size={20} />
@@ -109,10 +125,12 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                     {view === 'selection' ? 'Connect Integration' : 
                      view === 'library' ? 'Connector Library' : 
                      view === 'ai' ? 'AI Forge' : 
+                     view === 'trigger_type' ? 'Trigger Method' :
                      view === 'strategy' ? 'Provisioning Strategy' : 'Manual Builder'}
                   </h2>
                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
                     {view === 'selection' ? 'Select your path to integration' : 
+                     view === 'trigger_type' ? 'How should this integration be triggered?' :
                      view === 'strategy' ? 'How should we handle the API data?' : 'Define your custom API capability'}
                   </p>
                 </div>
@@ -212,8 +230,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                              try {
                                const activated = await onActivate(conn.id);
                                if (activated) {
-                                 setPendingConnector(activated);
-                                 setView('strategy');
+                                 showStrategyOrTriggerType(activated);
                                }
                              } finally {
                                setIsProcessing(false);
@@ -258,6 +275,52 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                   >
                     <ManualBuilderView onSave={handleManualSave} isSaving={isProcessing} />
                   </motion.div>
+                ) : view === 'trigger_type' ? (
+                  <motion.div 
+                    key="trigger_type"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="h-full flex items-center justify-center p-12 gap-8"
+                  >
+                    <button 
+                      onClick={() => {
+                        setPendingTriggerType('lookup');
+                        setView('strategy');
+                      }}
+                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"
+                    >
+                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
+                        <Search size={32} />
+                      </div>
+                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-2">Lookup Field Trigger</h3>
+                      <p className="text-xs text-zinc-500 text-center leading-relaxed">
+                        Create a lookup field in the module. Triggers when a user searches or selects a value to populate other fields.
+                      </p>
+                      <div className="mt-8 px-6 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
+                        Interactive search
+                      </div>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        setPendingTriggerType('rule');
+                        setView('strategy');
+                      }}
+                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"
+                    >
+                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
+                        <Zap size={32} />
+                      </div>
+                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-2">Conditional Trigger Rule</h3>
+                      <p className="text-xs text-zinc-500 text-center leading-relaxed">
+                        Trigger automatically on page load or on field changes, fetching data via API without an interactive lookup field.
+                      </p>
+                      <div className="mt-8 px-6 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
+                        Background execution
+                      </div>
+                    </button>
+                  </motion.div>
                 ) : (
                   <motion.div 
                     key="strategy"
@@ -268,7 +331,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
                   >
                     <button 
                       onClick={() => {
-                        onSelect(pendingConnector, 'auto');
+                        onSelect(pendingConnector, 'auto', pendingTriggerType);
                         onClose();
                       }}
                       className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-indigo-600 rounded-[2.5rem] hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20"
@@ -287,7 +350,7 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
 
                     <button 
                       onClick={() => {
-                        onSelect(pendingConnector, 'manual');
+                        onSelect(pendingConnector, 'manual', pendingTriggerType);
                         onClose();
                       }}
                       className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"

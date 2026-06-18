@@ -28,12 +28,12 @@ import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
-import { DATA_API_URL } from '../../config';
+import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
-import { cn, isFieldVisible, flattenFields } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, getFieldValue } from '../../lib/utils';
 import { validateRecordRules } from '../../lib/validationEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
@@ -538,7 +538,178 @@ export const ModuleView = () => {
     }
   };
 
+  const evaluateAllDataPopulationRules = async (currentData: any) => {
+    const rules = moduleData?.config?.dataPopulationRules || (moduleData as any)?.dataPopulationRules || [];
+    if (rules.length === 0) return;
+
+    for (const rule of rules) {
+      // 1. Evaluate condition
+      const condition = rule.condition || { operator: 'not_null' };
+      const fieldIdToEval = rule.triggerFieldId || condition.fieldId;
+      if (!fieldIdToEval) continue;
+
+      const triggerVal = getFieldValue(currentData, fieldIdToEval);
+      
+      let conditionMatches = false;
+      if (condition.operator === 'not_null') {
+        conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
+      } else if (condition.operator === 'equals') {
+        conditionMatches = String(triggerVal) === String(condition.value);
+      } else if (condition.operator === 'not_equals') {
+        conditionMatches = String(triggerVal) !== String(condition.value);
+      }
+
+      if (!conditionMatches) continue;
+
+      // 2. Gather input parameter payload
+      const payload: Record<string, any> = {};
+      (rule.inputMappings || []).forEach((m: any) => {
+        if (m.inputName && m.sourceFieldId) {
+          payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+        }
+      });
+
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify({
+            connectorId: rule.connectorId,
+            moduleId: moduleId,
+            noReshape: true,
+            payload
+          })
+        });
+
+        if (!res.ok) throw new Error("Connector execution failed");
+        const json = await res.json();
+        const rawData = json.data || json;
+
+        if (rawData && typeof rawData === 'object') {
+          // Apply output mappings
+          setNewEntryData(prev => {
+            const updatedData = { ...prev };
+            let changed = false;
+
+            (rule.outputMappings || []).forEach((m: any) => {
+              if (m.targetFieldId && m.sourceFieldId) {
+                const val = rawData[m.sourceFieldId];
+                if (val !== undefined && getFieldValue(updatedData, m.targetFieldId) !== val) {
+                  const targetGroupId = fieldToGroupMap[m.targetFieldId];
+                  if (targetGroupId) {
+                    updatedData[targetGroupId] = {
+                      ...(updatedData[targetGroupId] || {}),
+                      [m.targetFieldId]: val
+                    };
+                  } else {
+                    updatedData[m.targetFieldId] = val;
+                  }
+                  changed = true;
+                }
+              }
+            });
+
+            return changed ? updatedData : prev;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to run data population rule on load:", err);
+      }
+    }
+  };
+
+  const evaluateDataPopulationRules = async (changedFieldId: string, currentData: any) => {
+    const rules = moduleData?.config?.dataPopulationRules || (moduleData as any)?.dataPopulationRules || [];
+    const matchingRules = rules.filter((r: any) => r.triggerFieldId === changedFieldId);
+    
+    if (matchingRules.length === 0) return;
+
+    for (const rule of matchingRules) {
+      // 1. Evaluate condition
+      const condition = rule.condition || { operator: 'not_null' };
+      const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
+      
+      let conditionMatches = false;
+      if (condition.operator === 'not_null') {
+        conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
+      } else if (condition.operator === 'equals') {
+        conditionMatches = String(triggerVal) === String(condition.value);
+      } else if (condition.operator === 'not_equals') {
+        conditionMatches = String(triggerVal) !== String(condition.value);
+      }
+
+      if (!conditionMatches) continue;
+
+      // 2. Gather input parameter payload
+      const payload: Record<string, any> = {};
+      (rule.inputMappings || []).forEach((m: any) => {
+        if (m.inputName && m.sourceFieldId) {
+          payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+        }
+      });
+
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify({
+            connectorId: rule.connectorId,
+            moduleId: moduleId,
+            noReshape: true,
+            payload
+          })
+        });
+
+        if (!res.ok) throw new Error("Connector execution failed");
+        const json = await res.json();
+        const rawData = json.data || json;
+
+        if (rawData && typeof rawData === 'object') {
+          // Apply output mappings
+          setNewEntryData(prev => {
+            const updatedData = { ...prev };
+            let changed = false;
+
+            (rule.outputMappings || []).forEach((m: any) => {
+              if (m.targetFieldId && m.sourceFieldId) {
+                const val = rawData[m.sourceFieldId];
+                if (val !== undefined) {
+                  const targetGroupId = fieldToGroupMap[m.targetFieldId];
+                  if (targetGroupId) {
+                    updatedData[targetGroupId] = {
+                      ...(updatedData[targetGroupId] || {}),
+                      [m.targetFieldId]: val
+                    };
+                  } else {
+                    updatedData[m.targetFieldId] = val;
+                  }
+                  changed = true;
+                }
+              }
+            });
+
+            return changed ? updatedData : prev;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to run data population rule:", err);
+      }
+    }
+  };
+
   const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
+    let finalData: any;
+    
     setNewEntryData(prev => {
       let updatedData = { ...prev };
       
@@ -551,7 +722,7 @@ export const ModuleView = () => {
       
       // Execute Lookup Output Mappings
       const field = allFields.find(f => f.id === fieldId);
-      if (field?.type === 'lookup' && field.lookupOutputMappings?.length) {
+      if ((field?.type === 'lookup' || field?.lookupSource === 'connector') && field.lookupOutputMappings?.length) {
         // ONLY clear and populate if the lookup value itself has changed.
         if (val !== prev[fieldId]) {
           // First, null out all target fields to clear any previously mapped values
@@ -598,18 +769,32 @@ export const ModuleView = () => {
       // Re-calculate dynamic defaults that might depend on this field
       allFields.forEach(f => {
         if (f.id !== fieldId && f.defaultType === 'field_copy' && f.defaultSourceFieldId === fieldId) {
-          const currentVal = updatedData[f.id];
+          const currentVal = getFieldValue(updatedData, f.id);
           const oldDefault = calculateDefaultValue(f, prev);
           
           // Only overwrite if it was empty or matched the previous default
           if (!currentVal || currentVal === oldDefault) {
-            updatedData[f.id] = calculateDefaultValue(f, updatedData);
+            const defaultVal = calculateDefaultValue(f, updatedData);
+            const targetGroupId = fieldToGroupMap[f.id];
+            if (targetGroupId) {
+              updatedData[targetGroupId] = {
+                ...(updatedData[targetGroupId] || {}),
+                [f.id]: defaultVal
+              };
+            } else {
+              updatedData[f.id] = defaultVal;
+            }
           }
         }
       });
       
+      finalData = updatedData;
       return updatedData;
     });
+
+    if (finalData) {
+      evaluateDataPopulationRules(fieldId, finalData);
+    }
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -3306,6 +3491,7 @@ export const ModuleView = () => {
                   }
                 });
                 setNewEntryData(initialDefaults);
+                evaluateAllDataPopulationRules(initialDefaults);
                 setEditingRecord(null);
                 if (moduleData?.tabs && moduleData.tabs.length > 0) {
                   setActiveTabId(moduleData.tabs[0].id);
@@ -3373,6 +3559,7 @@ export const ModuleView = () => {
                 }
               });
               setNewEntryData(initialDefaults);
+              evaluateAllDataPopulationRules(initialDefaults);
               setEditingRecord(null);
               if (moduleData?.tabs && moduleData.tabs.length > 0) {
                 setActiveTabId(moduleData.tabs[0].id);

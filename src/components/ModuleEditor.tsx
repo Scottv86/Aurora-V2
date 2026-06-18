@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Save, 
@@ -805,7 +805,6 @@ export const FIELD_CATEGORIES = [
       { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
       { id: 'user', label: 'User Selector', icon: Users, defaultSpan: 6 },
       { id: 'autonumber', label: 'Auto-increment', icon: Hash, defaultSpan: 6 },
-      { id: 'connector', label: 'Connector', icon: Zap, defaultSpan: 6 },
       { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 6 },
     ]
   },
@@ -1634,6 +1633,7 @@ export const ModuleEditor = () => {
     ]
   });
   const [connectorMappings, setConnectorMappings] = useState<Record<string, Record<string, string>>>({});
+  const [dataPopulationRules, setDataPopulationRules] = useState<any[]>([]);
   
   // Column Drag and Drop Indicators
   const [tableDropIndicator, setTableDropIndicator] = useState<{
@@ -1779,6 +1779,33 @@ export const ModuleEditor = () => {
   const [connectorRegistry, setConnectorRegistry] = useState<any[]>([]);
   const [showConnectorModal, setShowConnectorModal] = useState(false);
   const [showSubmoduleWizard, setShowSubmoduleWizard] = useState(false);
+  const [pendingAutoProvision, setPendingAutoProvision] = useState<any>(null);
+  const [selectedAutoTabId, setSelectedAutoTabId] = useState<string>('default-tab');
+  const [showAutoCreateTabForm, setShowAutoCreateTabForm] = useState(false);
+  const [newAutoTabLabel, setNewAutoTabLabel] = useState('');
+  const [newAutoTabParentId, setNewAutoTabParentId] = useState('');
+
+  const displayAutoTabs = useMemo(() => {
+    if (!tabs || tabs.length === 0) {
+      return [{ id: 'default-tab', label: 'General', depth: 0 }];
+    }
+    const rootTabs = tabs.filter((t: any) => !t.parentId);
+    const result: any[] = [];
+    rootTabs.forEach((root: any) => {
+      result.push({ ...root, depth: 0 });
+      const subtabs = tabs.filter((t: any) => t.parentId === root.id);
+      subtabs.forEach((sub: any) => {
+        result.push({ ...sub, depth: 1 });
+      });
+    });
+    // fallback for any orphaned subtabs
+    tabs.forEach((t: any) => {
+      if (t.parentId && !result.some(r => r.id === t.id)) {
+        result.push({ ...t, depth: 1 });
+      }
+    });
+    return result;
+  }, [tabs]);
 
   // Validation Rules State
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
@@ -2136,6 +2163,7 @@ export const ModuleEditor = () => {
                 titleFieldId: (standardModule as any).config?.titleFieldId || '',
                 subtitleFieldIds: (standardModule as any).config?.subtitleFieldIds || [],
               });
+              setDataPopulationRules([]);
               setBreadcrumbOverride(id, standardModule.name);
               setIsLoading(false);
               return;
@@ -2198,6 +2226,7 @@ export const ModuleEditor = () => {
         if (data.tabs) setTabs(data.tabs);
         if (data.validationRules) setValidationRules(data.validationRules);
         if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
+        if (data.dataPopulationRules) setDataPopulationRules(data.dataPopulationRules);
         if (data.workflows && data.workflows.length > 0) {
           setWorkflow(data.workflows[0]);
         } else if (data.workflow) {
@@ -2255,6 +2284,7 @@ export const ModuleEditor = () => {
         tabs,
         forms,
         connectorMappings,
+        dataPopulationRules,
         workflows: workflow ? [workflow] : [],
         interfaceSettings,
         validationRules
@@ -2296,7 +2326,7 @@ export const ModuleEditor = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient, validationRules]);
+  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, dataPopulationRules, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient, validationRules]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -4338,7 +4368,7 @@ export const ModuleEditor = () => {
                     : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                 )}
               >
-                {tab}
+                {tab === 'connectors' ? 'integrations' : tab}
               </button>
             ))}
           </div>
@@ -8744,8 +8774,12 @@ export const ModuleEditor = () => {
               connectorRegistry={connectorRegistry}
               connectorMappings={connectorMappings}
               setConnectorMappings={setConnectorMappings}
+              dataPopulationRules={dataPopulationRules}
+              setDataPopulationRules={setDataPopulationRules}
               setShowConnectorModal={setShowConnectorModal}
               currentTabId={currentTabId}
+              tabs={tabs}
+              setTabs={setTabs}
               handleForgeConnector={handleForgeConnector}
               handleCreateCustomConnector={handleCreateCustomConnector}
             />
@@ -14258,235 +14292,652 @@ export const ModuleEditor = () => {
         DATA_API_URL={DATA_API_URL}
       />
 
-      <NexusSelectionModal 
-        isOpen={showConnectorModal}
-        onClose={() => setShowConnectorModal(false)}
-        activeConnectors={activeConnectors}
-        registry={connectorRegistry}
-        onSelect={async (conn, strategy) => {
-          if (selectedField) {
-            const fullConnector = activeConnectors.find(c => c.connectorId === conn.connectorId) || 
-                                connectorRegistry.find(c => c.id === conn.connectorId);
+      {(() => {
+        const executeAutoProvision = async (conn: any, selectedField: any, targetTabId: string, currentTabs: Tab[], triggerType?: 'lookup' | 'rule') => {
+          const fullConnector = activeConnectors.find(c => c.connectorId === conn.connectorId) || 
+                              connectorRegistry.find(c => c.id === conn.connectorId);
 
-            if (fullConnector) {
-              const outputs = (fullConnector.ioSchema?.outputs) || (fullConnector.connector?.ioSchema?.outputs) || [];
-              const inputs = (fullConnector.ioSchema?.inputs) || (fullConnector.connector?.ioSchema?.inputs) || [];
+          if (!fullConnector) return;
+          const outputs = (fullConnector.ioSchema?.outputs) || (fullConnector.connector?.ioSchema?.outputs) || [];
+          const inputs = (fullConnector.ioSchema?.inputs) || (fullConnector.connector?.ioSchema?.inputs) || [];
 
-              if (selectedField.type === 'lookup') {
-                const defaultSearchParam = inputs[0]?.name || '';
-                const defaultLabelField = outputs.find((o: any) => o.type === 'string')?.name || outputs[0]?.name || '';
-                const defaultValueField = outputs.find((o: any) => o.name.toLowerCase().includes('id'))?.name || outputs[0]?.name || '';
+          if (triggerType === 'rule') {
+            toast.info(`Auto-provisioning fields and trigger rule...`);
+            let currentLayout = [...layout];
+            const newMappings: any[] = [];
+            let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
+            let isLeft = true;
 
-                const updatedFieldAttrs: any = {
-                  connectorId: conn.connectorId,
-                  connectorSearchParam: defaultSearchParam,
-                  connectorLabelField: defaultLabelField,
-                  connectorValueField: defaultValueField,
-                  label: conn.displayName || selectedField.label,
-                };
+            for (const output of outputs) {
+              const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+              const fieldLabel = output.label || output.name;
+              const fieldName = generateSlug(fieldLabel, currentLayout);
+              const newField: any = {
+                id: fieldId,
+                name: fieldName,
+                label: fieldLabel,
+                type: output.type === 'number' ? 'number' : 
+                      output.type === 'boolean' ? 'checkbox' : 'text',
+                required: false,
+                colSpan: 6,
+                startCol: isLeft ? 1 : 7,
+                rowIndex: nextRow,
+                tabId: targetTabId
+              };
 
-                if (strategy === 'auto') {
-                  toast.info(`Auto-provisioning lookup fields...`);
-                  
-                  const currentLayout = layout.map(f => f.id === selectedField.id ? {
-                    ...f,
-                    ...updatedFieldAttrs
-                  } : f);
+              currentLayout.push(newField);
+              newMappings.push({
+                sourceFieldId: output.name,
+                targetFieldId: fieldId
+              });
 
-                  const newMappings = [...(selectedField.lookupOutputMappings || [])];
-                  let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
-                  let isLeft = true;
-
-                  for (const output of outputs) {
-                    if (output.name === defaultValueField) continue;
-                    if (newMappings.some((m: any) => m.sourceFieldId === output.name)) continue;
-
-                    const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
-                    const newField: any = {
-                      id: fieldId,
-                      label: output.label || output.name,
-                      type: output.type === 'number' ? 'number' : 
-                            output.type === 'boolean' ? 'checkbox' : 'text',
-                      required: false,
-                      colSpan: 6,
-                      startCol: isLeft ? 1 : 7,
-                      rowIndex: nextRow,
-                      tabId: currentTabId
-                    };
-
-                    currentLayout.push(newField);
-                    newMappings.push({
-                      id: Math.random().toString(36).substr(2, 9),
-                      sourceFieldId: output.name,
-                      targetFieldId: fieldId
-                    });
-
-                    if (isLeft) {
-                      isLeft = false;
-                    } else {
-                      isLeft = true;
-                      nextRow++;
-                    }
-                  }
-
-                  updatedFieldAttrs.lookupOutputMappings = newMappings;
-
-                  // 1. Update local states
-                  setLayout(currentLayout);
-                  updateField(selectedField.id, updatedFieldAttrs);
-
-                  // 2. Persist updated module
-                  const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-                  const isNew = id === 'new' || MODULES.some(m => m.id === id);
-                  const payload = {
-                    ...moduleSettings,
-                    config: {
-                      titleFieldId: moduleSettings.titleFieldId
-                    },
-                    id: isNew && id !== 'new' ? id : undefined,
-                    enabled: moduleSettings.status === 'ACTIVE',
-                    layout: currentLayout || [],
-                    tabs: tabs || [],
-                    forms: forms || [],
-                    connectorMappings: connectorMappings || {},
-                    workflows: workflow ? [workflow] : []
-                  };
-
-                  try {
-                    const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
-                    const res = await fetch(url, {
-                      method: isNew ? 'POST' : 'PUT',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'x-tenant-id': tenant?.id || '',
-                        'Authorization': `Bearer ${token}`
-                      },
-                      body: JSON.stringify(payload)
-                    });
-
-                    if (res.ok) {
-                      toast.success(`Successfully provisioned lookup and ${newMappings.length} fields`);
-                      refreshModules();
-                    } else {
-                      throw new Error('Failed to save auto-provisioned lookup fields');
-                    }
-                  } catch (err) {
-                    console.error("Failed to save mappings:", err);
-                    toast.error("Failed to persist auto-provisioned fields");
-                  }
-                } else {
-                  // Manual Strategy
-                  updateField(selectedField.id, updatedFieldAttrs);
-                  setSelectedId(selectedField.id);
-                  setRightSidebarTab('inspector');
-                }
-
+              if (isLeft) {
+                isLeft = false;
               } else {
-                // Existing connector block strategy
-                updateField(selectedField.id, { 
-                  connectorId: conn.connectorId,
-                  label: conn.displayName,
-                  icon: conn.icon || fullConnector?.icon
-                });
-                
-                if (strategy === 'auto') {
-                  toast.info(`Auto-provisioning ${outputs.length} fields...`);
-                  
-                  const newMappings: Record<string, string> = { ...(connectorMappings[conn.connectorId] || {}) };
-                  
-                  const currentLayout = layout.map(f => f.id === selectedField.id ? {
-                    ...f,
-                    connectorId: conn.connectorId,
-                    label: conn.displayName
-                  } : f);
-                  
-                  let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
-                  let isLeft = true;
-                  
-                  for (const output of outputs) {
-                    if (newMappings[output.name]) continue;
-
-                    const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
-                    const newField: any = {
-                      id: fieldId,
-                      label: output.label || output.name,
-                      type: output.type === 'number' ? 'number' : 
-                            output.type === 'boolean' ? 'checkbox' : 'text',
-                      required: false,
-                      colSpan: 6,
-                      startCol: isLeft ? 1 : 7,
-                      rowIndex: nextRow,
-                      tabId: currentTabId
-                    };
-
-                    currentLayout.push(newField);
-                    newMappings[output.name] = fieldId;
-                    
-                    if (isLeft) {
-                      isLeft = false;
-                    } else {
-                      isLeft = true;
-                      nextRow++;
-                    }
-                  }
-
-                  setLayout(currentLayout);
-                  setConnectorMappings(prev => ({ ...prev, [conn.connectorId]: newMappings }));
-
-                  const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-                  const isNew = id === 'new' || MODULES.some(m => m.id === id);
-                  const payload = {
-                    ...moduleSettings,
-                    config: {
-                      titleFieldId: moduleSettings.titleFieldId
-                    },
-                    id: isNew && id !== 'new' ? id : undefined,
-                    enabled: moduleSettings.status === 'ACTIVE',
-                    layout: currentLayout || [],
-                    tabs: tabs || [],
-                    forms: forms || [],
-                    connectorMappings: {
-                      ...(connectorMappings || {}),
-                      [conn.connectorId]: newMappings
-                    },
-                    workflows: workflow ? [workflow] : []
-                  };
-
-                  try {
-                    const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
-                    const res = await fetch(url, {
-                      method: isNew ? 'POST' : 'PUT',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'x-tenant-id': tenant?.id || '',
-                        'Authorization': `Bearer ${token}`
-                      },
-                      body: JSON.stringify(payload)
-                    });
-
-                    if (res.ok) {
-                      toast.success(`Successfully provisioned ${outputs.length} fields`);
-                      refreshModules();
-                    } else {
-                      throw new Error('Failed to save auto-provisioned fields');
-                    }
-                  } catch (err) {
-                    console.error("Failed to save mappings:", err);
-                    toast.error("Failed to persist auto-provisioned fields");
-                  }
-                } else {
-                  setSelectedId(selectedField.id);
-                  setRightSidebarTab('inspector');
-                }
+                isLeft = true;
+                nextRow++;
               }
             }
+
+            const newRuleId = `rule-${Math.random().toString(36).substring(2, 9)}`;
+            const existingFields = currentLayout.filter(f => !['heading', 'divider', 'spacer', 'alert', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(f.type) && !newMappings.some(m => m.targetFieldId === f.id));
+            const defaultTriggerFieldId = existingFields[0]?.id || '';
+
+            const newRule = {
+              id: newRuleId,
+              connectorId: conn.connectorId,
+              name: `${conn.displayName || conn.name || 'Connector'} Auto Trigger`,
+              triggerFieldId: defaultTriggerFieldId,
+              condition: { fieldId: defaultTriggerFieldId, operator: 'not_null', value: '' },
+              inputMappings: inputs.map(input => ({
+                inputName: input.name,
+                sourceFieldId: defaultTriggerFieldId
+              })),
+              outputMappings: newMappings.map(m => ({
+                id: Math.random().toString(36).substr(2, 9),
+                sourceFieldId: m.sourceFieldId,
+                targetFieldId: m.targetFieldId
+              }))
+            };
+
+            const finalLayout = currentLayout;
+            const finalRules = [...dataPopulationRules, newRule];
+
+            setLayout(finalLayout);
+            setDataPopulationRules(finalRules);
+
+            // Persist the updated module
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+            const isNew = id === 'new' || MODULES.some(m => m.id === id);
+            const payload = {
+              ...moduleSettings,
+              config: {
+                titleFieldId: moduleSettings.titleFieldId,
+                subtitleFieldIds: moduleSettings.subtitleFieldIds,
+              },
+              id: isNew && id !== 'new' ? id : undefined,
+              enabled: moduleSettings.status === 'ACTIVE',
+              layout: finalLayout || [],
+              tabs: currentTabs || [],
+              forms: forms || [],
+              connectorMappings: connectorMappings || {},
+              dataPopulationRules: finalRules,
+              workflows: workflow ? [workflow] : [],
+              interfaceSettings,
+              validationRules
+            };
+
+            try {
+              const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
+              const res = await fetch(url, {
+                method: isNew ? 'POST' : 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-tenant-id': tenant?.id || '',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+              });
+
+              if (res.ok) {
+                const savedModule = await res.json();
+                toast.success(`Successfully provisioned rule and ${newMappings.length} fields`);
+                await refreshModules();
+                if (isNew && savedModule?.id) {
+                  navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+                }
+              } else {
+                throw new Error('Failed to save auto-provisioned rule/fields');
+              }
+            } catch (err) {
+              console.error("Failed to save mappings:", err);
+              toast.error("Failed to persist auto-provisioned fields");
+            }
+            return;
           }
-          setShowConnectorModal(false);
-        }}
-        onActivate={handleActivateConnector}
-        onCreateCustom={handleCreateCustomConnector}
-        onForge={handleForgeConnector}
-      />
+
+          let targetField = selectedField;
+          let isNewLookup = false;
+          let currentLayout = [...layout];
+
+          // If no field is highlighted on the canvas, auto-create a lookup field to act as the trigger
+          if (!targetField) {
+            const lookupFieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+            const lookupLabel = `${conn.displayName || conn.name || 'Lookup'} Lookup`;
+            const lookupName = generateSlug(lookupLabel, currentLayout);
+            
+            targetField = {
+              id: lookupFieldId,
+              name: lookupName,
+              type: 'lookup',
+              lookupSource: 'connector',
+              connectorId: conn.connectorId,
+              label: lookupLabel,
+              placeholder: `Search ${lookupLabel}...`,
+              required: false,
+              colSpan: 6,
+              startCol: 1,
+              rowIndex: currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0,
+              tabId: targetTabId,
+              lookupOutputMappings: []
+            };
+            currentLayout.push(targetField);
+            isNewLookup = true;
+          }
+
+          if (targetField && (targetField.type === 'lookup' || targetField.lookupSource === 'connector')) {
+            const defaultSearchParam = inputs[0]?.name || '';
+            const defaultLabelField = outputs.find((o: any) => o.type === 'string')?.name || outputs[0]?.name || '';
+            const defaultValueField = outputs.find((o: any) => o.name.toLowerCase().includes('id'))?.name || outputs[0]?.name || '';
+
+            const updatedFieldAttrs: any = {
+              connectorId: conn.connectorId,
+              connectorSearchParam: defaultSearchParam,
+              connectorLabelField: defaultLabelField,
+              connectorValueField: defaultValueField,
+              label: conn.displayName || targetField.label,
+            };
+
+            toast.info(`Auto-provisioning lookup fields...`);
+            
+            currentLayout = currentLayout.map(f => f.id === targetField.id ? {
+              ...f,
+              ...updatedFieldAttrs
+            } : f);
+
+            const newMappings = [...(targetField.lookupOutputMappings || [])];
+            let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
+            let isLeft = true;
+
+            for (const output of outputs) {
+              if (output.name === defaultValueField) continue;
+              
+              const existingMappingIdx = newMappings.findIndex((m: any) => m.sourceFieldId === output.name);
+              if (existingMappingIdx > -1) {
+                const targetFieldId = newMappings[existingMappingIdx].targetFieldId;
+                const fieldExists = currentLayout.some(f => f.id === targetFieldId);
+                if (fieldExists) {
+                  // Relocate existing field to the selected tab
+                  currentLayout = currentLayout.map(f => f.id === targetFieldId ? { ...f, tabId: targetTabId } : f);
+                  continue;
+                } else {
+                  // Stale mapping: remove it so we recreate the field
+                  newMappings.splice(existingMappingIdx, 1);
+                }
+              }
+
+              const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+              const fieldLabel = output.label || output.name;
+              const fieldName = generateSlug(fieldLabel, currentLayout);
+              const newField: any = {
+                id: fieldId,
+                name: fieldName,
+                label: fieldLabel,
+                type: output.type === 'number' ? 'number' : 
+                      output.type === 'boolean' ? 'checkbox' : 'text',
+                required: false,
+                colSpan: 6,
+                startCol: isLeft ? 1 : 7,
+                rowIndex: nextRow,
+                tabId: targetTabId
+              };
+
+              currentLayout.push(newField);
+              newMappings.push({
+                id: Math.random().toString(36).substr(2, 9),
+                sourceFieldId: output.name,
+                targetFieldId: fieldId
+              });
+
+              if (isLeft) {
+                isLeft = false;
+              } else {
+                isLeft = true;
+                nextRow++;
+              }
+            }
+
+            updatedFieldAttrs.lookupOutputMappings = newMappings;
+
+            const finalLayout = currentLayout.map(f => f.id === targetField.id ? {
+              ...f,
+              ...updatedFieldAttrs
+            } : f);
+
+            // 1. Update local states
+            setLayout(finalLayout);
+
+            // 2. Persist updated module
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+            const isNew = id === 'new' || MODULES.some(m => m.id === id);
+            const payload = {
+              ...moduleSettings,
+              config: {
+                titleFieldId: moduleSettings.titleFieldId,
+                subtitleFieldIds: moduleSettings.subtitleFieldIds,
+              },
+              id: isNew && id !== 'new' ? id : undefined,
+              enabled: moduleSettings.status === 'ACTIVE',
+              layout: finalLayout || [],
+              tabs: currentTabs || [],
+              forms: forms || [],
+              connectorMappings: connectorMappings || {},
+              dataPopulationRules,
+              workflows: workflow ? [workflow] : [],
+              interfaceSettings,
+              validationRules
+            };
+
+            try {
+              const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
+              const res = await fetch(url, {
+                method: isNew ? 'POST' : 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-tenant-id': tenant?.id || '',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+              });
+
+              if (res.ok) {
+                const savedModule = await res.json();
+                toast.success(`Successfully provisioned lookup and ${newMappings.length} fields`);
+                await refreshModules();
+                if (isNew && savedModule?.id) {
+                  navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+                }
+              } else {
+                throw new Error('Failed to save auto-provisioned lookup fields');
+              }
+            } catch (err) {
+              console.error("Failed to save mappings:", err);
+              toast.error("Failed to persist auto-provisioned fields");
+            }
+          } else {
+            // Fallback strategy for legacy connector blocks
+            let currentLayout = layout.map(f => (selectedField && f.id === selectedField.id) ? {
+              ...f,
+              connectorId: conn.connectorId,
+              label: conn.displayName
+            } : f);
+            
+            toast.info(`Auto-provisioning ${outputs.length} fields...`);
+            
+            const newMappings: Record<string, string> = { ...(connectorMappings[conn.connectorId] || {}) };
+            
+            let nextRow = currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0;
+            let isLeft = true;
+            
+            for (const output of outputs) {
+              const mappedFieldId = newMappings[output.name];
+              if (mappedFieldId) {
+                const fieldExists = currentLayout.some(f => f.id === mappedFieldId);
+                if (fieldExists) {
+                  // Relocate existing field to the selected tab
+                  currentLayout = currentLayout.map(f => f.id === mappedFieldId ? { ...f, tabId: targetTabId } : f);
+                  continue;
+                } else {
+                  // Stale mapping: delete mapping so we recreate the field
+                  delete newMappings[output.name];
+                }
+              }
+
+              const fieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+              const fieldLabel = output.label || output.name;
+              const fieldName = generateSlug(fieldLabel, currentLayout);
+              const newField: any = {
+                id: fieldId,
+                name: fieldName,
+                label: fieldLabel,
+                type: output.type === 'number' ? 'number' : 
+                      output.type === 'boolean' ? 'checkbox' : 'text',
+                required: false,
+                colSpan: 6,
+                startCol: isLeft ? 1 : 7,
+                rowIndex: nextRow,
+                tabId: targetTabId
+              };
+
+              currentLayout.push(newField);
+              newMappings[output.name] = fieldId;
+              
+              if (isLeft) {
+                isLeft = false;
+              } else {
+                isLeft = true;
+                nextRow++;
+              }
+            }
+
+            setLayout(currentLayout);
+            setConnectorMappings(prev => ({ ...prev, [conn.connectorId]: newMappings }));
+
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+            const isNew = id === 'new' || MODULES.some(m => m.id === id);
+            const payload = {
+              ...moduleSettings,
+              config: {
+                titleFieldId: moduleSettings.titleFieldId,
+                subtitleFieldIds: moduleSettings.subtitleFieldIds,
+              },
+              id: isNew && id !== 'new' ? id : undefined,
+              enabled: moduleSettings.status === 'ACTIVE',
+              layout: currentLayout || [],
+              tabs: currentTabs || [],
+              forms: forms || [],
+              connectorMappings: {
+                ...(connectorMappings || {}),
+                [conn.connectorId]: newMappings
+              },
+              dataPopulationRules,
+              workflows: workflow ? [workflow] : [],
+              interfaceSettings,
+              validationRules
+            };
+
+            try {
+              const url = isNew ? `${API_BASE_URL}/api/data/modules` : `${API_BASE_URL}/api/data/modules/${id}`;
+              const res = await fetch(url, {
+                method: isNew ? 'POST' : 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-tenant-id': tenant?.id || '',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+              });
+
+              if (res.ok) {
+                const savedModule = await res.json();
+                toast.success(`Successfully provisioned lookup and ${Object.keys(newMappings).length} fields`);
+                await refreshModules();
+                if (isNew && savedModule?.id) {
+                  navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+                }
+              } else {
+                throw new Error('Failed to save auto-provisioned fields');
+              }
+            } catch (err) {
+              console.error("Failed to save mappings:", err);
+              toast.error("Failed to persist auto-provisioned fields");
+            }
+          }
+        };
+
+        return (
+          <>
+            <NexusSelectionModal 
+              isOpen={showConnectorModal}
+              onClose={() => setShowConnectorModal(false)}
+              activeConnectors={activeConnectors}
+              registry={connectorRegistry}
+              onSelect={async (conn, strategy, triggerType) => {
+                const fullConnector = activeConnectors.find(c => c.connectorId === conn.connectorId) || 
+                                     connectorRegistry.find(c => c.id === conn.connectorId);
+
+                if (fullConnector) {
+                  const outputs = (fullConnector.ioSchema?.outputs) || (fullConnector.connector?.ioSchema?.outputs) || [];
+                  const inputs = (fullConnector.ioSchema?.inputs) || (fullConnector.connector?.ioSchema?.inputs) || [];
+
+                  if (strategy === 'auto') {
+                    setShowConnectorModal(false);
+                    setPendingAutoProvision({ conn, strategy, selectedField, triggerType });
+                    setSelectedAutoTabId(currentTabId || (tabs && tabs[0]?.id) || 'default-tab');
+                  } else {
+                    if (triggerType === 'rule') {
+                      const newRuleId = `rule-${Math.random().toString(36).substring(2, 9)}`;
+                      const newRule = {
+                        id: newRuleId,
+                        connectorId: conn.connectorId,
+                        name: `${conn.displayName || conn.name || 'Connector'} Custom Trigger`,
+                        triggerFieldId: '',
+                        condition: { fieldId: '', operator: 'not_null', value: '' },
+                        inputMappings: [],
+                        outputMappings: []
+                      };
+                      setDataPopulationRules(prev => [...(prev || []), newRule]);
+                      setActiveTab('connectors');
+                      toast.success("Created a trigger rule. You can map fields manually in the Connectors tab.");
+                    } else if (selectedField) {
+                      if (selectedField.type === 'lookup') {
+                        const defaultSearchParam = inputs[0]?.name || '';
+                        const defaultLabelField = outputs.find((o: any) => o.type === 'string')?.name || outputs[0]?.name || '';
+                        const defaultValueField = outputs.find((o: any) => o.name.toLowerCase().includes('id'))?.name || outputs[0]?.name || '';
+
+                        const updatedFieldAttrs = {
+                          connectorId: conn.connectorId,
+                          connectorSearchParam: defaultSearchParam,
+                          connectorLabelField: defaultLabelField,
+                          connectorValueField: defaultValueField,
+                          label: conn.displayName || selectedField.label,
+                        };
+                        updateField(selectedField.id, updatedFieldAttrs);
+                        setSelectedId(selectedField.id);
+                        setRightSidebarTab('inspector');
+                      } else {
+                        updateField(selectedField.id, { 
+                          connectorId: conn.connectorId,
+                          label: conn.displayName,
+                          icon: conn.icon || fullConnector?.icon
+                        });
+                      }
+                    } else {
+                      // Lookup trigger requested without selecting a field: auto-create lookup field
+                      const lookupFieldId = `field_${Math.random().toString(36).substr(2, 9)}`;
+                      const lookupLabel = `${conn.displayName || conn.name || 'Lookup'} Lookup`;
+                      const lookupName = generateSlug(lookupLabel, layout);
+                      
+                      const newLookupField = {
+                        id: lookupFieldId,
+                        name: lookupName,
+                        type: 'lookup',
+                        lookupSource: 'connector',
+                        connectorId: conn.connectorId,
+                        label: lookupLabel,
+                        placeholder: `Search ${lookupLabel}...`,
+                        required: false,
+                        colSpan: 6,
+                        startCol: 1,
+                        rowIndex: layout.length > 0 ? Math.max(...layout.map((f: any) => f.rowIndex || 0)) + 1 : 0,
+                        tabId: currentTabId || (tabs && tabs[0]?.id) || 'default-tab',
+                        lookupOutputMappings: []
+                      };
+                      
+                      setLayout(prev => [...prev, newLookupField]);
+                      setSelectedId(lookupFieldId);
+                      setRightSidebarTab('inspector');
+                      setActiveTab('builder');
+                      toast.success(`Created lookup field "${lookupLabel}". Map outputs in the inspector.`);
+                    }
+                    setShowConnectorModal(false);
+                  }
+                }
+              }}
+              onActivate={handleActivateConnector}
+              onCreateCustom={handleCreateCustomConnector}
+              onForge={handleForgeConnector}
+            />
+
+            {/* Bulk Auto-Provision Tab Selector Modal */}
+            {pendingAutoProvision && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+                <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900 rounded-[2.5rem] w-full max-w-md p-6 shadow-2xl space-y-6">
+                  <div>
+                    <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">Select Placement Tab</h4>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
+                      Choose which tab in the module should contain the auto-provisioned fields.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Destination Tab</label>
+                    <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar border border-zinc-150 dark:border-zinc-900 rounded-xl p-1 bg-zinc-50 dark:bg-zinc-900/50">
+                      {displayAutoTabs.map((tab: any) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setSelectedAutoTabId(tab.id)}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between",
+                            selectedAutoTabId === tab.id
+                              ? "bg-indigo-600 text-white shadow-sm"
+                              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                          )}
+                          style={{ paddingLeft: tab.depth === 1 ? '1.5rem' : '0.75rem' }}
+                        >
+                          <span className="flex items-center gap-1">
+                            {tab.depth === 1 && <span className="opacity-40">↳</span>}
+                            <span>{tab.label || tab.id}</span>
+                          </span>
+                          <span className="text-[9px] opacity-60 font-mono">ID: {tab.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-900">
+                    {showAutoCreateTabForm ? (
+                      <div className="p-4 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/20 space-y-3">
+                        <h5 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Create New Tab or Section</h5>
+                        <div className="space-y-2">
+                          <div>
+                            <label className="text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Label</label>
+                            <input 
+                              type="text"
+                              placeholder="e.g. Weather Data"
+                              value={newAutoTabLabel}
+                              onChange={(e) => setNewAutoTabLabel(e.target.value)}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Parent Tab (Optional)</label>
+                            <select
+                              value={newAutoTabParentId}
+                              onChange={(e) => setNewAutoTabParentId(e.target.value)}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-500 text-zinc-700 dark:text-zinc-300"
+                            >
+                              <option value="">None (Root Tab)</option>
+                              {tabs.filter((t: any) => !t.parentId).map((t: any) => (
+                                <option key={t.id} value={t.id}>{t.label || t.id}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            onClick={() => {
+                              setShowAutoCreateTabForm(false);
+                              setNewAutoTabLabel('');
+                              setNewAutoTabParentId('');
+                            }}
+                            className="px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (!newAutoTabLabel.trim()) {
+                                toast.error("Please enter a tab label");
+                                return;
+                              }
+                              const newTabId = `tab-${Math.random().toString(36).substring(2, 9)}`;
+                              const newTab = {
+                                id: newTabId,
+                                label: newAutoTabLabel.trim(),
+                                parentId: newAutoTabParentId || undefined
+                              };
+                              setTabs([...tabs, newTab]);
+                              setSelectedAutoTabId(newTabId);
+                              setShowAutoCreateTabForm(false);
+                              setNewAutoTabLabel('');
+                              setNewAutoTabParentId('');
+                              toast.success(`Created tab "${newTab.label}"`);
+                            }}
+                            className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider shadow-sm hover:bg-indigo-500"
+                          >
+                            Create
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowAutoCreateTabForm(true)}
+                        className="w-full py-2 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-black uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all flex items-center justify-center gap-1.5 bg-zinc-50/20 dark:bg-zinc-900/10 cursor-pointer"
+                      >
+                        <Plus size={12} />
+                        <span>Create New Tab or Sub-tab</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 justify-end pt-2">
+                    <button
+                      onClick={() => setPendingAutoProvision(null)}
+                      className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (pendingAutoProvision) {
+                          let finalTabId = selectedAutoTabId;
+                          let finalTabs = [...tabs];
+
+                          // Auto-create new tab if form is open and has a non-empty label
+                          if (showAutoCreateTabForm && newAutoTabLabel.trim()) {
+                            const newTabId = `tab-${Math.random().toString(36).substring(2, 9)}`;
+                            const newTab = {
+                              id: newTabId,
+                              label: newAutoTabLabel.trim(),
+                              parentId: newAutoTabParentId || undefined
+                            };
+                            finalTabs = [...finalTabs, newTab];
+                            finalTabId = newTabId;
+
+                            // Update local states
+                            setTabs(finalTabs);
+                            setSelectedAutoTabId(newTabId);
+                            setShowAutoCreateTabForm(false);
+                            setNewAutoTabLabel('');
+                            setNewAutoTabParentId('');
+                          }
+
+                          await executeAutoProvision(pendingAutoProvision.conn, pendingAutoProvision.selectedField, finalTabId, finalTabs, pendingAutoProvision.triggerType);
+                          setPendingAutoProvision(null);
+                        }
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-indigo-500/20"
+                    >
+                      Auto Provision
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <ConnectorConfigDrawer 
         isOpen={configDrawerOpen}

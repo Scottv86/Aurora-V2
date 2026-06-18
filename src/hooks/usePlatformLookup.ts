@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { useUsers } from './useUsers';
 import { useTeams } from './useTeams';
 import { usePositions } from './usePositions';
@@ -66,6 +67,8 @@ export const usePlatformLookup = (field: any) => {
   const activeFilters = useMemo(() => lookupFilters.length > 0 ? lookupFilters : (userFilters || []), [JSON.stringify(lookupFilters), JSON.stringify(userFilters)]);
   
   const { tenant } = usePlatform();
+  const { moduleId, id } = useParams();
+  const activeModuleId = moduleId || id;
   
   // Debug log to ensure context is available
   useEffect(() => {
@@ -87,7 +90,7 @@ export const usePlatformLookup = (field: any) => {
   // Track the current source configuration to avoid redundant fetches
 
   const lastConfigRef = useRef<string>("");
-  const configKey = `${effectiveSource}-${platformEntity}-${targetModuleId}-${targetPlatformModuleId}-${globalListId}-${tenant?.id}`;
+  const configKey = `${effectiveSource}-${platformEntity}-${targetModuleId}-${targetPlatformModuleId}-${globalListId}-${field?.connectorId || ''}-${tenant?.id}`;
 
   // 1. Synchronous Data Source Resolver (Memoized)
   const syncData = useMemo<LookupItem[]>(() => {
@@ -165,17 +168,19 @@ export const usePlatformLookup = (field: any) => {
   const [asyncLoading, setAsyncLoading] = useState(false);
   
   const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
-                  (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
+                  (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
+                  (lookupSource === 'connector' && field?.connectorId);
 
   // Determine final data and loading state
   const rawData = isAsync ? asyncData : syncData;
   const loading = isAsync ? asyncLoading : isSyncLoading;
 
 
-  // 2. Async Effect: Handles Network-based fetches (Module Records & Platform Modules)
+  // 2. Async Effect: Handles Network-based fetches (Module Records, Platform Modules, and Connectors)
   useEffect(() => {
     const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
-                    (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId);
+                    (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
+                    (lookupSource === 'connector' && field?.connectorId);
 
     if (!isAsync) return;
 
@@ -253,6 +258,38 @@ export const usePlatformLookup = (field: any) => {
                 });
               }
             }
+          } else if (lookupSource === 'connector' && field?.connectorId) {
+            const url = `${API_BASE_URL}/api/nexus-proxy/execute`;
+            console.log(`[usePlatformLookup] Fetching connector options: ${url} for connectorId=${field.connectorId}`);
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.access_token}`,
+                'x-tenant-id': tenant?.id || ''
+              },
+              body: JSON.stringify({
+                connectorId: field.connectorId,
+                moduleId: activeModuleId,
+                noReshape: true,
+                payload: {}
+              })
+            });
+            if (res.ok) {
+              const json = await res.json();
+              const rawData = json.data || json;
+              const arrayData = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === 'object' && Object.keys(rawData).length > 0) ? [rawData] : [];
+              results = arrayData.map((item: any, idx: number) => {
+                const rawItem = typeof item === 'object' ? item : { value: item };
+                const labelField = field.connectorLabelField || 'name';
+                const valueField = field.connectorValueField || 'id';
+                return {
+                  id: String(rawItem[valueField] !== undefined ? rawItem[valueField] : (rawItem.id || rawItem.value || idx)),
+                  name: String(rawItem[labelField] !== undefined ? rawItem[labelField] : (rawItem.name || rawItem.value || JSON.stringify(rawItem))),
+                  ...rawItem
+                };
+              });
+            }
           }
 
           // Update cache
@@ -274,7 +311,7 @@ export const usePlatformLookup = (field: any) => {
     };
 
     fetchData();
-  }, [configKey, session?.access_token, lookupDisplayField, effectiveSource, lookupSource, optionsSource, targetModuleId, targetPlatformModuleId]);
+  }, [configKey, session?.access_token, lookupDisplayField, effectiveSource, lookupSource, optionsSource, targetModuleId, targetPlatformModuleId, activeModuleId, field?.connectorId, field?.connectorLabelField, field?.connectorValueField]);
 
 
 

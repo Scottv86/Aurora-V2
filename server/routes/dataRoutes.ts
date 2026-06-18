@@ -864,7 +864,8 @@ async function createConnectorLog(
   payload: any,
   response: any,
   status: 'SUCCESS' | 'ERROR',
-  errorMessage?: string
+  errorMessage?: string,
+  metadata?: any
 ) {
   try {
     let moduleName: string | null = null;
@@ -878,6 +879,11 @@ async function createConnectorLog(
       }
     }
 
+    const savedPayload = {
+      params: payload || {},
+      metadata: metadata || {}
+    };
+
     await db.connectorLog.create({
       data: {
         tenantId,
@@ -885,7 +891,7 @@ async function createConnectorLog(
         connectorName,
         moduleId: moduleId || null,
         moduleName,
-        payload: payload ? JSON.parse(JSON.stringify(payload)) : null,
+        payload: savedPayload,
         response: response ? JSON.parse(JSON.stringify(response)) : null,
         status,
         errorMessage: errorMessage || null
@@ -972,154 +978,190 @@ router.post('/nexus/execute', async (req: TenantRequest, res) => {
     const connectorConfig = (connector.config as any) || {};
     const edgeFunctionLogic = connectorConfig.edgeFunctionLogic;
 
+    let executionPath: 'vm' | 'http' | 'external' | 'simulation' = 'simulation';
+    let targetUrl: string | string[] | null = null;
+    let targetMethod: string | null = null;
+    let targetHeaders: any = null;
+
     if (edgeFunctionLogic && typeof edgeFunctionLogic === 'string') {
       // Run custom VM sandbox execution locally (reused proxy logic)
-      const vm = await import('vm');
-      const context = {
-        params,
-        secrets,
-        fetch,
-        console,
-        promise: null as any
-      };
-      vm.createContext(context);
-      const wrapperCode = `
-        promise = (async () => {
-          const fn = ${edgeFunctionLogic};
-          return await fn(params, secrets);
-        })();
-      `;
-      const script = new vm.Script(wrapperCode);
-      script.runInContext(context);
-      rawResultData = (await context.promise) || {};
-    } else if (connector.edgeFunctionUrl && connector.edgeFunctionUrl.startsWith('http') && !connector.edgeFunctionUrl.includes('/api/nexus-proxy/execute')) {
-      // Call external edge function URL
-      const fetchRes = await fetch(connector.edgeFunctionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectorId, payload: params, secrets })
-      });
-      if (!fetchRes.ok) {
-        const errText = await fetchRes.text();
-        throw new Error(`External API execution failed: ${errText}`);
-      }
-      const proxyResult = await fetchRes.json();
-      rawResultData = proxyResult.data || proxyResult;
-    } else if (connectorConfig.url) {
-      // Pure REST URL request configuration
-      let targetUrl = connectorConfig.url;
-      const replacePlaceholders = (str: string) => {
-        if (!str || typeof str !== 'string') return str;
-        let temp = str;
-        Object.entries(params).forEach(([k, v]) => {
-          temp = temp.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
+        executionPath = 'vm';
+        const requestedUrls: string[] = [];
+        const wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+          const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url || String(input));
+          requestedUrls.push(urlStr);
+          return fetch(input, init);
+        };
+
+        const vm = await import('vm');
+        const context = {
+          params,
+          secrets,
+          fetch: wrappedFetch,
+          console,
+          promise: null as any
+        };
+        vm.createContext(context);
+        const wrapperCode = `
+          promise = (async () => {
+            const fn = ${edgeFunctionLogic};
+            return await fn(params, secrets);
+          })();
+        `;
+        const script = new vm.Script(wrapperCode);
+        script.runInContext(context);
+        rawResultData = (await context.promise) || {};
+        targetUrl = requestedUrls.length === 1 ? requestedUrls[0] : (requestedUrls.length > 0 ? requestedUrls : null);
+      } else if (connector.edgeFunctionUrl && connector.edgeFunctionUrl.startsWith('http') && !connector.edgeFunctionUrl.includes('/api/nexus-proxy/execute')) {
+        executionPath = 'external';
+        targetUrl = connector.edgeFunctionUrl;
+        targetMethod = 'POST';
+
+        // Call external edge function URL
+        const fetchRes = await fetch(connector.edgeFunctionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connectorId, payload: params, secrets })
         });
-        Object.entries(secrets).forEach(([k, v]) => {
-          temp = temp.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
-        });
-        return temp;
-      };
-      targetUrl = replacePlaceholders(targetUrl);
-      const method = connectorConfig.method || 'GET';
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (connectorConfig.headers && typeof connectorConfig.headers === 'object') {
-        Object.entries(connectorConfig.headers).forEach(([k, v]) => {
-          headers[k] = replacePlaceholders(v as string);
-        });
-      }
-      let body: any = undefined;
-      if (method !== 'GET' && method !== 'HEAD' && connectorConfig.body) {
-        if (typeof connectorConfig.body === 'string') {
-          body = replacePlaceholders(connectorConfig.body);
-        } else if (typeof connectorConfig.body === 'object') {
-          body = replacePlaceholders(JSON.stringify(connectorConfig.body));
+        if (!fetchRes.ok) {
+          const errText = await fetchRes.text();
+          throw new Error(`External API execution failed: ${errText}`);
+        }
+        const proxyResult = await fetchRes.json();
+        rawResultData = proxyResult.data || proxyResult;
+      } else if (connectorConfig.url) {
+        executionPath = 'http';
+        // Pure REST URL request configuration
+        let targetUrlStr = connectorConfig.url;
+        const replacePlaceholders = (str: string) => {
+          if (!str || typeof str !== 'string') return str;
+          let temp = str;
+          Object.entries(params).forEach(([k, v]) => {
+            temp = temp.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
+          });
+          Object.entries(secrets).forEach(([k, v]) => {
+            temp = temp.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
+          });
+          return temp;
+        };
+        targetUrlStr = replacePlaceholders(targetUrlStr);
+        targetUrl = targetUrlStr;
+        const method = connectorConfig.method || 'GET';
+        targetMethod = method;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (connectorConfig.headers && typeof connectorConfig.headers === 'object') {
+          Object.entries(connectorConfig.headers).forEach(([k, v]) => {
+            headers[k] = replacePlaceholders(v as string);
+          });
+        }
+        targetHeaders = headers;
+
+        let body: any = undefined;
+        if (method !== 'GET' && method !== 'HEAD' && connectorConfig.body) {
+          if (typeof connectorConfig.body === 'string') {
+            body = replacePlaceholders(connectorConfig.body);
+          } else if (typeof connectorConfig.body === 'object') {
+            body = replacePlaceholders(JSON.stringify(connectorConfig.body));
+          }
+        }
+        const fetchRes = await fetch(targetUrlStr, { method, headers, body });
+        if (!fetchRes.ok) {
+          const errText = await fetchRes.text();
+          throw new Error(`REST API execution failed: ${errText}`);
+        }
+        rawResultData = await fetchRes.json();
+      } else {
+        // Fallback mockup
+        if (connector.ioSchema) {
+          ioSchema.outputs?.forEach((o: any) => {
+            rawResultData[o.name] = `Sample ${o.label} Data`;
+          });
         }
       }
-      const fetchRes = await fetch(targetUrl, { method, headers, body });
-      if (!fetchRes.ok) {
-        const errText = await fetchRes.text();
-        throw new Error(`REST API execution failed: ${errText}`);
-      }
-      rawResultData = await fetchRes.json();
-    } else {
-      // Fallback mockup
-      if (connector.ioSchema) {
-        ioSchema.outputs?.forEach((o: any) => {
-          rawResultData[o.name] = `Sample ${o.label} Data`;
+
+      // 7. Apply Mappings
+      const mappings = config.connectorMappings?.[connectorId];
+      const reshapedData: Record<string, any> = {};
+      if (mappings) {
+        Object.entries(mappings).forEach(([sourceKey, targetFieldId]) => {
+          if (targetFieldId && rawResultData[sourceKey] !== undefined) {
+            reshapedData[targetFieldId as string] = rawResultData[sourceKey];
+          }
         });
       }
-    }
 
-    // 7. Apply Mappings
-    const mappings = config.connectorMappings?.[connectorId];
-    const reshapedData: Record<string, any> = {};
-    if (mappings) {
-      Object.entries(mappings).forEach(([sourceKey, targetFieldId]) => {
-        if (targetFieldId && rawResultData[sourceKey] !== undefined) {
-          reshapedData[targetFieldId as string] = rawResultData[sourceKey];
-        }
+      // 8. Update Record in Database
+      const updatedData = {
+        ...(record.data as any),
+        ...reshapedData
+      };
+
+      const updatedRecord = await db.record.update({
+        where: { id: recordId },
+        data: { data: updatedData },
+        include: { createdByMember: true }
       });
+
+      // 9. Emit real-time Socket update
+      emitTenantUpdate(tenantId, 'record:update', {
+        id: recordId,
+        moduleId,
+        record: updatedRecord
+      });
+
+      const finalResponse = {
+        id: updatedRecord.id,
+        moduleId: updatedRecord.moduleId,
+        status: updatedRecord.status,
+        associations: updatedRecord.associations,
+        path: updatedRecord.path,
+        createdAt: updatedRecord.createdAt,
+        updatedAt: updatedRecord.updatedAt,
+        createdBy: (updatedRecord as any).createdByMember ? `${(updatedRecord as any).createdByMember.firstName || ''} ${(updatedRecord as any).createdByMember.familyName || ''}`.trim() : 'System',
+        ...(updatedRecord.data as any),
+        workflowState: updatedRecord.workflowState
+      };
+
+      await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, params, finalResponse, 'SUCCESS', undefined, {
+        isTest: false,
+        executionPath,
+        requestUrl: targetUrl,
+        requestMethod: targetMethod,
+        requestHeaders: targetHeaders
+      });
+
+      // 10. Format and Return updated record
+      res.json(finalResponse);
+
+    } catch (err: any) {
+      console.error('[DataAPI] Connector sync execution error:', err);
+      if (req.db && req.tenantId && req.body?.connectorId) {
+        let connName = 'Unknown Connector';
+        try {
+          const conn = await globalPrisma.nexusConnector.findUnique({ where: { id: req.body.connectorId } });
+          if (conn) connName = conn.name;
+        } catch {}
+        await createConnectorLog(
+          req.db,
+          req.tenantId,
+          req.body.connectorId,
+          connector?.name || connName,
+          req.body.moduleId,
+          req.body.payload || req.body,
+          null,
+          'ERROR',
+          err.message || String(err),
+          {
+            isTest: false,
+            executionPath,
+            requestUrl: targetUrl,
+            requestMethod: targetMethod,
+            requestHeaders: targetHeaders
+          }
+        );
+      }
+      res.status(500).json({ error: err.message || 'Failed to sync connector data' });
     }
-
-    // 8. Update Record in Database
-    const updatedData = {
-      ...(record.data as any),
-      ...reshapedData
-    };
-
-    const updatedRecord = await db.record.update({
-      where: { id: recordId },
-      data: { data: updatedData },
-      include: { createdByMember: true }
-    });
-
-    // 9. Emit real-time Socket update
-    emitTenantUpdate(tenantId, 'record:update', {
-      id: recordId,
-      moduleId,
-      record: updatedRecord
-    });
-
-    const finalResponse = {
-      id: updatedRecord.id,
-      moduleId: updatedRecord.moduleId,
-      status: updatedRecord.status,
-      associations: updatedRecord.associations,
-      path: updatedRecord.path,
-      createdAt: updatedRecord.createdAt,
-      updatedAt: updatedRecord.updatedAt,
-      createdBy: (updatedRecord as any).createdByMember ? `${(updatedRecord as any).createdByMember.firstName || ''} ${(updatedRecord as any).createdByMember.familyName || ''}`.trim() : 'System',
-      ...(updatedRecord.data as any),
-      workflowState: updatedRecord.workflowState
-    };
-
-    await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, params, finalResponse, 'SUCCESS');
-
-    // 10. Format and Return updated record
-    res.json(finalResponse);
-
-  } catch (err: any) {
-    console.error('[DataAPI] Connector sync execution error:', err);
-    if (req.db && req.tenantId && req.body?.connectorId) {
-      let connName = 'Unknown Connector';
-      try {
-        const conn = await globalPrisma.nexusConnector.findUnique({ where: { id: req.body.connectorId } });
-        if (conn) connName = conn.name;
-      } catch {}
-      await createConnectorLog(
-        req.db,
-        req.tenantId,
-        req.body.connectorId,
-        connector?.name || connName,
-        req.body.moduleId,
-        req.body.payload || req.body,
-        null,
-        'ERROR',
-        err.message || String(err)
-      );
-    }
-    res.status(500).json({ error: err.message || 'Failed to sync connector data' });
-  }
 });
 
 export default router;

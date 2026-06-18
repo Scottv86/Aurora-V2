@@ -573,16 +573,27 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           ref={inputRef}
           value={localValue || ''}
           disabled={readonly}
-          onChange={(e) => { setIsFocused(true); triggerImmediateChange(e.target.value); }}
+          onChange={(e) => { 
+            const selectedVal = e.target.value;
+            setIsFocused(true); 
+            const matchedItem = lookupResults?.find((item: any) => String(item.id) === selectedVal || String(item.name) === selectedVal);
+            triggerImmediateChange(selectedVal, matchedItem);
+          }}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
           className={cn(inputClasses, "appearance-none")}
         >
           <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">Select...</option>
-          {resolvedOptions?.map((opt: string, j: number) => (
-            <option key={j} value={opt} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt}</option>
-          ))}
+          {lookupSource === 'connector' ? (
+            lookupResults?.map((opt: any, j: number) => (
+              <option key={j} value={opt.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt.name}</option>
+            ))
+          ) : (
+            resolvedOptions?.map((opt: string, j: number) => (
+              <option key={j} value={opt} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt}</option>
+            ))
+          )}
         </select>
         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
       </div>
@@ -600,41 +611,79 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
       >
-        {resolvedOptions?.map((opt: string, i: number) => (
-          <div 
-            key={i} 
-            className={cn(
-              "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
-              localValue === opt 
-                ? "border-transparent" 
-                : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
-              disabled && "cursor-not-allowed opacity-60"
-            )}
-            onClick={(e) => {
-              if (disabled) return;
-              triggerImmediateChange(opt);
-              const input = e.currentTarget.querySelector('input');
-              if (input) input.focus();
-              onBlur?.();
-            }}
-          >
-            <div className={cn(
-              ds.radio,
-              "rounded-full border-2 flex items-center justify-center transition-all",
-              localValue === opt ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
-            )}>
-              {localValue === opt && <div className={cn(ds.radioDot, "rounded-full bg-white")} />}
+        {lookupSource === 'connector' ? (
+          lookupResults?.map((opt: any, i: number) => (
+            <div 
+              key={i} 
+              className={cn(
+                "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
+                localValue === opt.id 
+                  ? "border-transparent" 
+                  : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
+                disabled && "cursor-not-allowed opacity-60"
+              )}
+              onClick={(e) => {
+                if (disabled) return;
+                triggerImmediateChange(opt.id, opt);
+                const input = e.currentTarget.querySelector('input');
+                if (input) input.focus();
+                onBlur?.();
+              }}
+            >
+              <div className={cn(
+                ds.radio,
+                "rounded-full border-2 flex items-center justify-center transition-all",
+                localValue === opt.id ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
+              )}>
+                {localValue === opt.id && <div className={cn(ds.radioDot, "rounded-full bg-white")} />}
+              </div>
+              <input 
+                type="radio" 
+                className="sr-only" 
+                checked={localValue === opt.id} 
+                disabled={disabled}
+                onChange={() => {}} 
+              />
+              <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt.name}</span>
             </div>
-            <input 
-              type="radio" 
-              className="sr-only" 
-              checked={localValue === opt} 
-              disabled={disabled}
-              onChange={() => {}} 
-            />
-            <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
-          </div>
-        ))}
+          ))
+        ) : (
+          resolvedOptions?.map((opt: string, i: number) => (
+            <div 
+              key={i} 
+              className={cn(
+                "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
+                localValue === opt 
+                  ? "border-transparent" 
+                  : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
+                disabled && "cursor-not-allowed opacity-60"
+              )}
+              onClick={(e) => {
+                if (disabled) return;
+                triggerImmediateChange(opt);
+                const input = e.currentTarget.querySelector('input');
+                if (input) input.focus();
+                onBlur?.();
+              }}
+            >
+              <div className={cn(
+                ds.radio,
+                "rounded-full border-2 flex items-center justify-center transition-all",
+                localValue === opt ? "border-indigo-500 bg-indigo-500" : "border-zinc-200 dark:border-zinc-800"
+              )}>
+                {localValue === opt && <div className={cn(ds.radioDot, "rounded-full bg-white")} />}
+              </div>
+              <input 
+                type="radio" 
+                className="sr-only" 
+                checked={localValue === opt} 
+                disabled={disabled}
+                onChange={() => {}} 
+              />
+              <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
+            </div>
+          ))
+        )}
       </div>
     );
   }

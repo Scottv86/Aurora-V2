@@ -28,6 +28,7 @@ import { Button } from '../../components/UI/Primitives';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
+import { flattenFields } from '../../lib/utils';
 
 interface Connector {
   id: string;
@@ -181,22 +182,17 @@ export const ConnectorsPage = () => {
     if (!selectedConnectorId || !modules) return [];
     const placements: any[] = [];
     modules.forEach((m: any) => {
-      // Deep scan config for connectorId
-      const layout = m.layout || [];
-      const hasConnector = layout.some((f: any) => f.type === 'connector' && f.connectorId === selectedConnectorId);
-      
-      if (hasConnector) {
-        layout.forEach((f: any) => {
-          if (f.type === 'connector' && f.connectorId === selectedConnectorId) {
-            placements.push({
-              moduleId: m.id,
-              moduleName: m.name,
-              blockName: f.label || f.name || 'Nexus Block',
-              blockType: 'Integration'
-            });
-          }
-        });
-      }
+      const flatFields = flattenFields(m.layout || []);
+      flatFields.forEach((f: any) => {
+        if (f.connectorId === selectedConnectorId) {
+          placements.push({
+            moduleId: m.id,
+            moduleName: m.name,
+            blockName: f.label || f.name || 'Nexus Block',
+            blockType: f.type === 'connector' ? 'Integration' : 'Lookup Field'
+          });
+        }
+      });
     });
     return placements;
   }, [selectedConnectorId, modules]);
@@ -244,7 +240,7 @@ export const ConnectorsPage = () => {
             className="relative z-10"
           >
             <PageHeader 
-              title="Connectors"
+              title="Integrations"
               description="Nexus API Vending Machine. Activate business capabilities and snap them into your modules."
               actions={
                 <div className="flex items-center gap-4">
@@ -262,7 +258,7 @@ export const ConnectorsPage = () => {
                     onClick={() => setIsModalOpen(true)}
                     className="gap-2 font-bold shadow-indigo-500/20"
                   >
-                    <Plus size={16} /> Generate Connector
+                    <Plus size={16} /> Generate Integration
                   </Button>
                 </div>
               }
@@ -277,7 +273,7 @@ export const ConnectorsPage = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    onClick={() => navigate(`/workspace/settings/connectors/${connector.id}`)}
+                    onClick={() => navigate(`/workspace/settings/integrations/${connector.id}`)}
                     className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -308,7 +304,7 @@ export const ConnectorsPage = () => {
                       </div>
 
                       <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center text-sm font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-4 group-hover:translate-x-0 transform duration-300">
-                        Configure Connector <ArrowRight size={16} className="ml-2" />
+                        Configure Integration <ArrowRight size={16} className="ml-2" />
                       </div>
                     </div>
                   </motion.div>
@@ -323,8 +319,8 @@ export const ConnectorsPage = () => {
             className="flex-1 flex flex-col relative z-10"
           >
             <PageHeader 
-              title={selectedConnector?.name || 'Connector Details'}
-              description={selectedConnector?.category ? `${selectedConnector.category} • Enterprise Vaulted` : 'Configure your Nexus connector settings.'}
+              title={selectedConnector?.name || 'Integration Details'}
+              description={selectedConnector?.category ? `${selectedConnector.category} • Enterprise Vaulted` : 'Configure your Nexus integration settings.'}
               actions={
                 <div className="flex items-center gap-3">
                   <button
@@ -344,17 +340,17 @@ export const ConnectorsPage = () => {
                     ) : (
                       <>
                         <Zap className="w-4 h-4" />
-                        Activate Connector
+                        Activate Integration
                       </>
                     )}
                   </button>
                   <Button 
                     variant="secondary" 
                     size="sm"
-                    onClick={() => navigate('/workspace/settings/connectors')}
+                    onClick={() => navigate('/workspace/settings/integrations')}
                     className="gap-2 font-bold"
                   >
-                    <ArrowLeft size={16} /> Back to Connectors
+                    <ArrowLeft size={16} /> Back to Integrations
                   </Button>
                 </div>
               }
@@ -417,7 +413,7 @@ export const ConnectorsPage = () => {
         activeConnectors={activeConnectors}
         registry={registry}
         onSelect={(conn) => {
-          navigate(`/workspace/settings/connectors/${conn.connectorId}`);
+          navigate(`/workspace/settings/integrations/${conn.connectorId}`);
           setIsModalOpen(false);
         }}
         onActivate={handleActivateConnector}
@@ -464,7 +460,7 @@ const ConnectorSetup = ({ connector, activeConnector, onRefresh }: { connector: 
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-zinc-50 dark:bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-200 dark:border-white/10">
         <AlertCircle className="w-10 h-10 text-zinc-300 dark:text-zinc-700 mb-4" />
-        <p className="text-zinc-400 dark:text-zinc-500 font-medium">Activate this connector to begin setup</p>
+        <p className="text-zinc-400 dark:text-zinc-500 font-medium">Activate this integration to begin setup</p>
       </div>
     );
   }
@@ -549,7 +545,7 @@ const ConnectorUsage = ({ usage }: { usage: any[] }) => {
       ) : (
         <div className="py-20 text-center bg-zinc-50 dark:bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-200 dark:border-white/10">
           <Circle className="w-10 h-10 text-zinc-300 dark:text-zinc-800 mx-auto mb-4" />
-          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">This connector isn't used in any modules yet.</p>
+          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">This integration isn't used in any modules yet.</p>
           <p className="text-zinc-400 dark:text-zinc-600 text-xs mt-1">Use the Module Builder to snap this capability into a screen.</p>
         </div>
       )}
@@ -659,8 +655,8 @@ const ConnectorMapping = ({ connector }: { connector: Connector }) => {
   // Find all modules that have this connectorId in their layout
   const linkedModules = useMemo(() => {
     return modules.filter(m => {
-      const layout = m.layout || [];
-      return layout.some((f: any) => f.type === 'connector' && f.connectorId === connector.id);
+      const flatFields = flattenFields(m.layout || []);
+      return flatFields.some((f: any) => f.connectorId === connector.id);
     });
   }, [modules, connector.id]);
 
@@ -676,13 +672,36 @@ const ConnectorMapping = ({ connector }: { connector: Connector }) => {
       {linkedModules.length === 0 ? (
         <div className="py-20 text-center bg-zinc-50 dark:bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-200 dark:border-white/10">
           <Box className="w-10 h-10 text-zinc-300 dark:text-zinc-800 mx-auto mb-4" />
-          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">This connector is not yet deployed to any modules.</p>
+          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">This integration is not yet deployed to any modules.</p>
           <p className="text-[10px] text-zinc-500 mt-2 uppercase tracking-widest font-black">Go to Module Builder to link this integration</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
           {linkedModules.map(module => {
-            const mappings = module.connectorMappings?.[connector.id] || {};
+            const flatFields = flattenFields(module.layout || []);
+            const mappings: Record<string, string> = {
+              ...(module.connectorMappings?.[connector.id] || module.config?.connectorMappings?.[connector.id] || {})
+            };
+
+            // Capture mappings from lookup fields
+            flatFields.forEach((field: any) => {
+              if (
+                field.type === 'lookup' &&
+                field.lookupSource === 'connector' &&
+                field.connectorId === connector.id
+              ) {
+                if (field.connectorValueField) {
+                  mappings[field.connectorValueField] = field.id;
+                }
+                if (Array.isArray(field.lookupOutputMappings)) {
+                  field.lookupOutputMappings.forEach((mapping: any) => {
+                    if (mapping.sourceFieldId && mapping.targetFieldId) {
+                      mappings[mapping.sourceFieldId] = mapping.targetFieldId;
+                    }
+                  });
+                }
+              }
+            });
             
             return (
               <div key={module.id} className="bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-900 rounded-[2.5rem] p-8 shadow-sm">
@@ -710,7 +729,7 @@ const ConnectorMapping = ({ connector }: { connector: Connector }) => {
 
                   {outputs.map((output: any) => {
                     const targetFieldId = mappings[output.name];
-                    const targetField = (module.layout || []).find((f: any) => f.id === targetFieldId);
+                    const targetField = flatFields.find((f: any) => f.id === targetFieldId);
 
                     return (
                       <div key={output.name} className="grid grid-cols-2 gap-8 px-4 py-3 items-center group">
@@ -750,11 +769,12 @@ const ConnectorMapping = ({ connector }: { connector: Connector }) => {
 };
 
 const ConnectorLogs = ({ connector }: { connector: Connector }) => {
-  const { tenant } = usePlatform();
+  const { tenant, modules } = usePlatform();
   const { session } = useAuth();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'prod' | 'test'>('all');
 
   const fetchLogs = async () => {
     if (!tenant?.id) return;
@@ -783,6 +803,15 @@ const ConnectorLogs = ({ connector }: { connector: Connector }) => {
     fetchLogs();
   }, [connector.id, tenant?.id]);
 
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      const isTest = log.payload?.metadata?.isTest === true;
+      if (filter === 'prod') return !isTest;
+      if (filter === 'test') return isTest;
+      return true;
+    });
+  }, [logs, filter]);
+
   if (loading && logs.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -793,27 +822,128 @@ const ConnectorLogs = ({ connector }: { connector: Connector }) => {
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Execution History</h3>
           <p className="text-xs text-zinc-500 mt-1">Real-time audit log of external API queries and executions.</p>
         </div>
-        <button 
-          onClick={fetchLogs} 
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-bold transition-all"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 rotate-90" />}
-          Refresh
-        </button>
+        
+        <div className="flex items-center gap-3">
+          <div className="flex bg-zinc-150 dark:bg-zinc-900 rounded-xl p-1 border border-zinc-200 dark:border-white/5">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'prod', label: 'Production Only' },
+              { id: 'test', label: 'Test Runs' }
+            ].map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setFilter(opt.id as any)}
+                className={clsx(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  filter === opt.id 
+                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <button 
+            onClick={fetchLogs} 
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold transition-all border border-zinc-200 dark:border-white/5"
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 rotate-90" />}
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {logs.length > 0 ? (
+      {filteredLogs.length > 0 ? (
         <div className="space-y-4">
-          {logs.map((log) => {
+          {filteredLogs.map((log) => {
             const isExpanded = expandedLogId === log.id;
             const dateStr = new Date(log.timestamp).toLocaleString();
             const hasError = log.status === 'ERROR';
+
+            const isTestLog = log.payload?.metadata?.isTest === true;
+            const logParams = log.payload?.metadata ? log.payload.params : log.payload;
+            const logMetadata = log.payload?.metadata || null;
+
+            const mappedFieldsList = (() => {
+              if (!log.moduleId) return [];
+              const logModule = modules.find(m => m.id === log.moduleId);
+              if (!logModule) return [];
+              const flatFields = flattenFields(logModule.layout || []);
+              
+              const list: { apiKey: string; fieldLabel: string; value: any }[] = [];
+              const addedTargetFieldIds = new Set<string>();
+
+              // Helper function to add a mapping
+              const addMapping = (apiKey: string, targetFieldId: string, customLabel?: string) => {
+                if (!apiKey || !targetFieldId) return;
+                
+                const targetField = flatFields.find((f: any) => f.id === targetFieldId);
+                if (!targetField) return;
+
+                const label = customLabel || targetField.label || targetField.name || targetFieldId;
+                
+                let val: any = undefined;
+                if (log.response) {
+                  if (log.response.reshaped && log.response.data) {
+                    val = log.response.data[targetFieldId];
+                  } else if (log.response[targetFieldId] !== undefined) {
+                    val = log.response[targetFieldId];
+                  } else if (log.response.data && log.response.data[targetFieldId] !== undefined) {
+                    val = log.response.data[targetFieldId];
+                  } else if (log.response.data && log.response.data[apiKey] !== undefined) {
+                    val = log.response.data[apiKey];
+                  } else if (log.response[apiKey] !== undefined) {
+                    val = log.response[apiKey];
+                  }
+                }
+
+                list.push({
+                  apiKey,
+                  fieldLabel: label,
+                  value: val
+                });
+                addedTargetFieldIds.add(targetFieldId);
+              };
+
+              // 1. Get active standard connector mappings
+              const standardMappings = logModule.connectorMappings?.[log.connectorId] || logModule.config?.connectorMappings?.[log.connectorId] || {};
+              Object.entries(standardMappings).forEach(([apiKey, targetFieldId]) => {
+                addMapping(apiKey, targetFieldId as string);
+              });
+
+              // 2. Find any lookup fields that use this connector
+              flatFields.forEach((field: any) => {
+                if (
+                  field.type === 'lookup' &&
+                  field.lookupSource === 'connector' &&
+                  field.connectorId === log.connectorId
+                ) {
+                  // A. Map the lookup field itself
+                  if (field.connectorValueField) {
+                    addMapping(field.connectorValueField, field.id);
+                  }
+                  
+                  // B. Map any lookupOutputMappings defined on this lookup field
+                  if (Array.isArray(field.lookupOutputMappings)) {
+                    field.lookupOutputMappings.forEach((mapping: any) => {
+                      if (mapping.sourceFieldId && mapping.targetFieldId) {
+                        addMapping(mapping.sourceFieldId, mapping.targetFieldId);
+                      }
+                    });
+                  }
+                }
+              });
+
+              return list;
+            })();
 
             return (
               <div 
@@ -836,14 +966,21 @@ const ConnectorLogs = ({ connector }: { connector: Connector }) => {
                       </div>
                     )}
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-bold text-zinc-900 dark:text-white">
                           {log.status === 'SUCCESS' ? 'Success' : 'Failed'}
                         </span>
-                        {log.moduleName && (
-                          <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 text-[9px] font-bold uppercase tracking-wider">
-                            {log.moduleName}
+                        
+                        {isTestLog ? (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[9px] font-bold uppercase tracking-wider border border-amber-500/20">
+                            Test Run
                           </span>
+                        ) : (
+                          log.moduleName && (
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 text-[9px] font-bold uppercase tracking-wider border border-indigo-500/20">
+                              {log.moduleName}
+                            </span>
+                          )
                         )}
                       </div>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium mt-0.5">
@@ -871,27 +1008,123 @@ const ConnectorLogs = ({ connector }: { connector: Connector }) => {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Payload/Request */}
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Payload/Request</span>
-                        <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-xl p-4 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-x-auto max-h-60 custom-scrollbar">
-                          {log.payload ? (
-                            <pre>{JSON.stringify(log.payload, null, 2)}</pre>
-                          ) : (
-                            <span className="italic text-zinc-400">Empty Payload</span>
-                          )}
+                      {/* Left: Input parameters & response */}
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Input Parameters</span>
+                          <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-xl p-4 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-x-auto max-h-48 custom-scrollbar">
+                            {logParams ? (
+                              <pre>{JSON.stringify(logParams, null, 2)}</pre>
+                            ) : (
+                              <span className="italic text-zinc-400 font-sans">Empty Parameters</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Mapped Module Fields Section */}
+                        {mappedFieldsList.length > 0 && (
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Mapped Module Fields</span>
+                            <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-2xl overflow-hidden">
+                              <table className="w-full text-xs text-left border-collapse">
+                                <thead>
+                                  <tr className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-150 dark:border-zinc-900 text-[9px] uppercase font-bold text-zinc-400 tracking-wider">
+                                    <th className="px-4 py-2">API Output</th>
+                                    <th className="px-4 py-2">Module Field</th>
+                                    <th className="px-4 py-2">Synced Value</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {mappedFieldsList.map((mField, idx) => (
+                                    <tr key={idx} className="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/50 dark:hover:bg-white/[0.01]">
+                                      <td className="px-4 py-2.5 font-mono text-[10px] text-zinc-500">{mField.apiKey}</td>
+                                      <td className="px-4 py-2.5 font-bold text-zinc-800 dark:text-zinc-200">{mField.fieldLabel}</td>
+                                      <td className="px-4 py-2.5 text-indigo-600 dark:text-indigo-400 font-medium break-all">
+                                        {mField.value !== undefined ? String(mField.value) : <span className="text-zinc-400 italic">None</span>}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Response Data</span>
+                          <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-xl p-4 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-x-auto max-h-48 custom-scrollbar">
+                            {log.response ? (
+                              <pre>{JSON.stringify(log.response, null, 2)}</pre>
+                            ) : (
+                              <span className="italic text-zinc-400 font-sans">No Response</span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Response */}
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Response</span>
-                        <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-xl p-4 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 overflow-x-auto max-h-60 custom-scrollbar">
-                          {log.response ? (
-                            <pre>{JSON.stringify(log.response, null, 2)}</pre>
-                          ) : (
-                            <span className="italic text-zinc-400">No Response</span>
-                          )}
+                      {/* Right: Troubleshooting & Developer Details */}
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Developer Details</span>
+                          <div className="bg-white dark:bg-zinc-950 border border-zinc-150 dark:border-zinc-900 rounded-2xl p-5 space-y-4 text-xs">
+                            <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 dark:border-white/5">
+                              <span className="text-zinc-400 font-medium">Source / Module</span>
+                              <span className="col-span-2 font-bold text-zinc-800 dark:text-zinc-200">
+                                {log.moduleName ? `${log.moduleName} (ID: ${log.moduleId})` : 'Direct API Call / Test Plug'}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 dark:border-white/5">
+                              <span className="text-zinc-400 font-medium">Execution Type</span>
+                              <span className="col-span-2 font-bold text-zinc-800 dark:text-zinc-200 capitalize">
+                                {logMetadata?.executionPath || 'Legacy Execution'}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 dark:border-white/5">
+                              <span className="text-zinc-400 font-medium">Trigger Type</span>
+                              <span className="col-span-2">
+                                {isTestLog ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold border border-amber-500/20">Test Run</span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 text-[10px] font-bold border border-indigo-500/20">Production Execution</span>
+                                )}
+                              </span>
+                            </div>
+
+                            {logMetadata?.requestUrl && (
+                              <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 dark:border-white/5">
+                                <span className="text-zinc-400 font-medium">API URL(s) hit</span>
+                                <div className="col-span-2 font-mono text-[10px] text-indigo-500 break-all bg-zinc-50 dark:bg-zinc-900/50 p-2 rounded-lg border border-zinc-150 dark:border-zinc-900">
+                                  {Array.isArray(logMetadata.requestUrl) ? (
+                                    <ul className="list-disc pl-4 space-y-1">
+                                      {logMetadata.requestUrl.map((url: string, idx: number) => (
+                                        <li key={idx}>{url}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    logMetadata.requestUrl
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {logMetadata?.requestMethod && (
+                              <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 dark:border-white/5">
+                                <span className="text-zinc-400 font-medium">HTTP Method</span>
+                                <span className="col-span-2 font-mono font-bold text-teal-500">{logMetadata.requestMethod}</span>
+                              </div>
+                            )}
+
+                            {logMetadata?.requestHeaders && Object.keys(logMetadata.requestHeaders).length > 0 && (
+                              <div className="grid grid-cols-3 gap-2 py-1.5">
+                                <span className="text-zinc-400 font-medium">Request Headers</span>
+                                <div className="col-span-2 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 p-2 rounded-lg border border-zinc-150 dark:border-zinc-900 max-h-32 overflow-y-auto">
+                                  <pre>{JSON.stringify(logMetadata.requestHeaders, null, 2)}</pre>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -904,8 +1137,8 @@ const ConnectorLogs = ({ connector }: { connector: Connector }) => {
       ) : (
         <div className="py-20 text-center bg-zinc-50 dark:bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-200 dark:border-white/10">
           <FileText className="w-10 h-10 text-zinc-300 dark:text-zinc-800 mx-auto mb-4" />
-          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">No execution logs found for this connector yet.</p>
-          <p className="text-zinc-400 dark:text-zinc-600 text-xs mt-1">Logs will be created automatically whenever this connector is called.</p>
+          <p className="text-zinc-400 dark:text-zinc-500 text-sm font-medium">No execution logs match the selected filter.</p>
+          <p className="text-zinc-400 dark:text-zinc-600 text-xs mt-1">Try changing the filter option above or run a test execution.</p>
         </div>
       )}
     </div>

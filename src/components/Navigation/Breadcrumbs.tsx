@@ -34,7 +34,7 @@ const PATH_MAP: Record<string, string> = {
   intake: 'Intake',
   reset: 'Factory Reset',
   migration: 'Migration Tools',
-  connectors: 'Connectors'
+  connectors: 'Integrations'
 };
 
 export const Breadcrumbs = () => {

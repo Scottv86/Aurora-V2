@@ -191,8 +191,11 @@ const App = () => {
                 <Route path="intake" element={<ComingSoon title="Intake" description="Design and manage intake forms, onboarding flows, and data capture processes." />} />
                 <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
                 <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
-                <Route path="connectors" element={<ConnectorsPage />} />
-                <Route path="connectors/:id" element={<ConnectorsPage />} />
+                <Route path="integrations" element={<ConnectorsPage />} />
+                <Route path="integrations/:id" element={<ConnectorsPage />} />
+                {/* Legacy redirects */}
+                <Route path="connectors" element={<Navigate to="/workspace/settings/integrations" replace />} />
+                <Route path="connectors/:id" element={<Navigate to="/workspace/settings/integrations" replace />} />
                 
                 {/* Workforce Management (Integrated under Settings) */}
                 <Route path="workforce" element={<WorkforcePage />} />

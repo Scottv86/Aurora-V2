@@ -28,7 +28,7 @@ import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { MODULES } from '../../constants/modules';
-import { DATA_API_URL } from '../../config';
+import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
@@ -343,6 +343,90 @@ export const RecordDetailView = ({
     return map;
   }, [moduleData]);
 
+  const evaluateAllDataPopulationRules = async (currentData: any, activeModule: any) => {
+    const rules = activeModule?.config?.dataPopulationRules || activeModule?.dataPopulationRules || [];
+    if (rules.length === 0) return;
+
+    const currentFlatFields = flattenFields(activeModule?.layout || []) as ModuleField[];
+
+    for (const rule of rules) {
+      // 1. Evaluate condition
+      const condition = rule.condition || { operator: 'not_null' };
+      const fieldIdToEval = rule.triggerFieldId || condition.fieldId;
+      if (!fieldIdToEval) continue;
+
+      const triggerVal = getFieldValue(currentData, fieldIdToEval);
+      
+      let conditionMatches = false;
+      if (condition.operator === 'not_null') {
+        conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
+      } else if (condition.operator === 'equals') {
+        conditionMatches = String(triggerVal) === String(condition.value);
+      } else if (condition.operator === 'not_equals') {
+        conditionMatches = String(triggerVal) !== String(condition.value);
+      }
+
+      if (!conditionMatches) continue;
+
+      // 2. Gather input parameter payload
+      const payload: Record<string, any> = {};
+      (rule.inputMappings || []).forEach((m: any) => {
+        if (m.inputName && m.sourceFieldId) {
+          payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+        }
+      });
+
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify({
+            connectorId: rule.connectorId,
+            moduleId: moduleId,
+            noReshape: true,
+            payload
+          })
+        });
+
+        if (!res.ok) throw new Error("Connector execution failed");
+        const json = await res.json();
+        const rawData = json.data || json;
+
+        if (rawData && typeof rawData === 'object') {
+          // Apply output mappings
+          const updatedData = { ...editDataRef.current };
+          let changed = false;
+
+          (rule.outputMappings || []).forEach((m: any) => {
+            if (m.targetFieldId && m.sourceFieldId) {
+              const val = rawData[m.sourceFieldId];
+              if (val !== undefined && updatedData[m.targetFieldId] !== val) {
+                updatedData[m.targetFieldId] = val;
+                changed = true;
+              }
+            }
+          });
+
+          if (changed) {
+            const withCalculations = evaluateCalculations(updatedData, currentFlatFields, lookupData);
+            editDataRef.current = withCalculations;
+            setEditData(withCalculations);
+            
+            // Auto-save the updated record
+            handleUpdateEntry(withCalculations, undefined, true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to run data population rule on load:", err);
+      }
+    }
+  };
+
   const recordTitle = useMemo(() => {
     if (!moduleData || (!record && Object.keys(editData).length === 0)) return 'Record Details';
     
@@ -428,7 +512,9 @@ export const RecordDetailView = ({
           });
 
           const withCalculations = evaluateCalculations(dataWithDefaults, currentFlatFields, lookupData);
+          editDataRef.current = withCalculations;
           setEditData(withCalculations);
+          evaluateAllDataPopulationRules(withCalculations, currentModule);
           
           if (recordId && recData._record_key) {
             setBreadcrumbOverride(recordId, recData._record_key);
@@ -566,13 +652,94 @@ export const RecordDetailView = ({
 
     fetchLists();
   }, [requiredGlobalLists, tenant?.id]);
+  const evaluateDataPopulationRules = async (changedFieldId: string, currentData: any) => {
+    const rules = moduleData?.config?.dataPopulationRules || (moduleData as any)?.dataPopulationRules || [];
+    const matchingRules = rules.filter((r: any) => r.triggerFieldId === changedFieldId);
+    
+    if (matchingRules.length === 0) return;
+
+    for (const rule of matchingRules) {
+      // 1. Evaluate condition
+      const condition = rule.condition || { operator: 'not_null' };
+      const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
+      
+      let conditionMatches = false;
+      if (condition.operator === 'not_null') {
+        conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
+      } else if (condition.operator === 'equals') {
+        conditionMatches = String(triggerVal) === String(condition.value);
+      } else if (condition.operator === 'not_equals') {
+        conditionMatches = String(triggerVal) !== String(condition.value);
+      }
+
+      if (!conditionMatches) continue;
+
+      // 2. Gather input parameter payload
+      const payload: Record<string, any> = {};
+      (rule.inputMappings || []).forEach((m: any) => {
+        if (m.inputName && m.sourceFieldId) {
+          payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+        }
+      });
+
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify({
+            connectorId: rule.connectorId,
+            moduleId: moduleId,
+            noReshape: true,
+            payload
+          })
+        });
+
+        if (!res.ok) throw new Error("Connector execution failed");
+        const json = await res.json();
+        const rawData = json.data || json;
+
+        if (rawData && typeof rawData === 'object') {
+          // Apply output mappings
+          const updatedData = { ...editDataRef.current };
+          let changed = false;
+
+          (rule.outputMappings || []).forEach((m: any) => {
+            if (m.targetFieldId && m.sourceFieldId) {
+              const val = rawData[m.sourceFieldId];
+              if (val !== undefined) {
+                updatedData[m.targetFieldId] = val;
+                changed = true;
+              }
+            }
+          });
+
+          if (changed) {
+            const withCalculations = evaluateCalculations(updatedData, allFields, lookupData);
+            editDataRef.current = withCalculations;
+            setEditData(withCalculations);
+            
+            // Auto-save the updated record
+            handleUpdateEntry(withCalculations, undefined, true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to run data population rule:", err);
+      }
+    }
+  };
+
   const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
     let updatedData = { ...editData };
     updatedData[fieldId] = val;
     
     // Execute Lookup Output Mappings
     const field = allFields.find(f => f.id === fieldId);
-    if (field?.type === 'lookup' && field.lookupOutputMappings?.length) {
+    if ((field?.type === 'lookup' || field?.lookupSource === 'connector') && field.lookupOutputMappings?.length) {
       // ONLY clear and populate if the lookup value itself has changed.
       // This prevents wiping mapped fields on simple auto-saves (blur events)
       // while ensuring old values are cleared when a new record is selected.
@@ -616,6 +783,9 @@ export const RecordDetailView = ({
     // Update ref immediately so concurrent calls to handleUpdateEntry get fresh data
     editDataRef.current = withCalculations;
     setEditData(withCalculations);
+    
+    // Trigger data population rules on field change
+    evaluateDataPopulationRules(fieldId, withCalculations);
     
     return withCalculations;
   };

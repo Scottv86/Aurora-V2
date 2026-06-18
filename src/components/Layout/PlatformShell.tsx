@@ -471,7 +471,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Zap,
       items: [
         { label: 'Automations', icon: Zap, to: '/workspace/settings/automations' },
-        { label: 'Connectors', icon: Plug, to: '/workspace/settings/connectors' },
+        { label: 'Integrations', icon: Plug, to: '/workspace/settings/integrations' },
       ]
     },
     {

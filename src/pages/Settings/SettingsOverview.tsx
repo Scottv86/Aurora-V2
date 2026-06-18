@@ -148,10 +148,10 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   {
     id: 'connectors',
-    label: 'Connectors',
+    label: 'Integrations',
     description: 'Syncing data with other systems.',
     icon: 'Plug',
-    to: '/workspace/settings/connectors',
+    to: '/workspace/settings/integrations',
     category: 'Automations & Sync',
     tags: ['api', 'webhooks', 'sync']
   },

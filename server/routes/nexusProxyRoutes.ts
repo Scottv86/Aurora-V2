@@ -13,7 +13,8 @@ async function createConnectorLog(
   payload: any,
   response: any,
   status: 'SUCCESS' | 'ERROR',
-  errorMessage?: string
+  errorMessage?: string,
+  metadata?: any
 ) {
   try {
     let moduleName: string | null = null;
@@ -27,6 +28,11 @@ async function createConnectorLog(
       }
     }
 
+    const savedPayload = {
+      params: payload || {},
+      metadata: metadata || {}
+    };
+
     await db.connectorLog.create({
       data: {
         tenantId,
@@ -34,7 +40,7 @@ async function createConnectorLog(
         connectorName,
         moduleId: moduleId || null,
         moduleName,
-        payload: payload ? JSON.parse(JSON.stringify(payload)) : null,
+        payload: savedPayload,
         response: response ? JSON.parse(JSON.stringify(response)) : null,
         status,
         errorMessage: errorMessage || null
@@ -47,11 +53,17 @@ async function createConnectorLog(
 
 router.post('/execute', async (req: TenantRequest, res) => {
   let connector: any = null;
-  try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const { connectorId, payload, moduleId } = req.body;
+  const db = req.db!;
+  const tenantId = req.tenantId!;
+  const { connectorId, payload, moduleId, test } = req.body;
+  const isTest = test === true;
 
+  let executionPath: 'vm' | 'http' | 'simulation' = 'simulation';
+  let targetUrl: string | string[] | null = null;
+  let targetMethod: string | null = null;
+  let targetHeaders: any = null;
+
+  try {
     // 1. Fetch the connector
     connector = await globalPrisma.nexusConnector.findUnique({
       where: { id: connectorId }
@@ -80,6 +92,14 @@ router.post('/execute', async (req: TenantRequest, res) => {
     let rawResultData: any = {};
 
     if (edgeFunctionLogic && typeof edgeFunctionLogic === 'string') {
+      executionPath = 'vm';
+      const requestedUrls: string[] = [];
+      const wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url || String(input));
+        requestedUrls.push(urlStr);
+        return fetch(input, init);
+      };
+
       try {
         console.log(`[NexusProxy] Running VM script for connector: ${connector.name}`);
         const vm = await import('vm');
@@ -87,7 +107,7 @@ router.post('/execute', async (req: TenantRequest, res) => {
         const context = {
           params: payload || {},
           secrets: secrets || {},
-          fetch,
+          fetch: wrappedFetch,
           console,
           promise: null as any
         };
@@ -106,17 +126,24 @@ router.post('/execute', async (req: TenantRequest, res) => {
         
         const execResult = await context.promise;
         rawResultData = execResult || {};
+        targetUrl = requestedUrls.length === 1 ? requestedUrls[0] : (requestedUrls.length > 0 ? requestedUrls : null);
       } catch (scriptErr: any) {
         console.error(`[NexusProxy] VM Execution failed for ${connector.name}:`, scriptErr);
-        await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, null, 'ERROR', scriptErr.message || String(scriptErr));
+        targetUrl = requestedUrls.length === 1 ? requestedUrls[0] : (requestedUrls.length > 0 ? requestedUrls : null);
+        await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, null, 'ERROR', scriptErr.message || String(scriptErr), {
+          isTest,
+          executionPath,
+          requestUrl: targetUrl
+        });
         return res.status(500).json({ 
           error: `Execution Logic Error: ${scriptErr.message || scriptErr}` 
         });
       }
     } else if (connectorConfig.url) {
+      executionPath = 'http';
       try {
         console.log(`[NexusProxy] Running HTTP config request for connector: ${connector.name}`);
-        let targetUrl = connectorConfig.url;
+        let targetUrlStr = connectorConfig.url;
         
         const replacePlaceholders = (str: string) => {
           if (!str || typeof str !== 'string') return str;
@@ -130,8 +157,10 @@ router.post('/execute', async (req: TenantRequest, res) => {
           return temp;
         };
         
-        targetUrl = replacePlaceholders(targetUrl);
+        targetUrlStr = replacePlaceholders(targetUrlStr);
+        targetUrl = targetUrlStr;
         const method = connectorConfig.method || 'GET';
+        targetMethod = method;
         
         const headers: Record<string, string> = {
           'Content-Type': 'application/json'
@@ -141,6 +170,7 @@ router.post('/execute', async (req: TenantRequest, res) => {
             headers[k] = replacePlaceholders(v as string);
           });
         }
+        targetHeaders = headers;
         
         let body: any = undefined;
         if (method !== 'GET' && method !== 'HEAD') {
@@ -154,7 +184,7 @@ router.post('/execute', async (req: TenantRequest, res) => {
           }
         }
         
-        const fetchRes = await fetch(targetUrl, {
+        const fetchRes = await fetch(targetUrlStr, {
           method,
           headers,
           body
@@ -168,7 +198,13 @@ router.post('/execute', async (req: TenantRequest, res) => {
         rawResultData = await fetchRes.json();
       } catch (httpErr: any) {
         console.error(`[NexusProxy] HTTP execution failed for ${connector.name}:`, httpErr);
-        await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, null, 'ERROR', httpErr.message || String(httpErr));
+        await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, null, 'ERROR', httpErr.message || String(httpErr), {
+          isTest,
+          executionPath,
+          requestUrl: targetUrl,
+          requestMethod: targetMethod,
+          requestHeaders: targetHeaders
+        });
         return res.status(500).json({ 
           error: `HTTP Request Error: ${httpErr.message || httpErr}` 
         });
@@ -215,13 +251,25 @@ router.post('/execute', async (req: TenantRequest, res) => {
             data: reshapedData
           };
 
-          await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, mappedResult, 'SUCCESS');
+          await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, mappedResult, 'SUCCESS', undefined, {
+            isTest,
+            executionPath,
+            requestUrl: targetUrl,
+            requestMethod: targetMethod,
+            requestHeaders: targetHeaders
+          });
           return res.json(mappedResult);
         }
       }
     }
 
-    await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, rawResult, 'SUCCESS');
+    await createConnectorLog(db, tenantId, connectorId, connector.name, moduleId, payload, rawResult, 'SUCCESS', undefined, {
+      isTest,
+      executionPath,
+      requestUrl: targetUrl,
+      requestMethod: targetMethod,
+      requestHeaders: targetHeaders
+    });
     res.json(rawResult);
 
   } catch (err: any) {
@@ -236,7 +284,8 @@ router.post('/execute', async (req: TenantRequest, res) => {
         req.body.payload,
         null,
         'ERROR',
-        err.message || String(err)
+        err.message || String(err),
+        { isTest }
       );
     }
     res.status(500).json({ error: err.message });
