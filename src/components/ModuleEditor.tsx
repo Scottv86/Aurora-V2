@@ -636,6 +636,11 @@ export interface Field {
   connectorSearchParam?: string;
   connectorLabelField?: string;
   connectorValueField?: string;
+  minSearchLength?: number;
+  searchMode?: 'auto' | 'manual';
+  debounceDelay?: number;
+  maxResults?: number;
+  noResultsMessage?: string;
   // For nested fields (fieldGroup, repeatableGroup)
   fields?: Field[];
   visibilityRule?: VisibilityRule;
@@ -4909,7 +4914,10 @@ export const ModuleEditor = () => {
           {/* Main Tab Content Area */}
           <div 
             className={cn(
-              "flex-1 relative overflow-y-auto",
+              "flex-1 relative",
+              ['builder', 'forms', 'connectors', 'workflow', 'details'].includes(activeTab) 
+                ? "overflow-hidden h-full flex flex-col" 
+                : "overflow-y-auto",
               activeTab === 'builder' ? "p-0" : "p-0"
             )}
             onClick={(e) => {
@@ -13306,6 +13314,99 @@ export const ModuleEditor = () => {
                                         })}
                                       </div>
                                     </div>
+
+                                    {/* 5. Search & Performance Settings */}
+                                    <div className="space-y-4 pt-4 border-t border-zinc-150 dark:border-zinc-800">
+                                      <div>
+                                        <h5 className="text-[9px] font-black text-zinc-850 dark:text-zinc-200 uppercase tracking-wider">Search & Performance Settings</h5>
+                                        <p className="text-[8px] text-zinc-500 mt-0.5 leading-normal">
+                                          Tune lookup search triggers, delays, limits, and rate protection.
+                                        </p>
+                                      </div>
+
+                                      <div className="space-y-3">
+                                        {/* Search Mode */}
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Search Trigger Mode</label>
+                                          <select
+                                            value={selectedField.searchMode || 'auto'}
+                                            onChange={(e) => updateField(selectedField.id, { searchMode: e.target.value as any })}
+                                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                                          >
+                                            <option value="auto">Automatic (As You Type)</option>
+                                            <option value="manual">Manual (Requires Search Button/Enter)</option>
+                                          </select>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                          {/* Min Search Length */}
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Min Characters</label>
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              value={selectedField.minSearchLength !== undefined ? selectedField.minSearchLength : ''}
+                                              placeholder="1"
+                                              onChange={(e) => {
+                                                const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                                                updateField(selectedField.id, { minSearchLength: val });
+                                              }}
+                                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                                            />
+                                          </div>
+
+                                          {/* Debounce Delay (Auto-mode only) */}
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+                                              Debounce (ms)
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              step={50}
+                                              disabled={selectedField.searchMode === 'manual'}
+                                              value={selectedField.debounceDelay !== undefined ? selectedField.debounceDelay : ''}
+                                              placeholder={selectedField.searchMode === 'manual' ? 'N/A' : '350'}
+                                              onChange={(e) => {
+                                                const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                                                updateField(selectedField.id, { debounceDelay: val });
+                                              }}
+                                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all disabled:opacity-50 disabled:bg-zinc-50 dark:disabled:bg-zinc-950"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                          {/* Max Results */}
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Max Results</label>
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              value={selectedField.maxResults !== undefined ? selectedField.maxResults : ''}
+                                              placeholder="No limit"
+                                              onChange={(e) => {
+                                                const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                                                updateField(selectedField.id, { maxResults: val });
+                                              }}
+                                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                                            />
+                                          </div>
+
+                                          {/* No Results Message */}
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-1">Empty Text</label>
+                                            <input
+                                              type="text"
+                                              value={selectedField.noResultsMessage || ''}
+                                              placeholder="No results found"
+                                              onChange={(e) => updateField(selectedField.id, { noResultsMessage: e.target.value || undefined })}
+                                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
                                 );
                               })()}
@@ -14349,7 +14450,7 @@ export const ModuleEditor = () => {
               name: `${conn.displayName || conn.name || 'Connector'} Auto Trigger`,
               triggerFieldId: defaultTriggerFieldId,
               condition: { fieldId: defaultTriggerFieldId, operator: 'not_null', value: '' },
-              inputMappings: inputs.map(input => ({
+              inputMappings: inputs.map((input: any) => ({
                 inputName: input.name,
                 sourceFieldId: defaultTriggerFieldId
               })),
@@ -14417,7 +14518,6 @@ export const ModuleEditor = () => {
           }
 
           let targetField = selectedField;
-          let isNewLookup = false;
           let currentLayout = [...layout];
 
           // If no field is highlighted on the canvas, auto-create a lookup field to act as the trigger
@@ -14439,10 +14539,9 @@ export const ModuleEditor = () => {
               startCol: 1,
               rowIndex: currentLayout.length > 0 ? Math.max(...currentLayout.map((f: any) => f.rowIndex || 0)) + 1 : 0,
               tabId: targetTabId,
-              lookupOutputMappings: []
-            };
+              lookupOutputMappings: [] as any[]
+            } as Field;
             currentLayout.push(targetField);
-            isNewLookup = true;
           }
 
           if (targetField && (targetField.type === 'lookup' || targetField.lookupSource === 'connector')) {
@@ -14713,8 +14812,8 @@ export const ModuleEditor = () => {
                         name: `${conn.displayName || conn.name || 'Connector'} Custom Trigger`,
                         triggerFieldId: '',
                         condition: { fieldId: '', operator: 'not_null', value: '' },
-                        inputMappings: [],
-                        outputMappings: []
+                        inputMappings: [] as any[],
+                        outputMappings: [] as any[]
                       };
                       setDataPopulationRules(prev => [...(prev || []), newRule]);
                       setActiveTab('connectors');
@@ -14761,8 +14860,8 @@ export const ModuleEditor = () => {
                         startCol: 1,
                         rowIndex: layout.length > 0 ? Math.max(...layout.map((f: any) => f.rowIndex || 0)) + 1 : 0,
                         tabId: currentTabId || (tabs && tabs[0]?.id) || 'default-tab',
-                        lookupOutputMappings: []
-                      };
+                        lookupOutputMappings: [] as any[]
+                      } as Field;
                       
                       setLayout(prev => [...prev, newLookupField]);
                       setSelectedId(lookupFieldId);

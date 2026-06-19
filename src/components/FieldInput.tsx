@@ -44,66 +44,104 @@ const SearchableLookup = ({
   const { moduleId, id } = useParams();
   const activeModuleId = moduleId || id;
 
-  const isConnector = field?.lookupSource === 'connector';
+  const isConnector = (field?.lookupSource || field?.optionsSource) === 'connector';
   const [connectorResults, setConnectorResults] = React.useState<any[]>([]);
   const [connectorLoading, setConnectorLoading] = React.useState(false);
+  const [lastSearchedQuery, setLastSearchedQuery] = React.useState('');
 
-  // Debounced search for connector-backed lookups
-  React.useEffect(() => {
-    if (!isConnector || !field.connectorId || !isOpen) return;
+  // Execute connector lookup search
+  const executeSearch = React.useCallback(async (query: string) => {
+    if (!isConnector || !field.connectorId) return;
 
-    const delayDebounceFn = setTimeout(async () => {
-      setConnectorLoading(true);
-      try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const searchParam = field.connectorSearchParam || 'query';
+    // Check minSearchLength constraint
+    const minLen = field.minSearchLength !== undefined ? field.minSearchLength : 1;
+    if (query.length < minLen) {
+      setConnectorResults([]);
+      setLastSearchedQuery(query);
+      return;
+    }
 
-        const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-id': tenant?.id || ''
-          },
-          body: JSON.stringify({
-            connectorId: field.connectorId,
-            moduleId: activeModuleId,
-            noReshape: true,
-            payload: {
-              [searchParam]: search
-            }
-          })
-        });
+    setConnectorLoading(true);
+    setLastSearchedQuery(query);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const searchParam = field.connectorSearchParam || 'query';
 
-        if (!res.ok) throw new Error("Connector search failed");
-        const json = await res.json();
-        const rawData = json.data || json;
+      const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({
+          connectorId: field.connectorId,
+          moduleId: activeModuleId,
+          noReshape: true,
+          payload: {
+            [searchParam]: query
+          }
+        })
+      });
 
-        const arrayData = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === 'object' && Object.keys(rawData).length > 0) ? [rawData] : [];
+      if (!res.ok) throw new Error("Connector search failed");
+      const json = await res.json();
+      const rawData = json.data || json;
 
-        const mappedResults = arrayData.map((item: any, idx: number) => {
-          const rawItem = typeof item === 'object' ? item : { value: item };
-          const labelField = field.connectorLabelField || 'name';
-          const valueField = field.connectorValueField || 'id';
+      const arrayData = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === 'object' && Object.keys(rawData).length > 0) ? [rawData] : [];
 
-          return {
-            id: String(rawItem[valueField] !== undefined ? rawItem[valueField] : (rawItem.id || rawItem.value || idx)),
-            name: String(rawItem[labelField] !== undefined ? rawItem[labelField] : (rawItem.name || rawItem.value || JSON.stringify(rawItem))),
-            raw: rawItem
-          };
-        });
+      let mappedResults = arrayData.map((item: any, idx: number) => {
+        const rawItem = typeof item === 'object' ? item : { value: item };
+        const labelField = field.connectorLabelField || 'name';
+        const valueField = field.connectorValueField || 'id';
 
-        setConnectorResults(mappedResults);
-      } catch (err) {
-        console.error("Connector lookup search error:", err);
-        setConnectorResults([]);
-      } finally {
-        setConnectorLoading(false);
+        return {
+          id: String(rawItem[valueField] !== undefined ? rawItem[valueField] : (rawItem.id || rawItem.value || idx)),
+          name: String(rawItem[labelField] !== undefined ? rawItem[labelField] : (rawItem.name || rawItem.value || JSON.stringify(rawItem))),
+          raw: rawItem
+        };
+      });
+
+      // Apply maxResults limit if configured
+      if (field.maxResults !== undefined && field.maxResults > 0) {
+        mappedResults = mappedResults.slice(0, field.maxResults);
       }
-    }, 350);
+
+      setConnectorResults(mappedResults);
+    } catch (err) {
+      console.error("Connector lookup search error:", err);
+      setConnectorResults([]);
+    } finally {
+      setConnectorLoading(false);
+    }
+  }, [isConnector, field?.connectorId, field?.minSearchLength, field?.connectorSearchParam, field?.connectorLabelField, field?.connectorValueField, field?.maxResults, session?.access_token, tenant?.id, activeModuleId]);
+
+  // Debounced search for automatic connector-backed lookups
+  React.useEffect(() => {
+    if (!isConnector || !field.connectorId || !isOpen || field.searchMode === 'manual') return;
+
+    // Check minSearchLength constraint before scheduling debounce
+    const minLen = field.minSearchLength !== undefined ? field.minSearchLength : 1;
+    if (search.length < minLen) {
+      setConnectorResults([]);
+      setLastSearchedQuery(search);
+      return;
+    }
+
+    const delay = field.debounceDelay !== undefined ? field.debounceDelay : 350;
+    const delayDebounceFn = setTimeout(() => {
+      executeSearch(search);
+    }, delay);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [search, isOpen, isConnector, field?.connectorId, field?.connectorSearchParam, field?.connectorLabelField, field?.connectorValueField]);
+  }, [search, isOpen, isConnector, field?.connectorId, field?.searchMode, field?.minSearchLength, field?.debounceDelay, executeSearch]);
+
+  // Reset lastSearchedQuery when dropdown opens
+  React.useEffect(() => {
+    if (isOpen) {
+      setLastSearchedQuery('');
+    }
+  }, [isOpen]);
 
   // Auto-focus when becoming editable
   React.useEffect(() => {
@@ -171,14 +209,18 @@ const SearchableLookup = ({
         break;
       case 'Enter':
         e.preventDefault();
-        const item = displayResults[activeIndex];
-        if (item) {
-          setLocalName(item.name);
-          onChange(item.id, item.raw || item);
-          setIsOpen(false);
-          setSearch('');
-          if (inputRef.current) inputRef.current.blur();
-          onBlur?.();
+        if (isConnector && field.searchMode === 'manual' && search !== lastSearchedQuery) {
+          executeSearch(search);
+        } else {
+          const item = displayResults[activeIndex];
+          if (item) {
+            setLocalName(item.name);
+            onChange(item.id, item.raw || item);
+            setIsOpen(false);
+            setSearch('');
+            if (inputRef.current) inputRef.current.blur();
+            onBlur?.();
+          }
         }
         break;
       case 'Escape':
@@ -218,9 +260,30 @@ const SearchableLookup = ({
           readOnly={readonly}
           onBlur={onBlur}
           onKeyDown={handleLocalKeyDown}
-          className={cn(inputClasses, "pl-11 pr-10", readonly ? "cursor-pointer pointer-events-none" : "cursor-text")}
+          className={cn(
+            inputClasses, 
+            "pl-11", 
+            isConnector && field.searchMode === 'manual' && isOpen ? "pr-28" : "pr-10", 
+            readonly ? "cursor-pointer pointer-events-none" : "cursor-text"
+          )}
         />
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {isConnector && field.searchMode === 'manual' && isOpen && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevent input blur before click registers
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                executeSearch(search);
+              }}
+              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-sm flex items-center gap-1 shrink-0"
+            >
+              <Search size={10} />
+              <span>Search</span>
+            </button>
+          )}
           {value && !readonly && (
             <button 
               onClick={(e) => {
@@ -254,7 +317,9 @@ const SearchableLookup = ({
             <div className="overflow-y-auto p-2 space-y-1 custom-scrollbar">
               {displayResults.length === 0 ? (
                 <div className="p-4 text-center">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">No results found</p>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                    {field.noResultsMessage || 'No results found'}
+                  </p>
                 </div>
               ) : (
                 displayResults.map((item: any, idx: number) => (
@@ -329,6 +394,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   disabled = false
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
+  const effectiveSource = lookupSource || optionsSource;
 
   const getDensityClasses = (d: 'compact' | 'standard' | 'spacious') => {
     switch (d) {
@@ -585,7 +651,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           className={cn(inputClasses, "appearance-none")}
         >
           <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">Select...</option>
-          {lookupSource === 'connector' ? (
+          {effectiveSource === 'connector' ? (
             lookupResults?.map((opt: any, j: number) => (
               <option key={j} value={opt.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt.name}</option>
             ))
@@ -611,7 +677,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
       >
-        {lookupSource === 'connector' ? (
+        {effectiveSource === 'connector' ? (
           lookupResults?.map((opt: any, i: number) => (
             <div 
               key={i} 
@@ -719,43 +785,90 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           type === 'tag' ? "grid gap-1 grid-cols-2 md:grid-cols-3" : 
           optionLayout === 'horizontal' ? "flex flex-wrap gap-x-6 gap-y-2" : "grid gap-1 grid-cols-1"
         )}>
-          {resolvedOptions?.map((opt: string, i: number) => (
-            <div 
-              key={i} 
-              className={cn(
-                "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
-                currentValues.includes(opt) 
-                  ? "border-transparent" 
-                  : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
-                disabled && "cursor-not-allowed opacity-60"
-              )}
-              onClick={(e) => {
-                if (disabled) return;
-                const newValues = currentValues.includes(opt)
-                  ? currentValues.filter(v => v !== opt)
-                  : [...currentValues, opt];
-                triggerImmediateChange(newValues);
-                const input = e.currentTarget.querySelector('input');
-                if (input) input.focus();
-              }}
-            >
-              <div className={cn(
-                ds.checkbox,
-                "border-2 flex items-center justify-center transition-all",
-                currentValues.includes(opt) ? "border-indigo-500 bg-indigo-500 text-white" : "border-zinc-200 dark:border-zinc-800"
-              )}>
-                {currentValues.includes(opt) && <Check size={ds.checkboxIconSize} strokeWidth={4} />}
-              </div>
-              <input 
-                type="checkbox" 
-                className="sr-only" 
-                checked={currentValues.includes(opt)} 
-                disabled={disabled}
-                onChange={() => {}} 
-              />
-              <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
-            </div>
-          ))}
+          {effectiveSource === 'connector' ? (
+            lookupResults?.map((opt: any, i: number) => {
+              const optVal = opt.id;
+              const isChecked = currentValues.includes(optVal);
+              return (
+                <div 
+                  key={i} 
+                  className={cn(
+                    "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
+                    isChecked 
+                      ? "border-transparent" 
+                      : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
+                    disabled && "cursor-not-allowed opacity-60"
+                  )}
+                  onClick={(e) => {
+                    if (disabled) return;
+                    const newValues = isChecked
+                      ? currentValues.filter(v => v !== optVal)
+                      : [...currentValues, optVal];
+                    triggerImmediateChange(newValues);
+                    const input = e.currentTarget.querySelector('input');
+                    if (input) input.focus();
+                  }}
+                >
+                  <div className={cn(
+                    ds.checkbox,
+                    "border-2 flex items-center justify-center transition-all",
+                    isChecked ? "border-indigo-500 bg-indigo-500 text-white" : "border-zinc-200 dark:border-zinc-800"
+                  )}>
+                    {isChecked && <Check size={ds.checkboxIconSize} strokeWidth={4} />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="sr-only" 
+                    checked={isChecked} 
+                    disabled={disabled}
+                    onChange={() => {}} 
+                  />
+                  <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt.name}</span>
+                </div>
+              );
+            })
+          ) : (
+            resolvedOptions?.map((opt: string, i: number) => {
+              const isChecked = currentValues.includes(opt);
+              return (
+                <div 
+                  key={i} 
+                  className={cn(
+                    "flex items-center gap-3 cursor-pointer group p-1.5 rounded-xl border-2 transition-all",
+                    isChecked 
+                      ? "border-transparent" 
+                      : "border-transparent hover:border-zinc-100 dark:hover:border-zinc-800",
+                    disabled && "cursor-not-allowed opacity-60"
+                  )}
+                  onClick={(e) => {
+                    if (disabled) return;
+                    const newValues = isChecked
+                      ? currentValues.filter(v => v !== opt)
+                      : [...currentValues, opt];
+                    triggerImmediateChange(newValues);
+                    const input = e.currentTarget.querySelector('input');
+                    if (input) input.focus();
+                  }}
+                >
+                  <div className={cn(
+                    ds.checkbox,
+                    "border-2 flex items-center justify-center transition-all",
+                    isChecked ? "border-indigo-500 bg-indigo-500 text-white" : "border-zinc-200 dark:border-zinc-800"
+                  )}>
+                    {isChecked && <Check size={ds.checkboxIconSize} strokeWidth={4} />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="sr-only" 
+                    checked={isChecked} 
+                    disabled={disabled}
+                    onChange={() => {}} 
+                  />
+                  <span className={cn(ds.text, "font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors")}>{opt}</span>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     );

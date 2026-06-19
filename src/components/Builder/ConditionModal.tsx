@@ -7,26 +7,21 @@ import {
   Settings2, 
   BrainCircuit, 
   Layers, 
-  Filter, 
   ChevronRight,
   Split,
   CircleDot,
   Database,
-  Type,
   ChevronDown,
   GripVertical,
   MessageSquareQuote,
   Loader2,
-  Sparkles,
   Search,
   User,
   Clock,
-  Monitor,
   Users,
   Shield,
   Check,
-  Mail,
-  Key
+  Mail
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { VisibilityRule, Field, Tab } from '../ModuleEditor';
@@ -36,14 +31,11 @@ import {
   DndContext,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
-  DragOverlay,
-  defaultDropAnimationSideEffects,
-  DragEndEvent,
-  DragStartEvent,
-  DragOverEvent
+  DragEndEvent
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -62,6 +54,8 @@ interface ConditionModalProps {
   availableFields: Field[];
   tabs: Tab[];
   targetLabel: string;
+  title?: string;
+  hideActionSelector?: boolean;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -119,8 +113,8 @@ const HierarchicalSelector = ({
         const direction = spaceBelow < menuHeight && rect.top > menuHeight ? 'up' : 'down';
         
         setCoords({
-          top: direction === 'down' ? rect.bottom + window.scrollY : rect.top + window.scrollY - menuHeight - 8,
-          left: rect.left + window.scrollX,
+          top: direction === 'down' ? rect.bottom : rect.top - menuHeight - 8,
+          left: rect.left,
           width: rect.width,
           direction
         });
@@ -130,8 +124,8 @@ const HierarchicalSelector = ({
   }, [isOpen, activeCategory, categories]);
 
   const filteredOptions = options.filter(o => 
-    o.label.toLowerCase().includes(search.toLowerCase()) ||
-    o.category.toLowerCase().includes(search.toLowerCase())
+    (o.label || '').toLowerCase().includes(search.toLowerCase()) ||
+    (o.category || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const currentCategory = activeCategory || categories[0];
@@ -149,7 +143,7 @@ const HierarchicalSelector = ({
           "w-full h-10 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 text-xs flex items-center justify-between transition-all outline-none",
           isOpen ? "ring-2 ring-indigo-500/20 border-indigo-500 shadow-lg" : "hover:border-zinc-300 dark:hover:border-zinc-700",
           variableMode && "text-purple-500 border-purple-500/30",
-          !selectedOption && "text-zinc-400"
+          selectedOption ? "text-zinc-900 dark:text-white font-bold tracking-tight" : "text-zinc-400"
         )}
       >
         <span className="truncate flex items-center gap-2">
@@ -167,6 +161,15 @@ const HierarchicalSelector = ({
 
       {isOpen && createPortal(
         <div 
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+          }}
           className="fixed z-[9999]" 
           style={{ 
             top: coords.top, 
@@ -442,7 +445,7 @@ const ConditionValueInput = ({
                 .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
               
               tabFields.forEach(f => {
-                opts.push({ id: f.id, label: f.label, category: tab.label, icon: Database });
+                opts.push({ id: f.id, label: f.label || f.name || f.id, category: tab.label || 'General', icon: Database });
               });
             });
 
@@ -452,7 +455,7 @@ const ConditionValueInput = ({
               .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
             
             otherFields.forEach(f => {
-              opts.push({ id: f.id, label: f.label, category: 'Other Fields', icon: Database });
+              opts.push({ id: f.id, label: f.label || f.name || f.id, category: 'Other Fields', icon: Database });
             });
 
             return opts;
@@ -587,6 +590,95 @@ const SortableItem = ({
   );
 };
 
+class SmartMouseSensor extends MouseSensor {
+  static activators = [
+    {
+      eventName: 'onMouseDown' as const,
+      handler: (event: any) => {
+        const nativeEvent = event.nativeEvent || event;
+        const target = nativeEvent?.target as HTMLElement;
+        if (!target) return true;
+        if (
+          ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(target.tagName) ||
+          target.closest('input') ||
+          target.closest('select') ||
+          target.closest('textarea') ||
+          target.closest('button') ||
+          target.closest('[role="button"]')
+        ) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
+
+class SmartTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: 'onTouchStart' as const,
+      handler: (event: any) => {
+        const nativeEvent = event.nativeEvent || event;
+        const target = nativeEvent?.target as HTMLElement;
+        if (!target) return true;
+        if (
+          ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(target.tagName) ||
+          target.closest('input') ||
+          target.closest('select') ||
+          target.closest('textarea') ||
+          target.closest('button') ||
+          target.closest('[role="button"]')
+        ) {
+          return false;
+        }
+        return true;
+      },
+    },
+  ];
+}
+
+const normalizeRule = (r: any): VisibilityRule | undefined => {
+  if (!r) return undefined;
+
+  const mapOperator = (op?: string): any => {
+    if (!op) return 'equals';
+    switch (op) {
+      case 'not_null': return 'not_empty';
+      case 'null': return 'is_empty';
+      case 'eq': return 'equals';
+      case 'neq': return 'not_equals';
+      case 'gt': return 'greater_than';
+      case 'lt': return 'less_than';
+      default: return op;
+    }
+  };
+  
+  if (r.type === 'rule' || (!r.rules && !r.logicalOperator)) {
+    return {
+      id: r.id || `rule-${Math.random().toString(36).substring(2, 9)}`,
+      type: 'rule',
+      fieldType: r.fieldType || 'field',
+      fieldId: r.fieldId || '',
+      operator: mapOperator(r.operator),
+      value: r.value || '',
+      valueType: r.valueType || 'literal',
+      isCollapsed: r.isCollapsed
+    };
+  }
+  
+  return {
+    id: r.id || `group-${Math.random().toString(36).substring(2, 9)}`,
+    type: 'group',
+    logicalOperator: r.logicalOperator || 'AND',
+    rules: Array.isArray(r.rules) 
+      ? r.rules.map((sr: any) => normalizeRule(sr)).filter((sr: any): sr is VisibilityRule => !!sr)
+      : [],
+    name: r.name,
+    isCollapsed: r.isCollapsed
+  };
+};
+
 export const ConditionModal = ({
   isOpen,
   onClose,
@@ -594,16 +686,23 @@ export const ConditionModal = ({
   initialRule,
   availableFields,
   tabs,
-  targetLabel
+  targetLabel,
+  title = "Trigger Conditions",
+  hideActionSelector = false
 }: ConditionModalProps) => {
-  const [rule, setRule] = useState<VisibilityRule | undefined>(initialRule);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [rule, setRule] = useState<VisibilityRule | undefined>(() => normalizeRule(initialRule));
   const [showSummary, setShowSummary] = useState(false);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(SmartMouseSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(SmartTouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -611,10 +710,13 @@ export const ConditionModal = ({
     })
   );
 
+  const prevIsOpen = useRef(false);
+
   useEffect(() => {
-    if (isOpen) {
-      setRule(initialRule);
+    if (isOpen && !prevIsOpen.current) {
+      setRule(normalizeRule(initialRule));
     }
+    prevIsOpen.current = isOpen;
   }, [isOpen, initialRule]);
 
   const createDefaultRule = (): VisibilityRule => ({
@@ -795,13 +897,12 @@ export const ConditionModal = ({
     );
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+  const handleDragStart = () => {
+    // No drag overlay active state needed
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveId(null);
 
     if (over && active.id !== over.id && rule) {
       const activeId = active.id as string;
@@ -852,7 +953,7 @@ export const ConditionModal = ({
                   <GripVertical size={14} />
                 </div>
                 
-                <div className="flex-1 flex flex-col md:flex-row gap-4 items-end bg-zinc-900/40 p-4 rounded-2xl border border-white/5 relative group/rule">
+                 <div className="flex-1 flex flex-col md:flex-row gap-4 items-end bg-zinc-50/50 dark:bg-zinc-900/20 p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800/50 relative group/rule">
                   {/* LEFT SIDE: TARGET */}
                   <div className="flex gap-3 min-w-[280px] items-end">
                     <div className="flex flex-col gap-1.5">
@@ -869,7 +970,7 @@ export const ConditionModal = ({
                           <option value="field">Field</option>
                           <option value="variable">Variable</option>
                         </select>
-                        <ChevronRight size={12} className={cn("absolute right-3 top-1/2 -translate-y-1/2 rotate-90", r.fieldType === 'variable' ? "text-purple-500" : "text-zinc-400")} />
+                        <ChevronRight size={12} className={cn("absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none", r.fieldType === 'variable' ? "text-purple-500" : "text-zinc-400")} />
                       </div>
                     </div>
 
@@ -906,8 +1007,17 @@ export const ConditionModal = ({
                               .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
                             
                             tabFields.forEach(f => {
-                              opts.push({ id: f.id, label: f.label, category: tab.label, icon: Database });
+                              opts.push({ id: f.id, label: f.label || f.name || f.id, category: tab.label || 'General', icon: Database });
                             });
+                          });
+
+                          // Add other fields not in tabs
+                          const otherFields = availableFields
+                            .filter(f => (!f.tabId || !tabs.find(t => t.id === f.tabId)) && !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))
+                            .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.startCol || 0) - (b.startCol || 0));
+                          
+                          otherFields.forEach(f => {
+                            opts.push({ id: f.id, label: f.label || f.name || f.id, category: 'Other Fields', icon: Database });
                           });
 
                           return opts;
@@ -960,7 +1070,7 @@ export const ConditionModal = ({
                             <option value="variable">Variable</option>
                           </select>
                           <ChevronRight size={12} className={cn(
-                            "absolute right-3 top-1/2 -translate-y-1/2 rotate-90 transition-colors",
+                            "absolute right-3 top-1/2 -translate-y-1/2 rotate-90 transition-colors pointer-events-none",
                             r.valueType === 'field' ? "text-indigo-500" : r.valueType === 'variable' ? "text-purple-500" : "text-zinc-400"
                           )} />
                         </div>
@@ -1092,10 +1202,21 @@ export const ConditionModal = ({
     );
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4">
+        <div 
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+          }}
+          className="fixed inset-0 z-[1001] flex items-center justify-center p-4"
+        >
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1108,7 +1229,7 @@ export const ConditionModal = ({
             initial={{ opacity: 0, scale: 0.95, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 40 }}
-            className="relative w-full max-w-5xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative z-50 w-full max-w-5xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col max-h-[90vh] font-sans"
           >
             {/* Modal Header */}
             <div className="px-8 py-5 border-b border-zinc-100 dark:border-zinc-900/50 flex items-center justify-between bg-zinc-50/30 dark:bg-zinc-900/20">
@@ -1117,7 +1238,7 @@ export const ConditionModal = ({
                   <BrainCircuit size={24} className="text-white" />
                 </div>
                 <div className="space-y-0.5">
-                  <h2 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">Conditional Visibility</h2>
+                  <h2 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">{title}</h2>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Editing Logic for:</span>
                     <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-md text-[10px] font-bold uppercase tracking-tight">{targetLabel}</span>
@@ -1206,41 +1327,43 @@ export const ConditionModal = ({
                     </div>
 
                     {/* Action Selector */}
-                    <div className="bg-zinc-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
-                          <Settings2 size={18} />
+                    {!hideActionSelector && (
+                      <div className="bg-zinc-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                            <Settings2 size={18} />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Logic Action</p>
+                            <p className="text-xs font-bold text-zinc-900 dark:text-white">Determine the outcome when conditions are met</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Logic Action</p>
-                          <p className="text-xs font-bold text-zinc-900 dark:text-white">Determine the outcome when conditions are met</p>
+                        <div className="flex bg-white dark:bg-zinc-950 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                          <button
+                            onClick={() => setRule(prev => prev ? ({ ...prev, action: 'show' }) : undefined)}
+                            className={cn(
+                              "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                              (!rule?.action || rule?.action === 'show')
+                                ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20"
+                                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                            )}
+                          >
+                            Show
+                          </button>
+                          <button
+                            onClick={() => setRule(prev => prev ? ({ ...prev, action: 'hide' }) : undefined)}
+                            className={cn(
+                              "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                              rule?.action === 'hide'
+                                ? "bg-rose-600 text-white shadow-xl shadow-rose-500/20"
+                                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                            )}
+                          >
+                            Hide
+                          </button>
                         </div>
                       </div>
-                      <div className="flex bg-white dark:bg-zinc-950 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                        <button
-                          onClick={() => setRule(prev => prev ? ({ ...prev, action: 'show' }) : undefined)}
-                          className={cn(
-                            "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                            (!rule?.action || rule?.action === 'show')
-                              ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20"
-                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                          )}
-                        >
-                          Show
-                        </button>
-                        <button
-                          onClick={() => setRule(prev => prev ? ({ ...prev, action: 'hide' }) : undefined)}
-                          className={cn(
-                            "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                            rule?.action === 'hide'
-                              ? "bg-rose-600 text-white shadow-xl shadow-rose-500/20"
-                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                          )}
-                        >
-                          Hide
-                        </button>
-                      </div>
-                    </div>
+                    )}
 
                     <div className="space-y-6">
                       <AnimatePresence>
@@ -1260,7 +1383,13 @@ export const ConditionModal = ({
                               </div>
                               <div className="space-y-1">
                                 <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-3">
-                                  This element will be <span className={cn("font-black", rule.action === 'hide' ? "text-rose-500" : "text-indigo-500")}>{rule.action === 'hide' ? 'HIDDEN' : 'VISIBLE'}</span> if:
+                                  {hideActionSelector ? (
+                                    "This integration will execute if:"
+                                  ) : (
+                                    <>
+                                      This element will be <span className={cn("font-black", rule.action === 'hide' ? "text-rose-500" : "text-indigo-500")}>{rule.action === 'hide' ? 'HIDDEN' : 'VISIBLE'}</span> if:
+                                    </>
+                                  )}
                                 </p>
                                 {renderNaturalLanguageSummary(rule)}
                               </div>
@@ -1313,6 +1442,7 @@ export const ConditionModal = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

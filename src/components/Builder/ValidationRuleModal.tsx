@@ -463,7 +463,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
         className="relative w-full max-w-[92vw] h-[90vh] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col"
       >
         {/* Header */}
-        <div className="px-8 py-5 border-b border-zinc-150 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-zinc-50/50 dark:bg-zinc-900/50">
+        <div className="px-8 py-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-zinc-50/50 dark:bg-zinc-900/50">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-indigo-500/10 rounded-xl text-indigo-650 dark:text-indigo-400">
               <Code size={18} />
@@ -519,7 +519,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
             </div>
 
             {/* Search Input */}
-            <div className="p-3 border-b border-zinc-150 dark:border-zinc-800 bg-white/30 dark:bg-zinc-950/10">
+            <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/30 dark:bg-zinc-950/10">
               <div className="relative">
                 <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input 
@@ -527,7 +527,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={sidebarTab === 'fields' ? "Search variables..." : "Search functions..."}
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl pl-8 pr-4 py-2 text-[10px] font-bold focus:outline-none focus:border-indigo-500/50 transition-all shadow-sm dark:text-white"
+                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-4 py-2 text-[10px] font-bold focus:outline-none focus:border-indigo-500/50 transition-all shadow-sm dark:text-white"
                 />
               </div>
             </div>
@@ -664,7 +664,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
               </div>
 
               {/* Display Options */}
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-xl space-y-3">
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
                 <h5 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Display & Enforcement Options</h5>
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
                   <div className="flex items-center gap-2">
@@ -673,7 +673,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                       id="showInline"
                       checked={showInline}
                       onChange={(e) => setShowInline(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-850 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                     />
                     <label htmlFor="showInline" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Inline Error Message</label>
                   </div>
@@ -683,7 +683,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                       id="showToast"
                       checked={showToast}
                       onChange={(e) => setShowToast(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-850 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                     />
                     <label htmlFor="showToast" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Toast Alert</label>
                   </div>
@@ -694,7 +694,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                         id="bypassMode"
                         checked={bypassMode === 'confirm'}
                         onChange={(e) => setBypassMode(e.target.checked ? 'confirm' : 'none')}
-                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-850 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                       />
                       <label htmlFor="bypassMode" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Require confirmation popup to save anyway</label>
                     </div>
@@ -719,7 +719,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                 </div>
                 <div className="flex bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all rounded-2xl overflow-hidden relative h-48 shadow-inner">
                   {/* Line Number Gutter */}
-                  <div className="w-10 bg-zinc-100/50 dark:bg-zinc-900/20 border-r border-zinc-200 dark:border-zinc-850 flex flex-col pt-4 text-right pr-2.5 select-none pointer-events-none overflow-hidden">
+                  <div className="w-10 bg-zinc-100/50 dark:bg-zinc-900/20 border-r border-zinc-200 dark:border-zinc-800 flex flex-col pt-4 text-right pr-2.5 select-none pointer-events-none overflow-hidden">
                     {expression.split('\n').map((_, i) => (
                       <div key={i} className="text-[10px] font-mono leading-[22px] text-zinc-300 dark:text-zinc-650 h-[22px]">
                         {i + 1}
@@ -809,7 +809,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                               >
                                 <div className={cn(
                                   "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                                  i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-850"
+                                  i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-800"
                                 )}>
                                   {s.type === 'variable' ? <Hash size={14} /> : <FunctionSquare size={14} />}
                                 </div>
@@ -950,7 +950,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
                         setSandboxResult(null);
                       }}
                       placeholder={`Mock ${f.label} value`}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-250 dark:border-zinc-800/85 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-3 py-2 text-[10.5px] dark:text-white"
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/85 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all rounded-xl px-3 py-2 text-[10.5px] dark:text-white"
                     />
                   </div>
                 ));
@@ -960,7 +960,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-8 py-5 border-t border-zinc-150 dark:border-zinc-800 flex justify-end gap-3 bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0">
+        <div className="px-8 py-5 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-3 bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0">
           <button 
             onClick={onClose}
             className="px-5 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-750 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"

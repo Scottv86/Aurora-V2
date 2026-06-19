@@ -169,7 +169,7 @@ export const usePlatformLookup = (field: any) => {
   
   const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
                   (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
-                  (lookupSource === 'connector' && field?.connectorId);
+                  (effectiveSource === 'connector' && field?.connectorId);
 
   // Determine final data and loading state
   const rawData = isAsync ? asyncData : syncData;
@@ -180,7 +180,7 @@ export const usePlatformLookup = (field: any) => {
   useEffect(() => {
     const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
                     (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
-                    (lookupSource === 'connector' && field?.connectorId);
+                    (effectiveSource === 'connector' && field?.connectorId);
 
     if (!isAsync) return;
 
@@ -258,7 +258,7 @@ export const usePlatformLookup = (field: any) => {
                 });
               }
             }
-          } else if (lookupSource === 'connector' && field?.connectorId) {
+          } else if (effectiveSource === 'connector' && field?.connectorId) {
             const url = `${API_BASE_URL}/api/nexus-proxy/execute`;
             console.log(`[usePlatformLookup] Fetching connector options: ${url} for connectorId=${field.connectorId}`);
             const res = await fetch(url, {

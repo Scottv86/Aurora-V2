@@ -109,7 +109,8 @@ A Connector consists of:
 1. Metadata: Name, Icon (from Lucide-react name, e.g., "Globe"), Category.
 2. IO Schema: 
    - Inputs: Array of { name: string, type: string, label: string, placeholder: string, required: boolean }.
-   - Outputs: Array of { name: string, type: string, label: string }.
+   - Outputs: Array of { name: string, type: string, label: string, items?: Array<{ name: string, type: string, label: string }> }.
+     - Use type "array" for collections (lists of items), and provide the nested schema under "items".
 3. Edge Function Logic: A Deno-compatible Javascript function that handles the API request. 
    - It receives 'params' (inputs) and 'secrets' (API keys/tokens).
    - Use standard fetch for API calls.

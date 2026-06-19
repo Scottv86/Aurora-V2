@@ -235,7 +235,7 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
                 {step !== 'source' ? (
                   <button
                     onClick={handleBack}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-250 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/20 transition-all"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/20 transition-all"
                   >
                     <ArrowLeft size={16} />
                   </button>
@@ -348,7 +348,7 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
                       />
                     </div>
 
-                    <div className="flex-1 overflow-y-auto border border-zinc-250 dark:border-zinc-850 rounded-xl divide-y divide-zinc-200 dark:divide-zinc-900 max-h-[30vh]">
+                    <div className="flex-1 overflow-y-auto border border-zinc-200 dark:border-zinc-800 rounded-xl divide-y divide-zinc-200 dark:divide-zinc-900 max-h-[30vh]">
                       {eligibleModules.length > 0 ? (
                         eligibleModules.map(m => (
                           <button

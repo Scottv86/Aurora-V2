@@ -609,7 +609,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                 <button
                   key={f.id}
                   onClick={() => handleInsertToken(f.name ? `{${f.name}}` : `{{${f.id}}}`)}
-                  className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl transition-all flex items-center gap-3 group shadow-sm"
+                  className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl transition-all flex items-center gap-3 group shadow-sm"
                 >
                   <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 shrink-0">
                     <Hash size={12} />
@@ -632,7 +632,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                 <button
                   key={i}
                   onClick={() => handleInsertToken(func.template)}
-                  className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl transition-all flex flex-col gap-1 group shadow-sm"
+                  className="w-full text-left p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl transition-all flex flex-col gap-1 group shadow-sm"
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 group-hover:text-indigo-500 shrink-0">
@@ -709,7 +709,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
               </div>
 
               {/* Display Options */}
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-855 rounded-xl space-y-3">
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
                 <h5 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Display & Enforcement Options</h5>
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
                   <div className="flex items-center gap-2">
@@ -721,7 +721,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                         setShowInline(e.target.checked);
                         updateCurrentRule({ showInline: e.target.checked });
                       }}
-                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-855 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                     />
                     <label htmlFor="showInlineCheckbox" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Inline Error Message</label>
                   </div>
@@ -734,7 +734,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                         setShowToast(e.target.checked);
                         updateCurrentRule({ showToast: e.target.checked });
                       }}
-                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-855 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                      className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                     />
                     <label htmlFor="showToastCheckbox" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Show Toast Alert</label>
                   </div>
@@ -749,7 +749,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                           setBypassMode(nextBypass);
                           updateCurrentRule({ bypassMode: nextBypass });
                         }}
-                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-855 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
+                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-800 focus:ring-indigo-500 dark:bg-zinc-950 cursor-pointer"
                       />
                       <label htmlFor="bypassModeCheckbox" className="text-xs font-bold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">Require confirmation popup to save anyway</label>
                     </div>
@@ -843,7 +843,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                               >
                                 <div className={cn(
                                   "w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0",
-                                  i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-850"
+                                  i === selectedIndex ? "bg-white/20" : "bg-zinc-100 dark:bg-zinc-800"
                                 )}>
                                   {s.type === 'variable' ? <Hash size={13} /> : <FunctionSquare size={13} />}
                                 </div>
@@ -947,7 +947,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                         <span className="text-[7.5px] font-mono text-zinc-400">{"{" + key + "}"}</span>
                       </label>
                       {matchedField?.type === 'checkbox' ? (
-                        <div className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 rounded-xl">
+                        <div className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
                           <input 
                             type="checkbox"
                             checked={!!sandboxData[key]}

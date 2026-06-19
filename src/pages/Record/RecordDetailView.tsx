@@ -31,7 +31,7 @@ import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
-import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue, checkCondition, evaluateExpression, evaluateFormula } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
 import { validateRecordRules, ValidationError } from '../../lib/validationEngine';
 
@@ -351,19 +351,26 @@ export const RecordDetailView = ({
 
     for (const rule of rules) {
       // 1. Evaluate condition
-      const condition = rule.condition || { operator: 'not_null' };
-      const fieldIdToEval = rule.triggerFieldId || condition.fieldId;
-      if (!fieldIdToEval) continue;
-
-      const triggerVal = getFieldValue(currentData, fieldIdToEval);
-      
       let conditionMatches = false;
-      if (condition.operator === 'not_null') {
-        conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
-      } else if (condition.operator === 'equals') {
-        conditionMatches = String(triggerVal) === String(condition.value);
-      } else if (condition.operator === 'not_equals') {
-        conditionMatches = String(triggerVal) !== String(condition.value);
+      if ((rule.triggerMode || 'visual') === 'visual') {
+        if (rule.condition) {
+          conditionMatches = checkCondition(rule.condition, currentData, visibilityContext);
+        } else if (rule.triggerFieldId) {
+          const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
+          conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
+        } else {
+          conditionMatches = true;
+        }
+      } else if (rule.triggerMode === 'expression' && rule.conditionExpression) {
+        try {
+          const result = evaluateFormula(rule.conditionExpression, currentData);
+          conditionMatches = (result as any) === true || String(result).toLowerCase() === 'true';
+        } catch (e) {
+          console.error("Trigger expression evaluation error:", e);
+          conditionMatches = false;
+        }
+      } else {
+        conditionMatches = true;
       }
 
       if (!conditionMatches) continue;
@@ -371,8 +378,12 @@ export const RecordDetailView = ({
       // 2. Gather input parameter payload
       const payload: Record<string, any> = {};
       (rule.inputMappings || []).forEach((m: any) => {
-        if (m.inputName && m.sourceFieldId) {
-          payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+        if (m.inputName) {
+          if (m.mappingType === 'expression' && m.expression) {
+            payload[m.inputName] = evaluateExpression(m.expression, currentData, visibilityContext);
+          } else if (m.sourceFieldId) {
+            payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+          }
         }
       });
 
@@ -405,8 +416,26 @@ export const RecordDetailView = ({
           (rule.outputMappings || []).forEach((m: any) => {
             if (m.targetFieldId && m.sourceFieldId) {
               const val = rawData[m.sourceFieldId];
-              if (val !== undefined && updatedData[m.targetFieldId] !== val) {
-                updatedData[m.targetFieldId] = val;
+              if (val !== undefined) {
+                const targetField = currentFlatFields.find(f => f.id === m.targetFieldId);
+                if (targetField && targetField.type === 'repeatableGroup' && Array.isArray(val)) {
+                  const childFields = targetField.fields || [];
+                  const mappedArray = val.map((item: any) => {
+                    const mappedItem: Record<string, any> = {};
+                    childFields.forEach((cf: any) => {
+                      const sourceVal = item[cf.name] !== undefined ? item[cf.name]
+                                     : item[cf.label] !== undefined ? item[cf.label]
+                                     : item[cf.id];
+                      if (sourceVal !== undefined) {
+                        mappedItem[cf.id] = sourceVal;
+                      }
+                    });
+                    return mappedItem;
+                  });
+                  updatedData[m.targetFieldId] = mappedArray;
+                } else {
+                  updatedData[m.targetFieldId] = val;
+                }
                 changed = true;
               }
             }
@@ -654,22 +683,59 @@ export const RecordDetailView = ({
   }, [requiredGlobalLists, tenant?.id]);
   const evaluateDataPopulationRules = async (changedFieldId: string, currentData: any) => {
     const rules = moduleData?.config?.dataPopulationRules || (moduleData as any)?.dataPopulationRules || [];
-    const matchingRules = rules.filter((r: any) => r.triggerFieldId === changedFieldId);
+    
+    const isRuleTriggeredByField = (rule: any, fieldId: string): boolean => {
+      if (rule.triggerFieldId === fieldId) return true;
+      if ((rule.triggerMode || 'visual') === 'visual' && rule.condition) {
+        const extractFields = (c: any): string[] => {
+          if (!c) return [];
+          if (c.type === 'rule') {
+            const list = [];
+            if (c.fieldId && c.fieldType === 'field') list.push(c.fieldId);
+            if (c.value && c.valueType === 'field') list.push(c.value);
+            return list;
+          }
+          if (c.type === 'group') {
+            return (c.rules || []).flatMap(extractFields);
+          }
+          if (c.fieldId) return [c.fieldId];
+          return [];
+        };
+        return extractFields(rule.condition).includes(fieldId);
+      }
+      if (rule.triggerMode === 'expression' && rule.conditionExpression) {
+        const regex = new RegExp(`\\{\\s*${fieldId}\\s*\\}`, 'i');
+        return regex.test(rule.conditionExpression);
+      }
+      return false;
+    };
+
+    const matchingRules = rules.filter((r: any) => isRuleTriggeredByField(r, changedFieldId));
     
     if (matchingRules.length === 0) return;
 
     for (const rule of matchingRules) {
       // 1. Evaluate condition
-      const condition = rule.condition || { operator: 'not_null' };
-      const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
-      
       let conditionMatches = false;
-      if (condition.operator === 'not_null') {
-        conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
-      } else if (condition.operator === 'equals') {
-        conditionMatches = String(triggerVal) === String(condition.value);
-      } else if (condition.operator === 'not_equals') {
-        conditionMatches = String(triggerVal) !== String(condition.value);
+      if ((rule.triggerMode || 'visual') === 'visual') {
+        if (rule.condition) {
+          conditionMatches = checkCondition(rule.condition, currentData, visibilityContext);
+        } else if (rule.triggerFieldId) {
+          const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
+          conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
+        } else {
+          conditionMatches = true;
+        }
+      } else if (rule.triggerMode === 'expression' && rule.conditionExpression) {
+        try {
+          const result = evaluateFormula(rule.conditionExpression, currentData);
+          conditionMatches = (result as any) === true || String(result).toLowerCase() === 'true';
+        } catch (e) {
+          console.error("Trigger expression evaluation error:", e);
+          conditionMatches = false;
+        }
+      } else {
+        conditionMatches = true;
       }
 
       if (!conditionMatches) continue;
@@ -677,8 +743,12 @@ export const RecordDetailView = ({
       // 2. Gather input parameter payload
       const payload: Record<string, any> = {};
       (rule.inputMappings || []).forEach((m: any) => {
-        if (m.inputName && m.sourceFieldId) {
-          payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+        if (m.inputName) {
+          if (m.mappingType === 'expression' && m.expression) {
+            payload[m.inputName] = evaluateExpression(m.expression, currentData, visibilityContext);
+          } else if (m.sourceFieldId) {
+            payload[m.inputName] = getFieldValue(currentData, m.sourceFieldId) ?? '';
+          }
         }
       });
 
@@ -712,7 +782,25 @@ export const RecordDetailView = ({
             if (m.targetFieldId && m.sourceFieldId) {
               const val = rawData[m.sourceFieldId];
               if (val !== undefined) {
-                updatedData[m.targetFieldId] = val;
+                const targetField = allFields.find(f => f.id === m.targetFieldId);
+                if (targetField && targetField.type === 'repeatableGroup' && Array.isArray(val)) {
+                  const childFields = targetField.fields || [];
+                  const mappedArray = val.map((item: any) => {
+                    const mappedItem: Record<string, any> = {};
+                    childFields.forEach((cf: any) => {
+                      const sourceVal = item[cf.name] !== undefined ? item[cf.name]
+                                     : item[cf.label] !== undefined ? item[cf.label]
+                                     : item[cf.id];
+                      if (sourceVal !== undefined) {
+                        mappedItem[cf.id] = sourceVal;
+                      }
+                    });
+                    return mappedItem;
+                  });
+                  updatedData[m.targetFieldId] = mappedArray;
+                } else {
+                  updatedData[m.targetFieldId] = val;
+                }
                 changed = true;
               }
             }

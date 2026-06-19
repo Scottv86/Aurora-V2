@@ -110,7 +110,7 @@ const resolveVariable = (token: string, context?: any): any => {
   return cleanToken;
 };
 
-const checkCondition = (condition: any, data: any, context?: any): boolean => {
+export const checkCondition = (condition: any, data: any, context?: any): boolean => {
   if (!condition) return true;
 
   const action = condition.action || 'show';
@@ -229,6 +229,41 @@ export const evaluateFormula = (formula: string, data: any): string | number => 
   } catch (err) {
     console.error("Formula Eval Error:", err);
     return '#ERROR!';
+  }
+};
+
+export const evaluateExpression = (expr: string, data: any, context?: any): any => {
+  if (!expr) return '';
+  try {
+    // 1. First interpolate variables like {currentUser.email}, {today}, {now}
+    let interpolated = expr;
+    
+    // Replace {currentUser.xxx} or other custom context variables
+    interpolated = interpolated.replace(/\{currentUser\.(id|role|team|position|email|name)\}/g, (match) => {
+      const val = resolveVariable(match.slice(1, -1), context);
+      return typeof val === 'string' ? `"${val}"` : JSON.stringify(val);
+    });
+
+    // Replace standard layout field references {fieldId}
+    interpolated = interpolated.replace(/\{(\w+)\}/g, (_, fieldId) => {
+      const val = getFieldValue(data, fieldId);
+      if (val === undefined || val === null) return '""';
+      if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+      return `"${String(val).replace(/"/g, '\\"')}"`;
+    });
+
+    // 2. Evaluate using the centralized formula engine context
+    const formulaContext = createFormulaContext();
+    const func = new Function(...Object.keys(formulaContext), `return ${interpolated}`);
+    const result = func(...Object.values(formulaContext));
+    
+    if (typeof result === 'number') {
+      return Number.isInteger(result) ? result : Number(result.toFixed(2));
+    }
+    return result ?? '';
+  } catch (err) {
+    console.error("Expression Evaluation Error:", err);
+    return expr; // Fallback to raw string if evaluation fails
   }
 };
 
