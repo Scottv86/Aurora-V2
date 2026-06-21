@@ -1,8 +1,7 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GripVertical, Trash2, Folder, ListPlus, X, Maximize2, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus } from 'lucide-react';
+import { GripVertical, Trash2, Folder, ListPlus, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus } from 'lucide-react';
 import { cn, calculateHeight } from '../../lib/utils';
-import { useGridEngine, GridItem, GridPos } from '../../hooks/useGridEngine';
 import { GRID_CONFIG } from '../ModuleEditor';
 
 export interface Field {
@@ -107,11 +106,9 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState<'left' | 'right' | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isContentHovered, setIsContentHovered] = useState(false);
 
   const gc = gridConfig || GRID_CONFIG;
-  const { snapToGrid } = useGridEngine();
   const isCollapsed = block.collapsible ? (block.isCollapsed ?? block.defaultCollapsed ?? false) : false;
   const isNested = !!block.parentId;
   const isDraggingOverTarget = dragOverInfo?.active && dragOverInfo?.parentId === block.id;
@@ -193,6 +190,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800",
         isSelected ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30 shadow-2xl" : "hover:border-indigo-500/30 z-10 hover:z-40",
         isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30",
+        isDraggingOver && "border-indigo-500 bg-indigo-50/10 dark:bg-indigo-500/5 ring-4 ring-indigo-500/15 shadow-2xl z-30 scale-[1.005]",
         hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
       )}
     >
@@ -405,9 +403,9 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
                           }}
                         >
                           {isDragging && (
-                            <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
+                            <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
                               {Array.from({ length: 12 }).map((_, i) => (
-                                <div key={i} className="h-full border-l border-r border-dashed border-indigo-500/5 dark:border-indigo-400/[0.01] bg-indigo-500/[0.001]" />
+                                <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
                               ))}
                             </div>
                           )}
@@ -449,9 +447,9 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
                     }}
                   >
                     {isDragging && (
-                      <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
+                      <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
                         {Array.from({ length: 12 }).map((_, i) => (
-                          <div key={i} className="h-full border-l border-r border-dashed border-indigo-500/5 dark:border-indigo-400/[0.01] bg-indigo-500/[0.001]" />
+                          <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
                         ))}
                       </div>
                     )}

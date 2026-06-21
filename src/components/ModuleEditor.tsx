@@ -675,6 +675,7 @@ export interface Field {
   defaultCollapsed?: boolean;
   isCollapsed?: boolean;
   hidden?: boolean;
+  isDraggingPlaceholder?: boolean;
   optionLayout?: 'vertical' | 'horizontal';
   parentId?: string;
   // Date/Time specific settings
@@ -1671,10 +1672,14 @@ export const ModuleEditor = () => {
   const [architectInput, setArchitectInput] = useState('');
   const [isArchitectThinking, setIsArchitectThinking] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
+  const [draggedFieldInfo, setDraggedFieldInfo] = useState<{ type: string, fieldType?: string, fieldId?: string, label?: string, icon?: any } | null>(null);
+  const dragOverlayRef = useRef<HTMLDivElement>(null);
+  const lastDragOverTimeRef = useRef<number>(0);
   const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string, height?: number } | null>(null);
   const [previewLayout, setPreviewLayout] = useState<Field[] | null>(null);
   const [hoveredMapping, setHoveredMapping] = useState<{ connectorId: string, sourceOutput: string, targetFieldId: string } | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch Real Database Records for Live Preview
   useEffect(() => {
@@ -2643,11 +2648,49 @@ export const ModuleEditor = () => {
 
   // --- DnD Handlers ---
 
+  const handleWindowDragOver = useCallback((event: DragEvent) => {
+    if (dragOverlayRef.current) {
+      dragOverlayRef.current.style.left = `${event.clientX}px`;
+      dragOverlayRef.current.style.top = `${event.clientY}px`;
+    }
+  }, []);
+
   const handleDragStart = (e: React.DragEvent, data: any) => {
     e.dataTransfer.setData('application/json', JSON.stringify(data));
     e.dataTransfer.effectAllowed = 'move';
     setActiveDragItem(data);
     
+    // Resolve label and icon for custom overlay preview
+    let label = 'New Field';
+    let icon: any = null;
+    if (data.type === 'field') {
+      const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === data.fieldType);
+      label = fieldDef?.label || 'New Field';
+      icon = fieldDef?.icon || null;
+    } else if (data.type === 'move') {
+      const field = findFieldRecursive(layout, data.fieldId);
+      label = field?.label || 'Field';
+      const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field?.type);
+      icon = fieldDef?.icon || null;
+    }
+    
+    setDraggedFieldInfo({ ...data, label, icon });
+
+    // Hide default browser drag ghost image
+    const img = new window.Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    e.dataTransfer.setDragImage(img, 0, 0);
+
+    // Initial position for the overlay
+    if (dragOverlayRef.current) {
+      dragOverlayRef.current.style.left = `${e.clientX}px`;
+      dragOverlayRef.current.style.top = `${e.clientY}px`;
+      dragOverlayRef.current.style.display = 'block';
+    }
+
+    // Attach window level dragover listener for 60fps tracking outside canvas
+    window.addEventListener('dragover', handleWindowDragOver);
+
     // If it's an existing field, mark it as dragging
     if (data.type === 'move') {
       e.dataTransfer.setData('fieldId', data.fieldId);
@@ -2656,8 +2699,13 @@ export const ModuleEditor = () => {
 
   const handleDragEnd = () => {
     setActiveDragItem(null);
+    setDraggedFieldInfo(null);
     setDragOverInfo(null);
     setPreviewLayout(null);
+    window.removeEventListener('dragover', handleWindowDragOver);
+    if (dragOverlayRef.current) {
+      dragOverlayRef.current.style.display = 'none';
+    }
   };
 
   const handleColumnDragStart = (e: React.DragEvent, index: number) => {
@@ -2935,13 +2983,28 @@ export const ModuleEditor = () => {
     e.preventDefault();
     e.stopPropagation();
     
+    // Position custom overlay directly in DOM for 60fps tracking
+    if (dragOverlayRef.current) {
+      dragOverlayRef.current.style.left = `${e.clientX}px`;
+      dragOverlayRef.current.style.top = `${e.clientY}px`;
+      dragOverlayRef.current.style.transform = `translate(-50%, -50%) rotate(2.5deg)`;
+    }
+
+    // Throttle layout generation state updates (e.g., maximum once per 80ms)
+    const now = Date.now();
+    if (now - lastDragOverTimeRef.current < 80) {
+      return;
+    }
+    
     const isNested = !!parentId;
     const container = e.currentTarget.getBoundingClientRect();
+    
+    const scrollTop = scrollContainerRef.current?.scrollTop || 0;
     
     // Use snapToGrid for consistent coordinates
     const { x, y } = snapToGrid(
       e.clientX - container.left,
-      e.clientY - container.top,
+      e.clientY - container.top + scrollTop,
       container.width,
       GRID_CONFIG.rowHeight,
       GRID_CONFIG.gap,
@@ -2989,6 +3052,7 @@ export const ModuleEditor = () => {
       return;
     }
 
+    lastDragOverTimeRef.current = now;
     setDragOverInfo(info);
 
     // Generate Preview Layout
@@ -3006,25 +3070,79 @@ export const ModuleEditor = () => {
     };
 
     const performPreviewInsert = (fields: Field[], targetId?: string, fieldToMoveId?: string): Field[] => {
-      // 1. Remove the field if it's being moved
-      let cleanedFields = fields;
-      if (fieldToMoveId) {
-        cleanedFields = fields
-          .filter(f => f.id !== fieldToMoveId)
-          .map(f => f.fields ? { ...f, fields: performPreviewInsert(f.fields, undefined, fieldToMoveId) } : f);
-      }
+      const resolvedTabId = targetTabId || currentTabId;
 
-      // 2. Insert the placeholder at target
-      if (!targetId) return [...cleanedFields, tempField];
-      
-      return cleanedFields.map(f => {
-        if (f.id === targetId) return { ...f, fields: [...(f.fields || []), tempField] };
-        if (f.fields) return { ...f, fields: performPreviewInsert(f.fields, targetId, fieldToMoveId) };
-        return f;
-      });
+      if (fieldToMoveId) {
+        // Move Mode: Find the field, extract it, and move it to the target parent/tab at target coords
+        const extractField = (items: Field[]): { cleaned: Field[], extracted: Field | null } => {
+          let extracted: Field | null = null;
+          const cleaned = items.filter(item => {
+            if (item.id === fieldToMoveId) {
+              extracted = item;
+              return false;
+            }
+            return true;
+          }).map(item => {
+            if (item.fields) {
+              const res = extractField(item.fields);
+              if (res.extracted) extracted = res.extracted;
+              return { ...item, fields: res.cleaned };
+            }
+            return item;
+          });
+          return { cleaned, extracted };
+        };
+
+        const { cleaned, extracted } = extractField(fields);
+        if (extracted) {
+          const movedField = {
+            ...extracted,
+            startCol: info.col,
+            rowIndex: info.index,
+            parentId: targetId || undefined,
+            tabId: targetId ? undefined : resolvedTabId,
+            isDraggingPlaceholder: true
+          };
+
+          if (!targetId) {
+            // Top level insert
+            const sameTabFields = cleaned.filter(f => !f.parentId && f.tabId === resolvedTabId);
+            const otherFields = cleaned.filter(f => f.parentId || f.tabId !== resolvedTabId);
+            return [...otherFields, ...[...sameTabFields, movedField]];
+          } else {
+            // Nested insert
+            const insertIntoParent = (items: Field[]): Field[] => {
+              return items.map(item => {
+                if (item.id === targetId) {
+                  return { ...item, fields: [...(item.fields || []), movedField] };
+                }
+                if (item.fields) {
+                  return { ...item, fields: insertIntoParent(item.fields) };
+                }
+                return item;
+              });
+            };
+            return insertIntoParent(cleaned);
+          }
+        }
+        return fields;
+      } else {
+        // New Field Mode: Insert placeholder (tempField) at target
+        if (!targetId) {
+          const sameTabFields = fields.filter(f => !f.parentId && f.tabId === resolvedTabId);
+          const otherFields = fields.filter(f => f.parentId || f.tabId !== resolvedTabId);
+          return [...otherFields, ...[...sameTabFields, tempField]];
+        }
+        
+        return fields.map(f => {
+          if (f.id === targetId) return { ...f, fields: [...(f.fields || []), tempField] };
+          if (f.fields) return { ...f, fields: performPreviewInsert(f.fields, targetId, fieldToMoveId) };
+          return f;
+        });
+      }
     };
 
-    const preview = normalizeLayout(performPreviewInsert(layout, parentId, fieldToMoveId || undefined));
+    const preview = performPreviewInsert(layout, parentId, fieldToMoveId || undefined);
     setPreviewLayout(preview);
   };
 
@@ -4126,6 +4244,7 @@ export const ModuleEditor = () => {
             isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
             hoveredMapping={hoveredMapping}
             dragOverInfo={dragOverInfo}
+            isDragging={!!activeDragItem}
           />
         );
       }
@@ -4164,6 +4283,7 @@ export const ModuleEditor = () => {
             gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
           }}
           onClick={(e) => {
+            if (block.isDraggingPlaceholder) return;
             e.stopPropagation();
             if (e.shiftKey || e.metaKey || e.ctrlKey) {
               setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
@@ -4174,21 +4294,38 @@ export const ModuleEditor = () => {
           id={`canvas-field-${block.id}`}
           className={cn(
             "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
-            selectedIds.includes(block.id) 
-              ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
-              : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40",
+            block.isDraggingPlaceholder
+              ? "border-dashed border-indigo-500/40 bg-indigo-50/20 dark:bg-indigo-500/5 select-none pointer-events-none"
+              : (selectedIds.includes(block.id) 
+                  ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
+                  : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40"),
             block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
-            activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
+            activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
             hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
           )}
         >
-          {/* Selection UI */}
-          {selectedIds.includes(block.id) && (
-            <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
-              Selected
-            </div>
-          )}
-          <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+          {block.isDraggingPlaceholder ? (() => {
+            const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+            const Icon = fieldDef?.icon;
+            return (
+              <div className="flex-grow flex flex-col justify-center items-center h-full min-h-[60px] py-2 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent pointer-events-none" />
+                <div className="flex items-center gap-2 text-indigo-500/60 dark:text-indigo-400/60 z-10">
+                  {Icon && <Icon size={14} className="animate-pulse shrink-0" />}
+                  <span className="text-[10px] font-black uppercase tracking-wider truncate">{block.label || fieldDef?.label || block.type}</span>
+                </div>
+                <span className="text-[8px] font-bold text-indigo-400/40 uppercase tracking-widest mt-1 z-10">Moving Here</span>
+              </div>
+            );
+          })() : (
+            <>
+              {/* Selection UI */}
+              {selectedIds.includes(block.id) && (
+                <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
+                  Selected
+                </div>
+              )}
+              <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -4350,6 +4487,8 @@ export const ModuleEditor = () => {
             >
               <EyeOff size={12} />
             </button>
+          )}
+            </>
           )}
         </motion.div>
       );
@@ -5478,7 +5617,10 @@ export const ModuleEditor = () => {
                   </div>
                 )}
 
-              <div className="w-full space-y-4 relative px-6 py-6">
+              <div 
+                ref={scrollContainerRef}
+                className="w-full flex-1 overflow-y-auto custom-scrollbar relative px-6 py-6"
+              >
 
                 <div className="flex items-start gap-6 w-full">
                   {/* Grid Canvas */}
@@ -5986,7 +6128,7 @@ export const ModuleEditor = () => {
                           <>
                             <div className="space-y-4 flex-1 min-h-0 flex flex-col">
                               <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
-                              <div className="flex-1 overflow-y-auto px-1.5 pt-1.5 pb-2 custom-scrollbar">
+                              <div className="flex-1 px-1.5 pt-1.5 pb-2">
                                 <Reorder.Group 
                                   axis="y" 
                                   values={getSortedTabs(tabs)} 
@@ -6109,7 +6251,7 @@ export const ModuleEditor = () => {
                     {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'accordion' ? (() => {
                       const accordionTabs = tabs.filter(t => !tabs.some(sub => sub.parentId === t.id));
                       return (
-                        <div className="flex-1 p-8 pb-32 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] custom-scrollbar select-none">
+                        <div className="flex-1 p-8 pb-32 space-y-6 select-none">
                           {accordionTabs.map((tab) => {
                             const isCollapsed = collapsedGroups[tab.id] ?? false;
                             const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
@@ -6147,6 +6289,13 @@ export const ModuleEditor = () => {
                                     gridAutoRows: `${GRID_CONFIG.rowHeight}px`
                                   }}
                                 >
+                                  {activeDragItem && (
+                                    <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${GRID_CONFIG.gap}px`, padding: '24px' }}>
+                                      {Array.from({ length: 12 }).map((_, i) => (
+                                        <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.01] rounded-xl" />
+                                      ))}
+                                    </div>
+                                  )}
                                   {isLoading ? (
                                     <div className="col-span-12 h-20 bg-zinc-50 dark:bg-zinc-900/50 animate-pulse rounded-xl" />
                                   ) : (
@@ -6165,7 +6314,7 @@ export const ModuleEditor = () => {
                       className={cn(
                         "flex-1 min-w-0 p-8 pb-32 min-h-[800px] relative z-10 transition-all duration-300",
                         interfaceSettings.detail?.layoutType === 'sidebar' 
-                          ? "flex flex-col gap-8 overflow-y-auto max-h-[calc(100vh-140px)] custom-scrollbar" 
+                          ? "flex flex-col gap-8" 
                           : "grid grid-cols-1 " + (viewportSize !== 'mobile' ? "md:grid-cols-12" : ""),
                         isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
                       )}
@@ -6176,7 +6325,14 @@ export const ModuleEditor = () => {
                         gridAutoRows: interfaceSettings.detail?.layoutType === 'sidebar' ? undefined : `${GRID_CONFIG.rowHeight}px`
                       }}
                     >
-                    <AnimatePresence mode="popLayout">
+                      {activeDragItem && interfaceSettings.detail?.layoutType !== 'sidebar' && (
+                        <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${GRID_CONFIG.gap}px`, padding: `${GRID_CONFIG.padding}px` }}>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.01] rounded-xl" />
+                          ))}
+                        </div>
+                      )}
+                      <AnimatePresence mode="popLayout">
                         {isLoading ? (
                           <motion.div
                             key="skeleton-grid"
@@ -6261,6 +6417,7 @@ export const ModuleEditor = () => {
                                     isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
                                     hoveredMapping={hoveredMapping}
                                     dragOverInfo={dragOverInfo}
+                                    isDragging={!!activeDragItem}
                                   />
                                 );
                               }
@@ -6282,9 +6439,7 @@ export const ModuleEditor = () => {
                                     </div>
                                   </div>
                                 );
-                              }
-
-                              return (
+                              }                              return (
                                 <motion.div
                                   key={block.id}
                                   layout
@@ -6299,6 +6454,7 @@ export const ModuleEditor = () => {
                                     gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
                                   }}
                                   onClick={(e) => {
+                                    if (block.isDraggingPlaceholder) return;
                                     e.stopPropagation();
                                     if (e.shiftKey || e.metaKey || e.ctrlKey) {
                                       setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
@@ -6309,21 +6465,38 @@ export const ModuleEditor = () => {
                                   id={`canvas-field-${block.id}`}
                                   className={cn(
                                     "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
-                                    selectedIds.includes(block.id) 
-                                      ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
-                                      : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40",
+                                    block.isDraggingPlaceholder
+                                      ? "border-dashed border-indigo-500/40 bg-indigo-55/20 dark:bg-indigo-500/5 select-none pointer-events-none"
+                                      : (selectedIds.includes(block.id) 
+                                          ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
+                                          : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40"),
                                     block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
-                                    activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
+                                    activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
                                     hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
                                   )}
                                 >
-                                  {/* Selection UI */}
-                                  {selectedIds.includes(block.id) && (
-                                    <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
-                                      Selected
-                                    </div>
-                                  )}
-                                  <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+                                  {block.isDraggingPlaceholder ? (() => {
+                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+                                    const Icon = fieldDef?.icon;
+                                    return (
+                                      <div className="flex-grow flex flex-col justify-center items-center h-full min-h-[60px] py-2 relative overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent pointer-events-none" />
+                                        <div className="flex items-center gap-2 text-indigo-500/60 dark:text-indigo-400/60 z-10">
+                                          {Icon && <Icon size={14} className="animate-pulse shrink-0" />}
+                                          <span className="text-[10px] font-black uppercase tracking-wider truncate">{block.label || fieldDef?.label || block.type}</span>
+                                        </div>
+                                        <span className="text-[8px] font-bold text-indigo-400/40 uppercase tracking-widest mt-1 z-10">Moving Here</span>
+                                      </div>
+                                    );
+                                  })() : (
+                                    <>
+                                      {/* Selection UI */}
+                                      {selectedIds.includes(block.id) && (
+                                        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
+                                          Selected
+                                        </div>
+                                      )}
+                                      <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -6486,6 +6659,8 @@ export const ModuleEditor = () => {
                                       <EyeOff size={12} />
                                     </button>
                                   )}
+                                    </>
+                                  )}
                                 </motion.div>
                               );
                             });
@@ -6535,6 +6710,13 @@ export const ModuleEditor = () => {
                                   onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
                                   onDragLeave={handleDragLeave}
                                 >
+                                  {activeDragItem && (
+                                    <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${GRID_CONFIG.gap}px`, padding: '0px' }}>
+                                      {Array.from({ length: 12 }).map((_, i) => (
+                                        <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.01] rounded-xl" />
+                                      ))}
+                                    </div>
+                                  )}
                                   {renderFieldBlocks(displayLayout, undefined, tab.id)}
                                   
                                   {tabFields.length === 0 && !dragOverInfo && (
@@ -6596,6 +6778,7 @@ export const ModuleEditor = () => {
                                     isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
                                     hoveredMapping={hoveredMapping}
                                     dragOverInfo={dragOverInfo}
+                                    isDragging={!!activeDragItem}
                                   />
                                 );
                               }
@@ -6617,7 +6800,6 @@ export const ModuleEditor = () => {
                                   </div>
                                 );
                               }
-
                               return (
                                 <motion.div
                                   key={block.id}
@@ -6633,6 +6815,7 @@ export const ModuleEditor = () => {
                                     gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
                                   }}
                                   onClick={(e) => {
+                                    if (block.isDraggingPlaceholder) return;
                                     e.stopPropagation();
                                     if (e.shiftKey || e.metaKey || e.ctrlKey) {
                                       setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
@@ -6643,21 +6826,38 @@ export const ModuleEditor = () => {
                                   id={`canvas-field-${block.id}`}
                                   className={cn(
                                     "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
-                                    selectedIds.includes(block.id) 
-                                      ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
-                                      : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40",
+                                    block.isDraggingPlaceholder
+                                      ? "border-dashed border-indigo-500/40 bg-indigo-55/20 dark:bg-indigo-500/5 select-none pointer-events-none"
+                                      : (selectedIds.includes(block.id) 
+                                          ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
+                                          : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40"),
                                     block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
-                                    activeDragItem?.fieldId === block.id && "shadow-2xl ring-4 ring-indigo-500/20 z-50 cursor-grabbing",
+                                    activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
                                     hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
                                   )}
                                 >
-                                  {/* Selection UI */}
-                                  {selectedIds.includes(block.id) && (
-                                    <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
-                                      Selected
-                                    </div>
-                                  )}
-                                   <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
+                                  {block.isDraggingPlaceholder ? (() => {
+                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+                                    const Icon = fieldDef?.icon;
+                                    return (
+                                      <div className="flex-grow flex flex-col justify-center items-center h-full min-h-[60px] py-2 relative overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent pointer-events-none" />
+                                        <div className="flex items-center gap-2 text-indigo-500/60 dark:text-indigo-400/60 z-10">
+                                          {Icon && <Icon size={14} className="animate-pulse shrink-0" />}
+                                          <span className="text-[10px] font-black uppercase tracking-wider truncate">{block.label || fieldDef?.label || block.type}</span>
+                                        </div>
+                                        <span className="text-[8px] font-bold text-indigo-400/40 uppercase tracking-widest mt-1 z-10">Moving Here</span>
+                                      </div>
+                                    );
+                                  })() : (
+                                    <>
+                                      {/* Selection UI */}
+                                      {selectedIds.includes(block.id) && (
+                                        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
+                                          Selected
+                                        </div>
+                                      )}
+                                      <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -7598,6 +7798,8 @@ export const ModuleEditor = () => {
                                     >
                                       <EyeOff size={12} />
                                     </button>
+                                  )}
+                                    </>
                                   )}
                                 </motion.div>
                               );
@@ -15083,7 +15285,39 @@ export const ModuleEditor = () => {
         }}
       />
 
-
+      {typeof document !== 'undefined' && createPortal(
+        <div 
+          ref={dragOverlayRef}
+          style={{
+            position: 'fixed',
+            pointerEvents: 'none',
+            display: 'none',
+            zIndex: 99999,
+            width: '280px',
+            transform: 'translate(-50%, -50%) rotate(2.5deg)',
+            transition: 'transform 0.05s ease-out',
+          }}
+          className="bg-white/95 dark:bg-zinc-900/95 border-2 border-indigo-500/50 rounded-2xl p-4 shadow-[0_20px_50px_rgba(99,102,241,0.2)] backdrop-blur-md flex items-center gap-3 animate-in fade-in zoom-in-95 duration-100"
+        >
+          {draggedFieldInfo && (
+            <>
+              <div className="w-10 h-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+                {(() => {
+                  const Icon = draggedFieldInfo.icon;
+                  return Icon ? <Icon size={20} /> : <Box size={20} />;
+                })()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[8px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest leading-none block mb-0.5">
+                  {draggedFieldInfo.type === 'field' ? 'New Field' : 'Moving Field'}
+                </span>
+                <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{draggedFieldInfo.label}</p>
+              </div>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
 
     </div>
   );
