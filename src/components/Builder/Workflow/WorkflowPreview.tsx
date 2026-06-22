@@ -8,7 +8,7 @@ import {
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Workflow, WorkflowNodeType } from '../../../types/platform';
+import { Workflow } from '../../../types/platform';
 import { CustomWorkflowNode } from './CustomNode';
 import { CustomWorkflowEdge } from './CustomEdge';
 
@@ -62,6 +62,7 @@ const WorkflowPreviewContent: React.FC<WorkflowPreviewProps> = ({ workflow, acti
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
+        fitViewOptions={{ padding: 0.5, maxZoom: 0.6 }}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}

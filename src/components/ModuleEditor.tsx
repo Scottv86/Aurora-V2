@@ -1732,7 +1732,8 @@ export const ModuleEditor = () => {
         requireLogin: true, 
         submitLabel: 'Create',
         successMessage: 'Record created successfully!',
-        description: 'Default form for creating new records in this module.'
+        description: 'Default form for creating new records in this module.',
+        workspaceButtonLabel: 'New Entry'
       } 
     }
   ]);
@@ -1748,17 +1749,17 @@ export const ModuleEditor = () => {
         if (f.id !== selectedFormId) return f;
         
         if (f.isMultistep) {
-          const newSteps = f.steps.map((step: any) => {
+          const newSteps = (f.steps || []).map((step: any) => {
             if (step.id !== currentStepId) return step;
-            const oldIndex = step.fields.findIndex((fi: any) => fi.id === active.id);
-            const newIndex = step.fields.findIndex((fi: any) => fi.id === over.id);
-            return { ...step, fields: arrayMove(step.fields, oldIndex, newIndex) };
+            const oldIndex = (step.fields || []).findIndex((fi: any) => fi.id === active.id);
+            const newIndex = (step.fields || []).findIndex((fi: any) => fi.id === over.id);
+            return { ...step, fields: arrayMove(step.fields || [], oldIndex, newIndex) };
           });
           return { ...f, steps: newSteps };
         } else {
-          const oldIndex = f.fields.findIndex((fi: any) => fi.id === active.id);
-          const newIndex = f.fields.findIndex((fi: any) => fi.id === over.id);
-          return { ...f, fields: arrayMove(f.fields, oldIndex, newIndex) };
+          const oldIndex = (f.fields || []).findIndex((fi: any) => fi.id === active.id);
+          const newIndex = (f.fields || []).findIndex((fi: any) => fi.id === over.id);
+          return { ...f, fields: arrayMove(f.fields || [], oldIndex, newIndex) };
         }
       }));
     }
@@ -1772,7 +1773,7 @@ export const ModuleEditor = () => {
 
   const [editingCondition, setEditingCondition] = useState<{
     targetId: string;
-    targetType: 'field' | 'tab';
+    targetType: 'field' | 'tab' | 'formField' | 'step';
     rule?: VisibilityRule;
   } | null>(null);
 
@@ -2244,16 +2245,19 @@ export const ModuleEditor = () => {
         }
         if (data.forms && Array.isArray(data.forms)) {
           const normalizedForms = data.forms.map((f: any) => {
-            if (!f.steps || f.steps.length === 0) {
-              return {
-                ...f,
-                isMultistep: f.isMultistep || false,
-                steps: f.steps || [
-                  { id: 'step-1', title: 'Step 1', fields: f.fields || [] }
-                ]
-              };
-            }
-            return f;
+            const hasSteps = f.steps && f.steps.length > 0;
+            return {
+              ...f,
+              usage: f.usage && f.usage !== 'undefined' ? f.usage : (data.forms.length === 1 ? 'workspace_create' : 'public_link'),
+              isMultistep: f.isMultistep || false,
+              fields: f.fields || [],
+              steps: hasSteps ? f.steps.map((s: any) => ({
+                ...s,
+                fields: s.fields || []
+              })) : [
+                { id: 'step-1', title: 'Step 1', fields: f.fields || [] }
+              ]
+            };
           });
           setForms(normalizedForms);
         }
@@ -3332,10 +3336,10 @@ export const ModuleEditor = () => {
     if (updates.required !== undefined) {
       setForms(prev => prev.map(form => ({
         ...form,
-        fields: form.fields.map((f: any) => fieldIds.includes(f.id) ? { ...f, required: updates.required } : f),
-        steps: form.steps?.map((step: any) => ({
+        fields: (form.fields || []).map((f: any) => fieldIds.includes(f.id) ? { ...f, required: updates.required } : f),
+        steps: (form.steps || []).map((step: any) => ({
           ...step,
-          fields: step.fields.map((f: any) => fieldIds.includes(f.id) ? { ...f, required: updates.required } : f)
+          fields: (step.fields || []).map((f: any) => fieldIds.includes(f.id) ? { ...f, required: updates.required } : f)
         }))
       })));
     }
@@ -3381,10 +3385,10 @@ export const ModuleEditor = () => {
     if (updates.required !== undefined) {
       setForms(prev => prev.map(form => ({
         ...form,
-        fields: form.fields.map((f: any) => f.id === fieldId ? { ...f, required: updates.required } : f),
-        steps: form.steps?.map((step: any) => ({
+        fields: (form.fields || []).map((f: any) => f.id === fieldId ? { ...f, required: updates.required } : f),
+        steps: (form.steps || []).map((step: any) => ({
           ...step,
-          fields: step.fields.map((f: any) => f.id === fieldId ? { ...f, required: updates.required } : f)
+          fields: (step.fields || []).map((f: any) => f.id === fieldId ? { ...f, required: updates.required } : f)
         }))
       })));
     }
@@ -4512,7 +4516,7 @@ export const ModuleEditor = () => {
                     : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                 )}
               >
-                {tab === 'connectors' ? 'integrations' : tab}
+                {tab === 'connectors' ? 'integrations' : tab === 'builder' ? 'module' : tab === 'details' ? 'setup' : tab}
               </button>
             ))}
           </div>
@@ -8096,7 +8100,7 @@ export const ModuleEditor = () => {
                           className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-all"
                         >
                           <Plus size={14} />
-                          Create New
+                          {forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel || 'Create New'}
                         </button>
                       </div>
 
@@ -8440,18 +8444,15 @@ export const ModuleEditor = () => {
 
                                   // Validation
                                   const errors: Record<string, string> = {};
-                                  createForm.fields.forEach((fObj: any) => {
+                                  const allFormFields = createForm.isMultistep 
+                                    ? (createForm.steps || []).flatMap((s: any) => s.fields || [])
+                                    : (createForm.fields || []);
+
+                                  allFormFields.forEach((fObj: any) => {
                                     if (fObj.id.startsWith('visual-')) return;
                                     
                                     // Only validate if field is visible
-                                    const isVisible = (() => {
-                                      if (!fObj.visibility?.fieldId) return true;
-                                      const targetVal = moduleState[fObj.visibility.fieldId];
-                                      const ruleVal = fObj.visibility.value;
-                                      if (fObj.visibility.operator === 'neq') return String(targetVal) !== String(ruleVal);
-                                      if (fObj.visibility.operator === 'contains') return String(targetVal).toLowerCase().includes(String(ruleVal).toLowerCase());
-                                      return String(targetVal) === String(ruleVal);
-                                    })();
+                                    const isVisible = evaluateVisibilityRule(fObj.visibilityRule || fObj.visibility, moduleState);
 
                                     if (!isVisible) return;
 
@@ -8534,7 +8535,7 @@ export const ModuleEditor = () => {
                 <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                   <div className="max-w-none mx-auto space-y-12 pb-20">
                   <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Module Details</h2>
+                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Module Setup</h2>
                     <p className="text-zinc-500 text-sm">Configure the core properties and identity of this module.</p>
                   </div>
                   
@@ -9416,12 +9417,19 @@ export const ModuleEditor = () => {
                 <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-900">
                   <button 
                     onClick={() => {
+                      const hasCreateForm = forms.some(f => f.usage === 'workspace_create');
                       const newForm = {
                         id: `form-${Date.now()}`,
                         name: 'New Custom Form',
                         type: 'custom',
+                        usage: hasCreateForm ? 'public_link' : 'workspace_create',
+                        isMultistep: false,
                         fields: [] as any[],
-                        settings: { requireLogin: true, submitLabel: 'Submit' }
+                        settings: { 
+                          requireLogin: true, 
+                          submitLabel: 'Submit',
+                          workspaceButtonLabel: hasCreateForm ? undefined : 'New Entry'
+                        }
                       };
                       setForms([...forms, newForm]);
                       setSelectedFormId(newForm.id);
@@ -9649,9 +9657,18 @@ export const ModuleEditor = () => {
                                    </div>
                                  )}
 
-                                 <div className="space-y-2">
-                                    <h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">{selectedForm.name}</h2>
-                                    <p className="text-sm text-zinc-500">{selectedForm.settings?.description || 'Form description text goes here...'}</p>
+                                 <div className="flex items-start gap-4">
+                                    <div className="p-3 rounded-2xl shadow-lg bg-indigo-600 shadow-indigo-500/20 text-white shrink-0">
+                                       <DynamicIcon name={moduleSettings.iconName || 'Box'} size={24} />
+                                    </div>
+                                    <div className="space-y-1 text-left">
+                                       <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+                                          {selectedForm.name}
+                                       </h2>
+                                       <p className="text-zinc-500 dark:text-zinc-400 max-w-3xl text-sm font-medium leading-relaxed mt-1">
+                                          {selectedForm.settings?.description || 'Form description text goes here...'}
+                                       </p>
+                                    </div>
                                  </div>
 
                                  <DndContext
@@ -9986,84 +10003,25 @@ export const ModuleEditor = () => {
                                     )}
 
                                     {/* Visibility Logic Section */}
-                                    <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                                      <div className="flex items-center justify-between px-1">
-                                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Visibility Rules</label>
-                                        <div className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded text-[8px] font-black uppercase tracking-widest">Conditional</div>
-                                      </div>
-                                      
-                                      <div className="space-y-3">
-                                        <div className="space-y-1.5">
-                                          <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight ml-1">Dependent On</label>
-                                          <select 
-                                            value={fObj.visibility?.fieldId || ''}
-                                            onChange={(e) => {
-                                              const updates = { visibility: { ...fObj.visibility, fieldId: e.target.value } };
-                                              setForms(prev => prev.map(f => {
-                                                if (f.id !== selectedFormId) return f;
-                                                if (f.isMultistep) {
-                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                }
-                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                              }));
-                                            }}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
-                                          >
-                                            <option value="">Always Visible</option>
-                                            {fields
-                                              .filter((f: any) => f.id !== selectedFieldInFormId && !f.id.startsWith('visual-'))
-                                              .map((f: any) => {
-                                                const label = layout.find(l => l.id === f.id)?.label || f.id;
-                                                return <option key={f.id} value={f.id}>{label}</option>
-                                              })}
-                                          </select>
-                                        </div>
-
-                                        {fObj.visibility?.fieldId && (
-                                          <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2 duration-300">
-                                            <div className="space-y-1.5">
-                                              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight ml-1">Operator</label>
-                                              <select 
-                                                value={fObj.visibility?.operator || 'eq'}
-                                                onChange={(e) => {
-                                                  const updates = { visibility: { ...fObj.visibility, operator: e.target.value } };
-                                                  setForms(prev => prev.map(f => {
-                                                    if (f.id !== selectedFormId) return f;
-                                                    if (f.isMultistep) {
-                                                      return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                    }
-                                                    return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                                  }));
-                                                }}
-                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
-                                              >
-                                                <option value="eq">Equals</option>
-                                                <option value="neq">Not Equals</option>
-                                                <option value="contains">Contains</option>
-                                              </select>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight ml-1">Value</label>
-                                              <input 
-                                                type="text"
-                                                value={fObj.visibility?.value || ''}
-                                                onChange={(e) => {
-                                                  const updates = { visibility: { ...fObj.visibility, value: e.target.value } };
-                                                  setForms(prev => prev.map(f => {
-                                                    if (f.id !== selectedFormId) return f;
-                                                    if (f.isMultistep) {
-                                                      return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                    }
-                                                    return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                                  }));
-                                                }}
-                                                placeholder="Value..."
-                                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
-                                              />
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
+                                    <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                                      <VisibilityRuleEditor 
+                                        rule={fObj.visibilityRule}
+                                        onEdit={() => setEditingCondition({
+                                          targetId: selectedFieldInFormId,
+                                          targetType: 'formField',
+                                          rule: migrateVisibilityRule(fObj.visibilityRule)
+                                        })}
+                                        onRemove={() => {
+                                          setForms(prev => prev.map(f => {
+                                            if (f.id !== selectedFormId) return f;
+                                            if (f.isMultistep) {
+                                              return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, visibilityRule: undefined } : fo) })) };
+                                            }
+                                            return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, visibilityRule: undefined } : fo) };
+                                          }));
+                                        }}
+                                        label="Conditional Visibility"
+                                      />
                                     </div>
 
                                     {!isVisual && (
@@ -10152,10 +10110,15 @@ export const ModuleEditor = () => {
                                           if (f.id !== selectedFormId) return f;
                                           const isMultistep = !f.isMultistep;
                                           let steps = f.steps || [];
-                                          if (isMultistep && steps.length === 0) {
-                                            steps = [{ id: "step-1", title: "Step 1", fields: f.fields || [] }];
+                                          let fields = f.fields || [];
+                                          if (isMultistep) {
+                                            if (steps.length === 0) {
+                                              steps = [{ id: "step-1", title: "Step 1", fields: fields }];
+                                            }
+                                          } else {
+                                            fields = steps.flatMap((s: any) => s.fields || []);
                                           }
-                                          return { ...f, isMultistep, steps };
+                                          return { ...f, isMultistep, steps, fields };
                                         }));
                                       }}
                                       className={cn(
@@ -10211,6 +10174,25 @@ export const ModuleEditor = () => {
                                     <option value="action_trigger">Action: Triggered by Quick Action</option>
                                   </select>
                                 </div>
+
+                                {selectedForm.usage === 'workspace_create' && (
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Workspace Button Label</label>
+                                    <input 
+                                      type="text" 
+                                      placeholder="New Entry"
+                                      value={selectedForm.settings?.workspaceButtonLabel || ''}
+                                      onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { 
+                                        ...f, 
+                                        settings: { 
+                                          ...(f.settings || {}), 
+                                          workspaceButtonLabel: e.target.value 
+                                        } 
+                                      } : f))}
+                                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                    />
+                                  </div>
+                                )}
 
                                 <div className="space-y-2">
                                   <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Submit Label</label>
@@ -14496,22 +14478,52 @@ export const ModuleEditor = () => {
                 updateField(editingCondition.targetId, { visibilityRule: rule });
               } else if (editingCondition.targetType === 'tab') {
                 updateTab(editingCondition.targetId, { visibilityRule: rule });
-              } else if ((editingCondition.targetType as any) === 'step') {
+              } else if (editingCondition.targetType === 'step') {
                 setForms(prev => prev.map(f => f.id === selectedFormId ? {
                   ...f,
                   steps: f.steps.map((s: any) => s.id === editingCondition.targetId ? { ...s, visibilityRule: rule } : s)
+                } : f));
+              } else if (editingCondition.targetType === 'formField') {
+                setForms(prev => prev.map(f => f.id === selectedFormId ? {
+                  ...f,
+                  fields: f.fields ? f.fields.map((field: any) => field.id === editingCondition.targetId ? { ...field, visibilityRule: rule } : field) : undefined,
+                  steps: f.steps ? f.steps.map((s: any) => ({
+                    ...s,
+                    fields: s.fields ? s.fields.map((field: any) => field.id === editingCondition.targetId ? { ...field, visibilityRule: rule } : field) : undefined
+                  })) : undefined
                 } : f));
               }
             }
             setEditingCondition(null);
           }}
           initialRule={editingCondition?.rule}
-          availableFields={flattenFields(layout).filter(f => f.id !== editingCondition?.targetId)}
+          availableFields={
+            editingCondition?.targetType === 'formField'
+              ? (() => {
+                  const form = forms.find(f => f.id === selectedFormId);
+                  const allFormFields = form?.isMultistep 
+                    ? (form.steps || []).flatMap((s: any) => s.fields || [])
+                    : (form?.fields || []);
+                  const nonVisualFormFields = allFormFields.filter((f: any) => !f.id.startsWith('visual-') && f.id !== editingCondition?.targetId);
+                  return flattenFields(layout).filter(f => nonVisualFormFields.some((ff: any) => ff.id === f.id));
+                })()
+              : flattenFields(layout).filter(f => f.id !== editingCondition?.targetId)
+          }
           tabs={tabs}
           targetLabel={
             editingCondition?.targetType === 'field' 
               ? (layout.find(f => f.id === editingCondition?.targetId)?.label || 'Field')
-              : (tabs.find(t => t.id === editingCondition?.targetId)?.label || 'Tab')
+              : editingCondition?.targetType === 'formField'
+                ? (() => {
+                    const form = forms.find(f => f.id === selectedFormId);
+                    const allFormFields = form?.isMultistep 
+                      ? (form.steps || []).flatMap((s: any) => s.fields || [])
+                      : (form?.fields || []);
+                    const fObj = allFormFields.find((f: any) => f.id === editingCondition?.targetId);
+                    const originalField = flattenFields(layout).find(f => f.id === editingCondition?.targetId);
+                    return fObj?.labelOverride || originalField?.label || 'Form Field';
+                  })()
+                : (tabs.find(t => t.id === editingCondition?.targetId)?.label || 'Tab')
           }
         />
 

@@ -21,7 +21,7 @@ interface Message {
 }
 
 export const ChatDrawer = () => {
-  const { isChatOpen, setIsChatOpen } = usePlatform();
+  const { setIsChatOpen } = usePlatform();
   const [input, setInput] = useState('');
   const [messages] = useState<Message[]>([
     {

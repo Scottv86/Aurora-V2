@@ -1,6 +1,5 @@
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Settings2, Trash2, GitFork, Zap, Activity, Clock, Play, CircleDot, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, Bot, Layers } from 'lucide-react';
+import { Trash2, GitFork, Zap, Activity, Clock, Play, CircleDot, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, Bot, Layers } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { WorkflowNodeType } from '../../../types/platform';
 

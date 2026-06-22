@@ -2,14 +2,13 @@ import React, { useState } from 'react';
 import { 
   Play, 
   Terminal, 
-  ChevronRight, 
   AlertCircle, 
   CheckCircle2, 
   Search,
   Bug
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Workflow, WorkflowNode } from '../../../types/platform';
+import { Workflow } from '../../../types/platform';
 import { WorkflowEngine, WorkflowState } from '../../../../server/services/workflowEngine';
 import { cn } from '../../../lib/utils';
 

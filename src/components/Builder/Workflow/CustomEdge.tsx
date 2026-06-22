@@ -5,7 +5,7 @@ import {
   getBezierPath,
   useReactFlow,
 } from '@xyflow/react';
-import { Plus, X, Activity, GitFork, Zap, Clock, CircleDot, Play } from 'lucide-react';
+import { Plus, X, Activity, GitFork, Zap, Clock } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { WorkflowNodeType } from '../../../types/platform';
 

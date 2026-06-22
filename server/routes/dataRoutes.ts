@@ -3,6 +3,7 @@ import { emitTenantUpdate } from '../socket';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { RLS_CONTEXT, globalPrisma } from '../lib/prisma';
 import { validateRecordRules } from '../../src/lib/validationEngine';
+import { WorkflowEngine } from '../services/workflowEngine';
 
 const router = express.Router();
 
@@ -380,12 +381,13 @@ router.post('/records', async (req: TenantRequest, res) => {
         history: [{
           nodeId: startNode.id,
           timestamp: new Date().toISOString(),
-          action: 'Initialized'
+          action: 'Initialized',
+          triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
         }]
       };
     }
 
-    const record = await db.record.create({
+    let record = await db.record.create({
       data: {
         tenantId, // still required by schema, but RLS will verify it matches app.current_tenant_id
         moduleId,
@@ -397,6 +399,34 @@ router.post('/records', async (req: TenantRequest, res) => {
         workflowState: workflowState as any
       }
     });
+
+    // Evaluate workflow engine if a workflow exists
+    if (workflow && workflowState) {
+      try {
+        const evaluatedState = await WorkflowEngine.evaluate(
+          { id: record.id, ...finalData },
+          workflow,
+          workflowState,
+          config?.layout
+        );
+
+        if (evaluatedState.currentNodeId !== workflowState.currentNodeId) {
+          const targetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
+          const finalStatus = targetNode ? targetNode.name : record.status;
+
+          // Update record with the new state and status
+          record = await db.record.update({
+            where: { id: record.id },
+            data: {
+              status: finalStatus,
+              workflowState: evaluatedState as any
+            }
+          });
+        }
+      } catch (err) {
+        console.error('[Workflow Error on Creation]:', err);
+      }
+    }
 
     const recordWithMember = await db.record.findUnique({
       where: { id: record.id },
@@ -509,27 +539,64 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       path: path !== undefined ? path : existing.path
     };
 
-    if (transitionTo && module) {
+    if (module) {
       const config = module.config as any;
       const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
       
       if (workflow) {
-        const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
-        if (targetNode) {
-          const currentWorkflowState = (existing.workflowState as any) || { history: [] };
-          updatePayload.workflowState = {
-            currentNodeId: targetNode.id,
-            history: [
-              ...currentWorkflowState.history,
-              {
-                nodeId: targetNode.id,
-                timestamp: new Date().toISOString(),
-                action: 'Transitioned',
-                triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+        try {
+          if (transitionTo) {
+            const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
+            if (targetNode) {
+              const currentWorkflowState = (existing.workflowState as any) || { history: [] };
+              const intermediateState = {
+                currentNodeId: targetNode.id,
+                history: [
+                  ...(currentWorkflowState.history || []),
+                  {
+                    nodeId: targetNode.id,
+                    timestamp: new Date().toISOString(),
+                    action: 'Transitioned',
+                    triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+                  }
+                ]
+              };
+              
+              // Evaluate further conditional paths/actions from the manually transitioned node
+              const evaluatedState = await WorkflowEngine.evaluate(
+                { id, ...updatedData },
+                workflow,
+                intermediateState,
+                config?.layout
+              );
+              
+              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
+              updatePayload.workflowState = evaluatedState;
+              updatePayload.status = finalTargetNode ? finalTargetNode.name : targetNode.name;
+            }
+          } else {
+            // Auto-transition based on data changes from current node
+            const currentWorkflowState = (existing.workflowState as any) || {
+              currentNodeId: workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id,
+              history: []
+            };
+            const evaluatedState = await WorkflowEngine.evaluate(
+              { id, ...updatedData },
+              workflow,
+              currentWorkflowState,
+              config?.layout
+            );
+            
+            if (evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId) {
+              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
+              updatePayload.workflowState = evaluatedState;
+              if (finalTargetNode) {
+                updatePayload.status = finalTargetNode.name;
               }
-            ]
-          };
-          updatePayload.status = targetNode.name;
+            }
+          }
+        } catch (err) {
+          console.error('[Workflow Error on PUT Update]:', err);
         }
       }
     }
@@ -569,7 +636,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { moduleId, status, associations, path, ...data } = req.body;
+    const { moduleId, status, associations, path, transitionTo, ...data } = req.body;
 
     // 1. Fetch existing (using scoped client, handles RLS)
     const existing = await db.record.findUnique({ where: { id } });
@@ -641,6 +708,68 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       associations: associations !== undefined ? associations : existing.associations,
       path: path !== undefined ? path : existing.path
     };
+
+    if (module) {
+      const config = module.config as any;
+      const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+      
+      if (workflow) {
+        try {
+          if (transitionTo) {
+            const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
+            if (targetNode) {
+              const currentWorkflowState = (existing.workflowState as any) || { history: [] };
+              const intermediateState = {
+                currentNodeId: targetNode.id,
+                history: [
+                  ...(currentWorkflowState.history || []),
+                  {
+                    nodeId: targetNode.id,
+                    timestamp: new Date().toISOString(),
+                    action: 'Transitioned',
+                    triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+                  }
+                ]
+              };
+              
+              // Evaluate further conditional paths/actions from the manually transitioned node
+              const evaluatedState = await WorkflowEngine.evaluate(
+                { id, ...updatedData },
+                workflow,
+                intermediateState,
+                config?.layout
+              );
+              
+              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
+              updatePayload.workflowState = evaluatedState;
+              updatePayload.status = finalTargetNode ? finalTargetNode.name : targetNode.name;
+            }
+          } else {
+            // Auto-transition based on data changes from current node
+            const currentWorkflowState = (existing.workflowState as any) || {
+              currentNodeId: workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id,
+              history: []
+            };
+            const evaluatedState = await WorkflowEngine.evaluate(
+              { id, ...updatedData },
+              workflow,
+              currentWorkflowState,
+              config?.layout
+            );
+            
+            if (evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId) {
+              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
+              updatePayload.workflowState = evaluatedState;
+              if (finalTargetNode) {
+                updatePayload.status = finalTargetNode.name;
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[Workflow Error on PATCH Update]:', err);
+        }
+      }
+    }
 
     // 3. Perform update (using scoped client, handles RLS and returns included data)
     const recordWithMember = await db.record.update({

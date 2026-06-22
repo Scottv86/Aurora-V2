@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, Zap, Check, Plus, Globe, Shield, Rocket } from 'lucide-react';
+import { X, Search, Zap, Plus, Globe, Shield, Rocket } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface ConnectorModalProps {

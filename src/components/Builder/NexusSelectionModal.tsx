@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, Zap, Globe, Shield, Rocket, BrainCircuit, Wand2, Hammer, ArrowLeft, ArrowRight, Library } from 'lucide-react';
+import { X, Search, Zap, Shield, Rocket, BrainCircuit, Wand2, Hammer, ArrowLeft, ArrowRight, Library } from 'lucide-react';
 import { DynamicIcon } from '../UI/DynamicIcon';
-import { cn } from '../../lib/utils';
 import { AIForgeView } from './AIForgeView';
 import { ManualBuilderView } from './ManualBuilderView';
 
@@ -23,7 +22,7 @@ type ViewMode = 'selection' | 'library' | 'ai' | 'manual' | 'strategy' | 'trigge
 export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   isOpen,
   onClose,
-  activeConnectors,
+  activeConnectors: _activeConnectors,
   registry,
   onSelect,
   onActivate,

@@ -176,10 +176,18 @@ export const checkCondition = (condition: any, data: any, context?: any): boolea
           if (!isMet && typeof actualValue !== 'object' && typeof compareValue !== 'object') {
              isMet = String(actualValue).toLowerCase() === String(compareValue).toLowerCase();
           }
+          // If both are empty, they are equal
+          if (!isMet && isEmpty(actualValue) && isEmpty(compareValue)) {
+            isMet = true;
+          }
           break;
         case 'not_equals':
         case 'neq':
           isMet = !actuals.some(a => compares.includes(a));
+          // If both are empty, they are equal (not unequal)
+          if (isEmpty(actualValue) && isEmpty(compareValue)) {
+            isMet = false;
+          }
           break;
         case 'contains':
           isMet = actuals.some(a => compares.some(c => a.includes(c)));

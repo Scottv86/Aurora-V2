@@ -14,23 +14,24 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
   },
   'NOTIFY': {
     type: 'NOTIFY',
-    async execute(record, config) {
+    async execute(_record, config) {
       console.log(`[Action: NOTIFY] Alerting team: ${config.message}`);
       return { success: true };
     }
   },
   'GENERATE_DOC': {
     type: 'GENERATE_DOC',
-    async execute(record, config) {
+    async execute(_record, config) {
       console.log(`[Action: GENERATE_DOC] Creating PDF from template ${config.templateId}`);
       return { success: true, docUrl: 'https://example.com/doc.pdf' };
     }
   },
   'AI_AGENT': {
     type: 'AI_AGENT',
-    async execute(record, config) {
+    async execute(_record, config) {
       console.log(`[Action: AI_AGENT] Handing off to AI for ${config.task}`);
       return { success: true, analysis: 'Low risk' };
     }
   }
 };
+

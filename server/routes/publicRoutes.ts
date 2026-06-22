@@ -75,4 +75,57 @@ router.post('/submissions', async (req, res) => {
   }
 });
 
+router.get('/modules/:moduleId', async (req, res) => {
+  try {
+    const { moduleId } = req.params;
+    const moduleData = await globalPrisma.module.findUnique({
+      where: { id: moduleId }
+    });
+    if (!moduleData) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+    const publicForms = ((moduleData as any).forms || []).filter((f: any) => f.usage === 'public_link');
+    res.json({
+      id: moduleData.id,
+      name: moduleData.name,
+      description: moduleData.description,
+      layout: moduleData.layout,
+      tabs: moduleData.tabs,
+      forms: publicForms
+    });
+  } catch (error) {
+    console.error('[PublicAPI] Get module error:', error);
+    res.status(500).json({ error: 'Failed to fetch public module configuration' });
+  }
+});
+
+router.post('/modules/:moduleId/submissions', async (req, res) => {
+  const { moduleId } = req.params;
+  const { data } = req.body;
+  try {
+    const moduleData = await globalPrisma.module.findUnique({
+      where: { id: moduleId }
+    });
+    if (!moduleData) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+    const record = await globalPrisma.record.create({
+      data: {
+        tenantId: moduleData.tenantId,
+        moduleId: moduleData.id,
+        status: 'New',
+        data: data || {}
+      }
+    });
+    res.status(201).json({ 
+      success: true, 
+      id: record.id,
+      message: 'Submission received successfully'
+    });
+  } catch (error) {
+    console.error('[PublicAPI] Public submission error:', error);
+    res.status(500).json({ error: 'Failed to submit form' });
+  }
+});
+
 export default router;

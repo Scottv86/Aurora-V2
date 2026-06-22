@@ -277,7 +277,7 @@ const InlineAssigneeCell = ({
                         }}
                         className={cn(
                           "w-full text-left px-2 py-1.5 rounded-lg text-[10px] font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-                          isSelected && "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold"
+                          isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
                         )}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -331,10 +331,36 @@ export const ModuleView = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
+  const [activeStepId, setActiveStepId] = useState<string | null>(null);
+  const [activeQuickAction, setActiveQuickAction] = useState<any | null>(null);
+  const [showQuickActionModal, setShowQuickActionModal] = useState(false);
+  const [actionFormData, setActionFormData] = useState<Record<string, any>>({});
+  const [actionFormErrors, setActionFormErrors] = useState<Record<string, string>>({});
+  const [actionForm, setActionForm] = useState<any | null>(null);
+  const [actionStepId, setActionStepId] = useState<string | null>(null);
+
+  const createForm = useMemo(() => {
+    const forms = (moduleData as any)?.forms || [];
+    const found = forms.find((f: any) => f.usage === 'workspace_create');
+    if (found) return found;
+    if (forms.length === 1 && (!forms[0].usage || forms[0].usage === 'undefined' || forms[0].usage === 'workspace_create')) {
+      return forms[0];
+    }
+    return null;
+  }, [moduleData]);
+
+  const visibilityContext = useMemo(() => {
+    return {
+      user: platformUser || user,
+      tenant,
+      session
+    };
+  }, [platformUser, user, tenant, session]);
+
   const visibleTabs = useMemo(() => {
     if (!moduleData?.tabs) return [];
-    return moduleData.tabs.filter(tab => isFieldVisible(tab, newEntryData, { user }));
-  }, [moduleData?.tabs, newEntryData, user]);
+    return moduleData.tabs.filter(tab => isFieldVisible(tab, newEntryData, visibilityContext));
+  }, [moduleData?.tabs, newEntryData, visibilityContext]);
 
   useEffect(() => {
     if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find(t => t.id === activeTabId))) {
@@ -454,11 +480,26 @@ export const ModuleView = () => {
 
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (savedRecord) => {
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-      // Optionally update records state directly for immediate UI feedback if needed, 
-      // but invalidateQueries is safer and cleaner with pagination.
-      // setRecords(prev => [savedRecord, ...prev]);
+      
+      const queryKey = ['records', tenant?.id, moduleId, page, pageSize];
+      queryClient.setQueryData(queryKey, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          records: [savedRecord, ...old.records.filter((r: any) => r.id !== savedRecord.id)],
+          total: old.total + 1,
+          totalPages: Math.ceil((old.total + 1) / pageSize)
+        };
+      });
+
+      setRecords(prev => {
+        if (prev.some(r => r.id === savedRecord.id)) return prev;
+        return [savedRecord, ...prev];
+      });
+      setTotalRecords(t => t + 1);
+
       toast.success("Record created successfully");
       setShowNewEntryModal(false);
       setNewEntryData({});
@@ -469,12 +510,90 @@ export const ModuleView = () => {
     }
   });
 
+  const handleSubmitQuickAction = async () => {
+    if (!tenant?.id || !moduleId || !actionForm) return;
+
+    setIsSubmitting(true);
+    try {
+      const allFormFields = actionForm.isMultistep 
+        ? (actionForm.steps || []).flatMap((s: any) => s.fields || [])
+        : (actionForm.fields || []);
+
+      let hasErrors = false;
+      const errors: Record<string, string> = {};
+      allFormFields.forEach((fObj: any) => {
+        if (fObj.id.startsWith('visual-')) return;
+        if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
+        const field = allFields.find(f => f.id === fObj.id);
+        const isRequired = fObj.required || field?.required;
+        const value = actionFormData[fObj.id];
+        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+          hasErrors = true;
+          errors[fObj.id] = 'This field is required';
+        }
+      });
+
+      if (hasErrors) {
+        setActionFormErrors(errors);
+        toast.error('Please fill in all required fields.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      let finalData = evaluateCalculations(actionFormData, allFields);
+      
+      const hasAISummary = allFields.some(f => f.type === 'ai_summary');
+      if (hasAISummary) {
+        toast.info("Generating AI Summary...");
+        const aiSummaryField = allFields.find(f => f.type === 'ai_summary');
+        if (aiSummaryField) {
+          finalData[aiSummaryField.id] = await generateAISummary(finalData, allFields);
+        }
+      }
+
+      await createMutation.mutateAsync(finalData);
+      toast.success(`Action "${activeQuickAction?.label}" completed and record created successfully!`);
+      setShowQuickActionModal(false);
+      setActiveQuickAction(null);
+      setActionForm(null);
+      setActionFormData({});
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to submit quick action.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCreateEntry = async () => {
     if (!tenant?.id || !moduleId || !moduleData) return;
     
     setIsSubmitting(true);
     try {
       let finalData = evaluateCalculations(newEntryData, allFields);
+
+      // Validate required fields in custom create form if present
+      if (createForm) {
+        const allFormFields = createForm.isMultistep 
+          ? (createForm.steps || []).flatMap((s: any) => s.fields || [])
+          : (createForm.fields || []);
+        
+        let hasErrors = false;
+        allFormFields.forEach((fObj: any) => {
+          if (fObj.id.startsWith('visual-')) return;
+          if (!isFieldVisible(fObj, finalData, visibilityContext)) return;
+          const field = allFields.find(f => f.id === fObj.id);
+          const isRequired = fObj.required || field?.required;
+          const value = finalData[fObj.id];
+          if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+            hasErrors = true;
+          }
+        });
+        if (hasErrors) {
+          toast.error('Please fill in all required fields.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
       
       // Validate business validation rules before saving
       const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
@@ -1034,10 +1153,29 @@ export const ModuleView = () => {
         const err = await res.json();
         throw new Error(err.error || 'Failed to delete record');
       }
-      return res.json();
+      const data = await res.json();
+      return { ...data, deletedRecordId: recordId };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      const deletedId = data?.deletedRecordId;
+      if (deletedId) {
+        const queryKey = ['records', tenant?.id, moduleId, page, pageSize];
+        queryClient.setQueryData(queryKey, (old: any) => {
+          if (!old) return old;
+          const updatedRecords = old.records.filter((r: any) => r.id !== deletedId);
+          const newTotal = Math.max(0, old.total - 1);
+          return {
+            ...old,
+            records: updatedRecords,
+            total: newTotal,
+            totalPages: Math.ceil(newTotal / pageSize)
+          };
+        });
+
+        setRecords(prev => prev.filter(r => r.id !== deletedId));
+        setTotalRecords(t => Math.max(0, t - 1));
+      }
       toast.success("Record deleted successfully");
       setRecordToDelete(null);
     },
@@ -3541,6 +3679,43 @@ export const ModuleView = () => {
               <LucideIcons.Settings size={16} />
               Configure
             </Link>
+            {interfaceSettings.actions?.map((act: any) => {
+              const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
+              return (
+                <button
+                  key={act.id}
+                  onClick={() => {
+                    const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
+                    setActiveQuickAction(act);
+                    setActionForm(form || null);
+                    const defaults: any = {};
+                    if (form) {
+                      const allFormFields = form.isMultistep 
+                        ? (form.steps || []).flatMap((s: any) => s.fields || [])
+                        : (form.fields || []);
+                      allFormFields.forEach((fObj: any) => {
+                        const field = allFields.find(f => f.id === fObj.id);
+                        const defVal = calculateDefaultValue(field, defaults);
+                        if (defVal !== undefined && defVal !== null && defVal !== '') {
+                          defaults[fObj.id] = defVal;
+                        }
+                      });
+                      if (form.isMultistep && form.steps?.length > 0) {
+                        const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
+                        setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
+                      }
+                    }
+                    setActionFormData(defaults);
+                    setActionFormErrors({});
+                    setShowQuickActionModal(true);
+                  }}
+                  className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white border border-indigo-200 dark:border-indigo-500/20 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-sm"
+                >
+                  <ActionIcon size={16} />
+                  {act.label}
+                </button>
+              );
+            })}
             <button 
               onClick={() => {
                 const initialDefaults: any = {};
@@ -3558,12 +3733,21 @@ export const ModuleView = () => {
                 } else {
                   setActiveTabId(null);
                 }
+                
+                // Initialize custom create form step if applicable
+                if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
+                  const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
+                  setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
+                } else {
+                  setActiveStepId(null);
+                }
+                
                 setShowNewEntryModal(true);
               }}
               className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center gap-2"
             >
               <Plus size={18} />
-              New Entry
+              {createForm?.settings?.workspaceButtonLabel || 'New Entry'}
             </button>
           </div>
         }
@@ -3626,6 +3810,15 @@ export const ModuleView = () => {
               } else {
                 setActiveTabId(null);
               }
+
+              // Initialize custom create form step if applicable
+              if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
+                const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
+                setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
+              } else {
+                setActiveStepId(null);
+              }
+
               setShowNewEntryModal(true);
             }}
             className="px-6 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-900 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
@@ -3657,12 +3850,19 @@ export const ModuleView = () => {
               className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col"
             >
               <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
-                  <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                    <Plus size={20} />
-                  </div>
-                  New {moduleData?.name || 'Record'} Entry
-                </h2>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
+                    <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                      <Plus size={20} />
+                    </div>
+                    {createForm ? createForm.name : `New ${moduleData?.name || 'Record'} Entry`}
+                  </h2>
+                  {createForm?.settings?.description && (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed pl-12">
+                      {createForm.settings.description}
+                    </p>
+                  )}
+                </div>
                 <button 
                   onClick={() => {
                     setShowNewEntryModal(false);
@@ -3675,183 +3875,577 @@ export const ModuleView = () => {
                 </button>
               </div>
               <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
-                {visibleTabs && visibleTabs.length > 0 && (
-                  <div className="flex gap-2 mb-8 p-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-2xl overflow-x-auto no-scrollbar">
-                    {visibleTabs.map((tab: any) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTabId(tab.id)}
-                        className={cn(
-                          "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2",
-                          activeTabId === tab.id
-                            ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
-                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                        )}
-                      >
-                        {interfaceSettings.detail?.showTabIcons && (
-                          <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="shrink-0" />
-                        )}
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {moduleData?.layout ? (
-                  <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full">
-                    {(moduleData.layout || [])
-                      .filter((field: ModuleField) => {
-                        if (visibleTabs.length === 0) return true;
-                        const firstTabId = visibleTabs[0]?.id;
-                        const fieldTabId = field.tabId || firstTabId;
-                        return fieldTabId === activeTabId;
-                      })
-                      .sort((a, b) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
-                      .map((field: ModuleField) => {
-                        if (!isFieldVisible(field, newEntryData, { user })) return null;
-                        
-                        return (
-                            <div 
-                              key={field.id} 
-                              className={cn(
-                                "space-y-2",
-                                field.colSpan === 1 ? "col-span-1" :
-                                field.colSpan === 2 ? "col-span-2" :
-                                field.colSpan === 3 ? "col-span-3" :
-                                field.colSpan === 4 ? "col-span-4" :
-                                field.colSpan === 5 ? "col-span-5" :
-                                field.colSpan === 6 ? "col-span-6" :
-                                field.colSpan === 7 ? "col-span-7" :
-                                field.colSpan === 8 ? "col-span-8" :
-                                field.colSpan === 9 ? "col-span-9" :
-                                field.colSpan === 10 ? "col-span-10" :
-                                field.colSpan === 11 ? "col-span-11" : "col-span-12"
-                              )}
-                              style={{
-                                gridColumnStart: field.startCol ? field.startCol + 1 : 'auto',
-                                gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
-                              }}
-                            >
-                            {field.type === 'heading' ? (
-                              <h4 className={cn(
-                                "font-bold text-zinc-900 dark:text-white mt-2",
-                                field.options?.[0] === 'h1' ? "text-2xl" :
-                                field.options?.[0] === 'h3' ? "text-lg" :
-                                field.options?.[0] === 'h4' ? "text-base" : "text-xl"
-                              )}>{field.label}</h4>
-                            ) : field.type === 'divider' ? (
-                              <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
-                            ) : field.type === 'spacer' ? (
-                              <div className="w-full h-8" />
-                            ) : field.type === 'alert' ? (
-                              <div className={cn(
-                                "p-4 rounded-xl border text-sm",
-                                field.options?.[0] === 'success' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" :
-                                field.options?.[0] === 'warning' ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400" :
-                                field.options?.[0] === 'error' ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" :
-                                "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
-                              )}>
-                                {field.label}
-                              </div>
-                            ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(field.type) ? (
-                              <CollapsibleFieldGroup field={field}>
-                                <div className="space-y-4">
-                                  {(field.fields || []).map((nestedField: any) => {
-                                    if (!isFieldVisible(nestedField, newEntryData[field.id] || {}, { user })) return null;
-                                    return (
-                                    <div key={nestedField.id} className="space-y-2">
-                                      <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                                        {nestedField.label}
-                                        {nestedField.tooltip && (
-                                          <div className="relative cursor-help">
-                                            <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                              {nestedField.tooltip}
-                                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
-                                            </div>
-                                          </div>
-                                        )}
-                                      </label>
-                                      <FieldInput 
-                                        field={nestedField}
-                                        value={(() => {
-                                          const val = newEntryData[field.id]?.[nestedField.id];
-                                          if (val !== undefined) return val;
-                                          return calculateDefaultValue(nestedField, newEntryData[field.id] || {});
-                                        })()}
-                                        onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
-                                        recordData={newEntryData[field.id] || {}}
-                                      />
-                                    </div>
-                                  )})}
+                {createForm ? (
+                  <div className="space-y-10 w-full">
+                    {createForm.isMultistep && (
+                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2 border-b border-zinc-100 dark:border-zinc-800">
+                        {createForm.steps
+                          .filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext))
+                          .map((step: any, idx: number, list: any[]) => {
+                            const isActive = activeStepId === step.id;
+                            const activeIdx = list.findIndex(s => s.id === activeStepId);
+                            const isCompleted = activeIdx > idx;
+
+                            return (
+                              <div key={step.id} className="flex items-center gap-3 shrink-0">
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
+                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
+                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                )}>
+                                  {isCompleted ? <LucideIcons.Check size={12} /> : idx + 1}
                                 </div>
-                              </CollapsibleFieldGroup>
-                            ) : field.type === 'repeatableGroup' ? (
-                              <CollapsibleFieldGroup field={field} count={(newEntryData[field.id] || []).length}>
-                                <RepeatableGroupBlock 
-                                  field={field}
-                                  value={newEntryData[field.id] || []}
-                                  onChange={(val) => handleFieldChange(field.id, val)}
-                                  hideHeader={true}
-                                />
-                              </CollapsibleFieldGroup>
-                            ) : (
-                              <>
-                                <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
-                                  {field.label}
-                                  {field.required && <span className="text-rose-500">*</span>}
-                                  {field.tooltip && (
-                                    <div className="relative cursor-help">
-                                      <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                        {field.tooltip}
-                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
-                                      </div>
+                                <span className={cn(
+                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
+                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
+                                )}>{step.title}</span>
+                                {idx < list.length - 1 && (
+                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
+                                )}
+                              </div>
+                            );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full font-sans select-none">
+                      {(() => {
+                        const currentStep = createForm.isMultistep 
+                          ? createForm.steps.find((s: any) => s.id === activeStepId)
+                          : null;
+                        const fields = currentStep ? currentStep.fields : createForm.fields;
+
+                        return fields.map((fObj: any) => {
+                          const isVisual = fObj.id.startsWith('visual-');
+                          const field = isVisual ? null : allFields.find(f => f.id === fObj.id);
+                          if (!isVisual && !field) return null;
+
+                          // Evaluate Visibility
+                          if (!isFieldVisible(fObj, newEntryData, visibilityContext)) return null;
+
+                          const labelOverride = fObj.labelOverride || field?.label;
+                          const isRequired = fObj.required || field?.required;
+                          const isReadOnly = fObj.readOnly || (field as any)?.readOnly;
+
+                          return (
+                            <div key={fObj.id} className={cn(
+                              "space-y-2",
+                              fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                            )}>
+                              {isVisual ? (
+                                <div className="py-2">
+                                  {fObj.type === 'heading' && (
+                                    <h4 className="font-bold text-zinc-900 dark:text-white mt-2 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                                  )}
+                                  {fObj.type === 'divider' && (
+                                    <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
+                                  )}
+                                  {fObj.type === 'spacer' && (
+                                    <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                                  )}
+                                  {fObj.type === 'html-text' && (
+                                    <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                                      {fObj.labelOverride || 'Text content goes here...'}
                                     </div>
                                   )}
-                                </label>
+                                </div>
+                              ) : (
+                                <>
+                                  <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
+                                    {labelOverride}
+                                    {isRequired && <span className="text-rose-500">*</span>}
+                                    {field?.tooltip && (
+                                      <div className="relative cursor-help">
+                                        <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          {field.tooltip}
+                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </label>
                                   <FieldInput 
-                                    field={field}
-                                    value={(() => {
-                                    const val = newEntryData[field.id];
-                                    if (val !== undefined) return val;
-                                    return calculateDefaultValue(field, newEntryData);
-                                  })()}
-                                    onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                                    field={field!}
+                                    value={newEntryData[field!.id]}
+                                    onChange={(val, metadata) => handleFieldChange(field!.id, val, metadata)}
                                     recordData={newEntryData}
+                                    readonly={isReadOnly}
                                   />
-                                {field.helperText && (
-                                  <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
+                                  {field?.helperText && (
+                                    <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-zinc-500 text-sm italic">
-                    No fields configured for this layout.
-                  </div>
+                  <>
+                    {visibleTabs && visibleTabs.length > 0 && (
+                      <div className="flex gap-2 mb-8 p-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-2xl overflow-x-auto no-scrollbar">
+                        {visibleTabs.map((tab: any) => (
+                          <button
+                            key={tab.id}
+                            onClick={() => setActiveTabId(tab.id)}
+                            className={cn(
+                              "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2",
+                              activeTabId === tab.id
+                                ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
+                                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                            )}
+                          >
+                            {interfaceSettings.detail?.showTabIcons && (
+                              <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="shrink-0" />
+                            )}
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {moduleData?.layout ? (
+                      <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full">
+                        {(moduleData.layout || [])
+                          .filter((field: ModuleField) => {
+                            if (visibleTabs.length === 0) return true;
+                            const firstTabId = visibleTabs[0]?.id;
+                            const fieldTabId = field.tabId || firstTabId;
+                            return fieldTabId === activeTabId;
+                          })
+                          .sort((a, b) => ((a.rowIndex || 0) - (b.rowIndex || 0)) || ((a.startCol || 0) - (b.startCol || 0)))
+                          .map((field: ModuleField) => {
+                            if (!isFieldVisible(field, newEntryData, visibilityContext)) return null;
+                            
+                            return (
+                                <div 
+                                  key={field.id} 
+                                  className={cn(
+                                    "space-y-2",
+                                    field.colSpan === 1 ? "col-span-1" :
+                                    field.colSpan === 2 ? "col-span-2" :
+                                    field.colSpan === 3 ? "col-span-3" :
+                                    field.colSpan === 4 ? "col-span-4" :
+                                    field.colSpan === 5 ? "col-span-5" :
+                                    field.colSpan === 6 ? "col-span-6" :
+                                    field.colSpan === 7 ? "col-span-7" :
+                                    field.colSpan === 8 ? "col-span-8" :
+                                    field.colSpan === 9 ? "col-span-9" :
+                                    field.colSpan === 10 ? "col-span-10" :
+                                    field.colSpan === 11 ? "col-span-11" : "col-span-12"
+                                  )}
+                                  style={{
+                                    gridColumnStart: field.startCol ? field.startCol + 1 : 'auto',
+                                    gridRowStart: (field.rowIndex !== undefined) ? field.rowIndex + 1 : 'auto'
+                                  }}
+                                >
+                                {field.type === 'heading' ? (
+                                  <h4 className={cn(
+                                    "font-bold text-zinc-900 dark:text-white mt-2",
+                                    field.options?.[0] === 'h1' ? "text-2xl" :
+                                    field.options?.[0] === 'h3' ? "text-lg" :
+                                    field.options?.[0] === 'h4' ? "text-base" : "text-xl"
+                                  )}>{field.label}</h4>
+                                ) : field.type === 'divider' ? (
+                                  <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
+                                ) : field.type === 'spacer' ? (
+                                  <div className="w-full h-8" />
+                                ) : field.type === 'alert' ? (
+                                  <div className={cn(
+                                    "p-4 rounded-xl border text-sm",
+                                    field.options?.[0] === 'success' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" :
+                                    field.options?.[0] === 'warning' ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400" :
+                                    field.options?.[0] === 'error' ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" :
+                                    "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+                                  )}>
+                                    {field.label}
+                                  </div>
+                                ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(field.type) ? (
+                                  <CollapsibleFieldGroup field={field}>
+                                    <div className="space-y-4">
+                                      {(field.fields || []).map((nestedField: any) => {
+                                        if (!isFieldVisible(nestedField, newEntryData[field.id] || {}, visibilityContext)) return null;
+                                        return (
+                                        <div key={nestedField.id} className="space-y-2">
+                                          <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                                            {nestedField.label}
+                                            {nestedField.tooltip && (
+                                              <div className="relative cursor-help">
+                                                <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                                  {nestedField.tooltip}
+                                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                                </div>
+                                              </div>
+                                            )}
+                                          </label>
+                                          <FieldInput 
+                                            field={nestedField}
+                                            value={(() => {
+                                              const val = newEntryData[field.id]?.[nestedField.id];
+                                              if (val !== undefined) return val;
+                                              return calculateDefaultValue(nestedField, newEntryData[field.id] || {});
+                                            })()}
+                                            onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+                                            recordData={newEntryData[field.id] || {}}
+                                          />
+                                        </div>
+                                      )})}
+                                    </div>
+                                  </CollapsibleFieldGroup>
+                                ) : field.type === 'repeatableGroup' ? (
+                                  <CollapsibleFieldGroup field={field} count={(newEntryData[field.id] || []).length}>
+                                    <RepeatableGroupBlock 
+                                      field={field}
+                                      value={newEntryData[field.id] || []}
+                                      onChange={(val) => handleFieldChange(field.id, val)}
+                                      hideHeader={true}
+                                    />
+                                  </CollapsibleFieldGroup>
+                                ) : (
+                                  <>
+                                    <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
+                                      {field.label}
+                                      {field.required && <span className="text-rose-500">*</span>}
+                                      {field.tooltip && (
+                                        <div className="relative cursor-help">
+                                          <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                            {field.tooltip}
+                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </label>
+                                      <FieldInput 
+                                        field={field}
+                                        value={(() => {
+                                        const val = newEntryData[field.id];
+                                        if (val !== undefined) return val;
+                                        return calculateDefaultValue(field, newEntryData);
+                                      })()}
+                                        onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                                        recordData={newEntryData}
+                                      />
+                                    {field.helperText && (
+                                      <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <div className="text-zinc-500 text-sm italic">
+                        No fields configured for this layout.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
+                {createForm?.isMultistep && activeStepId !== createForm.steps[0].id ? (
+                  <button
+                    onClick={() => {
+                      const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext));
+                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
+                      if (currentIdx > 0) {
+                        setActiveStepId(visibleSteps[currentIdx - 1].id);
+                      }
+                    }}
+                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors uppercase tracking-widest text-xs"
+                  >
+                    Back
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setShowNewEntryModal(false);
+                      setEditingRecord(null);
+                      setNewEntryData({});
+                    }}
+                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button 
-                  onClick={() => {
-                    setShowNewEntryModal(false);
-                    setEditingRecord(null);
-                    setNewEntryData({});
+                  onClick={async () => {
+                    if (createForm?.isMultistep) {
+                      // Validation
+                      const currentStep = createForm.steps.find((s: any) => s.id === activeStepId);
+                      const fieldsToValidate = currentStep ? currentStep.fields : [];
+                      let hasErrors = false;
+                      fieldsToValidate.forEach((fObj: any) => {
+                        if (fObj.id.startsWith('visual-')) return;
+                        if (!isFieldVisible(fObj, newEntryData, visibilityContext)) return;
+                        const field = allFields.find(f => f.id === fObj.id);
+                        const isRequired = fObj.required || field?.required;
+                        const value = newEntryData[fObj.id];
+                        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+                          hasErrors = true;
+                        }
+                      });
+                      if (hasErrors) {
+                        toast.error('Please fill in all required fields.');
+                        return;
+                      }
+
+                      const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext));
+                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
+                      if (currentIdx < visibleSteps.length - 1) {
+                        setActiveStepId(visibleSteps[currentIdx + 1].id);
+                        return;
+                      }
+                    }
+                    handleCreateEntry();
                   }}
-                  className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleCreateEntry}
                   disabled={isSubmitting}
                   className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
-                  {isSubmitting ? 'Saving...' : 'Create Entry'}
+                  {isSubmitting ? 'Saving...' : (createForm?.isMultistep && activeStepId !== createForm.steps[createForm.steps.length - 1].id ? 'Continue' : (createForm?.settings?.submitLabel || 'Create Entry'))}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showQuickActionModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowQuickActionModal(false);
+                setActiveQuickAction(null);
+                setActionForm(null);
+                setActionFormData({});
+              }}
+              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col z-10 animate-in zoom-in-95 duration-350"
+            >
+              <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                    <LucideIcons.Zap size={20} />
+                  </div>
+                  Quick Action: {activeQuickAction?.label}
+                </h2>
+                <button 
+                  onClick={() => {
+                    setShowQuickActionModal(false);
+                    setActiveQuickAction(null);
+                    setActionForm(null);
+                    setActionFormData({});
+                  }}
+                  className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
+                {actionForm ? (
+                  <div className="space-y-10 w-full">
+                    {actionForm.isMultistep && (
+                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2 border-b border-zinc-100 dark:border-zinc-800">
+                        {actionForm.steps
+                          .filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext))
+                          .map((step: any, idx: number, list: any[]) => {
+                            const isActive = actionStepId === step.id;
+                            const activeIdx = list.findIndex(s => s.id === actionStepId);
+                            const isCompleted = activeIdx > idx;
+
+                            return (
+                              <div key={step.id} className="flex items-center gap-3 shrink-0">
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
+                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
+                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                )}>
+                                  {isCompleted ? <LucideIcons.Check size={12} /> : idx + 1}
+                                </div>
+                                <span className={cn(
+                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
+                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
+                                )}>{step.title}</span>
+                                {idx < list.length - 1 && (
+                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
+                                )}
+                              </div>
+                            );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full font-sans select-none">
+                      {(() => {
+                        const currentStep = actionForm.isMultistep 
+                          ? actionForm.steps.find((s: any) => s.id === actionStepId)
+                          : null;
+                        const fields = currentStep ? currentStep.fields : actionForm.fields;
+
+                        return (fields || []).map((fObj: any) => {
+                          const isVisual = fObj.id.startsWith('visual-');
+                          const field = isVisual ? null : allFields.find(f => f.id === fObj.id);
+                          if (!isVisual && !field) return null;
+
+                          // Evaluate Visibility
+                          if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return null;
+
+                          const labelOverride = fObj.labelOverride || field?.label;
+                          const isRequired = fObj.required || field?.required;
+                          const isReadOnly = fObj.readOnly || (field as any)?.readOnly;
+                          const error = actionFormErrors[fObj.id];
+
+                          return (
+                            <div key={fObj.id} className={cn(
+                              "space-y-2",
+                              fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                            )}>
+                              {isVisual ? (
+                                <div className="py-2 animate-in fade-in duration-300">
+                                  {fObj.type === 'heading' && (
+                                    <h4 className="font-bold text-zinc-900 dark:text-white mt-2 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                                  )}
+                                  {fObj.type === 'divider' && (
+                                    <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
+                                  )}
+                                  {fObj.type === 'spacer' && (
+                                    <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                                  )}
+                                  {fObj.type === 'html-text' && (
+                                    <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                                      {fObj.labelOverride || 'Text content goes here...'}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
+                                    {labelOverride}
+                                    {isRequired && <span className="text-rose-500">*</span>}
+                                    {field?.tooltip && (
+                                      <div className="relative cursor-help">
+                                        <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          {field.tooltip}
+                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </label>
+                                  <FieldInput 
+                                    field={field!}
+                                    value={actionFormData[field!.id]}
+                                    onChange={(val) => {
+                                      setActionFormData(prev => ({ ...prev, [field!.id]: val }));
+                                      if (actionFormErrors[field!.id]) {
+                                        setActionFormErrors(prev => {
+                                          const next = { ...prev };
+                                          delete next[field!.id];
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                    recordData={actionFormData}
+                                    readonly={isReadOnly}
+                                    allFields={allFields}
+                                  />
+                                  {error && (
+                                    <p className="text-[10px] text-rose-500 mt-1 font-semibold">{error}</p>
+                                  )}
+                                  {field?.helperText && !error && (
+                                    <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-zinc-500 italic">
+                    No action form layout configured. Click Submit to execute.
+                  </div>
+                )}
+              </div>
+              <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
+                {actionForm?.isMultistep && actionStepId !== actionForm.steps[0].id ? (
+                  <button
+                    onClick={() => {
+                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                      if (currentIdx > 0) {
+                        setActionStepId(visibleSteps[currentIdx - 1].id);
+                      }
+                    }}
+                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors uppercase tracking-widest text-xs"
+                  >
+                    Back
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setShowQuickActionModal(false);
+                      setActiveQuickAction(null);
+                      setActionForm(null);
+                      setActionFormData({});
+                    }}
+                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button 
+                  onClick={async () => {
+                    if (actionForm?.isMultistep) {
+                      // Validation
+                      const currentStep = actionForm.steps.find((s: any) => s.id === actionStepId);
+                      const fieldsToValidate = currentStep ? currentStep.fields : [];
+                      let hasErrors = false;
+                      const errors: Record<string, string> = {};
+                      fieldsToValidate.forEach((fObj: any) => {
+                        if (fObj.id.startsWith('visual-')) return;
+                        if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
+                        const field = allFields.find(f => f.id === fObj.id);
+                        const isRequired = fObj.required || field?.required;
+                        const value = actionFormData[fObj.id];
+                        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+                          hasErrors = true;
+                          errors[fObj.id] = 'This field is required';
+                        }
+                      });
+                      if (hasErrors) {
+                        setActionFormErrors(errors);
+                        toast.error('Please fill in all required fields.');
+                        return;
+                      }
+
+                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                      if (currentIdx < visibleSteps.length - 1) {
+                        setActionStepId(visibleSteps[currentIdx + 1].id);
+                        return;
+                      }
+                    }
+                    handleSubmitQuickAction();
+                  }}
+                  disabled={isSubmitting}
+                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
+                  {isSubmitting ? 'Submitting...' : (actionForm?.isMultistep && actionStepId !== actionForm.steps[actionForm.steps.length - 1].id ? 'Continue' : (actionForm?.settings?.submitLabel || 'Submit'))}
                 </button>
               </div>
             </motion.div>

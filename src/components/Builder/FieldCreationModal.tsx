@@ -5,7 +5,6 @@ import {
   X, 
   Sparkles, 
   Check, 
-  ChevronRight, 
   Type, 
   Hash, 
   Calendar, 

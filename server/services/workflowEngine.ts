@@ -1,5 +1,6 @@
-import { Workflow, WorkflowNode, WorkflowEdge } from '../../src/types/platform';
+import { Workflow, WorkflowNode } from '../../src/types/platform';
 import { ActionRegistry } from '../workflow/actions/core';
+
 
 export interface WorkflowState {
   currentNodeId: string;
@@ -8,6 +9,8 @@ export interface WorkflowState {
     timestamp: string;
     action?: string;
     result?: any;
+    triggerCondition?: string;
+    triggeredBy?: string;
   }[];
 }
 
@@ -18,12 +21,18 @@ export class WorkflowEngine {
   static async evaluate(
     record: any,
     workflow: Workflow,
-    currentState?: WorkflowState
+    currentState?: WorkflowState,
+    layout?: any[]
   ): Promise<WorkflowState> {
-    const state: WorkflowState = currentState || {
-      currentNodeId: this.findStartNode(workflow).id,
-      history: [{ nodeId: this.findStartNode(workflow).id, timestamp: new Date().toISOString() }]
-    };
+    const state: WorkflowState = currentState
+      ? {
+          currentNodeId: currentState.currentNodeId,
+          history: [...(currentState.history || [])]
+        }
+      : {
+          currentNodeId: this.findStartNode(workflow).id,
+          history: [{ nodeId: this.findStartNode(workflow).id, timestamp: new Date().toISOString() }]
+        };
 
     // Use a queue to handle potentially multiple active paths (Phase 2)
     const activeNodes = [state.currentNodeId];
@@ -41,15 +50,18 @@ export class WorkflowEngine {
         const currentNode = workflow.nodes.find(n => n.id === currentId);
         if (!currentNode) continue;
 
-        const nextNodes = this.findNextNodes(record, currentId, workflow);
+        const nextTransitions = this.findNextTransitions(record, currentId, workflow, layout);
 
-        for (const nextNode of nextNodes) {
+        for (const transition of nextTransitions) {
+          const nextNode = transition.node;
           // If we've already visited this node in this jump cycle, avoid loops
           if (state.history.some(h => h.nodeId === nextNode.id && h.timestamp === new Date().toISOString())) continue;
 
           state.history.push({
             nodeId: nextNode.id,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            action: 'Auto-transitioned',
+            triggerCondition: transition.condition || undefined
           });
           state.currentNodeId = nextNode.id; // Update "last" active node
 
@@ -99,30 +111,91 @@ export class WorkflowEngine {
     throw new Error('No start node or status node found in workflow');
   }
 
-  private static findNextNodes(record: any, currentNodeId: string, workflow: Workflow): WorkflowNode[] {
+  private static findNextTransitions(record: any, currentNodeId: string, workflow: Workflow, layout?: any[]): { node: WorkflowNode; condition?: string }[] {
     const edges = workflow.edges.filter(e => e.source === currentNodeId);
-    const nextNodes: WorkflowNode[] = [];
+    const nextTransitions: { node: WorkflowNode; condition?: string }[] = [];
 
     for (const edge of edges) {
-      if (this.evaluateCondition(record, edge.condition)) {
+      if (this.evaluateCondition(record, edge.condition, layout)) {
         const node = workflow.nodes.find(n => n.id === edge.target);
-        if (node) nextNodes.push(node);
+        if (node) nextTransitions.push({ node, condition: edge.condition });
       }
     }
 
-    return nextNodes;
+    return nextTransitions;
   }
 
-  private static evaluateCondition(record: any, condition?: string): boolean {
+  public static evaluateCondition(record: any, condition?: string, layout?: any[]): boolean {
     if (!condition || condition.trim() === '') return true;
 
     try {
-      // Robust evaluation for Aurora expressions
-      // Support basic comparison: record.amount > 1000, record.status == 'Urgent'
-      // Replace record.field with record['field'] to handle spaces/dots if needed
-      const sanitized = condition.replace(/record\.(\w+)/g, "record['$1']");
-      const fn = new Function('record', `return ${sanitized}`);
-      return !!fn(record);
+      const context: Record<string, any> = {};
+      
+      // Inject record properties
+      if (record && typeof record === 'object') {
+        Object.entries(record).forEach(([key, val]) => {
+          context[key] = val;
+        });
+      }
+      
+      const mappedRecord = { ...record };
+      
+      // If layout is provided, map field keys/slugs (f.name) to their values from the record
+      if (layout && Array.isArray(layout)) {
+        const flatten = (fields: any[]): any[] => {
+          const res: any[] = [];
+          (fields || []).forEach(f => {
+            res.push(f);
+            if (f.fields && Array.isArray(f.fields)) {
+              res.push(...flatten(f.fields));
+            }
+          });
+          return res;
+        };
+
+        const allFields = flatten(layout);
+        
+        // Helper to recursively find a field value inside record data
+        const getVal = (obj: any, fieldId: string): any => {
+          if (!obj) return undefined;
+          if (obj[fieldId] !== undefined) return obj[fieldId];
+          for (const key in obj) {
+            if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+              const nestedVal = getVal(obj[key], fieldId);
+              if (nestedVal !== undefined) return nestedVal;
+            }
+          }
+          return undefined;
+        };
+
+        allFields.forEach(f => {
+          if (f.name) {
+            const val = getVal(record, f.id);
+            if (val !== undefined) {
+              context[f.name] = val;
+              mappedRecord[f.name] = val; // Also allow record.slug
+            }
+          }
+        });
+      }
+
+      // Ensure 'record' prefix is also supported for backward compatibility
+      context.record = mappedRecord;
+
+      // Filter context to only valid JavaScript identifier keys to prevent syntax errors
+      const identifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+      const validKeys: string[] = [];
+      const validValues: any[] = [];
+      
+      Object.entries(context).forEach(([key, val]) => {
+        if (identifierRegex.test(key)) {
+          validKeys.push(key);
+          validValues.push(val);
+        }
+      });
+
+      const fn = new Function(...validKeys, `return ${condition}`);
+      return !!fn(...validValues);
     } catch (e) {
       console.error('Error evaluating condition:', condition, e);
       return false;

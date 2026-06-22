@@ -55,6 +55,7 @@ interface WorkflowState {
     timestamp: string;
     action?: string;
     triggeredBy?: string;
+    triggerCondition?: string;
   }[];
 }
 
@@ -115,6 +116,25 @@ export const RecordDetailView = ({
     fieldId: string | null;
     warnings: ValidationError[];
   } | null>(null);
+
+  // Quick Action States
+  const [activeQuickAction, setActiveQuickAction] = useState<any | null>(null);
+  const [showQuickActionModal, setShowQuickActionModal] = useState(false);
+  const [actionFormData, setActionFormData] = useState<Record<string, any>>({});
+  const [actionFormErrors, setActionFormErrors] = useState<Record<string, string>>({});
+  const [actionForm, setActionForm] = useState<any | null>(null);
+  const [actionStepId, setActionStepId] = useState<string | null>(null);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+
+  const editForm = useMemo(() => {
+    const forms = (moduleData as any)?.forms || [];
+    const found = forms.find((f: any) => f.usage === 'workspace_edit');
+    if (found) return found;
+    if (forms.length === 1 && (!forms[0].usage || forms[0].usage === 'undefined' || forms[0].usage === 'workspace_edit')) {
+      return forms[0];
+    }
+    return null;
+  }, [moduleData]);
 
   // Clear bypassed rules when recordId changes
   useEffect(() => {
@@ -183,7 +203,59 @@ export const RecordDetailView = ({
     }
   };
 
-  
+  const handleSubmitQuickAction = async () => {
+    if (!tenant?.id || !moduleId || !recordId || !actionForm) return;
+
+    setIsActionSubmitting(true);
+    try {
+      const allFormFields = actionForm.isMultistep 
+        ? (actionForm.steps || []).flatMap((s: any) => s.fields || [])
+        : (actionForm.fields || []);
+
+      let hasErrors = false;
+      const errors: Record<string, string> = {};
+      allFormFields.forEach((fObj: any) => {
+        if (fObj.id.startsWith('visual-')) return;
+        if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
+        const field = allFields.find(f => f.id === fObj.id);
+        const isRequired = fObj.required || field?.required;
+        const value = actionFormData[fObj.id];
+        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+          hasErrors = true;
+          errors[fObj.id] = 'This field is required';
+        }
+      });
+
+      if (hasErrors) {
+        setActionFormErrors(errors);
+        toast.error('Please fill in all required fields.');
+        setIsActionSubmitting(false);
+        return;
+      }
+
+      // Merge action form data into editData
+      const mergedData = {
+        ...editData,
+        ...actionFormData
+      };
+
+      setEditData(mergedData);
+      editDataRef.current = mergedData;
+
+      // Submit the changes
+      await handleUpdateEntry(mergedData, undefined, false, true);
+
+      toast.success(`Action "${activeQuickAction?.label}" executed successfully!`);
+      setShowQuickActionModal(false);
+      setActiveQuickAction(null);
+      setActionForm(null);
+      setActionFormData({});
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to execute quick action.');
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
 
 
   // Global click-away handler
@@ -215,6 +287,18 @@ export const RecordDetailView = ({
   }, [platformUser, supabaseUser, tenant, session]);
   
   const visibleTabs = useMemo(() => {
+    if (editForm) {
+      if (editForm.isMultistep && editForm.steps) {
+        return editForm.steps
+          .filter((step: any) => isFieldVisible(step, editData || record || {}, visibilityContext))
+          .map((step: any) => ({
+            id: step.id,
+            label: step.title,
+            iconName: 'Layout'
+          }));
+      }
+      return [];
+    }
     if (!moduleData?.tabs) return [];
     
     // 1. Filter tabs by visibility rules individually
@@ -236,7 +320,7 @@ export const RecordDetailView = ({
       const hasVisibleSubtabs = tabsWithParentCheck.some(t => t.parentId === tab.id);
       return hasVisibleSubtabs;
     });
-  }, [moduleData?.tabs, editData, record, visibilityContext]);
+  }, [moduleData?.tabs, editForm, editData, record, visibilityContext]);
 
   const sortedVisibleTabs = useMemo(() => {
     const sorted: any[] = [];
@@ -281,9 +365,9 @@ export const RecordDetailView = ({
   }, [checkScroll, visibleTabs]);
 
   useEffect(() => {
-    const isParent = (id: string) => visibleTabs.some(t => t.parentId === id);
-    const selectable = visibleTabs.find(t => !isParent(t.id));
-    if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find(t => t.id === activeTabId))) {
+    const isParent = (id: string) => visibleTabs.some((t: any) => t.parentId === id);
+    const selectable = visibleTabs.find((t: any) => !isParent(t.id));
+    if (visibleTabs.length > 0 && (!activeTabId || !visibleTabs.find((t: any) => t.id === activeTabId))) {
       setActiveTabId(selectable ? selectable.id : visibleTabs[0].id);
     }
   }, [visibleTabs, activeTabId]);
@@ -1477,6 +1561,153 @@ export const RecordDetailView = ({
 
   const renderFieldsGrid = (tabId: string) => {
     if (!moduleData) return null;
+
+    if (editForm) {
+      const currentStep = editForm.isMultistep 
+        ? editForm.steps.find((s: any) => s.id === tabId)
+        : null;
+      const formFields = currentStep ? currentStep.fields : editForm.fields;
+      
+      const density = (interfaceSettings.detail as any)?.density || 'standard';
+      const ds = getDensityStyles(density);
+      
+      return (
+        <div className="grid grid-cols-12 w-full gap-y-6 gap-x-6">
+          <AnimatePresence mode="popLayout">
+            {(formFields || []).map((fObj: any) => {
+              const isVisual = fObj.id.startsWith('visual-');
+              const field = isVisual ? null : allFields.find(f => f.id === fObj.id);
+              if (!isVisual && !field) return null;
+              
+              if (!isFieldVisible(fObj, editData || record || {}, visibilityContext)) return null;
+              
+              const labelOverride = fObj.labelOverride || field?.label;
+              const isRequired = fObj.required || field?.required;
+              const isReadOnly = fObj.readOnly || (field as any)?.readOnly;
+              const isErrorField = validationErrorField?.fieldId === fObj.id;
+              
+              return (
+                <motion.div
+                  key={fObj.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className={cn(
+                    "group/field transition-all relative min-w-0",
+                    fObj.width === 'half' ? "col-span-6" : "col-span-12",
+                    !activeFieldId && !isVisual && !isReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type) && "cursor-pointer"
+                  )}
+                  onClick={() => {
+                    if (!isVisual && !isReadOnly && activeFieldId !== field!.id && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type)) {
+                      setActiveFieldId(field!.id);
+                    }
+                  }}
+                >
+                  <div className={cn(
+                    "w-full transition-all duration-200 border-2 relative",
+                    ds.cardPaddingAndRounding,
+                    isErrorField
+                      ? (validationErrorField?.severity === 'warning'
+                          ? "bg-amber-500/5 border-amber-500 shadow-lg shadow-amber-500/10 animate-shake-field z-10"
+                          : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
+                      : activeFieldId === field?.id 
+                        ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
+                        : !activeFieldId && !isVisual && !isReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type)
+                          ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
+                          : "border-transparent"
+                  )}>
+                    {activeFieldId === field?.id && savingFieldId === field?.id && (
+                      <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
+                        <Loader2 size={10} className="animate-spin" />
+                        Saving
+                      </div>
+                    )}
+                    
+                    {isVisual ? (
+                      <div className="py-2 animate-in fade-in duration-300">
+                        {fObj.type === 'heading' && (
+                          <h4 className="font-bold text-zinc-900 dark:text-white mt-4 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                        )}
+                        {fObj.type === 'divider' && (
+                          <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
+                        )}
+                        {fObj.type === 'spacer' && (
+                          <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                        )}
+                        {fObj.type === 'html-text' && (
+                          <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                            {fObj.labelOverride || 'Text content goes here...'}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                          {labelOverride}
+                          {isRequired && <span className="text-rose-500">*</span>}
+                          {field!.tooltip && (
+                            <div className="relative cursor-help">
+                              <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                {field!.tooltip}
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                              </div>
+                            </div>
+                          )}
+                          {!activeFieldId && !isReadOnly && (
+                            ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field!.type) ? (
+                              <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                            ) : (
+                              !['datatable'].includes(field!.type) && (
+                                <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                              )
+                            )
+                          )}
+                        </label>
+                        <FieldInput 
+                          field={field!}
+                          value={(() => {
+                            const edited = getFieldValue(editData, field!.id);
+                            if (edited !== undefined) return edited;
+                            const original = getFieldValue(record, field!.id);
+                            if (original !== undefined) return original;
+                            return calculateDefaultValue(field!, editData);
+                          })()}
+                          onChange={(val, metadata) => handleFieldChange(field!.id, val, metadata)}
+                          onBlur={() => handleUpdateEntry(undefined, field!.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateEntry(undefined, field!.id);
+                            if (e.key === 'Escape') setActiveFieldId(null);
+                          }}
+                          readonly={isReadOnly || activeFieldId !== field!.id}
+                          disabled={savingFieldId === field!.id}
+                          recordData={editData}
+                          allFields={allFields}
+                        />
+                        {isErrorField && (
+                          <div className={cn(
+                            "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
+                            validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
+                          )}>
+                            {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
+                            <span>{validationErrorField.message}</span>
+                          </div>
+                        )}
+                        {field!.helperText && !isErrorField && (
+                          <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field!.helperText}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      );
+    }
+
     const visibleFields = compactLayout(
       (moduleData.layout || [])
         .filter((field: ModuleField) => {
@@ -1752,6 +1983,27 @@ export const RecordDetailView = ({
   };
 
   const validateStepFields = (tabId: string): boolean => {
+    if (editForm) {
+      const currentStep = editForm.isMultistep 
+        ? editForm.steps.find((s: any) => s.id === tabId)
+        : null;
+      const formFields = currentStep ? currentStep.fields : editForm.fields;
+      for (const fObj of (formFields || [])) {
+        if (fObj.id.startsWith('visual-')) continue;
+        if (fObj.required) {
+          const isVisible = isFieldVisible(fObj, editData || record || {}, visibilityContext);
+          if (isVisible) {
+            const val = getFieldValue(editData, fObj.id);
+            const field = allFields.find(f => f.id === fObj.id);
+            if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '') || (Array.isArray(val) && val.length === 0)) {
+              toast.error(`"${fObj.labelOverride || field?.label || fObj.id}" is required to proceed`);
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    }
     const steps = visibleTabs;
     const tabFields = allFields.filter(f => f.tabId === tabId || (!f.tabId && tabId === steps[0]?.id));
     for (const field of tabFields) {
@@ -1770,12 +2022,12 @@ export const RecordDetailView = ({
   };
 
   const renderProcessWizardView = () => {
-    const steps = visibleTabs.filter(t => !t.parentId);
+    const steps = visibleTabs.filter((t: any) => !t.parentId);
     if (steps.length === 0) return <div className="text-zinc-500 text-sm italic p-8 text-center">No steps configured</div>;
     
-    const activeStepTab = visibleTabs.find(t => t.id === activeTabId);
+    const activeStepTab = visibleTabs.find((t: any) => t.id === activeTabId);
     const activeParentId = activeStepTab?.parentId || activeTabId;
-    const safeActiveIdx = Math.max(0, steps.findIndex(t => t.id === activeParentId));
+    const safeActiveIdx = Math.max(0, steps.findIndex((t: any) => t.id === activeParentId));
     const currentStep = steps[safeActiveIdx] || steps[0];
     const isLastStep = safeActiveIdx === steps.length - 1;
     const progressPercent = ((safeActiveIdx + 1) / steps.length) * 100;
@@ -1791,7 +2043,7 @@ export const RecordDetailView = ({
       const nextStepIdx = Math.min(steps.length - 1, safeActiveIdx + 1);
       if (nextStepIdx !== safeActiveIdx) {
         const nextStepTab = steps[nextStepIdx];
-        const children = visibleTabs.filter(t => t.parentId === nextStepTab.id);
+        const children = visibleTabs.filter((t: any) => t.parentId === nextStepTab.id);
         setActiveTabId(children.length > 0 ? children[0].id : nextStepTab.id);
       }
     };
@@ -1800,7 +2052,7 @@ export const RecordDetailView = ({
       const prevStepIdx = Math.max(0, safeActiveIdx - 1);
       if (prevStepIdx !== safeActiveIdx) {
         const prevStepTab = steps[prevStepIdx];
-        const children = visibleTabs.filter(t => t.parentId === prevStepTab.id);
+        const children = visibleTabs.filter((t: any) => t.parentId === prevStepTab.id);
         setActiveTabId(children.length > 0 ? children[0].id : prevStepTab.id);
       }
     };
@@ -1839,7 +2091,7 @@ export const RecordDetailView = ({
                     <div 
                       onClick={() => {
                         if (isCompleted || idx === safeActiveIdx) {
-                          const children = visibleTabs.filter(t => t.parentId === step.id);
+                          const children = visibleTabs.filter((t: any) => t.parentId === step.id);
                           setActiveTabId(children.length > 0 ? children[0].id : step.id);
                         } else if (idx === safeActiveIdx + 1) {
                           handleNext();
@@ -1938,12 +2190,12 @@ export const RecordDetailView = ({
   };
 
   const renderAccordionView = () => {
-    const accordionTabs = visibleTabs.filter(t => !visibleTabs.some(sub => sub.parentId === t.id));
+    const accordionTabs = visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id));
     return (
       <div className="space-y-6">
         {accordionTabs.map((tab: any) => {
           const isCollapsed = collapsedGroups[tab.id] ?? false;
-          const parentTab = tab.parentId ? visibleTabs.find(t => t.id === tab.parentId) : null;
+          const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
           const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
           return (
             <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden transition-all">
@@ -2096,6 +2348,44 @@ export const RecordDetailView = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Custom Quick Actions */}
+          {interfaceSettings.actions?.map((act: any) => {
+            const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
+            return (
+              <button
+                key={act.id}
+                onClick={() => {
+                  const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
+                  setActiveQuickAction(act);
+                  setActionForm(form || null);
+                  const defaults: any = {};
+                  if (form) {
+                    const allFormFields = form.isMultistep 
+                      ? (form.steps || []).flatMap((s: any) => s.fields || [])
+                      : (form.fields || []);
+                    allFormFields.forEach((fObj: any) => {
+                      const field = allFields.find(f => f.id === fObj.id);
+                      const defVal = calculateDefaultValue(field, defaults);
+                      if (defVal !== undefined && defVal !== null && defVal !== '') {
+                        defaults[fObj.id] = defVal;
+                      }
+                    });
+                    if (form.isMultistep && form.steps?.length > 0) {
+                      const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
+                      setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
+                    }
+                  }
+                  setActionFormData(defaults);
+                  setActionFormErrors({});
+                  setShowQuickActionModal(true);
+                }}
+                className="h-10 px-4 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white border border-indigo-200 dark:border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+              >
+                <ActionIcon size={14} />
+                <span>{act.label}</span>
+              </button>
+            );
+          })}
           {/* Status & Transitions Dropdown */}
           {activeWorkflow ? (
             <div className="relative" ref={transitionsMenuRef}>
@@ -2246,6 +2536,11 @@ export const RecordDetailView = ({
                                   </>
                                 )}
                               </div>
+                              {h.triggerCondition && (
+                                <div className="mt-1 text-[8px] bg-amber-500/10 dark:bg-amber-500/5 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md font-mono border border-amber-500/20 w-fit flex items-center gap-1">
+                                  <Zap size={8} /> Condition: {h.triggerCondition}
+                                </div>
+                              )}
                             </div>
                           );
                         });
@@ -2346,7 +2641,7 @@ export const RecordDetailView = ({
                             }}
                             className={cn(
                               "w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-                              isSelected && "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold"
+                              isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
                             )}
                           >
                             <div className="flex items-center gap-2 min-w-0">
@@ -2398,7 +2693,11 @@ export const RecordDetailView = ({
       </div>
 
       <div className="w-full space-y-8">
-        {interfaceSettings.detail?.layoutType === 'process' ? (
+        {editForm && !editForm.isMultistep ? (
+          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
+            {renderFieldsGrid('default')}
+          </div>
+        ) : interfaceSettings.detail?.layoutType === 'process' || (editForm && editForm.isMultistep) ? (
           renderProcessWizardView()
         ) : interfaceSettings.detail?.layoutType === 'accordion' ? (
           renderAccordionView()
@@ -2462,7 +2761,7 @@ export const RecordDetailView = ({
         ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
           <div className="space-y-8">
             {visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id)).map((tab: any) => {
-              const parentTab = tab.parentId ? visibleTabs.find(t => t.id === tab.parentId) : null;
+              const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
               const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
               return (
                 <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
@@ -2747,6 +3046,244 @@ export const RecordDetailView = ({
                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
                   {activeWorkflow?.nodes?.length || 0} Nodes • {activeWorkflow?.edges?.length || 0} Transitions
                 </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {showQuickActionModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowQuickActionModal(false);
+                setActiveQuickAction(null);
+                setActionForm(null);
+                setActionFormData({});
+              }}
+              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col z-10 animate-in zoom-in-95 duration-350"
+            >
+              <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                    <Zap size={20} />
+                  </div>
+                  Quick Action: {activeQuickAction?.label}
+                </h2>
+                <button 
+                  onClick={() => {
+                    setShowQuickActionModal(false);
+                    setActiveQuickAction(null);
+                    setActionForm(null);
+                    setActionFormData({});
+                  }}
+                  className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
+                {actionForm ? (
+                  <div className="space-y-10 w-full">
+                    {actionForm.isMultistep && (
+                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2 border-b border-zinc-100 dark:border-zinc-800">
+                        {actionForm.steps
+                          .filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext))
+                          .map((step: any, idx: number, list: any[]) => {
+                            const isActive = actionStepId === step.id;
+                            const activeIdx = list.findIndex(s => s.id === actionStepId);
+                            const isCompleted = activeIdx > idx;
+
+                            return (
+                              <div key={step.id} className="flex items-center gap-3 shrink-0">
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
+                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
+                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                )}>
+                                  {isCompleted ? <CheckCircle2 size={12} /> : idx + 1}
+                                </div>
+                                <span className={cn(
+                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
+                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
+                                )}>{step.title}</span>
+                                {idx < list.length - 1 && (
+                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
+                                )}
+                              </div>
+                            );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full font-sans select-none">
+                      {(() => {
+                        const currentStep = actionForm.isMultistep 
+                          ? actionForm.steps.find((s: any) => s.id === actionStepId)
+                          : null;
+                        const fields = currentStep ? currentStep.fields : actionForm.fields;
+
+                        return (fields || []).map((fObj: any) => {
+                          const isVisual = fObj.id.startsWith('visual-');
+                          const field = isVisual ? null : allFields.find(f => f.id === fObj.id);
+                          if (!isVisual && !field) return null;
+
+                          // Evaluate Visibility
+                          if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return null;
+
+                          const labelOverride = fObj.labelOverride || field?.label;
+                          const isRequired = fObj.required || field?.required;
+                          const isReadOnly = fObj.readOnly || (field as any)?.readOnly;
+                          const error = actionFormErrors[fObj.id];
+
+                          return (
+                            <div key={fObj.id} className={cn(
+                              "space-y-2",
+                              fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                            )}>
+                              {isVisual ? (
+                                <div className="py-2 animate-in fade-in duration-300">
+                                  {fObj.type === 'heading' && (
+                                    <h4 className="font-bold text-zinc-900 dark:text-white mt-2 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                                  )}
+                                  {fObj.type === 'divider' && (
+                                    <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
+                                  )}
+                                  {fObj.type === 'spacer' && (
+                                    <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                                  )}
+                                  {fObj.type === 'html-text' && (
+                                    <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                                      {fObj.labelOverride || 'Text content goes here...'}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
+                                    {labelOverride}
+                                    {isRequired && <span className="text-rose-500">*</span>}
+                                    {field?.tooltip && (
+                                      <div className="relative cursor-help">
+                                        <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          {field.tooltip}
+                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </label>
+                                  <FieldInput 
+                                    field={field!}
+                                    value={actionFormData[field!.id]}
+                                    onChange={(val) => {
+                                      setActionFormData(prev => ({ ...prev, [field!.id]: val }));
+                                      if (actionFormErrors[field!.id]) {
+                                        setActionFormErrors(prev => {
+                                          const next = { ...prev };
+                                          delete next[field!.id];
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                    recordData={actionFormData}
+                                    readonly={isReadOnly}
+                                    allFields={allFields}
+                                  />
+                                  {error && (
+                                    <p className="text-[10px] text-rose-500 mt-1 font-semibold">{error}</p>
+                                  )}
+                                  {field?.helperText && !error && (
+                                    <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-zinc-500 italic">
+                    No action form layout configured. Click Submit to execute.
+                  </div>
+                )}
+              </div>
+              <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
+                {actionForm?.isMultistep && actionStepId !== actionForm.steps[0].id ? (
+                  <button
+                    onClick={() => {
+                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                      if (currentIdx > 0) {
+                        setActionStepId(visibleSteps[currentIdx - 1].id);
+                      }
+                    }}
+                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors uppercase tracking-widest text-xs"
+                  >
+                    Back
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setShowQuickActionModal(false);
+                      setActiveQuickAction(null);
+                      setActionForm(null);
+                      setActionFormData({});
+                    }}
+                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button 
+                  onClick={async () => {
+                    if (actionForm?.isMultistep) {
+                      // Validation
+                      const currentStep = actionForm.steps.find((s: any) => s.id === actionStepId);
+                      const fieldsToValidate = currentStep ? currentStep.fields : [];
+                      let hasErrors = false;
+                      const errors: Record<string, string> = {};
+                      fieldsToValidate.forEach((fObj: any) => {
+                        if (fObj.id.startsWith('visual-')) return;
+                        if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
+                        const field = allFields.find(f => f.id === fObj.id);
+                        const isRequired = fObj.required || field?.required;
+                        const value = actionFormData[fObj.id];
+                        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+                          hasErrors = true;
+                          errors[fObj.id] = 'This field is required';
+                        }
+                      });
+                      if (hasErrors) {
+                        setActionFormErrors(errors);
+                        toast.error('Please fill in all required fields.');
+                        return;
+                      }
+
+                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                      if (currentIdx < visibleSteps.length - 1) {
+                        setActionStepId(visibleSteps[currentIdx + 1].id);
+                        return;
+                      }
+                    }
+                    handleSubmitQuickAction();
+                  }}
+                  disabled={isActionSubmitting}
+                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isActionSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
+                  {isActionSubmitting ? 'Submitting...' : (actionForm?.isMultistep && actionStepId !== actionForm.steps[actionForm.steps.length - 1].id ? 'Continue' : (actionForm?.settings?.submitLabel || 'Submit'))}
+                </button>
               </div>
             </motion.div>
           </div>

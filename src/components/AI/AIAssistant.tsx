@@ -10,7 +10,7 @@ import {
   User as UserIcon,
   Sparkles
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 
@@ -27,7 +27,8 @@ interface Message {
 }
 
 export const AIAssistant = () => {
-  const { isAIAssistantOpen, setIsAIAssistantOpen } = usePlatform();
+  const { setIsAIAssistantOpen } = usePlatform();
+
   const [input, setInput] = useState('');
   const [messages] = useState<Message[]>([
     {

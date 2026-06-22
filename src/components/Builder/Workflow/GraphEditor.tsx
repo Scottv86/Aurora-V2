@@ -539,6 +539,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
               onEdgeSelect(null);
             }}
             fitView
+            fitViewOptions={{ padding: 0.5, maxZoom: 0.6 }}
           >
             {showGridlines !== false && (
               <Background variant={BackgroundVariant.Dots} gap={25} size={1} color="#27272a" />
@@ -810,7 +811,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                                       : edge
                                   ));
                                 }}
-                                placeholder="e.g. record.amount > 5000"
+                                placeholder="e.g. amount > 5000"
                                 className="w-full h-32 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs font-mono text-indigo-500 focus:outline-none focus:border-indigo-500 transition-all resize-none"
                               />
                               <p className="text-[10px] text-zinc-500 italic px-1">
@@ -824,7 +825,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                                  <span className="text-[10px] font-bold uppercase tracking-widest">AI Tip</span>
                                </div>
                                <p className="text-[10px] text-zinc-500 leading-relaxed">
-                                 You can use any record field here. Example: <code className="text-amber-600 font-bold">record.priority === 'High'</code>
+                                 You can use any record field here. Example: <code className="text-amber-600 font-bold">priority === 'High'</code>
                                </p>
                             </div>
                           </div>
