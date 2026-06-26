@@ -64,6 +64,7 @@ import { UsagePage } from './pages/Settings/UsagePage';
 import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
 import { SettingsOverview } from './pages/Settings/SettingsOverview';
 import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
+import { AutomationsPage } from './pages/Settings/AutomationsPage';
 
 const SettingsLayout = () => {
   const location = useLocation();
@@ -175,7 +176,7 @@ const App = () => {
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />
                 </Route>
                 <Route path="templates" element={<DocumentAutomation />} />
-                <Route path="automations" element={<ComingSoon title="Automations Studio" description="Advanced trigger-based automation builder with visual flow designer." />} />
+                <Route path="automations" element={<AutomationsPage />} />
                 <Route path="reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
                 <Route path="knowledge" element={<ComingSoon title="Knowledge Base" description="Central repository for institutional knowledge, documentation, and training materials." />} />
                 <Route path="sites" element={<SitesPage />} />

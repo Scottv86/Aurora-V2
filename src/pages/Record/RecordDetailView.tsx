@@ -80,6 +80,65 @@ export const RecordDetailView = ({
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [record, setRecord] = useState<Record<string, any> | null>(null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
+  const [quickActionAutomations, setQuickActionAutomations] = useState<any[]>([]);
+  const [triggeringAutomationId, setTriggeringAutomationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchQuickActions = async () => {
+      if (!tenant?.id || !moduleId) return;
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || '';
+        const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${moduleId}`, {
+          headers: {
+            'x-tenant-id': tenant.id,
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const qa = data.filter((auto: any) => 
+            auto.isActive && 
+            Array.isArray(auto.triggers) && 
+            auto.triggers.some((t: any) => t.type === 'QUICK_ACTION')
+          );
+          setQuickActionAutomations(qa);
+        }
+      } catch (err) {
+        console.error('Failed to fetch quick action automations:', err);
+      }
+    };
+    fetchQuickActions();
+  }, [moduleId, tenant?.id]);
+
+  const handleTriggerQuickAction = async (automation: any) => {
+    if (!tenant?.id || !record?.id) return;
+    setTriggeringAutomationId(automation.id);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || '';
+      const res = await fetch(`${API_BASE_URL}/api/automations/${automation.id}/trigger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant.id,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          recordId: record.id,
+          inputs: {}
+        })
+      });
+      if (res.ok) {
+        toast.success(`Triggered "${automation.name}" successfully`);
+      } else {
+        toast.error('Failed to trigger automation');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error triggering automation');
+    } finally {
+      setTriggeringAutomationId(null);
+    }
+  };
 
   const Icon = useMemo(() => {
     if (!moduleData) return LucideIcons.Layers;
@@ -2348,6 +2407,22 @@ export const RecordDetailView = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Automation Quick Actions */}
+          {quickActionAutomations.map((auto: any) => (
+            <button
+              key={auto.id}
+              disabled={triggeringAutomationId === auto.id}
+              onClick={() => handleTriggerQuickAction(auto)}
+              className="h-10 px-4 bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-600 hover:text-white border border-violet-200 dark:border-violet-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+            >
+              {triggeringAutomationId === auto.id ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <LucideIcons.Zap size={12} />
+              )}
+              <span>{auto.name}</span>
+            </button>
+          ))}
           {/* Custom Quick Actions */}
           {interfaceSettings.actions?.map((act: any) => {
             const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;

@@ -4,6 +4,7 @@ import { TenantRequest } from '../middleware/tenantMiddleware';
 import { RLS_CONTEXT, globalPrisma } from '../lib/prisma';
 import { validateRecordRules } from '../../src/lib/validationEngine';
 import { WorkflowEngine } from '../services/workflowEngine';
+import { AutomationEngine } from '../services/automationEngine';
 
 const router = express.Router();
 
@@ -428,6 +429,14 @@ router.post('/records', async (req: TenantRequest, res) => {
       }
     }
 
+    // Trigger automations asynchronously
+    AutomationEngine.handleEvent({
+      type: 'RECORD_CREATED',
+      tenantId,
+      moduleId,
+      record: { id: record.id, ...finalData }
+    }, db).catch(err => console.error('[Automation Error on Creation]:', err));
+
     const recordWithMember = await db.record.findUnique({
       where: { id: record.id },
       include: { createdByMember: true }
@@ -610,6 +619,14 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
 
     const record = recordWithMember; // For compatibility with rest of handler
 
+    // Trigger automations asynchronously
+    AutomationEngine.handleEvent({
+      type: 'RECORD_UPDATED',
+      tenantId,
+      moduleId: record.moduleId,
+      record: { id: record.id, ...updatedData }
+    }, db).catch(err => console.error('[Automation Error on PUT Update]:', err));
+
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
@@ -780,6 +797,13 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
 
     const record = recordWithMember; // For compatibility
 
+    // Trigger automations asynchronously
+    AutomationEngine.handleEvent({
+      type: 'RECORD_UPDATED',
+      tenantId,
+      moduleId: record.moduleId,
+      record: { id: record.id, ...updatedData }
+    }, db).catch(err => console.error('[Automation Error on PATCH Update]:', err));
 
     const formatted = {
       id: record.id,

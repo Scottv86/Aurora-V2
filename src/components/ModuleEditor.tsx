@@ -151,6 +151,7 @@ import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
 import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
 import { ConnectorsTab } from './Builder/ConnectorsTab';
+import { AutomationsTab } from './Builder/AutomationsTab';
 
 
 const METADATA_FIELDS = [
@@ -264,7 +265,7 @@ const renderSubmoduleMock = (block: any) => {
                   <th className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-wider text-zinc-400 text-right"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {[1, 2].map(i => (
                   <tr key={i} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10">
                     <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-500">REC-00{i}</td>
@@ -3784,7 +3785,7 @@ export const ModuleEditor = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {mockRecords.slice(0, 4).map((r, idx) => (
             <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between min-h-[320px]">
-              <div className="h-40 w-full overflow-hidden relative bg-zinc-150 dark:bg-zinc-800 border-b border-zinc-150 dark:border-zinc-850">
+              <div className="h-40 w-full overflow-hidden relative bg-zinc-100 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800">
                 <img 
                   src={mockGalleryPhotos[idx % mockGalleryPhotos.length]} 
                   alt={r.title}
@@ -8995,97 +8996,10 @@ export const ModuleEditor = () => {
               handleCreateCustomConnector={handleCreateCustomConnector}
             />
           ) : activeTab === 'automation' ? (
-            <div className="flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950">
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar border-r border-zinc-250 dark:border-zinc-900">
-                <div className="max-w-4xl mx-auto space-y-8 pb-20">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Automation Triggers</h2>
-                    <p className="text-zinc-500 text-sm">Define and execute event-driven actions based on data updates or workflow transitions.</p>
-                  </div>
-
-                  {/* Feature Preview Card */}
-                  <div className="relative overflow-hidden bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent border border-indigo-500/20 rounded-[2rem] p-8 space-y-6">
-                    <div className="max-w-xl space-y-3">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-black uppercase tracking-widest border border-indigo-500/20">
-                        <Sparkles size={10} className="animate-pulse" />
-                        Feature Preview
-                      </div>
-                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Event-Driven Flow Engine</h3>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">
-                        Automate repetitive processes by triggering external webhooks, sending notifications, or running calculations whenever fields change in this module.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      {[
-                        { 
-                          title: "Auto-Assignment", 
-                          desc: "Assign a standard workspace group or worker when record status transitions.",
-                          icon: Users,
-                          badge: "Trigger-based"
-                        },
-                        { 
-                          title: "Webhook Push", 
-                          desc: "Securely dispatch JSON payloads to external endpoints when records save.",
-                          icon: ExternalLink,
-                          badge: "Integrations"
-                        },
-                        { 
-                          title: "Scheduled Alerts", 
-                          desc: "Trigger time-based email or chat updates relative to date fields.",
-                          icon: Clock,
-                          badge: "Chronos"
-                        }
-                      ].map((item, idx) => (
-                        <div key={idx} className="bg-white dark:bg-zinc-900/80 p-5 rounded-2xl border border-zinc-150 dark:border-zinc-800 shadow-sm flex flex-col justify-between h-40">
-                          <div className="space-y-2">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
-                              <item.icon size={16} />
-                            </div>
-                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white">{item.title}</h4>
-                            <p className="text-[10px] text-zinc-400 leading-normal">{item.desc}</p>
-                          </div>
-                          <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{item.badge}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sidebar Preview */}
-              <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-950 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6">
-                <div>
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">AI Automation Architect</h3>
-                  <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-150 dark:border-zinc-850 rounded-2xl p-5 space-y-4">
-                    <p className="text-[10px] text-zinc-500 leading-normal">
-                      Describe your ideal automation, and our AI will suggest the rules and triggers configuration.
-                    </p>
-                    <textarea 
-                      placeholder="e.g. Send a notification to the manager when a licence has expired..."
-                      className="w-full h-24 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-[10px] text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-all shadow-sm"
-                    />
-                    <button 
-                      disabled
-                      className="w-full py-2.5 bg-zinc-250 dark:bg-zinc-800 text-zinc-450 dark:text-zinc-550 rounded-xl text-[10px] font-bold uppercase tracking-widest cursor-not-allowed flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles size={12} />
-                      Generate Suggestion
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-auto p-4 bg-amber-500/5 border border-dashed border-amber-500/20 rounded-2xl">
-                  <h4 className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                    <Clock size={12} />
-                    Coming Soon
-                  </h4>
-                  <p className="text-[10px] text-zinc-500 leading-relaxed">
-                    Automation triggers configuration and visual engine builder are scheduled for the next major platform update.
-                  </p>
-                </div>
-              </aside>
-            </div>
+            <AutomationsTab 
+              moduleId={routeId}
+              fields={flattenFields(layout)}
+            />
           ) : activeTab === 'deployment' ? (
             <div className="flex h-full w-full overflow-hidden">
               {/* Deployment Sidebar */}
@@ -13442,9 +13356,9 @@ export const ModuleEditor = () => {
                                     </div>
 
                                     {/* 4. Auto-populate Mappings */}
-                                    <div className="space-y-3 pt-3 border-t border-zinc-150 dark:border-zinc-800">
+                                    <div className="space-y-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
                                       <div>
-                                        <h5 className="text-[9px] font-black text-zinc-850 dark:text-zinc-200 uppercase tracking-wider">Field Auto-Populate</h5>
+                                        <h5 className="text-[9px] font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Field Auto-Populate</h5>
                                         <p className="text-[8px] text-zinc-500 mt-0.5 leading-normal">
                                           Optionally map other response outputs to auto-fill sister fields upon selection.
                                         </p>
@@ -13457,7 +13371,7 @@ export const ModuleEditor = () => {
                                           const currentMappedId = currentMapped?.targetFieldId || '';
 
                                           return (
-                                            <div key={output.name} className="flex items-center justify-between gap-3 p-2 bg-white dark:bg-zinc-900/60 border border-zinc-150 dark:border-zinc-800 rounded-xl">
+                                            <div key={output.name} className="flex items-center justify-between gap-3 p-2 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl">
                                               <div className="min-w-0">
                                                 <p className="text-[10px] font-bold text-zinc-900 dark:text-white truncate">{output.label || output.name}</p>
                                                 <p className="text-[8px] text-zinc-400 font-mono">.{output.name}</p>
@@ -13500,9 +13414,9 @@ export const ModuleEditor = () => {
                                     </div>
 
                                     {/* 5. Search & Performance Settings */}
-                                    <div className="space-y-4 pt-4 border-t border-zinc-150 dark:border-zinc-800">
+                                    <div className="space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
                                       <div>
-                                        <h5 className="text-[9px] font-black text-zinc-850 dark:text-zinc-200 uppercase tracking-wider">Search & Performance Settings</h5>
+                                        <h5 className="text-[9px] font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Search & Performance Settings</h5>
                                         <p className="text-[8px] text-zinc-500 mt-0.5 leading-normal">
                                           Tune lookup search triggers, delays, limits, and rate protection.
                                         </p>

@@ -144,6 +144,12 @@ CREATE POLICY tenant_isolation_taxonomies ON "taxonomies" FOR ALL USING (has_ten
 DROP POLICY IF EXISTS tenant_isolation_connectors ON "tenant_connectors";
 CREATE POLICY tenant_isolation_connectors ON "tenant_connectors" FOR ALL USING (has_tenant_access(tenant_id));
 
+DROP POLICY IF EXISTS tenant_isolation_automations ON "automations";
+CREATE POLICY tenant_isolation_automations ON "automations" FOR ALL USING (has_tenant_access(tenant_id));
+
+DROP POLICY IF EXISTS tenant_isolation_automation_runs ON "automation_runs";
+CREATE POLICY tenant_isolation_automation_runs ON "automation_runs" FOR ALL USING (has_tenant_access(tenant_id));
+
 -- Sub-resource Isolation
 DROP POLICY IF EXISTS subresource_isolation_phone ON "member_phone_numbers";
 CREATE POLICY subresource_isolation_phone ON "member_phone_numbers" FOR ALL USING (has_tenant_access(tenant_id));

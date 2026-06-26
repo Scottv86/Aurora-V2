@@ -643,3 +643,41 @@ model ConnectorLog {
 
   @@map("connector_logs")
 }
+
+model Automation {
+  id          String            @id @default(cuid())
+  tenantId    String            @map("tenant_id")
+  moduleId    String?           @map("module_id")
+  name        String
+  description String?
+  isActive    Boolean           @default(true) @map("is_active")
+  conditions  String?
+  inputs      Json              @default("{}")
+  actions     Json              @default("[]")
+  triggers    Json              @default("[]")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  runs        AutomationRun[]
+
+  @@index([tenantId])
+  @@index([moduleId])
+  @@map("automations")
+}
+
+model AutomationRun {
+  id            String      @id @default(cuid())
+  automationId  String      @map("automation_id")
+  tenantId      String      @map("tenant_id")
+  status        String      
+  triggerSource String      @map("trigger_source")
+  startedAt     DateTime    @default(now()) @map("started_at")
+  completedAt   DateTime?   @map("completed_at")
+  errorMessage  String?     @map("error_message")
+  inputData     Json        @map("input_data")
+  stepLogs      Json        @map("step_logs")
+  automation    Automation  @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+  @@index([tenantId])
+  @@map("automation_runs")
+}

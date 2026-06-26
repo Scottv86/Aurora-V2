@@ -18,6 +18,7 @@ import tenantRoutes from './routes/tenantRoutes';
 import architectRoutes from './routes/architectRoutes';
 import connectorRoutes from './routes/connectorRoutes';
 import nexusProxyRoutes from './routes/nexusProxyRoutes';
+import automationRoutes from './routes/automationRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -102,6 +103,7 @@ app.use('/api/tenants', tenantRoutes);
 app.use('/api/architect', authenticate, requireTenantAccess, architectRoutes);
 app.use('/api/connectors', authenticate, requireTenantAccess, connectorRoutes);
 app.use('/api/nexus-proxy', authenticate, requireTenantAccess, nexusProxyRoutes);
+app.use('/api/automations', authenticate, requireTenantAccess, automationRoutes);
 
 
 // Public API Routes (Portal submissions)

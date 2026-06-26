@@ -702,7 +702,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
                   <div className="flex gap-2">
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleRecordOpen(rec); }}
-                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
+                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
                       title="View Details"
                     >
                       <Eye size={12} />
@@ -721,14 +721,14 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
                           }
                         });
                       }}
-                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
+                      className="p-2 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-400 hover:text-indigo-500 rounded-xl transition-all"
                       title="Edit"
                     >
                       <Edit2 size={12} />
                     </button>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleRemoveClick(rec); }}
-                      className="p-2 bg-zinc-50 hover:bg-rose-500/10 dark:bg-zinc-850 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-500 rounded-xl transition-all"
+                      className="p-2 bg-zinc-50 hover:bg-rose-500/10 dark:bg-zinc-800 dark:hover:bg-rose-500/10 text-zinc-400 hover:text-rose-500 rounded-xl transition-all"
                       title="Remove"
                     >
                       <Trash2 size={12} />
