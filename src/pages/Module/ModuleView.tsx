@@ -997,7 +997,7 @@ export const ModuleView = () => {
 
   const getRecordTitle = useCallback((r: any) => {
     if (!r) return 'Untitled';
-    const fieldId = interfaceSettings?.master?.titleFieldId;
+    const fieldId = moduleData?.config?.titleFieldId || (moduleData as any)?.titleFieldId;
     if (fieldId) {
       if (fieldId === 'createdAt') {
         return r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'Just now';
@@ -1017,7 +1017,7 @@ export const ModuleView = () => {
       if (val) return String(val);
     }
     return r.title || r.name || r._record_key || r.id || 'Untitled';
-  }, [interfaceSettings, allFields, displayFields]);
+  }, [moduleData, allFields, displayFields]);
 
   const handleRecordClick = (recordId: string) => {
     const detailViewMode = interfaceSettings.master.detailViewMode || 'page';

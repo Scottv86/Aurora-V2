@@ -85,8 +85,22 @@ export class AutomationEngine {
       };
     }
 
+    let targetModuleId = moduleId;
+    if (!targetModuleId && recordObj && recordObj.id) {
+      const dbRecord = await db.record.findUnique({
+        where: { id: recordObj.id }
+      });
+      if (dbRecord) {
+        targetModuleId = dbRecord.moduleId;
+      }
+    }
+
+    if (!targetModuleId) {
+      return flatRecord;
+    }
+
     const module = await db.module.findFirst({
-      where: { id: moduleId }
+      where: { id: targetModuleId }
     });
 
     if (module && module.config) {

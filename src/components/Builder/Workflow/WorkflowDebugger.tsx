@@ -9,8 +9,106 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Workflow } from '../../../types/platform';
-import { WorkflowEngine, WorkflowState } from '../../../../server/services/workflowEngine';
 import { cn } from '../../../lib/utils';
+
+export interface WorkflowState {
+  currentNodeId: string;
+  history: {
+    nodeId: string;
+    timestamp: string;
+    action?: string;
+    triggerCondition?: string;
+  }[];
+}
+
+class ClientWorkflowEngine {
+  static evaluate(record: any, workflow: Workflow): WorkflowState {
+    const startNode = workflow.nodes.find(n => n.type === 'START') || workflow.nodes.find(n => n.type === 'STATUS');
+    if (!startNode) {
+      throw new Error('No start or status node found in workflow');
+    }
+
+    const state: WorkflowState = {
+      currentNodeId: startNode.id,
+      history: [{ nodeId: startNode.id, timestamp: new Date().toISOString() }]
+    };
+
+    const activeNodes = [state.currentNodeId];
+    let changed = true;
+    
+    while (changed) {
+      changed = false;
+      const nextNodesToProcess: string[] = [];
+
+      for (const currentId of activeNodes) {
+        const nextTransitions = this.findNextTransitions(record, currentId, workflow);
+
+        for (const transition of nextTransitions) {
+          const nextNode = transition.node;
+          if (state.history.some(h => h.nodeId === nextNode.id)) continue;
+
+          state.history.push({
+            nodeId: nextNode.id,
+            timestamp: new Date().toISOString(),
+            action: 'Auto-transitioned',
+            triggerCondition: transition.condition || undefined
+          });
+          state.currentNodeId = nextNode.id;
+
+          if (nextNode.type === 'DECISION' || nextNode.type === 'ACTION') {
+            nextNodesToProcess.push(nextNode.id);
+            changed = true;
+          }
+        }
+      }
+
+      if (nextNodesToProcess.length > 0) {
+        activeNodes.splice(0, activeNodes.length, ...nextNodesToProcess);
+      }
+    }
+
+    return state;
+  }
+
+  private static findNextTransitions(record: any, currentNodeId: string, workflow: Workflow): { node: any; condition?: string }[] {
+    const edges = workflow.edges.filter(e => e.source === currentNodeId);
+    const nextTransitions: { node: any; condition?: string }[] = [];
+
+    for (const edge of edges) {
+      if (this.evaluateCondition(record, edge.condition)) {
+        const node = workflow.nodes.find(n => n.id === edge.target);
+        if (node) nextTransitions.push({ node, condition: edge.condition });
+      }
+    }
+
+    return nextTransitions;
+  }
+
+  private static evaluateCondition(record: any, condition?: string): boolean {
+    if (!condition || condition.trim() === '') return true;
+
+    try {
+      const context: Record<string, any> = { ...record };
+      
+      const identifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+      const validKeys: string[] = [];
+      const validValues: any[] = [];
+      
+      Object.entries(context).forEach(([key, val]) => {
+        if (identifierRegex.test(key)) {
+          validKeys.push(key);
+          validValues.push(val);
+        }
+      });
+
+      const fn = new Function(...validKeys, `return ${condition}`);
+      return !!fn(...validValues);
+    } catch (e) {
+      console.error('Error evaluating condition in debugger:', condition, e);
+      return false;
+    }
+  }
+}
 
 interface WorkflowDebuggerProps {
   workflow: Workflow;
@@ -27,9 +125,7 @@ export const WorkflowDebugger: React.FC<WorkflowDebuggerProps> = ({ workflow }) 
     setError(null);
     try {
       const record = JSON.parse(mockRecord);
-      // Since WorkflowEngine is on the server, we'll mimic its logic here 
-      // or call a local version for the debugger
-      const result = await WorkflowEngine.evaluate(record, workflow);
+      const result = ClientWorkflowEngine.evaluate(record, workflow);
       setExecutionState(result);
     } catch (e: any) {
       setError(e.message || "Failed to parse mock record JSON");

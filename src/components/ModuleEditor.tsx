@@ -1643,18 +1643,18 @@ export const ModuleEditor = () => {
     ]
   });
   const getRecordTitle = React.useCallback((r: any) => {
-    const fieldId = interfaceSettings.master.titleFieldId;
+    const fieldId = moduleSettings.titleFieldId;
     if (fieldId) {
       const f = allFields.find(field => field.id === fieldId);
       if (f) {
-        return (r as any)[f.id] || (r as any)[f.name] || r.title || 'Untitled';
+        return (r as any)[f.id] || (r as any)[f.name || ''] || r.title || 'Untitled';
       }
     }
     if (displayFields[0]) {
-      return (r as any)[displayFields[0].name] || (r as any)[displayFields[0].id] || r.title || 'Untitled';
+      return (r as any)[displayFields[0].name || ''] || (r as any)[displayFields[0].id] || r.title || 'Untitled';
     }
     return r.title || 'Untitled';
-  }, [interfaceSettings.master.titleFieldId, allFields, displayFields]);
+  }, [moduleSettings.titleFieldId, allFields, displayFields]);
   const [connectorMappings, setConnectorMappings] = useState<Record<string, Record<string, string>>>({});
   const [dataPopulationRules, setDataPopulationRules] = useState<any[]>([]);
   
@@ -4544,7 +4544,12 @@ export const ModuleEditor = () => {
             <div className="flex items-center gap-4 pl-4 border-l border-zinc-200 dark:border-zinc-800">
               <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800 animate-in fade-in duration-300">
                 <button
-                  onClick={() => setActiveViewMode('master')}
+                  onClick={() => {
+                    setActiveViewMode('master');
+                    if (selectedId === 'page-header') {
+                      setSelectedId(null);
+                    }
+                  }}
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all uppercase tracking-widest",
                     activeViewMode === 'master'
@@ -5105,36 +5110,17 @@ export const ModuleEditor = () => {
                         </div>
                       </div>
                     ) : (
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId('page-header');
-                        }}
-                        className={cn(
-                          "flex items-center gap-3.5 cursor-pointer group px-3 py-2 rounded-2xl transition-all border border-transparent flex-shrink-0",
-                          selectedId === 'page-header' 
-                            ? "bg-indigo-500/10 border-indigo-500/30 ring-4 ring-indigo-500/5 shadow-sm" 
-                            : "hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:border-zinc-100 dark:hover:border-zinc-800"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md shadow-zinc-200/50 dark:shadow-none border border-transparent",
-                          selectedId === 'page-header' 
-                            ? "bg-indigo-600 text-white shadow-indigo-500/20" 
-                            : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/5 group-hover:border-indigo-500/10"
-                        )}>
+                      <div className="flex items-center gap-3.5 px-3 py-2 rounded-2xl border border-transparent flex-shrink-0">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 text-zinc-400 border border-zinc-200/50 dark:border-zinc-800/50 shadow-sm">
                           <DynamicIcon name={moduleSettings.iconName || 'Box'} size={20} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h2 className="text-base font-black text-zinc-900 dark:text-white tracking-tight truncate leading-none">
-                              {interfaceSettings.master.titleFieldId 
-                                ? (allFields.find(f => f.id === interfaceSettings.master.titleFieldId)?.label || 'Page Title') 
-                                : 'Page Title'}
-                            </h2>
-                            <Settings2 size={13} className={cn("transition-all duration-300 flex-shrink-0", selectedId === 'page-header' ? "opacity-100 text-indigo-500 transform rotate-45" : "opacity-0 group-hover:opacity-100 text-zinc-400")} />
-                          </div>
-                          <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest mt-1 block">Record Master Title</span>
+                          <h2 className="text-base font-black text-zinc-900 dark:text-white tracking-tight truncate leading-none">
+                            {moduleSettings.name || 'Module Name'}
+                          </h2>
+                          <span className="text-[8px] text-zinc-400 font-bold uppercase tracking-widest mt-1.5 block">
+                            {moduleSettings.description || 'Module View'}
+                          </span>
                         </div>
                       </div>
                     )}
@@ -9208,6 +9194,7 @@ export const ModuleEditor = () => {
                 onEdgeSelect={setSelectedEdgeId}
                 rightSidebarTab={rightSidebarTabWorkflow}
                 setRightSidebarTab={setRightSidebarTabWorkflow}
+                fields={layout}
               />
             </div>
           ) : activeTab === 'security' ? (
@@ -10375,7 +10362,7 @@ export const ModuleEditor = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
                           <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
-                            {activeViewMode === 'master' ? 'Master Page Title Settings' : 'Page Title Settings'}
+                            Page Title Settings
                           </h3>
                         </div>
                         <button 
@@ -10389,29 +10376,17 @@ export const ModuleEditor = () => {
                       <div className="space-y-6">
                         <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
                           <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed italic">
-                            {activeViewMode === 'master'
-                              ? 'Select which field should be used as the primary title header for records in the master list view layouts.'
-                              : 'Select which field should be used as the primary header for records in this module.'}
+                            Select which field should be used as the primary header for records in this module.
                           </p>
                         </div>
 
                         <div className="space-y-4">
                           <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Source Field</label>
                           <select 
-                            value={activeViewMode === 'master' ? (interfaceSettings.master.titleFieldId || '') : (moduleSettings.titleFieldId || '')}
+                            value={moduleSettings.titleFieldId || ''}
                             onChange={(e) => {
                               const val = e.target.value;
-                              if (activeViewMode === 'master') {
-                                setInterfaceSettings(prev => ({
-                                  ...prev,
-                                  master: {
-                                    ...prev.master,
-                                    titleFieldId: val
-                                  }
-                                }));
-                              } else {
-                                setModuleSettings(prev => ({ ...prev, titleFieldId: val }));
-                              }
+                              setModuleSettings(prev => ({ ...prev, titleFieldId: val }));
                             }}
                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                           >
@@ -10434,23 +10409,13 @@ export const ModuleEditor = () => {
                           <div className="space-y-2">
                              <Reorder.Group 
                                axis="y" 
-                               values={activeViewMode === 'master' ? (interfaceSettings.master.subtitleFieldIds || []) : (moduleSettings.subtitleFieldIds || [])} 
+                               values={moduleSettings.subtitleFieldIds || []} 
                                onReorder={(newIds) => {
-                                 if (activeViewMode === 'master') {
-                                   setInterfaceSettings(prev => ({
-                                     ...prev,
-                                     master: {
-                                       ...prev.master,
-                                       subtitleFieldIds: newIds
-                                     }
-                                   }));
-                                 } else {
-                                   setModuleSettings(prev => ({ ...prev, subtitleFieldIds: newIds }));
-                                 }
+                                 setModuleSettings(prev => ({ ...prev, subtitleFieldIds: newIds }));
                                }}
                                className="space-y-2"
                              >
-                               {(activeViewMode === 'master' ? (interfaceSettings.master.subtitleFieldIds || []) : (moduleSettings.subtitleFieldIds || [])).map((id) => {
+                               {(moduleSettings.subtitleFieldIds || []).map((id) => {
                                  const field = layout.find(f => f.id === id) || METADATA_FIELDS.find(f => f.id === id);
                                  return (
                                    <Reorder.Item 
@@ -10465,20 +10430,10 @@ export const ModuleEditor = () => {
                                          </div>
                                          <button 
                                            onClick={() => {
-                                             if (activeViewMode === 'master') {
-                                               setInterfaceSettings(prev => ({
-                                                 ...prev,
-                                                 master: {
-                                                   ...prev.master,
-                                                   subtitleFieldIds: prev.master.subtitleFieldIds.filter(sid => sid !== id)
-                                                 }
-                                               }));
-                                             } else {
-                                               setModuleSettings(prev => ({ 
-                                                 ...prev, 
-                                                 subtitleFieldIds: prev.subtitleFieldIds.filter(sid => sid !== id) 
-                                               }));
-                                             }
+                                             setModuleSettings(prev => ({ 
+                                               ...prev, 
+                                               subtitleFieldIds: prev.subtitleFieldIds.filter(sid => sid !== id) 
+                                             }));
                                            }}
                                            className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-rose-500 transition-all"
                                          >
@@ -10504,36 +10459,16 @@ export const ModuleEditor = () => {
                                title="Nominate Subtitle Field"
                                multi={true}
                                onSelectMultiple={(fieldIds) => {
-                                 if (activeViewMode === 'master') {
-                                   setInterfaceSettings(prev => ({
-                                     ...prev,
-                                     master: {
-                                       ...prev.master,
-                                       subtitleFieldIds: [...(prev.master.subtitleFieldIds || []), ...fieldIds]
-                                     }
-                                   }));
-                                 } else {
-                                   setModuleSettings(prev => ({ 
-                                     ...prev, 
-                                     subtitleFieldIds: [...(prev.subtitleFieldIds || []), ...fieldIds] 
-                                   }));
-                                 }
+                                 setModuleSettings(prev => ({ 
+                                   ...prev, 
+                                   subtitleFieldIds: [...(prev.subtitleFieldIds || []), ...fieldIds] 
+                                 }));
                                }}
                                onSelect={(fieldId) => {
-                                 if (activeViewMode === 'master') {
-                                   setInterfaceSettings(prev => ({
-                                     ...prev,
-                                     master: {
-                                       ...prev.master,
-                                       subtitleFieldIds: [...(prev.master.subtitleFieldIds || []), fieldId]
-                                     }
-                                   }));
-                                 } else {
-                                   setModuleSettings(prev => ({ 
-                                     ...prev, 
-                                     subtitleFieldIds: [...(prev.subtitleFieldIds || []), fieldId] 
-                                   }));
-                                 }
+                                 setModuleSettings(prev => ({ 
+                                   ...prev, 
+                                   subtitleFieldIds: [...(prev.subtitleFieldIds || []), fieldId] 
+                                 }));
                                }}
                                fields={[
                                  ...METADATA_FIELDS.map(f => f as any),
@@ -10543,7 +10478,7 @@ export const ModuleEditor = () => {
                                  { id: 'metadata', label: 'System Metadata' },
                                  ...tabs
                                ]}
-                               excludeFieldIds={activeViewMode === 'master' ? (interfaceSettings.master.subtitleFieldIds || []) : (moduleSettings.subtitleFieldIds || [])}
+                               excludeFieldIds={moduleSettings.subtitleFieldIds || []}
                              />
                           </div>
                           <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed">
@@ -10551,18 +10486,16 @@ export const ModuleEditor = () => {
                           </p>
                         </div>
 
-                        {activeViewMode !== 'master' && (
-                          <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
-                            <IconPicker 
-                              label="Module Icon"
-                              value={moduleSettings.iconName || 'Box'}
-                              onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
-                            />
-                            <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed">
-                              This icon represents the module across the entire platform sidebar and workspace.
-                            </p>
-                          </div>
-                        )}
+                        <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                          <IconPicker 
+                            label="Module Icon"
+                            value={moduleSettings.iconName || 'Box'}
+                            onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
+                          />
+                          <p className="text-[9px] text-zinc-500 font-medium px-1 leading-relaxed">
+                            This icon represents the module across the entire platform sidebar and workspace.
+                          </p>
+                        </div>
 
                         <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
                           <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex gap-3">

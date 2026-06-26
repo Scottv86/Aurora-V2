@@ -26,6 +26,9 @@ import { CustomWorkflowEdge } from './CustomEdge';
 import { CustomWorkflowZone } from './CustomZone';
 import { cn } from '../../../lib/utils';
 import dagre from 'dagre';
+import { usePlatform } from '../../../hooks/usePlatform';
+import { useAuth } from '../../../hooks/useAuth';
+import { API_BASE_URL } from '@/src/config';
 
 const ACTION_LIBRARY = [
   { id: 'EMAIL', label: 'Send Email', desc: 'Dispatch templated emails to users or customers.', icon: Mail, color: 'indigo' },
@@ -35,6 +38,7 @@ const ACTION_LIBRARY = [
   { id: 'WEBHOOK', label: 'Outbound Webhook', desc: 'Push data to external systems and APIs.', icon: Globe, color: 'zinc' },
   { id: 'AI_SUMMARIZE', label: 'AI Summarize', desc: 'Generate intelligent summaries using LLMs.', icon: SparklesIcon, color: 'amber' },
   { id: 'AI_AGENT', label: 'Trigger AI Agent', desc: 'Hand off the record to an autonomous agent for complex reasoning.', icon: Bot, color: 'violet' },
+  { id: 'RUN_AUTOMATION', label: 'Run Automation', desc: 'Execute a reusable saved automation pipeline.', icon: Play, color: 'indigo' },
 ];
 
 interface GraphEditorProps {
@@ -49,6 +53,7 @@ interface GraphEditorProps {
   rightSidebarTab: 'inspector' | 'debugger' | 'architect';
   setRightSidebarTab: (tab: 'inspector' | 'debugger' | 'architect') => void;
   showGridlines?: boolean;
+  fields?: any[];
 }
 
 const nodeTypes = {
@@ -58,6 +63,333 @@ const nodeTypes = {
 
 const edgeTypes = {
   workflowEdge: CustomWorkflowEdge,
+};
+
+interface ActionConfigPanelProps {
+  nodeId: string;
+  actionType: string;
+  config: Record<string, any>;
+  updateNodeConfig: (nodeId: string, updated: Record<string, any>) => void;
+  automations: any[];
+  flatFields: any[];
+}
+
+const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
+  nodeId,
+  actionType,
+  config,
+  updateNodeConfig,
+  automations,
+  flatFields
+}) => {
+  const [tempFieldKey, setTempFieldKey] = React.useState('');
+  const [tempFieldValue, setTempFieldValue] = React.useState('');
+
+  const handleAddFieldUpdate = () => {
+    if (!tempFieldKey) return;
+    const currentFields = config.fields || {};
+    updateNodeConfig(nodeId, {
+      fields: {
+        ...currentFields,
+        [tempFieldKey]: tempFieldValue
+      }
+    });
+    setTempFieldKey('');
+    setTempFieldValue('');
+  };
+
+  const handleRemoveFieldUpdate = (key: string) => {
+    const currentFields = { ...(config.fields || {}) };
+    delete currentFields[key];
+    updateNodeConfig(nodeId, { fields: currentFields });
+  };
+
+  const insertVariable = (targetField: string, variableName: string) => {
+    const currentVal = config[targetField] || '';
+    const newVal = currentVal + `{{${variableName}}}`;
+    updateNodeConfig(nodeId, { [targetField]: newVal });
+  };
+
+  switch (actionType) {
+    case 'RUN_AUTOMATION':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Select Automation</label>
+            <select
+              value={config.automationId || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { automationId: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            >
+              <option value="">-- Choose Automation --</option>
+              {automations.map((aut: any) => (
+                <option key={aut.id} value={aut.id}>
+                  {aut.name} {aut.description ? `(${aut.description})` : ''}
+                </option>
+              ))}
+            </select>
+            {automations.length === 0 && (
+              <p className="text-[10px] text-zinc-500 italic px-1">No automations found.</p>
+            )}
+          </div>
+        </div>
+      );
+
+    case 'EMAIL':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Recipient (To)</label>
+            <input
+              type="text"
+              placeholder="e.g. customer@example.com or {{email}}"
+              value={config.to || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { to: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Subject</label>
+            <input
+              type="text"
+              placeholder="e.g. Action Required: {{title}}"
+              value={config.subject || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { subject: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Body</label>
+            <textarea
+              rows={4}
+              placeholder="Write email contents..."
+              value={config.body || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { body: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-sans resize-y"
+            />
+          </div>
+
+          {flatFields.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Insert variable into Body</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800/80 rounded-xl">
+                {flatFields.map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => insertVariable('body', f.name)}
+                    className="px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[9px] font-mono hover:border-indigo-500 transition-colors"
+                  >
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'SLACK':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Slack Channel</label>
+            <input
+              type="text"
+              placeholder="#general"
+              value={config.channel || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { channel: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Message Template</label>
+            <textarea
+              rows={3}
+              placeholder="e.g. New record: {{name}}"
+              value={config.message || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { message: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-sans resize-y"
+            />
+          </div>
+
+          {flatFields.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Insert variable</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800/80 rounded-xl">
+                {flatFields.map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => insertVariable('message', f.name)}
+                    className="px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[9px] font-mono hover:border-indigo-500 transition-colors"
+                  >
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'UPDATE':
+      return (
+        <div className="space-y-4">
+          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Field Updates</label>
+
+          {Object.keys(config.fields || {}).length > 0 ? (
+            <div className="space-y-2">
+              {Object.entries(config.fields || {}).map(([key, val]: [string, any]) => {
+                const fieldDef = flatFields.find(f => f.name === key || f.id === key);
+                const fieldLabel = fieldDef?.label || key;
+                return (
+                  <div key={key} className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <div className="truncate pr-2">
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{fieldLabel}</span>
+                      <span className="mx-1 text-zinc-400">→</span>
+                      <span className="text-xs font-mono text-indigo-500">{String(val)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFieldUpdate(key)}
+                      className="text-rose-500 hover:text-rose-600 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[10px] text-zinc-500 italic px-1">No field updates defined.</p>
+          )}
+
+          <div className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={tempFieldKey}
+                onChange={(e) => setTempFieldKey(e.target.value)}
+                className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-900 dark:text-white focus:outline-none"
+              >
+                <option value="">-- Field --</option>
+                {flatFields.map(f => (
+                  <option key={f.id} value={f.name || f.id}>{f.label}</option>
+                ))}
+              </select>
+
+              <input
+                type="text"
+                placeholder="Value"
+                value={tempFieldValue}
+                onChange={(e) => setTempFieldValue(e.target.value)}
+                className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-900 dark:text-white focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddFieldUpdate}
+              disabled={!tempFieldKey}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg py-1.5 text-xs font-bold transition-colors"
+            >
+              Add Field Update
+            </button>
+          </div>
+        </div>
+      );
+
+    case 'PDF':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Template ID</label>
+            <input
+              type="text"
+              placeholder="e.g. invoice-template"
+              value={config.templateId || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { templateId: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+        </div>
+      );
+
+    case 'WEBHOOK':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Webhook URL</label>
+            <input
+              type="text"
+              placeholder="https://api.example.com/webhook"
+              value={config.url || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { url: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Method</label>
+            <select
+              value={config.method || 'POST'}
+              onChange={(e) => updateNodeConfig(nodeId, { method: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            >
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+        </div>
+      );
+
+    case 'AI_SUMMARIZE':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Source Field</label>
+            <select
+              value={config.sourceField || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { sourceField: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+            >
+              <option value="">-- Choose Field --</option>
+              {flatFields.map(f => (
+                <option key={f.id} value={f.name || f.id}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      );
+
+    case 'AI_AGENT':
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Task/Instructions</label>
+            <textarea
+              rows={4}
+              placeholder="e.g. Evaluate this record..."
+              value={config.task || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { task: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-sans resize-y"
+            />
+          </div>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="p-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center text-xs text-zinc-500">
+          No configuration required.
+        </div>
+      );
+  }
 };
 
 export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({ 
@@ -71,12 +403,55 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
   onEdgeSelect,
   rightSidebarTab,
   setRightSidebarTab,
-  showGridlines
+  showGridlines,
+  fields
 }) => {
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [actionSearchQuery, setActionSearchQuery] = React.useState('');
   const [showActionModal, setShowActionModal] = React.useState(false);
+
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const [automations, setAutomations] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    const loadAutomations = async () => {
+      if (!tenant?.id) return;
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
+        const res = await fetch(`${API_BASE_URL}/api/automations`, {
+          headers: {
+            'x-tenant-id': tenant.id,
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAutomations(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch automations:', err);
+      }
+    };
+    loadAutomations();
+  }, [tenant?.id, session?.access_token]);
+
+  const flatFields = React.useMemo(() => {
+    const flatten = (items: any[]): any[] => {
+      const res: any[] = [];
+      (items || []).forEach(item => {
+        if (item.id && item.name) {
+          res.push(item);
+        }
+        if (item.fields && Array.isArray(item.fields)) {
+          res.push(...flatten(item.fields));
+        }
+      });
+      return res;
+    };
+    return flatten(fields || []);
+  }, [fields]);
 
   const initialNodes = useMemo(() => 
     workflow?.nodes.map(n => ({
@@ -85,8 +460,9 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       data: { 
         label: n.name, 
         type: n.type,
-        actionType: (n as any).actionType,
-        color: (n as any).color,
+        actionType: (n as any).actionType || n.config?.actionType,
+        color: (n as any).color || n.config?.color,
+        config: n.config || {},
         onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
       },
       position: n.position || { x: 0, y: 0 },
@@ -106,6 +482,24 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  const updateNodeConfig = useCallback((nodeId: string, updatedConfig: Record<string, any>) => {
+    setNodes(nds => nds.map(node => {
+      if (node.id === nodeId) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            config: {
+              ...(node.data.config || {}),
+              ...updatedConfig
+            }
+          }
+        };
+      }
+      return node;
+    }));
+  }, [setNodes]);
 
   const onLayout = useCallback((direction: 'TB' | 'LR' = 'TB') => {
     const currentNodes = getNodes();
@@ -157,6 +551,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         type,
         actionType: undefined as string | undefined,
         color: undefined as string | undefined,
+        config: {} as Record<string, any>,
         onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
       },
       ...(type === 'ZONE' ? { width: 600, height: 400 } : {})
@@ -285,7 +680,12 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         id: n.id,
         name: n.data.label as string,
         type: n.data.type as WorkflowNodeType,
-        position: n.position
+        position: n.position,
+        config: {
+          ...(n.data.config || {}),
+          actionType: n.data.actionType,
+          color: n.data.color
+        }
       })),
       edges: edges.map(e => {
         const edgeLabel = typeof e.label === 'string' ? e.label : (e.label as any)?.props?.children || '';
@@ -317,8 +717,9 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         data: { 
           label: n.name, 
           type: n.type,
-          actionType: (n as any).actionType,
-          color: (n as any).color,
+          actionType: (n as any).actionType || n.config?.actionType,
+          color: (n as any).color || n.config?.color,
+          config: n.config || {},
           onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
         },
         position: n.position || { x: 0, y: 0 },
@@ -752,10 +1153,14 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                                      <Zap size={12} />
                                      <span className="text-[10px] font-bold uppercase tracking-widest">Action Configuration</span>
                                    </div>
-                                   <div className="p-8 border-2 border-dashed border-zinc-100 dark:border-zinc-800 rounded-2xl flex flex-col items-center justify-center text-center">
-                                      <Settings2 size={24} className="text-zinc-200 dark:text-zinc-800 mb-2" />
-                                      <p className="text-[10px] text-zinc-400 uppercase tracking-widest">Configuration UI for {nodes.find(n => n.id === selectedNodeId)?.data.actionType} Coming Soon</p>
-                                   </div>
+                                   <ActionConfigPanel
+                                     nodeId={selectedNodeId!}
+                                     actionType={nodes.find(n => n.id === selectedNodeId)?.data.actionType!}
+                                     config={nodes.find(n => n.id === selectedNodeId)?.data.config || {}}
+                                     updateNodeConfig={updateNodeConfig}
+                                     automations={automations}
+                                     flatFields={flatFields}
+                                   />
                                  </div>
                                ) : (
                                  <div className="p-12 border-2 border-dashed border-zinc-100 dark:border-zinc-800 rounded-[32px] flex flex-col items-center justify-center text-center">
