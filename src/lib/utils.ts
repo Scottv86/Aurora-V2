@@ -21,16 +21,17 @@ export function stripUndefined(obj: any) {
  * Resolves a field value from a data object, searching both root level
  * and inside any nested objects (like groups).
  */
-export function getFieldValue(data: any, fieldId: string): any {
+export function getFieldValue(data: any, fieldId: string, fieldName?: string): any {
   if (!data || !fieldId) return undefined;
   
   // 1. Try root level first
   if (data[fieldId] !== undefined) return data[fieldId];
+  if (fieldName && data[fieldName] !== undefined) return data[fieldName];
   
-// 2. Search inside nested objects (groups)
+  // 2. Search inside nested objects (groups)
   for (const key in data) {
     if (data[key] && typeof data[key] === 'object' && !Array.isArray(data[key])) {
-      const nestedVal = getFieldValue(data[key], fieldId);
+      const nestedVal = getFieldValue(data[key], fieldId, fieldName);
       if (nestedVal !== undefined) {
         return nestedVal;
       }

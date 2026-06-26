@@ -48,14 +48,17 @@ const getFieldOperators = (field: any) => {
   ];
 };
 
-const compileVisualConditions = (rows: VisualConditionRow[], matchType: 'AND' | 'OR'): string => {
+const compileVisualConditions = (rows: VisualConditionRow[], matchType: 'AND' | 'OR', fields: any[]): string => {
   if (!rows || rows.length === 0) return '';
   
   const compiledRows = rows
     .map(row => {
       if (!row.fieldId) return null;
       
-      const variableName = row.fieldId;
+      const fieldDef = fields.find(f => f.id === row.fieldId || f.name === row.fieldId);
+      if (!fieldDef) return null;
+
+      const variableName = fieldDef.name || fieldDef.id;
       let val = row.value ?? '';
       
       const isNumber = !isNaN(Number(val)) && val.trim() !== '';
@@ -174,8 +177,8 @@ const renderVariablePreviews = (
                 </span>
               );
             }
-            const fieldDef = triggerFields.find(f => f.name === fieldKey);
-            const fieldLabel = fieldDef ? (fieldDef.label || fieldDef.name) : fieldKey;
+            const fieldDef = triggerFields.find(f => f.id === fieldKey || f.name === fieldKey);
+            const fieldLabel = fieldDef ? (fieldDef.label || fieldDef.name || fieldDef.id) : fieldKey;
             return (
               <span 
                 key={idx} 
@@ -205,16 +208,16 @@ const renderVariablePreviews = (
                   if (m) {
                     stepModName = m.name;
                     const fs = flattenFields(m.layout || []);
-                    const fd = fs.find(f => f.name === fieldKey);
+                    const fd = fs.find(f => f.id === fieldKey || f.name === fieldKey);
                     if (fd) {
-                      fieldLabel = fd.label || fd.name;
+                      fieldLabel = fd.label || fd.name || fd.id;
                     }
                   }
                 } else if (stepAction.config.targetType === 'TRIGGERING') {
                   stepModName = triggerModuleName;
-                  const fd = triggerFields.find(f => f.name === fieldKey);
+                  const fd = triggerFields.find(f => f.id === fieldKey || f.name === fieldKey);
                   if (fd) {
-                    fieldLabel = fd.label || fd.name;
+                    fieldLabel = fd.label || fd.name || fd.id;
                   }
                 }
 
@@ -288,8 +291,8 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
   }, [fieldsObj]);
 
   const handleAddRow = () => {
-    const unmapped = targetFields.find(tf => tf.name && !fieldsObj[tf.name]);
-    const newKey = unmapped ? unmapped.name : `custom_field_${Object.keys(fieldsObj || {}).length + 1}`;
+    const unmapped = targetFields.find(tf => tf.id && !fieldsObj[tf.id]);
+    const newKey = unmapped ? unmapped.id : `custom_field_${Object.keys(fieldsObj || {}).length + 1}`;
     onChange({ ...fieldsObj, [newKey]: '' });
   };
 
@@ -327,10 +330,10 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
       groups.push({
         label: 'Trigger Record Fields',
         items: triggerFields
-          .filter(f => f.name)
+          .filter(f => f.id)
           .map(f => ({
-            label: `${f.label || f.name} (${f.name})`,
-            value: `{{ trigger.record.${f.name} }}`
+            label: `${f.label || f.name || f.id} (${f.id})`,
+            value: `{{ trigger.record.${f.id} }}`
           }))
       });
     }
@@ -345,10 +348,10 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
       if (prevAction.config.targetModuleId) {
         const prevMod = modules?.find(m => m.id === prevAction.config.targetModuleId);
         const prevFields = prevMod ? flattenFields(prevMod.layout || []) : [];
-        prevFields.filter(f => f.name).forEach(f => {
+        prevFields.filter(f => f.id).forEach(f => {
           stepItems.push({
-            label: `${f.label || f.name} (${f.name})`,
-            value: `{{ steps.${prevIdx}.output.${f.name} }}`
+            label: `${f.label || f.name || f.id} (${f.id})`,
+            value: `{{ steps.${prevIdx}.output.${f.id} }}`
           });
         });
       }
@@ -383,8 +386,8 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
           <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
             {entries.map(({ key, value }) => {
               const fieldId = `val-input-${actionIdx}-${key}`;
-              const targetFieldDef = targetFields.find(tf => tf.name === key);
-              const isStandard = targetFields.some(tf => tf.name === key);
+              const targetFieldDef = targetFields.find(tf => tf.id === key || tf.name === key);
+              const isStandard = targetFields.some(tf => tf.id === key || tf.name === key);
 
               return (
                 <div key={key} className="flex gap-2 items-start bg-zinc-50/30 dark:bg-zinc-950/20 p-2 border border-zinc-200/80 dark:border-zinc-800/85 rounded-xl animate-in fade-in duration-100 w-full">
@@ -392,7 +395,7 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
                   <div className="w-1/3 min-w-[120px] space-y-1.5">
                     {targetFields.length > 0 && (
                       <select
-                        value={isStandard ? key : '__custom__'}
+                        value={isStandard ? (targetFields.find(tf => tf.id === key)?.id || targetFields.find(tf => tf.name === key)?.id || key) : '__custom__'}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === '__custom__') {
@@ -403,8 +406,8 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
                         }}
                         className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-900 dark:text-white cursor-pointer focus:outline-none"
                       >
-                        {targetFields.filter(f => f.name).map(f => (
-                          <option key={f.id} value={f.name}>{f.label || f.name}</option>
+                        {targetFields.filter(f => f.id).map(f => (
+                          <option key={f.id} value={f.id}>{f.label || f.name || f.id}</option>
                         ))}
                         <option value="__custom__">+ Custom Field Key...</option>
                       </select>
@@ -836,7 +839,7 @@ export const AutomationsPage: React.FC = () => {
     }
 
     const finalConditions = (scope === 'LOCAL') 
-      ? (isAdvancedCondition ? conditions : compileVisualConditions(visualConditions, conditionMatchType))
+      ? (isAdvancedCondition ? conditions : compileVisualConditions(visualConditions, conditionMatchType, fields))
       : null;
 
     const payload = {
@@ -913,7 +916,7 @@ export const AutomationsPage: React.FC = () => {
   };
 
   const handleAddConditionRow = () => {
-    const defaultField = fields[0]?.name || '';
+    const defaultField = fields[0]?.id || '';
     setVisualConditions(prev => [
       ...prev,
       {
@@ -930,7 +933,7 @@ export const AutomationsPage: React.FC = () => {
       if (row.id === id) {
         const updated = { ...row, ...updates };
         if (updates.fieldId !== undefined) {
-          const newField = fields.find(f => f.name === updates.fieldId);
+          const newField = fields.find(f => f.id === updates.fieldId || f.name === updates.fieldId);
           const ops = getFieldOperators(newField);
           updated.operator = ops[0]?.value || 'equals';
           updated.value = newField?.type === 'checkbox' || newField?.type === 'boolean' ? 'true' : '';
@@ -1733,19 +1736,19 @@ export const AutomationsPage: React.FC = () => {
                         
                         <div className="space-y-2">
                           {visualConditions.map((row) => {
-                            const selectedField = fields.find(f => f.name === row.fieldId);
+                            const selectedField = fields.find(f => f.id === row.fieldId || f.name === row.fieldId);
                             const operators = getFieldOperators(selectedField);
                             
                             return (
                               <div key={row.id} className="p-3 bg-zinc-55/40 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800/80 rounded-xl flex flex-col gap-2 relative group animate-in fade-in duration-100">
                                 <select
-                                  value={row.fieldId}
+                                  value={selectedField?.id || row.fieldId}
                                   onChange={(e) => handleUpdateConditionRow(row.id, { fieldId: e.target.value })}
                                   className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10.5px] text-zinc-900 dark:text-white cursor-pointer"
                                 >
                                   <option value="">Select Field...</option>
-                                  {fields.filter(f => f.name).map(f => (
-                                    <option key={f.id} value={f.name}>{f.label || f.name}</option>
+                                  {fields.filter(f => f.id).map(f => (
+                                    <option key={f.id} value={f.id}>{f.label || f.name || f.id}</option>
                                   ))}
                                 </select>
                                 

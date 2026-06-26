@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { RecordDetailView } from '../Record/RecordDetailView';
 import { createPortal } from 'react-dom';
@@ -992,9 +992,32 @@ export const ModuleView = () => {
       detail: {
         layoutType: 'tabs'
       },
-      actions: []
     };
   }, [moduleData]);
+
+  const getRecordTitle = useCallback((r: any) => {
+    if (!r) return 'Untitled';
+    const fieldId = interfaceSettings?.master?.titleFieldId;
+    if (fieldId) {
+      if (fieldId === 'createdAt') {
+        return r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'Just now';
+      }
+      if (fieldId === 'createdBy') {
+        return r.createdBy || 'System';
+      }
+      if (fieldId === '_record_key') {
+        return r._record_key || r.id;
+      }
+      const f = allFields.find(field => field.id === fieldId);
+      const val = getFieldValue(r, fieldId, f?.name);
+      if (val) return String(val);
+    }
+    if (displayFields[0]) {
+      const val = getFieldValue(r, displayFields[0].id, displayFields[0].name);
+      if (val) return String(val);
+    }
+    return r.title || r.name || r._record_key || r.id || 'Untitled';
+  }, [interfaceSettings, allFields, displayFields]);
 
   const handleRecordClick = (recordId: string) => {
     const detailViewMode = interfaceSettings.master.detailViewMode || 'page';
@@ -1465,7 +1488,7 @@ export const ModuleView = () => {
                       
                       <div className="space-y-1">
                         <p className="text-xs font-bold text-zinc-900 dark:text-white leading-relaxed">
-                          {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled Record'}
+                          {getRecordTitle(record)}
                         </p>
                         {displayFields.slice(1, 3).map((f: any) => {
                           const val = record[f.id] || record[f.name];
@@ -1652,7 +1675,7 @@ export const ModuleView = () => {
                         
                         <div className="space-y-1">
                           <p className="text-xs font-black text-zinc-900 dark:text-white leading-snug">
-                            {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled Opportunity'}
+                            {getRecordTitle(record)}
                           </p>
                           {valueFieldId && value !== undefined && value !== null && (
                             <p className="text-sm font-black font-mono text-zinc-800 dark:text-zinc-200">
@@ -2010,7 +2033,7 @@ export const ModuleView = () => {
                           </span>
                         </div>
                         <p className="text-[11px] font-bold text-zinc-900 dark:text-white leading-relaxed truncate">
-                          {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled'}
+                          {getRecordTitle(record)}
                         </p>
                         
                         {displayFields[1] && (
@@ -2063,7 +2086,7 @@ export const ModuleView = () => {
                       >
                         <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
                         <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate flex-1 text-right">
-                          {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled'}
+                          {getRecordTitle(record)}
                         </span>
                       </div>
                     ))}
@@ -2095,7 +2118,7 @@ export const ModuleView = () => {
                             >
                               <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
                               <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 truncate flex-1 text-right">
-                                {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled'}
+                                {getRecordTitle(record)}
                               </span>
                             </div>
                           ))}
@@ -2139,7 +2162,7 @@ export const ModuleView = () => {
                     </span>
                   </div>
                   <p className="text-xs font-black text-zinc-900 dark:text-white leading-relaxed">
-                    {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || '-') : 'Untitled Record'}
+                    {getRecordTitle(record)}
                   </p>
                   
                   {displayFields.slice(1, 4).map((f: any) => {
@@ -2454,7 +2477,7 @@ export const ModuleView = () => {
                     )}
                   </div>
                   <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
-                    {record[displayFields[0]?.id] || record[displayFields[0]?.name] || 'Untitled'}
+                    {getRecordTitle(record)}
                   </p>
                   <p className="text-[10px] text-zinc-500 mt-1 truncate">
                     {record[addressFieldId] || 'No location address'}
@@ -2485,7 +2508,7 @@ export const ModuleView = () => {
                   <div>
                     <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{selectedRecord._record_key}</span>
                     <h4 className="text-sm font-bold text-zinc-950 dark:text-white mt-0.5">
-                      {selectedRecord[displayFields[0]?.id] || selectedRecord[displayFields[0]?.name] || 'Untitled Record'}
+                      {getRecordTitle(selectedRecord)}
                     </h4>
                   </div>
                   <button 
@@ -2595,7 +2618,7 @@ export const ModuleView = () => {
                   </div>
 
                   <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-4 line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
-                    {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || 'Untitled') : 'Record'}
+                    {getRecordTitle(record)}
                   </h4>
 
                   <div className="mt-4 space-y-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
@@ -2811,7 +2834,7 @@ export const ModuleView = () => {
                     </div>
 
                     <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-4 line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
-                      {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || 'Untitled') : 'Record'}
+                      {getRecordTitle(record)}
                     </h4>
 
                     <div className="grid grid-cols-2 gap-x-4 gap-y-3 mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
@@ -2932,7 +2955,7 @@ export const ModuleView = () => {
                       </span>
                     </div>
                     <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight">
-                      {displayFields[0] ? (record[displayFields[0].id] || record[displayFields[0].name] || 'Untitled') : 'Record'}
+                      {getRecordTitle(record)}
                     </h4>
                     <p className="text-[10px] text-zinc-400 font-mono">
                       ID: {record._record_key || record.id}
@@ -3066,7 +3089,7 @@ export const ModuleView = () => {
                   <div className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 p-4 truncate">
                     <span className="block text-[9px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key}</span>
                     <span className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate mt-0.5 group-hover:text-indigo-500 transition-colors">
-                      {record[displayFields[0]?.id] || record[displayFields[0]?.name] || 'Untitled'}
+                      {getRecordTitle(record)}
                     </span>
                   </div>
 

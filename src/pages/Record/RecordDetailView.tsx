@@ -87,7 +87,7 @@ export const RecordDetailView = ({
     const fetchQuickActions = async () => {
       if (!tenant?.id || !moduleId) return;
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || '';
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
         const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${moduleId}`, {
           headers: {
             'x-tenant-id': tenant.id,
@@ -114,7 +114,7 @@ export const RecordDetailView = ({
     if (!tenant?.id || !record?.id) return;
     setTriggeringAutomationId(automation.id);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || '';
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
       const res = await fetch(`${API_BASE_URL}/api/automations/${automation.id}/trigger`, {
         method: 'POST',
         headers: {
@@ -605,7 +605,17 @@ export const RecordDetailView = ({
     const titleFieldId = moduleData.config?.titleFieldId || (moduleData as any).titleFieldId;
     
     if (titleFieldId) {
-      const val = editData[titleFieldId] ?? record?.[titleFieldId];
+      if (titleFieldId === 'createdAt') {
+        return record?.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now';
+      }
+      if (titleFieldId === 'createdBy') {
+        return record?.createdBy || 'System';
+      }
+      if (titleFieldId === '_record_key') {
+        return record?._record_key || record?.id || 'Untitled';
+      }
+      const field = allFields.find(f => f.id === titleFieldId);
+      const val = getFieldValue(editData, titleFieldId, field?.name) ?? getFieldValue(record, titleFieldId, field?.name);
       if (val) return val;
     }
 
@@ -615,7 +625,7 @@ export const RecordDetailView = ({
       editData.title || record?.title || 
       record?.id || 'Record Details'
     );
-  }, [moduleData, editData, record]);
+  }, [moduleData, editData, record, allFields]);
 
   const activeWorkflow = useMemo(() => {
     if (!moduleData) return null;
@@ -1570,9 +1580,9 @@ export const RecordDetailView = ({
         <FieldInput 
           field={nestedField}
           value={(() => {
-            const edited = getFieldValue(editData, nestedField.id);
+            const edited = getFieldValue(editData, nestedField.id, nestedField.name);
             if (edited !== undefined) return edited;
-            const original = getFieldValue(record, nestedField.id);
+            const original = getFieldValue(record, nestedField.id, nestedField.name);
             if (original !== undefined) return original;
             return calculateDefaultValue(nestedField, editData);
           })()}
@@ -1935,7 +1945,7 @@ export const RecordDetailView = ({
             ) : field.type === 'repeatableGroup' ? (
               <RepeatableGroupBlock 
                  field={field}
-                 value={getFieldValue(editData, field.id) ?? (record?.[field.id] || [])}
+                 value={getFieldValue(editData, field.id, field.name) ?? (record?.[field.id] || record?.[field.name] || [])}
                  onChange={(newVal) => handleFieldChange(field.id, newVal)}
                  onBlur={() => handleUpdateEntry(undefined, field.id)}
                  hideHeader={true}
@@ -2001,9 +2011,9 @@ export const RecordDetailView = ({
                 <FieldInput 
                   field={field}
                   value={(() => {
-                    const edited = getFieldValue(editData, field.id);
+                    const edited = getFieldValue(editData, field.id, field.name);
                     if (edited !== undefined) return edited;
-                    const original = getFieldValue(record, field.id);
+                    const original = getFieldValue(record, field.id, field.name);
                     if (original !== undefined) return original;
                     return calculateDefaultValue(field, editData);
                   })()}
@@ -2365,11 +2375,11 @@ export const RecordDetailView = ({
                       return record._record_key || record.id;
                     }
 
-                    const value = getFieldValue(editData, fieldId) ?? getFieldValue(record, fieldId);
+                    const field = allFields.find(f => f.id === fieldId);
+                    const value = getFieldValue(editData, fieldId, field?.name) ?? getFieldValue(record, fieldId, field?.name);
                     if (!value && value !== 0) return null;
                     
                     // Format value if it's a date or other special type
-                    const field = allFields.find(f => f.id === fieldId);
                     let displayValue = value;
                     if (field?.type === 'date' && value) {
                       displayValue = new Date(value).toLocaleDateString();
