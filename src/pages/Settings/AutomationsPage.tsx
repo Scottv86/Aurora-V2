@@ -571,7 +571,7 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
 
   const selectedMember = members.find(m => m.id === value);
   const displayName = selectedMember
-    ? (selectedMember.fullName || selectedMember.email.split('@')[0])
+    ? (selectedMember.name || selectedMember.email.split('@')[0])
     : 'Select Member...';
     
   const getInitials = (nameStr: string) => {
@@ -593,7 +593,13 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
         className="w-full flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer hover:border-zinc-350 dark:hover:border-zinc-700 focus:outline-none transition-all"
       >
         <div className="flex items-center gap-2">
-          {selectedMember ? (
+          {selectedMember && selectedMember.avatarUrl ? (
+            <img 
+              src={selectedMember.avatarUrl} 
+              alt={displayName} 
+              className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-850 shrink-0"
+            />
+          ) : selectedMember ? (
             <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-black text-indigo-600">
               {selectedInitials}
             </div>
@@ -602,7 +608,7 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
               ?
             </div>
           )}
-          <span className="font-medium">{displayName}</span>
+          <span className="font-medium text-zinc-900 dark:text-white">{displayName}</span>
         </div>
         <ChevronDown size={14} className={cn("text-zinc-400 transition-transform", isOpen && "rotate-180")} />
       </button>
@@ -613,7 +619,7 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
             <div className="px-3 py-2 text-[10px] text-zinc-400">No members found</div>
           ) : (
             members.map((m: any) => {
-              const mName = m.fullName || m.email.split('@')[0];
+              const mName = m.name || m.email.split('@')[0];
               const initials = getInitials(mName);
               const isSelected = m.id === value;
               
@@ -632,14 +638,22 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
                       : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-700 dark:text-zinc-300"
                   )}
                 >
-                  <div className={cn(
-                    "w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0",
-                    isSelected
-                      ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
-                      : "bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500"
-                  )}>
-                    {initials}
-                  </div>
+                  {m.avatarUrl ? (
+                    <img 
+                      src={m.avatarUrl} 
+                      alt={mName} 
+                      className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-850 shrink-0"
+                    />
+                  ) : (
+                    <div className={cn(
+                      "w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0",
+                      isSelected
+                        ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+                        : "bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500"
+                    )}>
+                      {initials}
+                    </div>
+                  )}
                   <div className="flex flex-col">
                     <span className="font-bold">{mName}</span>
                     <span className="text-[9px] text-zinc-450 dark:text-zinc-500">{m.email}</span>
@@ -1310,11 +1324,11 @@ export const AutomationsPage: React.FC = () => {
               {actions.map((action, idx) => (
                 <div 
                   key={idx}
-                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-200"
+                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm animate-in fade-in duration-200"
                 >
                   <div 
                     onClick={() => setExpandedActionIdx(expandedActionIdx === idx ? null : idx)}
-                    className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors select-none"
+                    className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors select-none rounded-t-2xl"
                   >
                     <div className="flex items-center gap-3">
                       <span className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-[10px] font-bold">{idx + 1}</span>
