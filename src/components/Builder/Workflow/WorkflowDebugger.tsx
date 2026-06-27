@@ -58,6 +58,24 @@ class ClientWorkflowEngine {
           if (nextNode.type === 'DECISION' || nextNode.type === 'ACTION') {
             nextNodesToProcess.push(nextNode.id);
             changed = true;
+          } else if (nextNode.type === 'STATUS' || nextNode.type === 'START' || nextNode.type === 'END') {
+            // Check for immediate downstream ACTION nodes
+            const outgoingActionTransitions = this.findNextTransitions(record, nextNode.id, workflow)
+              .filter(t => t.node.type === 'ACTION');
+            
+            for (const actTrans of outgoingActionTransitions) {
+              state.history.push({
+                nodeId: actTrans.node.id,
+                timestamp: new Date().toISOString(),
+                action: 'Auto-transitioned (Action Hook)',
+                triggerCondition: actTrans.condition || undefined
+              });
+              state.currentNodeId = actTrans.node.id;
+
+              // Push the action node to process its outgoing transitions
+              nextNodesToProcess.push(actTrans.node.id);
+              changed = true;
+            }
           }
         }
       }

@@ -8,6 +8,22 @@ import { AutomationEngine } from '../services/automationEngine';
 
 const router = express.Router();
 
+function getStatusFromState(evaluatedState: any, workflow: any, fallback: string): string {
+  if (!evaluatedState || !workflow) return fallback;
+  let targetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
+  if (targetNode && (targetNode.type === 'ACTION' || targetNode.type === 'DECISION')) {
+    const history = evaluatedState.history || [];
+    for (let i = history.length - 1; i >= 0; i--) {
+      const histNode = workflow.nodes.find((n: any) => n.id === history[i].nodeId);
+      if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
+        targetNode = histNode;
+        break;
+      }
+    }
+  }
+  return targetNode ? targetNode.name : fallback;
+}
+
 function processAutonumbers(dataObject: any, fields: any[], updatedConfig: any): boolean {
   if (!dataObject || typeof dataObject !== 'object' || !fields || !Array.isArray(fields)) return false;
   let changed = false;
@@ -395,7 +411,7 @@ router.post('/records', async (req: TenantRequest, res) => {
         data: finalData as any,
         associations: associations || [],
         path: path || null,
-        status: (data as any).status || (workflowState ? (workflow.nodes.find((n: any) => n.id === workflowState.currentNodeId)?.name) : 'New'),
+        status: (data as any).status || (workflowState ? getStatusFromState(workflowState, workflow, 'New') : 'New'),
         createdByMemberId: (req as any).user?.memberId,
         workflowState: workflowState as any
       }
@@ -412,8 +428,7 @@ router.post('/records', async (req: TenantRequest, res) => {
         );
 
         if (evaluatedState.currentNodeId !== workflowState.currentNodeId) {
-          const targetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
-          const finalStatus = targetNode ? targetNode.name : record.status;
+          const finalStatus = getStatusFromState(evaluatedState, workflow, record.status);
 
           // Update record with the new state and status
           record = await db.record.update({
@@ -579,9 +594,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
                 config?.layout
               );
               
-              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
               updatePayload.workflowState = evaluatedState;
-              updatePayload.status = finalTargetNode ? finalTargetNode.name : targetNode.name;
+              updatePayload.status = getStatusFromState(evaluatedState, workflow, targetNode.name);
             }
           } else {
             // Auto-transition based on data changes from current node
@@ -597,11 +611,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
             );
             
             if (evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId) {
-              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
               updatePayload.workflowState = evaluatedState;
-              if (finalTargetNode) {
-                updatePayload.status = finalTargetNode.name;
-              }
+              updatePayload.status = getStatusFromState(evaluatedState, workflow, existing.status || 'New');
             }
           }
         } catch (err) {
@@ -757,9 +768,8 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
                 config?.layout
               );
               
-              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
               updatePayload.workflowState = evaluatedState;
-              updatePayload.status = finalTargetNode ? finalTargetNode.name : targetNode.name;
+              updatePayload.status = getStatusFromState(evaluatedState, workflow, targetNode.name);
             }
           } else {
             // Auto-transition based on data changes from current node
@@ -775,11 +785,8 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
             );
             
             if (evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId) {
-              const finalTargetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
               updatePayload.workflowState = evaluatedState;
-              if (finalTargetNode) {
-                updatePayload.status = finalTargetNode.name;
-              }
+              updatePayload.status = getStatusFromState(evaluatedState, workflow, existing.status || 'New');
             }
           }
         } catch (err) {
