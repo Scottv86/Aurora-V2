@@ -592,144 +592,62 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   // Form states for rule editing
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [isActive, setIsActive] = useState(true);
-  const [triggerType, setTriggerType] = useState('RECORD_CREATED'); // RECORD_CREATED | RECORD_UPDATED | QUICK_ACTION
-  const [conditions, setConditions] = useState('');
-  const [actions, setActions] = useState<any[]>([]);
-  const [expandedActionIdx, setExpandedActionIdx] = useState<number | null>(null);
-  const [fieldsEditorModes, setFieldsEditorModes] = useState<Record<number, 'visual' | 'json'>>({});
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  // Visual Condition states
-  const [visualConditions, setVisualConditions] = useState<VisualConditionRow[]>([]);
-  const [conditionMatchType, setConditionMatchType] = useState<'AND' | 'OR'>('AND');
-  const [isAdvancedCondition, setIsAdvancedCondition] = useState(false);
-
-  // Right sidebar tab toggle (Settings vs History)
-  const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'runs'>('properties');
-
-  // Search Filter
-  const [searchQuery, setSearchQuery] = useState('');
-
+  // Derived active rule object
   const selectedRule = useMemo(() => {
     return automations.find(a => a.id === selectedRuleId) || null;
   }, [automations, selectedRuleId]);
 
+  // Derived properties from active selectedRule
+  const name = selectedRule ? selectedRule.name : '';
+  const description = selectedRule ? selectedRule.description || '' : '';
+  const isActive = selectedRule ? selectedRule.isActive : true;
+  const conditions = selectedRule ? selectedRule.conditions || '' : '';
+  const actions = selectedRule ? selectedRule.actions || [] : [];
+  
+  const inputsPayload = selectedRule?.inputs || {};
+  const visualConditions = inputsPayload.visualConditions || [];
+  const conditionMatchType = inputsPayload.conditionMatchType || 'AND';
+
+  const triggerConfig = selectedRule?.triggers?.[0];
+  const triggerType = triggerConfig 
+    ? (triggerConfig.type === 'MODULE_EVENT' ? triggerConfig.on : triggerConfig.type)
+    : 'RECORD_CREATED';
+
+  // Local UI only states
+  const [expandedActionIdx, setExpandedActionIdx] = useState<number | null>(null);
+  const [fieldsEditorModes, setFieldsEditorModes] = useState<Record<number, 'visual' | 'json'>>({});
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isAdvancedCondition, setIsAdvancedCondition] = useState(false);
+  const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'runs'>('properties');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Auto-selection of first rule on load
   useEffect(() => {
     if (selectedRuleId === null && automations.length > 0) {
       setSelectedRuleId(automations[0].id);
     }
   }, [automations, selectedRuleId]);
 
-  // Load selection state
+  // Selection initialization effect (load runs and advanced condition toggle)
   useEffect(() => {
     if (selectedRule) {
-      setName(selectedRule.name);
-      setDescription(selectedRule.description || '');
-      setIsActive(selectedRule.isActive);
-      setConditions(selectedRule.conditions || '');
-      setActions(selectedRule.actions || []);
-      
-      const triggerConfig = selectedRule.triggers?.[0];
-      if (triggerConfig) {
-        if (triggerConfig.type === 'MODULE_EVENT') {
-          setTriggerType(triggerConfig.on);
-        } else if (triggerConfig.type === 'QUICK_ACTION') {
-          setTriggerType('QUICK_ACTION');
-        } else if (triggerConfig.type === 'CALL_ONLY') {
-          setTriggerType('CALL_ONLY');
-        }
+      if (selectedRule.id && !String(selectedRule.id).startsWith('temp-')) {
+        viewRuns(selectedRule);
       } else {
-        setTriggerType('RECORD_CREATED');
+        setRuns([]);
       }
       
       const inputsPayload = selectedRule.inputs || {};
       if (inputsPayload.visualConditions && Array.isArray(inputsPayload.visualConditions)) {
-        setVisualConditions(inputsPayload.visualConditions);
-        setConditionMatchType(inputsPayload.conditionMatchType || 'AND');
         setIsAdvancedCondition(false);
       } else {
-        setVisualConditions([]);
-        setConditionMatchType('AND');
         setIsAdvancedCondition(!!selectedRule.conditions);
       }
-      
       setExpandedActionIdx(null);
       setFieldsEditorModes({});
-      setRightSidebarTab('properties');
-      viewRuns(selectedRule);
-    } else {
-      setName('');
-      setDescription('');
-      setIsActive(true);
-      setTriggerType('RECORD_CREATED');
-      setConditions('');
-      setVisualConditions([]);
-      setActions([]);
     }
-  }, [selectedRuleId, selectedRule]);
-
-  // Synchronize local edit states to the parent automations prop on change
-  useEffect(() => {
-    if (selectedRuleId === null || selectedRuleId === 'new') return;
-    
-    let triggersPayload = [];
-    if (triggerType === 'RECORD_CREATED' || triggerType === 'RECORD_UPDATED') {
-      triggersPayload.push({
-        type: 'MODULE_EVENT',
-        on: triggerType,
-        moduleId: moduleId
-      });
-    } else if (triggerType === 'QUICK_ACTION') {
-      triggersPayload.push({
-        type: 'QUICK_ACTION',
-        label: name,
-        icon: 'Play'
-      });
-    } else if (triggerType === 'CALL_ONLY') {
-      triggersPayload.push({
-        type: 'CALL_ONLY'
-      });
-    }
-
-    const finalConditions = isAdvancedCondition 
-      ? conditions 
-      : compileVisualConditions(visualConditions, conditionMatchType, fields);
-
-    const updatedRule = {
-      id: selectedRuleId,
-      name,
-      description,
-      moduleId,
-      inputs: {
-        visualConditions,
-        conditionMatchType
-      },
-      actions,
-      triggers: triggersPayload,
-      isActive,
-      conditions: finalConditions.trim() || null
-    };
-
-    const existing = automations.find(a => a.id === selectedRuleId);
-    if (existing) {
-      const hasChanged = 
-        existing.name !== name ||
-        existing.description !== description ||
-        existing.isActive !== isActive ||
-        JSON.stringify(existing.actions) !== JSON.stringify(actions) ||
-        JSON.stringify(existing.triggers) !== JSON.stringify(triggersPayload) ||
-        JSON.stringify(existing.inputs) !== JSON.stringify(updatedRule.inputs) ||
-        existing.conditions !== updatedRule.conditions;
-
-      if (hasChanged) {
-        setAutomations(prev => prev.map(a => a.id === selectedRuleId ? updatedRule : a));
-      }
-    }
-  }, [name, description, isActive, triggerType, conditions, visualConditions, conditionMatchType, actions, isAdvancedCondition, selectedRuleId, moduleId]);
+  }, [selectedRuleId]);
 
   // fetchAutomations is handled by the parent ModuleEditor
 
