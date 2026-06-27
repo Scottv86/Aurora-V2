@@ -564,6 +564,108 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
   );
 };
 
+interface AssigneeSelectProps {
+  value: string;
+  onChange: (val: string) => void;
+  members: any[];
+}
+
+const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, members }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Close on click outside
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClose = () => setIsOpen(false);
+    window.addEventListener('click', handleClose);
+    return () => window.removeEventListener('click', handleClose);
+  }, [isOpen]);
+
+  const selectedMember = members.find(m => m.id === value);
+  const displayName = selectedMember
+    ? (selectedMember.fullName || selectedMember.email.split('@')[0])
+    : 'Select Member...';
+    
+  const getInitials = (nameStr: string) => {
+    if (!nameStr || nameStr === 'Select Member...') return '?';
+    const parts = nameStr.split(/[\s._-]+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return nameStr.substring(0, 2).toUpperCase();
+  };
+
+  const selectedInitials = getInitials(displayName);
+
+  return (
+    <div className="relative w-full" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer hover:border-zinc-350 dark:hover:border-zinc-700 focus:outline-none transition-all"
+      >
+        <div className="flex items-center gap-2">
+          {selectedMember ? (
+            <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-black text-indigo-600">
+              {selectedInitials}
+            </div>
+          ) : (
+            <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-[8px] font-black text-zinc-400">
+              ?
+            </div>
+          )}
+          <span className="font-medium">{displayName}</span>
+        </div>
+        <ChevronDown size={14} className={cn("text-zinc-400 transition-transform", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar py-1">
+          {members.length === 0 ? (
+            <div className="px-3 py-2 text-[10px] text-zinc-400">No members found</div>
+          ) : (
+            members.map((m: any) => {
+              const mName = m.fullName || m.email.split('@')[0];
+              const initials = getInitials(mName);
+              const isSelected = m.id === value;
+              
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(m.id);
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors cursor-pointer",
+                    isSelected 
+                      ? "bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
+                      : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-700 dark:text-zinc-300"
+                  )}
+                >
+                  <div className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0",
+                    isSelected
+                      ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+                      : "bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500"
+                  )}>
+                    {initials}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold">{mName}</span>
+                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500">{m.email}</span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface AutomationsTabProps {
   moduleId: string | undefined;
   fields?: any[];
@@ -1291,20 +1393,15 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                           
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-zinc-400">Assign To</label>
-                            <select 
+                            <AssigneeSelect
                               value={action.config.assigneeId || ''}
-                              onChange={(e) => {
+                              onChange={(val) => {
                                 const updated = [...actions];
-                                updated[idx].config.assigneeId = e.target.value;
+                                updated[idx].config.assigneeId = val;
                                 setActions(updated);
                               }}
-                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
-                            >
-                              <option value="">Select Member...</option>
-                              {members.map((m: any) => (
-                                <option key={m.id} value={m.id}>{m.fullName || m.email || m.id}</option>
-                              ))}
-                            </select>
+                              members={members}
+                            />
                           </div>
                         </div>
                       )}
