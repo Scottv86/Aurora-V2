@@ -2495,6 +2495,18 @@ export const RecordDetailView = ({
                   );
                 }
 
+                let displayNode = currentNode;
+                if (currentNode && (currentNode.type === 'ACTION' || currentNode.type === 'DECISION')) {
+                  const history = wState?.history || [];
+                  for (let i = history.length - 1; i >= 0; i--) {
+                    const histNode = activeWorkflow?.nodes.find((n: any) => n.id === history[i].nodeId);
+                    if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
+                      displayNode = histNode;
+                      break;
+                    }
+                  }
+                }
+
                 const transitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === wState?.currentNodeId) || [];
 
                 return (
@@ -2504,7 +2516,7 @@ export const RecordDetailView = ({
                       className="h-10 px-4 bg-indigo-500/10 dark:bg-indigo-500/5 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider relative overflow-hidden group/status"
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
-                      <span>{currentNode.name}</span>
+                      <span>{displayNode.name}</span>
                       <LucideIcons.ChevronDown size={14} className="text-indigo-500/70 group-hover:text-indigo-500 transition-colors" />
                     </button>
 
