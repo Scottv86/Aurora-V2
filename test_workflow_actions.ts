@@ -44,11 +44,11 @@ async function run() {
     workspaceId = workspace.id;
     console.log(`✅ Using Workspace: ${workspace.name} (${workspaceId})`);
 
-    // 3. Create a test automation rule to be triggered by the RUN_AUTOMATION workflow action
+    // 3. Create a test automation rule to be triggered by the RUN_AUTOMATION workflow action (CALL_ONLY trigger type)
     const automation = await globalPrisma.automation.create({
       data: {
         tenantId,
-        name: 'Workflow-triggered Automation Pipeline',
+        name: 'Workflow-triggered Subroutine Automation',
         description: 'Fired by RUN_AUTOMATION node in Workflow',
         isActive: true,
         inputs: {},
@@ -56,13 +56,17 @@ async function run() {
           {
             type: 'SEND_EMAIL',
             config: {
-              to: 'customer@workflow.com',
-              subject: 'Pipeline Automation Executed Successfully',
-              body: 'The saved automation pipeline runs fine!'
+              to: '{{ inputs.managerEmail }}',
+              subject: 'Pipeline Subroutine Executed: {{ trigger.record.leadName }}',
+              body: 'The saved subroutine automation runs fine with parameter: {{ inputs.paramMessage }}!'
             }
           }
         ],
-        triggers: []
+        triggers: [
+          {
+            type: 'CALL_ONLY'
+          }
+        ]
       }
     });
     automationId = automation.id;
@@ -121,7 +125,11 @@ async function run() {
           name: 'Trigger Saved Automation', 
           config: { 
             actionType: 'RUN_AUTOMATION',
-            automationId: automationId
+            automationId: automationId,
+            inputs: {
+              managerEmail: 'boss@company.com',
+              paramMessage: 'Workflow node passed this: {{leadName}}'
+            }
           } 
         },
 

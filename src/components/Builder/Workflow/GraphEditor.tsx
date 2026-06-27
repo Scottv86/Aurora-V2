@@ -84,6 +84,31 @@ const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
 }) => {
   const [tempFieldKey, setTempFieldKey] = React.useState('');
   const [tempFieldValue, setTempFieldValue] = React.useState('');
+  const [tempParamKey, setTempParamKey] = React.useState('');
+  const [tempParamValue, setTempParamValue] = React.useState('');
+
+  const handleAddParam = () => {
+    if (!tempParamKey.trim()) return;
+    const currentInputs = config.inputs || {};
+    updateNodeConfig(nodeId, {
+      inputs: {
+        ...currentInputs,
+        [tempParamKey.trim()]: tempParamValue
+      }
+    });
+    setTempParamKey('');
+    setTempParamValue('');
+  };
+
+  const handleRemoveParam = (key: string) => {
+    const currentInputs = { ...(config.inputs || {}) };
+    delete currentInputs[key];
+    updateNodeConfig(nodeId, { inputs: currentInputs });
+  };
+
+  const insertParamVariable = (variableName: string) => {
+    setTempParamValue(prev => prev + `{{${variableName}}}`);
+  };
 
   const handleAddFieldUpdate = () => {
     if (!tempFieldKey) return;
@@ -112,13 +137,14 @@ const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
 
   switch (actionType) {
     case 'RUN_AUTOMATION':
+      const mappedParams = config.inputs || {};
       return (
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Select Automation</label>
             <select
               value={config.automationId || ''}
-              onChange={(e) => updateNodeConfig(nodeId, { automationId: e.target.value })}
+              onChange={(e) => updateNodeConfig(nodeId, { automationId: e.target.value, inputs: {} })}
               className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
             >
               <option value="">-- Choose Automation --</option>
@@ -132,6 +158,81 @@ const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
               <p className="text-[10px] text-zinc-500 italic px-1">No automations found.</p>
             )}
           </div>
+
+          {config.automationId && (
+            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Input Parameters</label>
+
+              {Object.keys(mappedParams).length > 0 ? (
+                <div className="space-y-2">
+                  {Object.entries(mappedParams).map(([key, val]: [string, any]) => (
+                    <div key={key} className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                      <div className="truncate pr-2">
+                        <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{key}</span>
+                        <span className="mx-1 text-zinc-400">→</span>
+                        <span className="text-xs font-mono text-indigo-500">{String(val)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveParam(key)}
+                        className="text-rose-500 hover:text-rose-600 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-zinc-500 italic px-1">No input parameters mapped.</p>
+              )}
+
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Key (e.g. email)"
+                    value={tempParamKey}
+                    onChange={(e) => setTempParamKey(e.target.value)}
+                    className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Value"
+                    value={tempParamValue}
+                    onChange={(e) => setTempParamValue(e.target.value)}
+                    className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {flatFields.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block">Insert record variable</label>
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto p-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                      {flatFields.map(f => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => insertParamVariable(f.name)}
+                          className="px-1.5 py-0.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[8px] font-mono hover:border-indigo-500 transition-colors"
+                        >
+                          {f.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleAddParam}
+                  disabled={!tempParamKey}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg py-1.5 text-xs font-bold transition-colors"
+                >
+                  Add Parameter
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       );
 

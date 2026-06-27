@@ -632,6 +632,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
           setTriggerType(triggerConfig.on);
         } else if (triggerConfig.type === 'QUICK_ACTION') {
           setTriggerType('QUICK_ACTION');
+        } else if (triggerConfig.type === 'CALL_ONLY') {
+          setTriggerType('CALL_ONLY');
         }
       } else {
         setTriggerType('RECORD_CREATED');
@@ -787,6 +789,10 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
         type: 'QUICK_ACTION',
         label: name,
         icon: 'Play'
+      });
+    } else if (triggerType === 'CALL_ONLY') {
+      triggersPayload.push({
+        type: 'CALL_ONLY'
       });
     }
 
@@ -1023,7 +1029,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
                 {[
                   { id: 'RECORD_CREATED', label: 'On Created', desc: 'When record is added' },
                   { id: 'RECORD_UPDATED', label: 'On Updated', desc: 'When record changes' },
-                  { id: 'QUICK_ACTION', label: 'Quick Action', desc: 'Detail page button click' }
+                  { id: 'QUICK_ACTION', label: 'Quick Action', desc: 'Detail page button click' },
+                  { id: 'CALL_ONLY', label: 'No Trigger', desc: 'Triggered by Workflow/API' }
                 ].map((trig) => (
                   <button
                     key={trig.id}

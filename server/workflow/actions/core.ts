@@ -114,7 +114,32 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
         console.warn(`[Action: RUN_AUTOMATION] Automation ${config.automationId} not found.`);
         return { success: false, error: 'Automation not found' };
       }
-      await AutomationEngine.runPipeline(automation, record, config.inputs || {}, 'WORKFLOW_NODE', globalPrisma);
+
+      // Interpolate parameter inputs passed from the workflow node configuration against the record
+      const inputs = config.inputs || {};
+      const recordData = record.data && typeof record.data === 'object' 
+        ? { ...record.data, id: record.id, status: record.status } 
+        : record;
+
+      const interpolatedInputs: Record<string, any> = {};
+      for (const [key, val] of Object.entries(inputs)) {
+        if (typeof val === 'string') {
+          interpolatedInputs[key] = val.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, path) => {
+            const cleanPath = path.trim().replace(/^(trigger\.record\.|record\.)/, '');
+            const parts = cleanPath.split('.');
+            let current: any = recordData;
+            for (const part of parts) {
+              if (current === null || current === undefined) break;
+              current = current[part];
+            }
+            return current !== undefined && current !== null ? String(current) : '';
+          });
+        } else {
+          interpolatedInputs[key] = val;
+        }
+      }
+
+      await AutomationEngine.runPipeline(automation, record, interpolatedInputs, 'WORKFLOW_NODE', globalPrisma);
       return { success: true };
     }
   }
