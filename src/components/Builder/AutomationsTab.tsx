@@ -5,7 +5,8 @@ import { API_BASE_URL } from '../../config';
 import { 
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
-  ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers
+  ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers,
+  Copy, GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -584,6 +585,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
   const [actions, setActions] = useState<any[]>([]);
   const [expandedActionIdx, setExpandedActionIdx] = useState<number | null>(null);
   const [fieldsEditorModes, setFieldsEditorModes] = useState<Record<number, 'visual' | 'json'>>({});
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Visual Condition states
   const [visualConditions, setVisualConditions] = useState<VisualConditionRow[]>([]);
@@ -765,6 +768,45 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
     newActions.splice(idx, 1);
     setActions(newActions);
     setExpandedActionIdx(null);
+  };
+
+  const handleDuplicateAction = (idx: number) => {
+    const cloned = JSON.parse(JSON.stringify(actions[idx]));
+    const newActions = [...actions];
+    newActions.splice(idx + 1, 0, cloned);
+    setActions(newActions);
+    setExpandedActionIdx(idx + 1);
+    toast.success('Step duplicated');
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+      const reordered = [...actions];
+      const [dragged] = reordered.splice(draggedIndex, 1);
+      reordered.splice(dragOverIndex, 0, dragged);
+      setActions(reordered);
+      
+      if (expandedActionIdx !== null) {
+        const target = actions[expandedActionIdx];
+        const newIdx = reordered.indexOf(target);
+        setExpandedActionIdx(newIdx !== -1 ? newIdx : null);
+      }
+      toast.success('Steps reordered');
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleSaveRule = async () => {
@@ -1113,22 +1155,47 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
               {actions.map((action, idx) => (
                 <div 
                   key={idx}
-                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-200"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className={cn(
+                    "bg-white dark:bg-zinc-900 border rounded-2xl overflow-hidden shadow-sm transition-all duration-200",
+                    draggedIndex === idx ? "opacity-35 border-dashed border-indigo-400" : "border-zinc-200 dark:border-zinc-800",
+                    dragOverIndex === idx && draggedIndex !== idx ? "border-t-4 border-t-indigo-500 scale-[0.99] translate-y-1" : ""
+                  )}
                 >
                   <div 
                     onClick={() => setExpandedActionIdx(expandedActionIdx === idx ? null : idx)}
                     className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors select-none"
                   >
                     <div className="flex items-center gap-3">
+                      <GripVertical size={14} className="text-zinc-400 cursor-grab active:cursor-grabbing shrink-0" />
                       <span className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-[10px] font-bold">{idx + 1}</span>
                       <div>
-                        <p className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200">{action.type.replace(/_/g, ' ')}</p>
-                        <p className="text-[8px] text-zinc-400 mt-0.5">Configure step details</p>
+                        <p className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200">
+                          {action.config?.stepName || action.type.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-[8px] text-zinc-400 mt-0.5">
+                          {action.config?.stepName ? action.type.replace(/_/g, ' ') : 'Configure step details'}
+                        </p>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicateAction(idx);
+                        }}
+                        className="p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/5 rounded-lg transition-all cursor-pointer"
+                        title="Duplicate Step"
+                      >
+                        <Copy size={12} />
+                      </button>
+                      <button 
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRemoveAction(idx);
@@ -1143,7 +1210,23 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
                   </div>
 
                   {expandedActionIdx === idx && (
-                    <div className="px-6 pb-6 pt-2 border-t border-zinc-250 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-4">
+                    <div className="px-6 pb-6 pt-4 border-t border-zinc-250 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-4">
+                      {/* Step Name / Label Input */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-400">Step Custom Label</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Send manager approval alert"
+                          value={action.config?.stepName || ''}
+                          onChange={(e) => {
+                            const updated = [...actions];
+                            if (!updated[idx].config) updated[idx].config = {};
+                            updated[idx].config.stepName = e.target.value;
+                            setActions(updated);
+                          }}
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
                                            {/* Create Record Form */}
                       {action.type === 'CREATE_RECORD' && (
                         <div className="space-y-3">
