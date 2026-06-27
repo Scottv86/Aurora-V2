@@ -1590,6 +1590,8 @@ export const ModuleEditor = () => {
     subtitleFieldIds: [] as string[],
   });
   const [isFieldSelectorOpen, setIsFieldSelectorOpen] = useState(false);
+  const [localAutomations, setLocalAutomations] = useState<any[]>([]);
+  const [deletedAutomationIds, setDeletedAutomationIds] = useState<string[]>([]);
   
   const [layout, setLayout] = useState<Layout>([]);
   const allFields = React.useMemo(() => flattenFields(layout), [layout]);
@@ -2280,6 +2282,22 @@ export const ModuleEditor = () => {
           });
           setForms(normalizedForms);
         }
+
+        // Load automations for the module
+        try {
+          const autResponse = await fetch(`${API_BASE_URL}/api/automations?moduleId=${id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant.id || ''
+            }
+          });
+          if (autResponse.ok) {
+            const autData = await autResponse.json();
+            setLocalAutomations(autData);
+          }
+        } catch (err) {
+          console.error("Error loading automations:", err);
+        }
         
       } catch (error) {
         console.error("Error loading module:", error);
@@ -2343,10 +2361,76 @@ export const ModuleEditor = () => {
       }
 
       const savedModule = await response.json();
-      
+      const actualModuleId = savedModule.id || id;
+
+      // 2. Synchronize automations
+      // A. Delete removed rules
+      for (const delId of deletedAutomationIds) {
+        try {
+          await fetch(`${API_BASE_URL}/api/automations/${delId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant.id || ''
+            }
+          });
+        } catch (err) {
+          console.error(`Failed to delete automation ${delId}:`, err);
+        }
+      }
+
+      // B. Create or update remaining rules
+      for (const aut of localAutomations) {
+        const isNewAut = String(aut.id).startsWith('temp-');
+        const autUrl = isNewAut
+          ? `${API_BASE_URL}/api/automations`
+          : `${API_BASE_URL}/api/automations/${aut.id}`;
+
+        const autPayload = {
+          ...aut,
+          id: isNewAut ? undefined : aut.id,
+          moduleId: actualModuleId
+        };
+
+        try {
+          const autRes = await fetch(autUrl, {
+            method: isNewAut ? 'POST' : 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant.id || ''
+            },
+            body: JSON.stringify(autPayload)
+          });
+          if (!autRes.ok) {
+            console.error(`Failed to save automation ${aut.name}:`, await autRes.text());
+          }
+        } catch (err) {
+          console.error(`Error saving automation ${aut.name}:`, err);
+        }
+      }
+
+      setDeletedAutomationIds([]);
+
+      // Refresh local automations state from DB to get actual DB ids
+      try {
+        const refreshRes = await fetch(`${API_BASE_URL}/api/automations?moduleId=${actualModuleId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id || ''
+          }
+        });
+        if (refreshRes.ok) {
+          const freshAuts = await refreshRes.json();
+          setLocalAutomations(freshAuts);
+        }
+      } catch (err) {
+        console.error("Error refreshing automations after save:", err);
+      }
+
       await refreshModules();
       queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
-      
+
       if (isNew) {
         toast.success('Module created successfully!');
         navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
@@ -2359,7 +2443,7 @@ export const ModuleEditor = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, dataPopulationRules, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient, validationRules]);
+  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, dataPopulationRules, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient, validationRules, localAutomations, deletedAutomationIds]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -9049,6 +9133,10 @@ export const ModuleEditor = () => {
             <AutomationsTab 
               moduleId={routeId}
               fields={flattenFields(layout)}
+              automations={localAutomations}
+              setAutomations={setLocalAutomations}
+              deletedAutomationIds={deletedAutomationIds}
+              setDeletedAutomationIds={setDeletedAutomationIds}
             />
           ) : activeTab === 'deployment' ? (
             <div className="flex h-full w-full overflow-hidden">

@@ -564,10 +564,25 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
   );
 };
 
-export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields = [] }) => {
+interface AutomationsTabProps {
+  moduleId: string | undefined;
+  fields?: any[];
+  automations: any[];
+  setAutomations: React.Dispatch<React.SetStateAction<any[]>>;
+  deletedAutomationIds: string[];
+  setDeletedAutomationIds: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
+export const AutomationsTab: React.FC<AutomationsTabProps> = ({
+  moduleId,
+  fields = [],
+  automations,
+  setAutomations,
+  deletedAutomationIds,
+  setDeletedAutomationIds
+}) => {
   const { tenant, modules } = usePlatform();
   const { session } = useAuth();
-  const [automations, setAutomations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   
@@ -604,8 +619,10 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
   }, [automations, selectedRuleId]);
 
   useEffect(() => {
-    fetchAutomations();
-  }, [moduleId, tenant?.id]);
+    if (selectedRuleId === null && automations.length > 0) {
+      setSelectedRuleId(automations[0].id);
+    }
+  }, [automations, selectedRuleId]);
 
   // Load selection state
   useEffect(() => {
@@ -668,81 +685,25 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
     }
   }, [selectedRuleId, selectedRule]);
 
-  const fetchAutomations = async () => {
-    if (!tenant?.id || !moduleId) return;
-    setLoading(true);
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-      const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${moduleId}`, {
-        headers: {
-          'x-tenant-id': tenant.id,
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAutomations(data);
-        if (selectedRuleId === null && data.length > 0) {
-          setSelectedRuleId(data[0].id);
-        }
-      } else {
-        toast.error('Failed to load automations');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load automations');
-    } finally {
-      setLoading(false);
-    }
+  // fetchAutomations is handled by the parent ModuleEditor
+
+  const handleToggleActive = (rule: any, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const updatedActive = !rule.isActive;
+    const updated = automations.map(a => a.id === rule.id ? { ...a, isActive: updatedActive } : a);
+    setAutomations(updated);
+    toast.success(`Automation is now ${updatedActive ? 'active' : 'inactive'} (click Save to persist)`);
   };
 
-  const handleToggleActive = async (rule: any, event: React.MouseEvent) => {
+  const handleDeleteRule = (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!tenant?.id) return;
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-      const updatedActive = !rule.isActive;
-      const res = await fetch(`${API_BASE_URL}/api/automations/${rule.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenant.id,
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ isActive: updatedActive })
-      });
-      if (res.ok) {
-        toast.success(`Automation is now ${updatedActive ? 'active' : 'inactive'}`);
-        fetchAutomations();
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to toggle automation state');
-    }
-  };
-
-  const handleDeleteRule = async (id: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (!tenant?.id) return;
     if (!confirm('Are you sure you want to delete this automation?')) return;
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-      const res = await fetch(`${API_BASE_URL}/api/automations/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'x-tenant-id': tenant.id,
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        toast.success('Automation deleted');
-        if (selectedRuleId === id) setSelectedRuleId(null);
-        fetchAutomations();
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to delete automation');
+    if (!String(id).startsWith('temp-')) {
+      setDeletedAutomationIds(prev => [...prev, id]);
     }
+    setAutomations(prev => prev.filter(a => a.id !== id));
+    if (selectedRuleId === id) setSelectedRuleId(null);
+    toast.success('Automation marked for deletion (click Save to persist)');
   };
 
   const handleCreateRule = () => {
@@ -809,7 +770,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
     setDragOverIndex(null);
   };
 
-  const handleSaveRule = async () => {
+  const handleSaveRule = () => {
     if (!name.trim()) {
       toast.error('Rule name is required');
       return;
@@ -842,7 +803,11 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
       ? conditions 
       : compileVisualConditions(visualConditions, conditionMatchType, fields);
 
-    const payload = {
+    const isNew = selectedRuleId === 'new';
+    const actualId = isNew ? `temp-${Date.now()}` : selectedRuleId;
+
+    const newRule = {
+      id: actualId,
       name,
       description,
       moduleId,
@@ -856,37 +821,14 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
       conditions: finalConditions.trim() || null
     };
 
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-      const isNew = selectedRuleId === 'new';
-      const url = isNew 
-        ? `${API_BASE_URL}/api/automations` 
-        : `${API_BASE_URL}/api/automations/${selectedRuleId}`;
-      
-      const res = await fetch(url, {
-        method: isNew ? 'POST' : 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': tenant.id || '',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (res.ok) {
-        const savedData = await res.json();
-        toast.success(isNew ? 'Automation created successfully' : 'Automation updated');
-        fetchAutomations();
-        if (isNew && savedData?.id) {
-          setSelectedRuleId(savedData.id);
-        }
-      } else {
-        const errorData = await res.json();
-        toast.error(errorData.error || 'Failed to save automation');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error saving automation');
+    if (isNew) {
+      setAutomations([...automations, newRule]);
+      setSelectedRuleId(actualId);
+      toast.success('Changes applied locally. Save module to persist.');
+    } else {
+      const updated = automations.map(a => a.id === selectedRuleId ? newRule : a);
+      setAutomations(updated);
+      toast.success('Changes applied locally. Save module to persist.');
     }
   };
 
@@ -1145,7 +1087,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({ moduleId, fields
                   onClick={handleSaveRule}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md shrink-0 cursor-pointer"
                 >
-                  Save Automation
+                  Apply Changes
                 </button>
               </div>
             </div>
