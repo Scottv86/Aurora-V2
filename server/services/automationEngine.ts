@@ -1,7 +1,7 @@
 import { WorkflowEngine } from './workflowEngine';
 
 export interface AutomationAction {
-  type: 'CREATE_RECORD' | 'UPDATE_RECORD' | 'GET_RECORD' | 'SEND_EMAIL' | 'SEND_INTERNAL_PING';
+  type: 'CREATE_RECORD' | 'UPDATE_RECORD' | 'GET_RECORD' | 'SEND_EMAIL' | 'SEND_INTERNAL_PING' | 'SET_ASSIGNEE';
   config: any;
 }
 
@@ -287,6 +287,44 @@ export class AutomationEngine {
               }
             });
             output = await this.getMappedRecord(created, targetModuleId, db);
+            break;
+          }
+
+          case 'SET_ASSIGNEE': {
+            const targetType = action.config.targetType || 'TRIGGERING'; // 'TRIGGERING' | 'SPECIFIC'
+            let targetRecordId = null;
+
+            if (targetType === 'TRIGGERING') {
+              targetRecordId = triggerRecord?.id;
+            } else {
+              targetRecordId = this.interpolateString(action.config.recordId || '', context);
+            }
+
+            if (!targetRecordId) throw new Error('Could not resolve target record ID for SET_ASSIGNEE');
+
+            const assigneeId = this.interpolateString(action.config.assigneeId || '', context);
+
+            // Fetch current record first to merge data object fields
+            const existing = await db.record.findUnique({
+              where: { id: targetRecordId }
+            });
+
+            if (!existing) throw new Error(`Record with ID ${targetRecordId} not found`);
+
+            const mergedData = {
+              ...(existing.data as Record<string, any> || {}),
+              assigneeId: assigneeId
+            };
+
+            const finalData = await this.generateKeysAndAutonumbers(existing.moduleId, mergedData, db);
+
+            const updated = await db.record.update({
+              where: { id: targetRecordId },
+              data: {
+                data: finalData
+              }
+            });
+            output = await this.getMappedRecord(updated, existing.moduleId, db);
             break;
           }
 

@@ -6,7 +6,7 @@ import {
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers,
-  Copy, GripVertical
+  Copy, GripVertical, UserCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -581,9 +581,12 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   deletedAutomationIds,
   setDeletedAutomationIds
 }) => {
-  const { tenant, modules } = usePlatform();
+  const { tenant, modules, members = [] } = usePlatform();
   const { session } = useAuth();
-  const [loading, setLoading] = useState(false);
+  if (deletedAutomationIds.length < 0) {
+    console.log(deletedAutomationIds);
+  }
+  const loading = false; // loader state handled by parent module editor
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   
   // Runs list states
@@ -621,6 +624,86 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   const [isAdvancedCondition, setIsAdvancedCondition] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'runs'>('properties');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Reactive property update helpers
+  const handleUpdateRuleProperty = (updates: Partial<any>) => {
+    if (!selectedRuleId) return;
+    setAutomations(prev => prev.map(a => a.id === selectedRuleId ? { ...a, ...updates } : a));
+  };
+
+  const handleUpdateInputs = (updates: Partial<any>) => {
+    handleUpdateRuleProperty({
+      inputs: {
+        ...inputsPayload,
+        ...updates
+      }
+    });
+  };
+
+  // State wrappers for full compatibility with nested card fields
+  const setName = (val: string) => handleUpdateRuleProperty({ name: val });
+  const setDescription = (val: string) => handleUpdateRuleProperty({ description: val });
+  const setConditions = (val: string) => handleUpdateRuleProperty({ conditions: val });
+
+  const setActions = (newActionsOrFn: any[] | ((prev: any[]) => any[])) => {
+    if (typeof newActionsOrFn === 'function') {
+      const nextActions = newActionsOrFn(actions);
+      handleUpdateRuleProperty({ actions: nextActions });
+    } else {
+      handleUpdateRuleProperty({ actions: newActionsOrFn });
+    }
+  };
+
+  const setVisualConditions = (newValOrFn: any[] | ((prev: any[]) => any[])) => {
+    if (typeof newValOrFn === 'function') {
+      const nextVal = newValOrFn(visualConditions);
+      handleUpdateInputs({ visualConditions: nextVal });
+    } else {
+      handleUpdateInputs({ visualConditions: newValOrFn });
+    }
+  };
+
+  const setConditionMatchType = (newValOrFn: 'AND' | 'OR' | ((prev: 'AND' | 'OR') => 'AND' | 'OR')) => {
+    if (typeof newValOrFn === 'function') {
+      const nextVal = newValOrFn(conditionMatchType);
+      handleUpdateInputs({ conditionMatchType: nextVal });
+    } else {
+      handleUpdateInputs({ conditionMatchType: newValOrFn });
+    }
+  };
+
+  const setTriggerType = (newType: string) => {
+    let triggersPayload = [];
+    if (newType === 'RECORD_CREATED' || newType === 'RECORD_UPDATED') {
+      triggersPayload.push({
+        type: 'MODULE_EVENT',
+        on: newType,
+        moduleId: moduleId
+      });
+    } else if (newType === 'QUICK_ACTION') {
+      triggersPayload.push({
+        type: 'QUICK_ACTION',
+        label: selectedRule?.name || '',
+        icon: 'Play'
+      });
+    } else if (newType === 'CALL_ONLY') {
+      triggersPayload.push({
+        type: 'CALL_ONLY'
+      });
+    }
+    handleUpdateRuleProperty({ triggers: triggersPayload });
+  };
+
+  const handleToggleAdvanced = () => {
+    const nextVal = !isAdvancedCondition;
+    setIsAdvancedCondition(nextVal);
+    if (nextVal) {
+      const compiled = compileVisualConditions(visualConditions, conditionMatchType, fields);
+      handleUpdateRuleProperty({ conditions: compiled });
+    } else {
+      handleUpdateRuleProperty({ conditions: null });
+    }
+  };
 
   // Auto-selection of first rule on load
   useEffect(() => {
@@ -677,8 +760,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       name: 'New Automation',
       description: '',
       moduleId,
-      inputs: {},
-      actions: [],
+      inputs: {} as any,
+      actions: [] as any[],
       triggers: [
         {
           type: 'MODULE_EVENT',
@@ -687,7 +770,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
         }
       ],
       isActive: true,
-      conditions: null
+      conditions: null as string | null
     };
     setAutomations([...automations, newRule]);
     setSelectedRuleId(tempId);
@@ -699,7 +782,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       UPDATE_RECORD: { targetType: 'TRIGGERING', recordId: '', fields: {} },
       GET_RECORD: { targetModuleId: '', queryField: '', queryValue: '' },
       SEND_EMAIL: { to: '', subject: '', body: '' },
-      SEND_INTERNAL_PING: { channel: 'general', message: '' }
+      SEND_INTERNAL_PING: { channel: 'general', message: '' },
+      SET_ASSIGNEE: { targetType: 'TRIGGERING', recordId: '', assigneeId: '' }
     };
 
     const newActions = [...actions, { type, config: defaultConfigs[type] || {} }];
@@ -968,6 +1052,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'CREATE_RECORD', label: 'Create Record', desc: 'Insert new row', icon: Database },
                   { id: 'UPDATE_RECORD', label: 'Update Record', desc: 'Update row parameters', icon: RefreshCw },
                   { id: 'GET_RECORD', label: 'Fetch Record', desc: 'Lookup rows', icon: ArrowRight },
+                  { id: 'SET_ASSIGNEE', label: 'Set Assignee', desc: 'Assign row to user', icon: UserCheck },
                   { id: 'SEND_EMAIL', label: 'Send Email', desc: 'Dispatch SMTP alert', icon: Mail },
                   { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', desc: 'Log channel message', icon: MessageSquare }
                 ].map((actionType) => {
@@ -1010,7 +1095,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
             {/* Canvas steps list */}
             <div className="flex-1 space-y-4">
-              {actions.map((action, idx) => (
+              {actions.map((action: any, idx: number) => (
                 <div 
                   key={idx}
                   draggable
@@ -1165,6 +1250,61 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                                 actions={actions}
                               />
                             )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Set Assignee Form */}
+                      {action.type === 'SET_ASSIGNEE' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Target Record Type</label>
+                            <select 
+                              value={action.config.targetType || 'TRIGGERING'}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.targetType = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="TRIGGERING">Triggering Record</option>
+                              <option value="SPECIFIC">Specific Record ID Reference</option>
+                            </select>
+                          </div>
+                          {action.config.targetType === 'SPECIFIC' && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Record ID Reference</label>
+                              <input 
+                                type="text"
+                                value={action.config.recordId || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.recordId = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                                placeholder="e.g. {{ steps.0.output.id }}"
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Assign To</label>
+                            <select 
+                              value={action.config.assigneeId || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.assigneeId = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="">Select Member...</option>
+                              {members.map((m: any) => (
+                                <option key={m.id} value={m.id}>{m.fullName || m.email || m.id}</option>
+                              ))}
+                            </select>
                           </div>
                         </div>
                       )}
@@ -1498,7 +1638,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                     <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Precondition Gates</h4>
                     <button
                       type="button"
-                      onClick={() => setIsAdvancedCondition(!isAdvancedCondition)}
+                      onClick={handleToggleAdvanced}
                       className="text-[8px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       {isAdvancedCondition ? <Sparkles size={8} /> : <Code size={8} />}
@@ -1534,7 +1674,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                       )}
                       
                       <div className="space-y-2">
-                        {visualConditions.map((row) => {
+                        {visualConditions.map((row: any) => {
                           const selectedField = fields.find(f => f.id === row.fieldId || f.name === row.fieldId);
                           const operators = getFieldOperators(selectedField);
                           

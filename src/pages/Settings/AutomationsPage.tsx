@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../../config';
 import { 
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
-  ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Globe, Layers, Calendar, Search, Sparkles, Code, Play
+  ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Globe, Layers, Calendar, Search, Sparkles, Code, Play, UserCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -553,7 +553,7 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
 };
 
 export const AutomationsPage: React.FC = () => {
-  const { tenant, modules } = usePlatform();
+  const { tenant, modules, members = [] } = usePlatform();
   const { session } = useAuth();
   const [automations, setAutomations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -785,7 +785,8 @@ export const AutomationsPage: React.FC = () => {
       UPDATE_RECORD: { targetType: 'TRIGGERING', recordId: '', fields: {} },
       GET_RECORD: { targetModuleId: '', queryField: '', queryValue: '' },
       SEND_EMAIL: { to: '', subject: '', body: '' },
-      SEND_INTERNAL_PING: { channel: 'general', message: '' }
+      SEND_INTERNAL_PING: { channel: 'general', message: '' },
+      SET_ASSIGNEE: { targetType: 'TRIGGERING', recordId: '', assigneeId: '' }
     };
 
     const newActions = [...actions, { type, config: defaultConfigs[type] || {} }];
@@ -1154,6 +1155,7 @@ export const AutomationsPage: React.FC = () => {
                   { id: 'CREATE_RECORD', label: 'Create Record', desc: 'Insert new row', icon: Database },
                   { id: 'UPDATE_RECORD', label: 'Update Record', desc: 'Update row parameters', icon: RefreshCw },
                   { id: 'GET_RECORD', label: 'Fetch Record', desc: 'Lookup rows', icon: ArrowRight },
+                  { id: 'SET_ASSIGNEE', label: 'Set Assignee', desc: 'Assign row to user', icon: UserCheck },
                   { id: 'SEND_EMAIL', label: 'Send Email', desc: 'Dispatch SMTP alert', icon: Mail },
                   { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', desc: 'Log channel message', icon: MessageSquare }
                 ].map((actionType) => {
@@ -1317,6 +1319,61 @@ export const AutomationsPage: React.FC = () => {
                                 actions={actions}
                               />
                             )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Set Assignee Form */}
+                      {action.type === 'SET_ASSIGNEE' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Target Record Type</label>
+                            <select 
+                              value={action.config.targetType || 'TRIGGERING'}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.targetType = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="TRIGGERING">Triggering Record</option>
+                              <option value="SPECIFIC">Specific Record ID Reference</option>
+                            </select>
+                          </div>
+                          {action.config.targetType === 'SPECIFIC' && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Record ID Reference</label>
+                              <input 
+                                type="text"
+                                value={action.config.recordId || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.recordId = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                                placeholder="e.g. {{ steps.0.output.id }}"
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Assign To</label>
+                            <select 
+                              value={action.config.assigneeId || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.assigneeId = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="">Select Member...</option>
+                              {members.map((m: any) => (
+                                <option key={m.id} value={m.id}>{m.fullName || m.email || m.id}</option>
+                              ))}
+                            </select>
                           </div>
                         </div>
                       )}
