@@ -626,20 +626,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
   // Load selection state
   useEffect(() => {
-    if (selectedRuleId === 'new') {
-      setName('');
-      setDescription('');
-      setIsActive(true);
-      setTriggerType('RECORD_CREATED');
-      setConditions('');
-      setVisualConditions([]);
-      setConditionMatchType('AND');
-      setIsAdvancedCondition(false);
-      setActions([]);
-      setExpandedActionIdx(null);
-      setFieldsEditorModes({});
-      setRightSidebarTab('properties');
-    } else if (selectedRule) {
+    if (selectedRule) {
       setName(selectedRule.name);
       setDescription(selectedRule.description || '');
       setIsActive(selectedRule.isActive);
@@ -685,6 +672,65 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
     }
   }, [selectedRuleId, selectedRule]);
 
+  // Synchronize local edit states to the parent automations prop on change
+  useEffect(() => {
+    if (selectedRuleId === null || selectedRuleId === 'new') return;
+    
+    let triggersPayload = [];
+    if (triggerType === 'RECORD_CREATED' || triggerType === 'RECORD_UPDATED') {
+      triggersPayload.push({
+        type: 'MODULE_EVENT',
+        on: triggerType,
+        moduleId: moduleId
+      });
+    } else if (triggerType === 'QUICK_ACTION') {
+      triggersPayload.push({
+        type: 'QUICK_ACTION',
+        label: name,
+        icon: 'Play'
+      });
+    } else if (triggerType === 'CALL_ONLY') {
+      triggersPayload.push({
+        type: 'CALL_ONLY'
+      });
+    }
+
+    const finalConditions = isAdvancedCondition 
+      ? conditions 
+      : compileVisualConditions(visualConditions, conditionMatchType, fields);
+
+    const updatedRule = {
+      id: selectedRuleId,
+      name,
+      description,
+      moduleId,
+      inputs: {
+        visualConditions,
+        conditionMatchType
+      },
+      actions,
+      triggers: triggersPayload,
+      isActive,
+      conditions: finalConditions.trim() || null
+    };
+
+    const existing = automations.find(a => a.id === selectedRuleId);
+    if (existing) {
+      const hasChanged = 
+        existing.name !== name ||
+        existing.description !== description ||
+        existing.isActive !== isActive ||
+        JSON.stringify(existing.actions) !== JSON.stringify(actions) ||
+        JSON.stringify(existing.triggers) !== JSON.stringify(triggersPayload) ||
+        JSON.stringify(existing.inputs) !== JSON.stringify(updatedRule.inputs) ||
+        existing.conditions !== updatedRule.conditions;
+
+      if (hasChanged) {
+        setAutomations(prev => prev.map(a => a.id === selectedRuleId ? updatedRule : a));
+      }
+    }
+  }, [name, description, isActive, triggerType, conditions, visualConditions, conditionMatchType, actions, isAdvancedCondition, selectedRuleId, moduleId]);
+
   // fetchAutomations is handled by the parent ModuleEditor
 
   const handleToggleActive = (rule: any, event: React.MouseEvent) => {
@@ -707,7 +753,26 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   };
 
   const handleCreateRule = () => {
-    setSelectedRuleId('new');
+    const tempId = `temp-${Date.now()}`;
+    const newRule = {
+      id: tempId,
+      name: 'New Automation',
+      description: '',
+      moduleId,
+      inputs: {},
+      actions: [],
+      triggers: [
+        {
+          type: 'MODULE_EVENT',
+          on: 'RECORD_CREATED',
+          moduleId
+        }
+      ],
+      isActive: true,
+      conditions: null
+    };
+    setAutomations([...automations, newRule]);
+    setSelectedRuleId(tempId);
   };
 
   const handleAddAction = (type: string) => {
@@ -770,67 +835,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
     setDragOverIndex(null);
   };
 
-  const handleSaveRule = () => {
-    if (!name.trim()) {
-      toast.error('Rule name is required');
-      return;
-    }
-    if (actions.length === 0) {
-      toast.error('At least one action is required');
-      return;
-    }
-
-    let triggersPayload = [];
-    if (triggerType === 'RECORD_CREATED' || triggerType === 'RECORD_UPDATED') {
-      triggersPayload.push({
-        type: 'MODULE_EVENT',
-        on: triggerType,
-        moduleId: moduleId
-      });
-    } else if (triggerType === 'QUICK_ACTION') {
-      triggersPayload.push({
-        type: 'QUICK_ACTION',
-        label: name,
-        icon: 'Play'
-      });
-    } else if (triggerType === 'CALL_ONLY') {
-      triggersPayload.push({
-        type: 'CALL_ONLY'
-      });
-    }
-
-    const finalConditions = isAdvancedCondition 
-      ? conditions 
-      : compileVisualConditions(visualConditions, conditionMatchType, fields);
-
-    const isNew = selectedRuleId === 'new';
-    const actualId = isNew ? `temp-${Date.now()}` : selectedRuleId;
-
-    const newRule = {
-      id: actualId,
-      name,
-      description,
-      moduleId,
-      inputs: {
-        visualConditions,
-        conditionMatchType
-      },
-      actions,
-      triggers: triggersPayload,
-      isActive,
-      conditions: finalConditions.trim() || null
-    };
-
-    if (isNew) {
-      setAutomations([...automations, newRule]);
-      setSelectedRuleId(actualId);
-      toast.success('Changes applied locally. Save module to persist.');
-    } else {
-      const updated = automations.map(a => a.id === selectedRuleId ? newRule : a);
-      setAutomations(updated);
-      toast.success('Changes applied locally. Save module to persist.');
-    }
-  };
+  // handleSaveRule removed, changes are bound reactively
 
   const viewRuns = async (rule: any) => {
     if (!rule || rule.id === 'new') return;
@@ -1082,14 +1087,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                 <p className="text-zinc-500 text-xs mt-0.5">Design sequential task blocks triggered by system events.</p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleSaveRule}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md shrink-0 cursor-pointer"
-                >
-                  Apply Changes
-                </button>
-              </div>
+              {/* Save header actions removed, parent module save handles rules persistence */}
             </div>
 
             {/* Canvas steps list */}
