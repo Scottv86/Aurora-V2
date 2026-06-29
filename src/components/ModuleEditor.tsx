@@ -1588,6 +1588,9 @@ export const ModuleEditor = () => {
     nextKeyNumber: 1,
     titleFieldId: '',
     subtitleFieldIds: [] as string[],
+    customerRefPrefix: '',
+    customerRefSuffix: '',
+    customerRefNextNumber: 10001,
   });
   const [isFieldSelectorOpen, setIsFieldSelectorOpen] = useState(false);
   const [localAutomations, setLocalAutomations] = useState<any[]>([]);
@@ -2192,6 +2195,9 @@ export const ModuleEditor = () => {
                 nextKeyNumber: (standardModule as any).nextKeyNumber || 1,
                 titleFieldId: (standardModule as any).config?.titleFieldId || '',
                 subtitleFieldIds: (standardModule as any).config?.subtitleFieldIds || [],
+                customerRefPrefix: (standardModule as any).config?.customerRefPrefix || '',
+                customerRefSuffix: (standardModule as any).config?.customerRefSuffix || '',
+                customerRefNextNumber: (standardModule as any).config?.customerRefNextNumber || 10001,
               });
               setDataPopulationRules([]);
               setBreadcrumbOverride(id, standardModule.name);
@@ -2217,6 +2223,9 @@ export const ModuleEditor = () => {
           nextKeyNumber: data.nextKeyNumber || 1,
           titleFieldId: data.config?.titleFieldId || '',
           subtitleFieldIds: data.config?.subtitleFieldIds || [],
+          customerRefPrefix: data.customerRefPrefix !== undefined ? data.customerRefPrefix : (data.config?.customerRefPrefix !== undefined ? data.config.customerRefPrefix : ''),
+          customerRefSuffix: data.customerRefSuffix !== undefined ? data.customerRefSuffix : (data.config?.customerRefSuffix !== undefined ? data.config.customerRefSuffix : ''),
+          customerRefNextNumber: data.customerRefNextNumber !== undefined ? Number(data.customerRefNextNumber) : (data.config?.customerRefNextNumber !== undefined ? Number(data.config.customerRefNextNumber) : 10001),
         });
         
         if (data.interfaceSettings) {
@@ -10248,34 +10257,77 @@ export const ModuleEditor = () => {
                                 )}
 
                                 {selectedForm.usage === 'public_link' && (
-                                  <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Public Form URL</label>
-                                    {id === 'new' ? (
-                                      <div className="text-xs text-zinc-500 italic px-1">
-                                        Save the module first to generate a public link.
+                                  <>
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Public Form URL</label>
+                                      {id === 'new' ? (
+                                        <div className="text-xs text-zinc-500 italic px-1">
+                                          Save the module first to generate a public link.
+                                        </div>
+                                      ) : (
+                                        <div className="flex gap-2">
+                                          <input 
+                                            type="text" 
+                                            readOnly 
+                                            value={`${window.location.origin}/portal?moduleId=${id}`}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                          />
+                                          <button 
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(`${window.location.origin}/portal?moduleId=${id}`);
+                                              toast.success('Public form URL copied to clipboard');
+                                            }}
+                                            className="px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                            title="Copy Link"
+                                          >
+                                            <Copy size={12} />
+                                            <span>Copy</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Customer Reference Number Configuration */}
+                                    <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                                      <div className="space-y-0.5">
+                                        <p className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest px-1">Customer Reference Number</p>
+                                        <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest px-1 font-sans">Sequence Format for public submissions</p>
                                       </div>
-                                    ) : (
-                                      <div className="flex gap-2">
+                                      
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                          <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Prefix</label>
+                                          <input 
+                                            type="text"
+                                            value={(moduleSettings as any).customerRefPrefix !== undefined ? (moduleSettings as any).customerRefPrefix : ''}
+                                            onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefPrefix: e.target.value.toUpperCase() }))}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                            placeholder="e.g. APP"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Suffix</label>
+                                          <input 
+                                            type="text"
+                                            value={(moduleSettings as any).customerRefSuffix !== undefined ? (moduleSettings as any).customerRefSuffix : ''}
+                                            onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefSuffix: e.target.value.toUpperCase() }))}
+                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                            placeholder="e.g. -T"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Next Number</label>
                                         <input 
-                                          type="text" 
-                                          readOnly 
-                                          value={`${window.location.origin}/portal?moduleId=${id}`}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                          type="number"
+                                          value={(moduleSettings as any).customerRefNextNumber !== undefined ? (moduleSettings as any).customerRefNextNumber : 10001}
+                                          onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefNextNumber: Number(e.target.value) }))}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                                         />
-                                        <button 
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(`${window.location.origin}/portal?moduleId=${id}`);
-                                            toast.success('Public form URL copied to clipboard');
-                                          }}
-                                          className="px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                                          title="Copy Link"
-                                        >
-                                          <Copy size={12} />
-                                          <span>Copy</span>
-                                        </button>
                                       </div>
-                                    )}
-                                  </div>
+                                    </div>
+                                  </>
                                 )}
 
                                 <div className="space-y-2">

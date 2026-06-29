@@ -58,12 +58,33 @@ router.post('/submissions', async (req, res) => {
     }
 
     // 3. Create the Record
+    let customerRef = undefined;
+    const targetConfig = (targetModule.config || {}) as any;
+    if (targetConfig.customerRefPrefix) {
+      const prefix = targetConfig.customerRefPrefix;
+      const suffix = targetConfig.customerRefSuffix || '';
+      const nextNum = targetConfig.customerRefNextNumber !== undefined ? Number(targetConfig.customerRefNextNumber) : 23734592;
+
+      customerRef = `${prefix}-${nextNum}${suffix}`;
+
+      await globalPrisma.module.update({
+        where: { id: targetModule.id },
+        data: {
+          config: {
+            ...targetConfig,
+            customerRefNextNumber: nextNum + 1
+          }
+        }
+      });
+    }
+
     const recordData = {
       submitted_by: fullName,
       email: email,
       description: description,
       form_type: type,
       source: 'External Portal',
+      ...(customerRef ? { _customerRef: customerRef } : {}),
       ...otherData
     };
 
@@ -90,6 +111,7 @@ router.post('/submissions', async (req, res) => {
     res.status(201).json({ 
       success: true, 
       id: record.id,
+      customerRef: customerRef || record.id,
       message: 'Submission received successfully'
     });
   } catch (error: any) {
@@ -145,15 +167,36 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
 
     let targetModuleId = moduleData.id;
     let originalTargetModuleId = moduleData.id;
+    let customerRef = undefined;
 
     if (triageModule) {
       targetModuleId = triageModule.id;
+      const origConfig = (moduleData.config || {}) as any;
+
+      if (origConfig.customerRefPrefix) {
+        const prefix = origConfig.customerRefPrefix;
+        const suffix = origConfig.customerRefSuffix || '';
+        const nextNum = origConfig.customerRefNextNumber !== undefined ? Number(origConfig.customerRefNextNumber) : 10001;
+
+        customerRef = `${prefix}-${nextNum}${suffix}`;
+
+        await globalPrisma.module.update({
+          where: { id: moduleData.id },
+          data: {
+            config: {
+              ...origConfig,
+              customerRefNextNumber: nextNum + 1
+            }
+          }
+        });
+      }
     }
 
     const submissionData = {
       ...(data || {}),
       _originalModuleId: originalTargetModuleId,
-      _submissionSource: 'Public Form'
+      _submissionSource: 'Public Form',
+      ...(customerRef ? { _customerRef: customerRef } : {})
     };
 
     const record = await globalPrisma.record.create({
@@ -179,6 +222,7 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
     res.status(201).json({ 
       success: true, 
       id: record.id,
+      customerRef: customerRef || record.id,
       message: 'Submission received successfully'
     });
   } catch (error) {

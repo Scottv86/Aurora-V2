@@ -30,10 +30,11 @@ export const IntakeSettingsPage = () => {
 
   const loadTriageConfig = async () => {
     if (!modules) return;
-    const triage = modules.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);
+    const triage = modules.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true) as any;
     setTriageModule(triage || null);
 
     if (triage) {
+
       try {
         const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triage.id}`, {
           headers: { 
@@ -251,6 +252,8 @@ export const IntakeSettingsPage = () => {
     ? `${window.location.origin}/portal?moduleId=${triageModule.id}`
     : '';
 
+
+
   return (
     <div className="flex-1 bg-zinc-950 p-10 overflow-y-auto custom-scrollbar flex flex-col gap-8">
       {/* Header section */}
@@ -360,6 +363,7 @@ export const IntakeSettingsPage = () => {
                 </div>
               </div>
             </div>
+
           </div>
 
           {/* Rule Editor detail section */}

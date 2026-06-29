@@ -115,7 +115,7 @@ export const ExternalPortal = () => {
       }
 
       const result = await response.json();
-      setSubmittedId(result.id);
+      setSubmittedId(result.customerRef || result.id);
       setIsSubmitted(true);
     } catch (error: any) {
       console.error("Submission Error:", error);
@@ -178,7 +178,7 @@ export const ExternalPortal = () => {
       }
 
       const result = await res.json();
-      setSubmittedId(result.id);
+      setSubmittedId(result.customerRef || result.id);
       setIsSubmitted(true);
       toast.success(publicForm.settings?.successMessage || 'Form submitted successfully!');
     } catch (err: any) {

@@ -639,6 +639,20 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       }
     }
 
+    const finalStatus = updatePayload.status || existing.status;
+    if (finalStatus && finalStatus !== existing.status) {
+      const userLabel = (req as any).user?.name || (req as any).user?.email || 'System';
+      const comments = [...(updatedData._comments || [])];
+      comments.push({
+        id: `comm_${Math.random().toString(36).substr(2, 9)}`,
+        body: `Status changed from "${existing.status || 'New'}" to "${finalStatus}"`,
+        author: userLabel === 'System' ? 'System Workflow' : userLabel,
+        timestamp: new Date().toISOString()
+      });
+      updatedData._comments = comments;
+      updatePayload.data = updatedData;
+    }
+
     // 3. Perform update (using scoped client, handles RLS and returns included data in one transaction)
     const recordWithMember = await db.record.update({
       where: { id },
@@ -850,6 +864,20 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
           console.error('[Workflow Error on PATCH Update]:', err);
         }
       }
+    }
+
+    const finalStatus = updatePayload.status || existing.status;
+    if (finalStatus && finalStatus !== existing.status) {
+      const userLabel = (req as any).user?.name || (req as any).user?.email || 'System';
+      const comments = [...(updatedData._comments || [])];
+      comments.push({
+        id: `comm_${Math.random().toString(36).substr(2, 9)}`,
+        body: `Status changed from "${existing.status || 'New'}" to "${finalStatus}"`,
+        author: userLabel === 'System' ? 'System Workflow' : userLabel,
+        timestamp: new Date().toISOString()
+      });
+      updatedData._comments = comments;
+      updatePayload.data = updatedData;
     }
 
     // 3. Perform update (using scoped client, handles RLS and returns included data)
