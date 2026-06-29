@@ -23,6 +23,7 @@ import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
 import { initSocket } from './socket';
+import { AutomationScheduler } from './services/scheduler';
 
 dotenv.config();
 
@@ -133,5 +134,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 Aurora Platform Server (with Real-time) running on http://localhost:${PORT}`);
+  AutomationScheduler.start();
 });
 // Trigger restart to reload server port 3001

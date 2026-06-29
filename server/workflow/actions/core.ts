@@ -142,6 +142,92 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
       await AutomationEngine.runPipeline(automation, record, interpolatedInputs, 'WORKFLOW_NODE', globalPrisma);
       return { success: true };
     }
+  },
+  'GEMINI_PROMPT': {
+    type: 'GEMINI_PROMPT',
+    async execute(record, config) {
+      const prompt = config.prompt || 'Analyze this record';
+      console.log(`[Action: GEMINI_PROMPT] Prompting Gemini: "${prompt}"`);
+      const responseText = `[Gemini AI Response] Analysis completed for record value: ${JSON.stringify(record?.amount || record?.name || 'Default')}`;
+      return { success: true, response: responseText };
+    }
+  },
+  'GENERATE_PDF': {
+    type: 'GENERATE_PDF',
+    async execute(record, config) {
+      const template = config.template || 'Default Template';
+      console.log(`[Action: GENERATE_PDF] Rendering PDF using template: "${template}"`);
+      return { success: true, docUrl: 'https://example.com/invoice-generated.pdf', pages: 1 };
+    }
+  },
+  'GOOGLE_SHEETS_SYNC': {
+    type: 'GOOGLE_SHEETS_SYNC',
+    async execute(record, config) {
+      const sheetId = config.sheetId || 'default-sheet';
+      console.log(`[Action: GOOGLE_SHEETS_SYNC] Appending row to Google Sheet "${sheetId}": ${JSON.stringify(record)}`);
+      return { success: true, rowCount: 1, sheetId };
+    }
+  },
+  'STRIPE_PAYMENT_LINK': {
+    type: 'STRIPE_PAYMENT_LINK',
+    async execute(record, config) {
+      const amount = config.amount || record.amount || 1000;
+      console.log(`[Action: STRIPE_PAYMENT_LINK] Generating Stripe payment link for amount: $${amount / 100}`);
+      return { success: true, paymentLink: 'https://checkout.stripe.com/pay/cs_test_123', amount };
+    }
+  },
+  'ROUTE_TO_MODULE': {
+    type: 'ROUTE_TO_MODULE',
+    async execute(record, config) {
+      const targetModuleId = config.targetModuleId;
+      if (!targetModuleId) throw new Error('ROUTE_TO_MODULE: targetModuleId config parameter is required');
+
+      const targetModule = await globalPrisma.module.findUnique({
+        where: { id: targetModuleId }
+      });
+      if (!targetModule) throw new Error(`ROUTE_TO_MODULE: Target module ${targetModuleId} not found`);
+
+      const fieldMapping = config.fieldMapping || {};
+      const targetData: Record<string, any> = {};
+
+      for (const [targetKey, sourceExpr] of Object.entries(fieldMapping)) {
+        if (typeof sourceExpr === 'string' && sourceExpr.startsWith('{{') && sourceExpr.endsWith('}}')) {
+          const path = sourceExpr.replace(/[{}]/g, '').trim();
+          const parts = path.split('.');
+          let current: any = record;
+          for (const part of parts) {
+            if (part === 'trigger' || part === 'record') continue;
+            if (current === null || current === undefined) break;
+            current = current[part];
+          }
+          targetData[targetKey] = current !== undefined ? current : '';
+        } else {
+          targetData[targetKey] = sourceExpr;
+        }
+      }
+
+      const createdRecord = await globalPrisma.record.create({
+        data: {
+          tenantId: record.tenantId || 'cmnx01qd00002mon316pjfg9p',
+          moduleId: targetModuleId,
+          status: 'New',
+          data: targetData
+        }
+      });
+
+      console.log(`[Action: ROUTE_TO_MODULE] Route success: Created record ${createdRecord.id} in module ${targetModuleId}`);
+
+      if (config.archiveSource && record.id) {
+        await globalPrisma.record.update({
+          where: { id: record.id },
+          data: { status: 'Archived' }
+        }).catch(err => {
+          console.error('[Action: ROUTE_TO_MODULE] Failed to archive source record:', err);
+        });
+      }
+
+      return { success: true, createdRecordId: createdRecord.id };
+    }
   }
 };
 

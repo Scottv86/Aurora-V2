@@ -10,18 +10,27 @@ const router = express.Router();
 
 function getStatusFromState(evaluatedState: any, workflow: any, fallback: string): string {
   if (!evaluatedState || !workflow) return fallback;
-  let targetNode = workflow.nodes.find((n: any) => n.id === evaluatedState.currentNodeId);
-  if (targetNode && (targetNode.type === 'ACTION' || targetNode.type === 'DECISION')) {
-    const history = evaluatedState.history || [];
-    for (let i = history.length - 1; i >= 0; i--) {
-      const histNode = workflow.nodes.find((n: any) => n.id === history[i].nodeId);
-      if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
-        targetNode = histNode;
-        break;
+  const activeNodeIds = evaluatedState.activeNodeIds || (evaluatedState.currentNodeId ? [evaluatedState.currentNodeId] : []);
+  if (activeNodeIds.length === 0) return fallback;
+
+  const statusNames: string[] = [];
+  for (const nodeId of activeNodeIds) {
+    let targetNode = workflow.nodes.find((n: any) => n.id === nodeId);
+    if (targetNode && (targetNode.type === 'ACTION' || targetNode.type === 'DECISION')) {
+      const history = evaluatedState.history || [];
+      for (let i = history.length - 1; i >= 0; i--) {
+        const histNode = workflow.nodes.find((n: any) => n.id === history[i].nodeId);
+        if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
+          targetNode = histNode;
+          break;
+        }
       }
     }
+    if (targetNode && targetNode.name && !statusNames.includes(targetNode.name)) {
+      statusNames.push(targetNode.name);
+    }
   }
-  return targetNode ? targetNode.name : fallback;
+  return statusNames.length > 0 ? statusNames.join(' / ') : fallback;
 }
 
 function processAutonumbers(dataObject: any, fields: any[], updatedConfig: any): boolean {
@@ -395,6 +404,7 @@ router.post('/records', async (req: TenantRequest, res) => {
       const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
       workflowState = {
         currentNodeId: startNode.id,
+        activeNodeIds: [startNode.id],
         history: [{
           nodeId: startNode.id,
           timestamp: new Date().toISOString(),
@@ -427,7 +437,10 @@ router.post('/records', async (req: TenantRequest, res) => {
           config?.layout
         );
 
-        if (evaluatedState.currentNodeId !== workflowState.currentNodeId) {
+        if (
+          evaluatedState.currentNodeId !== workflowState.currentNodeId ||
+          JSON.stringify(evaluatedState.activeNodeIds) !== JSON.stringify(workflowState.activeNodeIds)
+        ) {
           const finalStatus = getStatusFromState(evaluatedState, workflow, record.status);
 
           // Update record with the new state and status
@@ -575,6 +588,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
               const currentWorkflowState = (existing.workflowState as any) || { history: [] };
               const intermediateState = {
                 currentNodeId: targetNode.id,
+                activeNodeIds: [targetNode.id],
                 history: [
                   ...(currentWorkflowState.history || []),
                   {
@@ -601,6 +615,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
             // Auto-transition based on data changes from current node
             const currentWorkflowState = (existing.workflowState as any) || {
               currentNodeId: workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id,
+              activeNodeIds: workflow.nodes.find((n: any) => n.type === 'START')?.id ? [workflow.nodes.find((n: any) => n.type === 'START')?.id] : [workflow.nodes[0]?.id],
               history: []
             };
             const evaluatedState = await WorkflowEngine.evaluate(
@@ -610,7 +625,10 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
               config?.layout
             );
             
-            if (evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId) {
+            if (
+              evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId ||
+              JSON.stringify(evaluatedState.activeNodeIds) !== JSON.stringify(currentWorkflowState.activeNodeIds)
+            ) {
               updatePayload.workflowState = evaluatedState;
               updatePayload.status = getStatusFromState(evaluatedState, workflow, existing.status || 'New');
             }
@@ -637,6 +655,40 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       moduleId: record.moduleId,
       record: { id: record.id, ...updatedData }
     }, db).catch(err => console.error('[Automation Error on PUT Update]:', err));
+
+    // Handle transition-specific triggers
+    const oldData = (existing.data as Record<string, any>) || {};
+    const newData = (record.data as Record<string, any>) || {};
+
+    if (existing.status !== record.status) {
+      AutomationEngine.handleEvent({
+        type: 'STATUS_CHANGED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { fromStatus: existing.status, toStatus: record.status }
+      }, db).catch(err => console.error('[Automation: STATUS_CHANGED error]:', err));
+    }
+
+    if (oldData.assigneeId !== newData.assigneeId) {
+      AutomationEngine.handleEvent({
+        type: 'ASSIGNEE_CHANGED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { fromAssigneeId: oldData.assigneeId, toAssigneeId: newData.assigneeId }
+      }, db).catch(err => console.error('[Automation: ASSIGNEE_CHANGED error]:', err));
+    }
+
+    if (JSON.stringify(existing.associations) !== JSON.stringify(record.associations)) {
+      AutomationEngine.handleEvent({
+        type: 'RELATION_LINKED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { associations: record.associations }
+      }, db).catch(err => console.error('[Automation: RELATION_LINKED error]:', err));
+    }
 
     const formatted = {
       id: record.id,
@@ -749,6 +801,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
               const currentWorkflowState = (existing.workflowState as any) || { history: [] };
               const intermediateState = {
                 currentNodeId: targetNode.id,
+                activeNodeIds: [targetNode.id],
                 history: [
                   ...(currentWorkflowState.history || []),
                   {
@@ -775,6 +828,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
             // Auto-transition based on data changes from current node
             const currentWorkflowState = (existing.workflowState as any) || {
               currentNodeId: workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id,
+              activeNodeIds: workflow.nodes.find((n: any) => n.type === 'START')?.id ? [workflow.nodes.find((n: any) => n.type === 'START')?.id] : [workflow.nodes[0]?.id],
               history: []
             };
             const evaluatedState = await WorkflowEngine.evaluate(
@@ -784,7 +838,10 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
               config?.layout
             );
             
-            if (evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId) {
+            if (
+              evaluatedState.currentNodeId !== currentWorkflowState.currentNodeId ||
+              JSON.stringify(evaluatedState.activeNodeIds) !== JSON.stringify(currentWorkflowState.activeNodeIds)
+            ) {
               updatePayload.workflowState = evaluatedState;
               updatePayload.status = getStatusFromState(evaluatedState, workflow, existing.status || 'New');
             }
@@ -811,6 +868,40 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       moduleId: record.moduleId,
       record: { id: record.id, ...updatedData }
     }, db).catch(err => console.error('[Automation Error on PATCH Update]:', err));
+
+    // Handle transition-specific triggers
+    const oldData = (existing.data as Record<string, any>) || {};
+    const newData = (record.data as Record<string, any>) || {};
+
+    if (existing.status !== record.status) {
+      AutomationEngine.handleEvent({
+        type: 'STATUS_CHANGED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { fromStatus: existing.status, toStatus: record.status }
+      }, db).catch(err => console.error('[Automation: STATUS_CHANGED error]:', err));
+    }
+
+    if (oldData.assigneeId !== newData.assigneeId) {
+      AutomationEngine.handleEvent({
+        type: 'ASSIGNEE_CHANGED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { fromAssigneeId: oldData.assigneeId, toAssigneeId: newData.assigneeId }
+      }, db).catch(err => console.error('[Automation: ASSIGNEE_CHANGED error]:', err));
+    }
+
+    if (JSON.stringify(existing.associations) !== JSON.stringify(record.associations)) {
+      AutomationEngine.handleEvent({
+        type: 'RELATION_LINKED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { associations: record.associations }
+      }, db).catch(err => console.error('[Automation: RELATION_LINKED error]:', err));
+    }
 
     const formatted = {
       id: record.id,
@@ -1322,6 +1413,91 @@ router.post('/nexus/execute', async (req: TenantRequest, res) => {
       }
       res.status(500).json({ error: err.message || 'Failed to sync connector data' });
     }
+});
+
+// GET comments for a record
+router.get('/:recordId/comments', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { recordId } = req.params;
+
+    const record = await db.record.findUnique({
+      where: { id: recordId }
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    const dataObj = (record.data as Record<string, any>) || {};
+    const comments = dataObj._comments || [];
+
+    res.json(comments);
+  } catch (err: any) {
+    console.error('[DataAPI] GET comments error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST a new comment to a record
+router.post('/:recordId/comments', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { recordId } = req.params;
+    const { body, author } = req.body;
+
+    if (!body) {
+      return res.status(400).json({ error: 'Comment body is required' });
+    }
+
+    const record = await db.record.findUnique({
+      where: { id: recordId }
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    const dataObj = { ...(record.data as Record<string, any> || {}) };
+    const comments = [...(dataObj._comments || [])];
+
+    const newComment = {
+      id: `comm_${Math.random().toString(36).substr(2, 9)}`,
+      body,
+      author: author || 'System User',
+      timestamp: new Date().toISOString()
+    };
+
+    comments.push(newComment);
+    dataObj._comments = comments;
+
+    await db.record.update({
+      where: { id: recordId },
+      data: { data: dataObj }
+    });
+
+    if (body.includes('@')) {
+      console.log(`[CommentsAPI] Mentions detected in comment: "${body}". Triggering USER_MENTIONED...`);
+      AutomationEngine.handleEvent({
+        type: 'USER_MENTIONED' as any,
+        tenantId,
+        moduleId: record.moduleId,
+        record: {
+          id: record.id,
+          ...dataObj,
+          latestComment: body
+        }
+      }, db).catch(err => {
+        console.error('[CommentsAPI] Error triggering USER_MENTIONED event:', err);
+      });
+    }
+
+    res.json(newComment);
+  } catch (err: any) {
+    console.error('[DataAPI] POST comment error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

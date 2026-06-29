@@ -23,9 +23,17 @@ const edgeTypes = {
 interface WorkflowPreviewProps {
   workflow: Workflow;
   activeNodeId?: string;
+  activeNodeIds?: string[];
 }
 
-const WorkflowPreviewContent: React.FC<WorkflowPreviewProps> = ({ workflow, activeNodeId }) => {
+const WorkflowPreviewContent: React.FC<WorkflowPreviewProps> = ({ workflow, activeNodeId, activeNodeIds }) => {
+  const activeSet = useMemo(() => {
+    const set = new Set<string>();
+    if (activeNodeId) set.add(activeNodeId);
+    if (activeNodeIds) activeNodeIds.forEach(id => set.add(id));
+    return set;
+  }, [activeNodeId, activeNodeIds]);
+
   const initialNodes = useMemo(() => 
     workflow.nodes.map(n => ({
       id: n.id,
@@ -33,12 +41,12 @@ const WorkflowPreviewContent: React.FC<WorkflowPreviewProps> = ({ workflow, acti
       data: { 
         label: n.name, 
         type: n.type,
-        isActive: n.id === activeNodeId,
+        isActive: activeSet.has(n.id),
         readOnly: true,
         onDelete: () => {} // No-op in preview
       },
       position: n.position || { x: 0, y: 0 },
-    })), [workflow, activeNodeId]);
+    })), [workflow, activeSet]);
 
   const initialEdges = useMemo(() => 
     workflow.edges.map(e => ({
@@ -47,9 +55,9 @@ const WorkflowPreviewContent: React.FC<WorkflowPreviewProps> = ({ workflow, acti
       target: e.target,
       label: e.label || e.condition,
       type: 'workflowEdge',
-      animated: e.source === activeNodeId,
-      className: e.source === activeNodeId ? "stroke-indigo-500" : "stroke-zinc-600"
-    })), [workflow, activeNodeId]);
+      animated: activeSet.has(e.source),
+      className: activeSet.has(e.source) ? "stroke-indigo-500" : "stroke-zinc-600"
+    })), [workflow, activeSet]);
 
   const [nodes] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);

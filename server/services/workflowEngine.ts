@@ -1,9 +1,11 @@
 import { Workflow, WorkflowNode } from '../../src/types/platform';
 import { ActionRegistry } from '../workflow/actions/core';
-
+import { globalPrisma } from '../lib/prisma';
+import { emitTenantUpdate } from '../socket';
 
 export interface WorkflowState {
   currentNodeId: string;
+  activeNodeIds?: string[];
   history: {
     nodeId: string;
     timestamp: string;
@@ -27,19 +29,20 @@ export class WorkflowEngine {
     const state: WorkflowState = currentState
       ? {
           currentNodeId: currentState.currentNodeId,
+          activeNodeIds: currentState.activeNodeIds || [currentState.currentNodeId],
           history: [...(currentState.history || [])]
         }
       : {
           currentNodeId: this.findStartNode(workflow).id,
+          activeNodeIds: [this.findStartNode(workflow).id],
           history: [{ nodeId: this.findStartNode(workflow).id, timestamp: new Date().toISOString() }]
         };
 
-    // Use a queue to handle potentially multiple active paths (Phase 2)
-    const activeNodes = [state.currentNodeId];
+    const activeNodes = [...(state.activeNodeIds || [state.currentNodeId])];
+    const currentActive = new Set<string>(activeNodes);
     
-    // For now, we'll track a single primary path in the state, 
-    // but the engine will process all available transitions.
-    // In a full implementation, we might have multiple 'active' nodes.
+    // Collect actions to execute after evaluation completes
+    const actionsToRun: { node: WorkflowNode; historyIndex: number }[] = [];
 
     let changed = true;
     while (changed) {
@@ -52,75 +55,293 @@ export class WorkflowEngine {
 
         const nextTransitions = this.findNextTransitions(record, currentId, workflow, layout);
 
+        if (nextTransitions.length > 0) {
+          currentActive.delete(currentId);
+          changed = true;
+        }
+
         for (const transition of nextTransitions) {
           const nextNode = transition.node;
-          // If we've already visited this node in this jump cycle, avoid loops
           if (state.history.some(h => h.nodeId === nextNode.id && h.timestamp === new Date().toISOString())) continue;
 
-          state.history.push({
-            nodeId: nextNode.id,
-            timestamp: new Date().toISOString(),
-            action: 'Auto-transitioned',
-            triggerCondition: transition.condition || undefined
-          });
-          state.currentNodeId = nextNode.id; // Update "last" active node
-
-          // Execute Side-Effects (Phase 3)
-          if (nextNode.type === 'ACTION') {
-            await this.executeAction(record, nextNode);
-          }
-
-          // Decide whether to keep jumping
-          if (nextNode.type === 'DECISION' || nextNode.type === 'ACTION') {
+          if (nextNode.type === 'DECISION') {
+            state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: 'Auto-transitioned',
+              triggerCondition: transition.condition || undefined
+            });
             nextNodesToProcess.push(nextNode.id);
-            changed = true;
+          } else if (nextNode.type === 'ACTION') {
+            currentActive.add(nextNode.id);
+            const historyIndex = state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: 'Auto-transitioned',
+              triggerCondition: transition.condition || undefined,
+              result: { status: 'RUNNING', retries: 0 }
+            }) - 1;
+
+            actionsToRun.push({ node: nextNode, historyIndex });
           } else if (nextNode.type === 'STATUS' || nextNode.type === 'START' || nextNode.type === 'END') {
-            // Check for immediate downstream ACTION nodes connected directly to this status node
+            state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: 'Auto-transitioned',
+              triggerCondition: transition.condition || undefined
+            });
+
             const outgoingActionTransitions = this.findNextTransitions(record, nextNode.id, workflow, layout)
               .filter(t => t.node.type === 'ACTION');
             
-            for (const actTrans of outgoingActionTransitions) {
-              state.history.push({
-                nodeId: actTrans.node.id,
-                timestamp: new Date().toISOString(),
-                action: 'Auto-transitioned (Action Hook)',
-                triggerCondition: actTrans.condition || undefined
-              });
-              state.currentNodeId = actTrans.node.id;
+            if (outgoingActionTransitions.length > 0) {
+              for (const actTrans of outgoingActionTransitions) {
+                currentActive.add(actTrans.node.id);
+                const historyIndex = state.history.push({
+                  nodeId: actTrans.node.id,
+                  timestamp: new Date().toISOString(),
+                  action: 'Auto-transitioned (Action Hook)',
+                  triggerCondition: actTrans.condition || undefined,
+                  result: { status: 'RUNNING', retries: 0 }
+                }) - 1;
 
-              // Execute the action side-effect
-              await this.executeAction(record, actTrans.node);
-
-              // Push the action node to process its outgoing transitions
-              nextNodesToProcess.push(actTrans.node.id);
-              changed = true;
+                actionsToRun.push({ node: actTrans.node, historyIndex });
+              }
+            } else {
+              currentActive.add(nextNode.id);
             }
           }
         }
       }
 
       if (nextNodesToProcess.length > 0) {
-        // Update active nodes for next iteration
         activeNodes.splice(0, activeNodes.length, ...nextNodesToProcess);
+      } else {
+        activeNodes.splice(0, activeNodes.length);
       }
+    }
+
+    state.activeNodeIds = Array.from(currentActive);
+    if (state.activeNodeIds.length > 0) {
+      state.currentNodeId = state.activeNodeIds[state.activeNodeIds.length - 1];
+    }
+
+    // Save state to DB atomically BEFORE executing actions in the background
+    if (record.id && actionsToRun.length > 0) {
+      this.updateStateInDb(record.id, state).then(() => {
+        for (const act of actionsToRun) {
+          this.runAsyncAction(record.id, act.node, act.historyIndex, workflow, layout).catch(err => {
+            console.error(`[WorkflowEngine] Background action failed to launch:`, err);
+          });
+        }
+      }).catch(err => {
+        console.error(`[WorkflowEngine] Failed to save intermediate state:`, err);
+      });
     }
 
     return state;
   }
 
-  private static async executeAction(record: any, node: WorkflowNode) {
+  private static async updateStateInDb(recordId: string, state: WorkflowState) {
+    await globalPrisma.record.update({
+      where: { id: recordId },
+      data: {
+        workflowState: state as any
+      }
+    });
+  }
+
+  private static async runAsyncAction(
+    recordId: string,
+    node: WorkflowNode,
+    historyIndex: number,
+    workflow: Workflow,
+    layout?: any[]
+  ) {
     const actionType = node.config?.actionType;
     const action = ActionRegistry[actionType];
     
-    if (action) {
-      console.log(`[ACTION] Executing ${actionType} for node ${node.name}`);
+    let tenantId = '';
+    try {
+      const dbRecord = await globalPrisma.record.findUnique({
+        where: { id: recordId },
+        select: { tenantId: true }
+      });
+      if (dbRecord) {
+        tenantId = dbRecord.tenantId;
+      }
+    } catch (err) {
+      console.error(`[WorkflowEngine] Error resolving tenantId for action:`, err);
+    }
+
+    if (!action) {
+      console.warn(`[ACTION] No action handler found for type: ${actionType}`);
+      await this.updateActionHistory(recordId, historyIndex, {
+        status: 'FAILED',
+        error: `No action handler found for type: ${actionType}`
+      });
+      return;
+    }
+
+    const maxRetries = 3;
+    let attempt = 0;
+    let success = false;
+    let resultOutput: any = null;
+    let errorMessage: string | null = null;
+    const startTime = Date.now();
+
+    while (attempt < maxRetries && !success) {
+      attempt++;
       try {
-        await action.execute(record, node.config);
-      } catch (error) {
-        console.error(`[ACTION ERROR] Failed to execute ${actionType}:`, error);
+        console.log(`[ACTION] Executing ${actionType} for node ${node.name} (Attempt ${attempt}/${maxRetries})`);
+        
+        const dbRecord = await globalPrisma.record.findUnique({
+          where: { id: recordId }
+        });
+        
+        if (!dbRecord) {
+          throw new Error(`Record ${recordId} not found during action execution`);
+        }
+
+        const recordContext = {
+          id: dbRecord.id,
+          status: dbRecord.status,
+          ...(dbRecord.data as Record<string, any> || {})
+        };
+
+        resultOutput = await action.execute(recordContext, node.config);
+        success = true;
+      } catch (error: any) {
+        errorMessage = error.message || 'Unknown action error';
+        console.error(`[ACTION ERROR] Attempt ${attempt} failed for ${actionType}:`, errorMessage);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+
+    const duration = Date.now() - startTime;
+
+    if (success) {
+      const updatedState = await this.updateActionHistory(recordId, historyIndex, {
+        status: 'SUCCESS',
+        durationMs: duration,
+        retries: attempt - 1,
+        output: resultOutput
+      });
+
+      if (updatedState) {
+        try {
+          const dbRecord = await globalPrisma.record.findUnique({
+            where: { id: recordId }
+          });
+          
+          if (dbRecord) {
+            const recordContext = {
+              id: dbRecord.id,
+              status: dbRecord.status,
+              ...(dbRecord.data as Record<string, any> || {})
+            };
+
+            const evaluatedState = await WorkflowEngine.evaluate(
+              recordContext,
+              workflow,
+              updatedState,
+              layout
+            );
+
+            const activeNodeIds = evaluatedState.activeNodeIds || [evaluatedState.currentNodeId];
+            const fallbackStatus = dbRecord.status;
+            
+            const statusNames: string[] = [];
+            for (const nodeId of activeNodeIds) {
+              let tNode = workflow.nodes.find(n => n.id === nodeId);
+              if (tNode && (tNode.type === 'ACTION' || tNode.type === 'DECISION')) {
+                const history = evaluatedState.history || [];
+                for (let i = history.length - 1; i >= 0; i--) {
+                  const histNode = workflow.nodes.find(n => n.id === history[i].nodeId);
+                  if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
+                    tNode = histNode;
+                    break;
+                  }
+                }
+              }
+              if (tNode && tNode.name && !statusNames.includes(tNode.name)) {
+                statusNames.push(tNode.name);
+              }
+            }
+            const finalStatus = statusNames.length > 0 ? statusNames.join(' / ') : fallbackStatus;
+
+            await globalPrisma.record.update({
+              where: { id: recordId },
+              data: {
+                status: finalStatus,
+                workflowState: evaluatedState as any
+              }
+            });
+
+            if (tenantId) {
+              emitTenantUpdate(tenantId, 'record_updated', {
+                id: recordId,
+                moduleId: dbRecord.moduleId
+              });
+            }
+          }
+        } catch (evalErr) {
+          console.error('[WorkflowEngine] Error in post-action evaluation:', evalErr);
+        }
       }
     } else {
-      console.warn(`[ACTION] No action handler found for type: ${actionType}`);
+      await this.updateActionHistory(recordId, historyIndex, {
+        status: 'FAILED',
+        durationMs: duration,
+        retries: attempt,
+        error: errorMessage
+      });
+      
+      const dbRecord = await globalPrisma.record.findUnique({
+        where: { id: recordId }
+      });
+      if (dbRecord && tenantId) {
+        emitTenantUpdate(tenantId, 'record_updated', {
+          id: recordId,
+          moduleId: dbRecord.moduleId
+        });
+      }
+    }
+  }
+
+  private static async updateActionHistory(
+    recordId: string,
+    historyIndex: number,
+    result: any
+  ): Promise<WorkflowState | null> {
+    try {
+      const record = await globalPrisma.record.findUnique({
+        where: { id: recordId },
+        select: { workflowState: true }
+      });
+
+      if (!record || !record.workflowState) return null;
+
+      const state = { ...(record.workflowState as any) } as WorkflowState;
+      if (state.history && state.history[historyIndex]) {
+        state.history[historyIndex].result = result;
+        
+        await globalPrisma.record.update({
+          where: { id: recordId },
+          data: {
+            workflowState: state as any
+          }
+        });
+        
+        return state;
+      }
+      return null;
+    } catch (error) {
+      console.error('[WorkflowEngine] Error in updateActionHistory:', error);
+      return null;
     }
   }
 
@@ -152,7 +373,6 @@ export class WorkflowEngine {
     try {
       const context: Record<string, any> = {};
       
-      // Inject record properties
       if (record && typeof record === 'object') {
         Object.entries(record).forEach(([key, val]) => {
           context[key] = val;
@@ -161,7 +381,6 @@ export class WorkflowEngine {
       
       const mappedRecord = { ...record };
       
-      // If layout is provided, map field keys/slugs (f.name) to their values from the record
       if (layout && Array.isArray(layout)) {
         const flatten = (fields: any[]): any[] => {
           const res: any[] = [];
@@ -176,7 +395,6 @@ export class WorkflowEngine {
 
         const allFields = flatten(layout);
         
-        // Helper to recursively find a field value inside record data
         const getVal = (obj: any, fieldId: string): any => {
           if (!obj) return undefined;
           if (obj[fieldId] !== undefined) return obj[fieldId];
@@ -194,16 +412,14 @@ export class WorkflowEngine {
             const val = getVal(record, f.id);
             if (val !== undefined) {
               context[f.name] = val;
-              mappedRecord[f.name] = val; // Also allow record.slug
+              mappedRecord[f.name] = val;
             }
           }
         });
       }
 
-      // Ensure 'record' prefix is also supported for backward compatibility
       context.record = mappedRecord;
 
-      // Filter context to only valid JavaScript identifier keys to prevent syntax errors
       const identifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
       const validKeys: string[] = [];
       const validValues: any[] = [];

@@ -14,6 +14,7 @@ import {
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, isFieldVisible } from '../lib/utils';
+import { API_BASE_URL } from '../config';
 import { FieldInput } from './FieldInput';
 import { calculateDefaultValue } from '../services/fieldService';
 import { toast } from 'sonner';
@@ -53,7 +54,7 @@ export const ExternalPortal = () => {
       setLoadingForm(true);
       setFormError(null);
       try {
-        const res = await fetch(`/api/public/modules/${urlModuleId}`);
+        const res = await fetch(`${API_BASE_URL}/api/public/modules/${urlModuleId}`);
         if (!res.ok) {
           throw new Error('Failed to load public form configuration.');
         }
@@ -94,7 +95,7 @@ export const ExternalPortal = () => {
     
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/public/submissions', {
+      const response = await fetch(`${API_BASE_URL}/api/public/submissions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -166,7 +167,7 @@ export const ExternalPortal = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/public/modules/${urlModuleId}/submissions`, {
+      const res = await fetch(`${API_BASE_URL}/api/public/modules/${urlModuleId}/submissions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: dynamicFormData })

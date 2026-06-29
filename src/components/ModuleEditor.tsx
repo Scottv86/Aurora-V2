@@ -10247,6 +10247,37 @@ export const ModuleEditor = () => {
                                   </div>
                                 )}
 
+                                {selectedForm.usage === 'public_link' && (
+                                  <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Public Form URL</label>
+                                    {id === 'new' ? (
+                                      <div className="text-xs text-zinc-500 italic px-1">
+                                        Save the module first to generate a public link.
+                                      </div>
+                                    ) : (
+                                      <div className="flex gap-2">
+                                        <input 
+                                          type="text" 
+                                          readOnly 
+                                          value={`${window.location.origin}/portal?moduleId=${id}`}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                        <button 
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(`${window.location.origin}/portal?moduleId=${id}`);
+                                            toast.success('Public form URL copied to clipboard');
+                                          }}
+                                          className="px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                                          title="Copy Link"
+                                        >
+                                          <Copy size={12} />
+                                          <span>Copy</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
                                 <div className="space-y-2">
                                   <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Submit Label</label>
                                   <input 

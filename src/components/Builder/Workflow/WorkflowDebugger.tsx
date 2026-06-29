@@ -13,11 +13,13 @@ import { cn } from '../../../lib/utils';
 
 export interface WorkflowState {
   currentNodeId: string;
+  activeNodeIds?: string[];
   history: {
     nodeId: string;
     timestamp: string;
     action?: string;
     triggerCondition?: string;
+    result?: any;
   }[];
 }
 
@@ -30,10 +32,12 @@ class ClientWorkflowEngine {
 
     const state: WorkflowState = {
       currentNodeId: startNode.id,
+      activeNodeIds: [startNode.id],
       history: [{ nodeId: startNode.id, timestamp: new Date().toISOString() }]
     };
 
-    const activeNodes = [state.currentNodeId];
+    const activeNodes = [...(state.activeNodeIds || [state.currentNodeId])];
+    const currentActive = new Set<string>(activeNodes);
     let changed = true;
     
     while (changed) {
@@ -43,38 +47,59 @@ class ClientWorkflowEngine {
       for (const currentId of activeNodes) {
         const nextTransitions = this.findNextTransitions(record, currentId, workflow);
 
+        if (nextTransitions.length > 0) {
+          currentActive.delete(currentId);
+          changed = true;
+        }
+
         for (const transition of nextTransitions) {
           const nextNode = transition.node;
           if (state.history.some(h => h.nodeId === nextNode.id)) continue;
 
-          state.history.push({
-            nodeId: nextNode.id,
-            timestamp: new Date().toISOString(),
-            action: 'Auto-transitioned',
-            triggerCondition: transition.condition || undefined
-          });
-          state.currentNodeId = nextNode.id;
-
-          if (nextNode.type === 'DECISION' || nextNode.type === 'ACTION') {
+          if (nextNode.type === 'DECISION') {
+            state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: 'Auto-transitioned',
+              triggerCondition: transition.condition || undefined
+            });
             nextNodesToProcess.push(nextNode.id);
-            changed = true;
+          } else if (nextNode.type === 'ACTION') {
+            state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: 'Auto-transitioned',
+              triggerCondition: transition.condition || undefined,
+              result: { status: 'SUCCESS', simulated: true }
+            });
+            nextNodesToProcess.push(nextNode.id);
           } else if (nextNode.type === 'STATUS' || nextNode.type === 'START' || nextNode.type === 'END') {
+            state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: 'Auto-transitioned',
+              triggerCondition: transition.condition || undefined
+            });
+
             // Check for immediate downstream ACTION nodes
             const outgoingActionTransitions = this.findNextTransitions(record, nextNode.id, workflow)
               .filter(t => t.node.type === 'ACTION');
             
-            for (const actTrans of outgoingActionTransitions) {
-              state.history.push({
-                nodeId: actTrans.node.id,
-                timestamp: new Date().toISOString(),
-                action: 'Auto-transitioned (Action Hook)',
-                triggerCondition: actTrans.condition || undefined
-              });
-              state.currentNodeId = actTrans.node.id;
+            if (outgoingActionTransitions.length > 0) {
+              for (const actTrans of outgoingActionTransitions) {
+                state.history.push({
+                  nodeId: actTrans.node.id,
+                  timestamp: new Date().toISOString(),
+                  action: 'Auto-transitioned (Action Hook)',
+                  triggerCondition: actTrans.condition || undefined,
+                  result: { status: 'SUCCESS', simulated: true }
+                });
 
-              // Push the action node to process its outgoing transitions
-              nextNodesToProcess.push(actTrans.node.id);
-              changed = true;
+                // Push the action node to process its outgoing transitions
+                nextNodesToProcess.push(actTrans.node.id);
+              }
+            } else {
+              currentActive.add(nextNode.id);
             }
           }
         }
@@ -82,7 +107,14 @@ class ClientWorkflowEngine {
 
       if (nextNodesToProcess.length > 0) {
         activeNodes.splice(0, activeNodes.length, ...nextNodesToProcess);
+      } else {
+        activeNodes.splice(0, activeNodes.length);
       }
+    }
+
+    state.activeNodeIds = Array.from(currentActive);
+    if (state.activeNodeIds.length > 0) {
+      state.currentNodeId = state.activeNodeIds[state.activeNodeIds.length - 1];
     }
 
     return state;
@@ -265,7 +297,11 @@ export const WorkflowDebugger: React.FC<WorkflowDebuggerProps> = ({ workflow }) 
              <div className="space-y-1.5">
                <div className="flex justify-between text-[10px]">
                  <span className="text-zinc-500">End State:</span>
-                 <span className="text-emerald-400 font-bold">{workflow.nodes.find(n => n.id === executionState.currentNodeId)?.name}</span>
+               <span className="text-emerald-400 font-bold">
+                 {executionState.activeNodeIds 
+                   ? executionState.activeNodeIds.map(id => workflow.nodes.find(n => n.id === id)?.name).filter(Boolean).join(' / ')
+                   : workflow.nodes.find(n => n.id === executionState.currentNodeId)?.name}
+               </span>
                </div>
                <div className="flex justify-between text-[10px]">
                  <span className="text-zinc-500">Steps Jumped:</span>

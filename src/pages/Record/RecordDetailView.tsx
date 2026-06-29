@@ -99,7 +99,7 @@ export const RecordDetailView = ({
           const qa = data.filter((auto: any) => 
             auto.isActive && 
             Array.isArray(auto.triggers) && 
-            auto.triggers.some((t: any) => t.type === 'QUICK_ACTION')
+            auto.triggers.some((t: any) => t.type === 'QUICK_ACTION' || t.type === 'MANUAL_BUTTON')
           );
           setQuickActionAutomations(qa);
         }
@@ -2475,10 +2475,10 @@ export const RecordDetailView = ({
           {activeWorkflow ? (
             <div className="relative" ref={transitionsMenuRef}>
               {(() => {
-                const wState = record.workflowState as WorkflowState | undefined;
-                const currentNode = activeWorkflow?.nodes.find((n: any) => n.id === wState?.currentNodeId);
+                const wState = record.workflowState as any;
+                const activeNodeIds = wState?.activeNodeIds || (wState?.currentNodeId ? [wState.currentNodeId] : []);
 
-                if (!currentNode) {
+                if (activeNodeIds.length === 0) {
                   return (
                     <button
                       onClick={handleStartWorkflow}
@@ -2495,19 +2495,40 @@ export const RecordDetailView = ({
                   );
                 }
 
-                let displayNode = currentNode;
-                if (currentNode && (currentNode.type === 'ACTION' || currentNode.type === 'DECISION')) {
-                  const history = wState?.history || [];
-                  for (let i = history.length - 1; i >= 0; i--) {
-                    const histNode = activeWorkflow?.nodes.find((n: any) => n.id === history[i].nodeId);
-                    if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
-                      displayNode = histNode;
-                      break;
+                // Resolve display names for all active nodes
+                const displayNodeNames: string[] = [];
+                for (const nodeId of activeNodeIds) {
+                  const node = activeWorkflow?.nodes.find((n: any) => n.id === nodeId);
+                  if (!node) continue;
+                  
+                  let displayNode = node;
+                  if (node.type === 'ACTION' || node.type === 'DECISION') {
+                    const history = wState?.history || [];
+                    for (let i = history.length - 1; i >= 0; i--) {
+                      const histNode = activeWorkflow?.nodes.find((n: any) => n.id === history[i].nodeId);
+                      if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
+                        displayNode = histNode;
+                        break;
+                      }
                     }
+                  }
+                  if (displayNode && !displayNodeNames.includes(displayNode.name)) {
+                    displayNodeNames.push(displayNode.name);
                   }
                 }
 
-                const transitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === wState?.currentNodeId) || [];
+                const displayStatusText = displayNodeNames.length > 0 ? displayNodeNames.join(' / ') : 'Active';
+
+                // Collect transitions from all active nodes
+                const transitions: any[] = [];
+                for (const nodeId of activeNodeIds) {
+                  const nodeTransitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === nodeId) || [];
+                  for (const edge of nodeTransitions) {
+                    if (!transitions.some((t: any) => t.id === edge.id)) {
+                      transitions.push(edge);
+                    }
+                  }
+                }
 
                 return (
                   <>
@@ -2516,7 +2537,7 @@ export const RecordDetailView = ({
                       className="h-10 px-4 bg-indigo-500/10 dark:bg-indigo-500/5 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider relative overflow-hidden group/status"
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
-                      <span>{displayNode.name}</span>
+                      <span>{displayStatusText}</span>
                       <LucideIcons.ChevronDown size={14} className="text-indigo-500/70 group-hover:text-indigo-500 transition-colors" />
                     </button>
 
@@ -2904,7 +2925,7 @@ export const RecordDetailView = ({
                   onScroll={checkScroll}
                   className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
                 >
-                  {sortedVisibleTabs.filter((t: any) => !t.parentId).map((tab: any) => {
+                  {[...sortedVisibleTabs.filter((t: any) => !t.parentId), { id: 'activity', name: 'activity', label: 'Activity Feed', iconName: 'MessageSquare' }].map((tab: any) => {
                     const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
                     const isParent = subtabs.length > 0;
                     const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
@@ -3031,7 +3052,11 @@ export const RecordDetailView = ({
             )}
 
             <div className="p-8">
-              {activeTabId ? renderFieldsGrid(activeTabId) : (
+              {activeTabId === 'activity' ? (
+                <RecordActivityFeed recordId={record.id} />
+              ) : activeTabId ? (
+                renderFieldsGrid(activeTabId)
+              ) : (
                 <div className="text-zinc-500 text-sm">
                   Select a section
                 </div>
@@ -3126,6 +3151,7 @@ export const RecordDetailView = ({
                 <WorkflowPreview 
                   workflow={activeWorkflow} 
                   activeNodeId={(record?.workflowState as any)?.currentNodeId} 
+                  activeNodeIds={(record?.workflowState as any)?.activeNodeIds} 
                 />
               </div>
 
@@ -3448,6 +3474,98 @@ export const RecordDetailView = ({
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const RecordActivityFeed = ({ recordId }: { recordId: string }) => {
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const loadComments = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/data/${recordId}/comments`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data);
+      }
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadComments();
+  }, [recordId]);
+
+  const handlePostComment = async () => {
+    if (!newComment.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/data/${recordId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ body: newComment })
+      });
+      if (res.ok) {
+        setNewComment('');
+        await loadComments();
+        toast.success('Comment posted');
+      }
+    } catch (err) {
+      toast.error('Failed to post comment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-left">
+      <div className="flex gap-2">
+        <input 
+          type="text"
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          className="flex-1 bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+          placeholder="Write comment & @mention team..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handlePostComment();
+          }}
+        />
+        <button 
+          onClick={handlePostComment}
+          disabled={loading}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/10 shrink-0 cursor-pointer disabled:opacity-50"
+        >
+          Post
+        </button>
+      </div>
+
+      <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+        {comments.map((comm) => (
+          <div key={comm.id} className="p-4 bg-zinc-905/30 border border-zinc-900 rounded-2xl space-y-1.5 transition-all hover:bg-zinc-900/10">
+            <div className="flex items-center justify-between text-[9px] font-bold text-zinc-500">
+              <span className="text-zinc-400 font-semibold">{comm.author}</span>
+              <span>{new Date(comm.timestamp).toLocaleString()}</span>
+            </div>
+            <p className="text-xs text-zinc-200 leading-normal">{comm.body}</p>
+          </div>
+        ))}
+        {comments.length === 0 && (
+          <div className="py-12 text-center text-zinc-600 border border-dashed border-zinc-900 rounded-2xl">
+            <p className="text-xs font-bold text-zinc-500">No activity logged yet.</p>
+            <p className="text-[10px] text-zinc-650 mt-0.5">Start collaborating by posting comments above.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

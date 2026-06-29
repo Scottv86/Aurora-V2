@@ -1249,7 +1249,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
                                       const val = e.target.value;
                                       setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, tabId: val } : f));
                                     }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-700 dark:text-zinc-300 font-bold"
+                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-700 dark:text-zinc-300 font-bold"
                                   >
                                     {displayTabs.map((t: any) => (
                                       <option key={t.id} value={t.id}>
@@ -1392,7 +1392,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
                                       const val = e.target.value;
                                       setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerFieldId: val } : r));
                                     }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-700 dark:text-zinc-300 font-bold"
+                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-700 dark:text-zinc-300 font-bold"
                                   >
                                     <option value="">-- None (Auto-detect from conditions) --</option>
                                     {targetFields.map((f: any) => (

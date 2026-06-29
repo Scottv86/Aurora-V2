@@ -65,6 +65,8 @@ import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
 import { SettingsOverview } from './pages/Settings/SettingsOverview';
 import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
 import { AutomationsPage } from './pages/Settings/AutomationsPage';
+import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
+import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
 
 const SettingsLayout = () => {
   const location = useLocation();
@@ -141,7 +143,7 @@ const App = () => {
                 <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
                 <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
                 <Route path="analytics" element={<Analytics />} />
-                <Route path="reminders" element={<ComingSoon title="Reminders" description="Set task alerts, keep track of deadlines, and manage your personal notifications." />} />
+                <Route path="platform/intake" element={<TriageInboxPage />} />
               </Route>
               
               {/* Settings & Workforce (Developer Only) */}
@@ -189,7 +191,7 @@ const App = () => {
                 <Route path="records" element={<ComingSoon title="Records" description="Manage system records, data entries, and historical logs across all modules." />} />
                 <Route path="fees-products" element={<ComingSoon title="Fees & Products" description="Configure service fees, product catalogs, and pricing structures." />} />
                 <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
-                <Route path="intake" element={<ComingSoon title="Intake" description="Design and manage intake forms, onboarding flows, and data capture processes." />} />
+                <Route path="intake" element={<IntakeSettingsPage />} />
                 <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
                 <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
                 <Route path="integrations" element={<ConnectorsPage />} />

@@ -6,7 +6,7 @@ import {
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers,
-  Copy, GripVertical, UserCheck
+  Copy, GripVertical, UserCheck, GitFork, Route, RotateCw, FileText, Grid, CreditCard
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -802,6 +802,30 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
         label: selectedRule?.name || '',
         icon: 'Play'
       });
+    } else if (newType === 'STATUS_CHANGED') {
+      triggersPayload.push({
+        type: 'STATUS_CHANGED',
+        fromStatus: '',
+        toStatus: ''
+      });
+    } else if (newType === 'ASSIGNEE_CHANGED') {
+      triggersPayload.push({
+        type: 'ASSIGNEE_CHANGED'
+      });
+    } else if (newType === 'RELATION_LINKED') {
+      triggersPayload.push({
+        type: 'RELATION_LINKED',
+        linkedModuleId: ''
+      });
+    } else if (newType === 'USER_MENTIONED') {
+      triggersPayload.push({
+        type: 'USER_MENTIONED'
+      });
+    } else if (newType === 'FORM_SUBMITTED') {
+      triggersPayload.push({
+        type: 'FORM_SUBMITTED',
+        formId: 'public_form'
+      });
     } else if (newType === 'CALL_ONLY') {
       triggersPayload.push({
         type: 'CALL_ONLY'
@@ -899,7 +923,16 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       GET_RECORD: { targetModuleId: '', queryField: '', queryValue: '' },
       SEND_EMAIL: { to: '', subject: '', body: '' },
       SEND_INTERNAL_PING: { channel: 'general', message: '' },
-      SET_ASSIGNEE: { targetType: 'TRIGGERING', recordId: '', assigneeId: '' }
+      SET_ASSIGNEE: { targetType: 'TRIGGERING', recordId: '', assigneeId: '' },
+      IF_CONDITION: { condition: '', thenSteps: [], elseSteps: [] },
+      SWITCH_CASE: { switchValue: '', cases: {}, defaultSteps: [] },
+      LOOP_FOREACH: { arrayPath: '', loopSteps: [] },
+      DELAY: { delaySeconds: '5' },
+      GEMINI_PROMPT: { prompt: '' },
+      GENERATE_PDF: { template: 'Default Invoice' },
+      GOOGLE_SHEETS_SYNC: { sheetId: '' },
+      STRIPE_PAYMENT_LINK: { amount: 1000 },
+      ROUTE_TO_MODULE: { targetModuleId: '', fieldMapping: {}, archiveSource: true }
     };
 
     const newActions = [...actions, { type, config: defaultConfigs[type] || {} }];
@@ -1136,6 +1169,11 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                 {[
                   { id: 'RECORD_CREATED', label: 'On Created', desc: 'When record is added' },
                   { id: 'RECORD_UPDATED', label: 'On Updated', desc: 'When record changes' },
+                  { id: 'STATUS_CHANGED', label: 'Status Changed', desc: 'When status transitions' },
+                  { id: 'ASSIGNEE_CHANGED', label: 'Assignee Changed', desc: 'When assignee updates' },
+                  { id: 'RELATION_LINKED', label: 'Relation Linked', desc: 'When records are linked' },
+                  { id: 'USER_MENTIONED', label: 'User Mentioned', desc: 'Mentions in comments' },
+                  { id: 'FORM_SUBMITTED', label: 'Form Submitted', desc: 'Public form ingestion' },
                   { id: 'QUICK_ACTION', label: 'Quick Action', desc: 'Detail page button click' },
                   { id: 'CALL_ONLY', label: 'No Trigger', desc: 'Triggered by Workflow/API' }
                 ].map((trig) => (
@@ -1170,7 +1208,16 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'GET_RECORD', label: 'Fetch Record', desc: 'Lookup rows', icon: ArrowRight },
                   { id: 'SET_ASSIGNEE', label: 'Set Assignee', desc: 'Assign row to user', icon: UserCheck },
                   { id: 'SEND_EMAIL', label: 'Send Email', desc: 'Dispatch SMTP alert', icon: Mail },
-                  { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', desc: 'Log channel message', icon: MessageSquare }
+                  { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', desc: 'Log channel message', icon: MessageSquare },
+                  { id: 'IF_CONDITION', label: 'Condition Branch', desc: 'If/Else step branching', icon: GitFork },
+                  { id: 'SWITCH_CASE', label: 'Switch Path', desc: 'Value route branching', icon: Route },
+                  { id: 'LOOP_FOREACH', label: 'Loop (For Each)', desc: 'Iterate list records', icon: RotateCw },
+                  { id: 'DELAY', label: 'Wait / Delay', desc: 'Pause thread duration', icon: Clock },
+                  { id: 'GEMINI_PROMPT', label: 'Gemini AI Prompt', desc: 'Query LLM agent', icon: Sparkles },
+                  { id: 'GENERATE_PDF', label: 'Generate PDF', desc: 'Create document file', icon: FileText },
+                  { id: 'GOOGLE_SHEETS_SYNC', label: 'Google Sheets', desc: 'Append sheet row', icon: Grid },
+                  { id: 'STRIPE_PAYMENT_LINK', label: 'Stripe Payment', desc: 'Generate payment link', icon: CreditCard },
+                  { id: 'ROUTE_TO_MODULE', label: 'Route Record', desc: 'Migrate to another module', icon: GitFork }
                 ].map((actionType) => {
                   const Icon = actionType.icon;
                   return (
@@ -1567,6 +1614,255 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                                 placeholder="e.g. {{ trigger.record.applicantEmail }}"
                               />
                             </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Delay Form */}
+                      {action.type === 'DELAY' && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400">Delay Duration (Seconds)</label>
+                          <input 
+                            type="number"
+                            value={action.config.delaySeconds || ''}
+                            onChange={(e) => {
+                              const updated = [...actions];
+                              updated[idx].config.delaySeconds = e.target.value;
+                              setActions(updated);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                            placeholder="e.g. 5"
+                          />
+                        </div>
+                      )}
+
+                      {/* Gemini Prompt Form */}
+                      {action.type === 'GEMINI_PROMPT' && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400">Prompt Template</label>
+                          <textarea 
+                            value={action.config.prompt || ''}
+                            onChange={(e) => {
+                              const updated = [...actions];
+                              updated[idx].config.prompt = e.target.value;
+                              setActions(updated);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white h-24 focus:outline-none focus:border-indigo-500/50"
+                            placeholder="Analyze: {{ trigger.record.description }}"
+                          />
+                        </div>
+                      )}
+
+                      {/* Generate PDF Form */}
+                      {action.type === 'GENERATE_PDF' && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400">PDF Template Identifier</label>
+                          <input 
+                            type="text"
+                            value={action.config.template || ''}
+                            onChange={(e) => {
+                              const updated = [...actions];
+                              updated[idx].config.template = e.target.value;
+                              setActions(updated);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                            placeholder="e.g. Invoice Template"
+                          />
+                        </div>
+                      )}
+
+                      {/* Google Sheets Sync Form */}
+                      {action.type === 'GOOGLE_SHEETS_SYNC' && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400">Google Sheet ID</label>
+                          <input 
+                            type="text"
+                            value={action.config.sheetId || ''}
+                            onChange={(e) => {
+                              const updated = [...actions];
+                              updated[idx].config.sheetId = e.target.value;
+                              setActions(updated);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                            placeholder="e.g. 1a2b3c4d5e6f"
+                          />
+                        </div>
+                      )}
+
+                      {/* Stripe Payment Link Form */}
+                      {action.type === 'STRIPE_PAYMENT_LINK' && (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400">Charge Amount (in Cents)</label>
+                          <input 
+                            type="number"
+                            value={action.config.amount || ''}
+                            onChange={(e) => {
+                              const updated = [...actions];
+                              updated[idx].config.amount = parseInt(e.target.value, 10) || 0;
+                              setActions(updated);
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                            placeholder="e.g. 1000 for $10.00"
+                          />
+                        </div>
+                      )}
+
+                      {/* Route To Module Form */}
+                      {action.type === 'ROUTE_TO_MODULE' && (
+                        <div className="space-y-3 text-left">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Destination Module</label>
+                            <select 
+                              value={action.config.targetModuleId || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.targetModuleId = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="">Select Target Module...</option>
+                              {modules?.filter((m: any) => m.id !== moduleId).map((m: any) => (
+                                <option key={m.id} value={m.id}>{m.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Fields Mapping Template (JSON)</label>
+                            <textarea 
+                              value={typeof action.config.fieldMapping === 'object' ? JSON.stringify(action.config.fieldMapping, null, 2) : action.config.fieldMapping || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                try {
+                                  updated[idx].config.fieldMapping = JSON.parse(e.target.value);
+                                } catch {
+                                  updated[idx].config.fieldMapping = e.target.value;
+                                }
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 font-mono text-[10px] text-zinc-900 dark:text-white h-24 focus:outline-none"
+                              placeholder='{\n  "target_field": "{{ trigger.record.source_field }}"\n}'
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer text-[10px] text-zinc-400 font-bold select-none pt-1">
+                            <input 
+                              type="checkbox"
+                              checked={action.config.archiveSource !== false}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.archiveSource = e.target.checked;
+                                setActions(updated);
+                              }}
+                              className="rounded border-zinc-300 dark:border-zinc-850 bg-white dark:bg-zinc-950 text-indigo-650"
+                            />
+                            Archive source Intake record automatically upon routing
+                          </label>
+                        </div>
+                      )}
+
+                      {/* If Condition Form */}
+                      {action.type === 'IF_CONDITION' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">JavaScript Condition</label>
+                            <input 
+                              type="text"
+                              value={action.config.condition || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.condition = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. score > 80"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Nested Steps Config (JSON)</label>
+                            <textarea 
+                              value={JSON.stringify({ thenSteps: action.config.thenSteps || [], elseSteps: action.config.elseSteps || [] }, null, 2)}
+                              onChange={(e) => {
+                                try {
+                                  const parsed = JSON.parse(e.target.value);
+                                  const updated = [...actions];
+                                  updated[idx].config.thenSteps = parsed.thenSteps || [];
+                                  updated[idx].config.elseSteps = parsed.elseSteps || [];
+                                  setActions(updated);
+                                } catch (err) {}
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 font-mono text-[9px] text-zinc-900 dark:text-white h-36 focus:outline-none focus:border-indigo-500/50"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Switch Case Form */}
+                      {action.type === 'SWITCH_CASE' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Switch Variable/Value</label>
+                            <input 
+                              type="text"
+                              value={action.config.switchValue || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.switchValue = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. {{ trigger.record.status }}"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Cases and Nested Steps (JSON)</label>
+                            <textarea 
+                              value={JSON.stringify({ cases: action.config.cases || {}, defaultSteps: action.config.defaultSteps || [] }, null, 2)}
+                              onChange={(e) => {
+                                try {
+                                  const parsed = JSON.parse(e.target.value);
+                                  const updated = [...actions];
+                                  updated[idx].config.cases = parsed.cases || {};
+                                  updated[idx].config.defaultSteps = parsed.defaultSteps || [];
+                                  setActions(updated);
+                                } catch (err) {}
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 font-mono text-[9px] text-zinc-900 dark:text-white h-36 focus:outline-none focus:border-indigo-500/50"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Loop For Each Form */}
+                      {action.type === 'LOOP_FOREACH' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Array Path Reference</label>
+                            <input 
+                              type="text"
+                              value={action.config.arrayPath || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.arrayPath = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. trigger.record.items"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Loop Steps Config (JSON)</label>
+                            <textarea 
+                              value={JSON.stringify({ loopSteps: action.config.loopSteps || [] }, null, 2)}
+                              onChange={(e) => {
+                                try {
+                                  const parsed = JSON.parse(e.target.value);
+                                  const updated = [...actions];
+                                  updated[idx].config.loopSteps = parsed.loopSteps || [];
+                                  setActions(updated);
+                                } catch (err) {}
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 font-mono text-[9px] text-zinc-900 dark:text-white h-36 focus:outline-none focus:border-indigo-500/50"
+                            />
                           </div>
                         </div>
                       )}

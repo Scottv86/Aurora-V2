@@ -198,6 +198,14 @@ async function run() {
       }
     });
 
+    console.log('Waiting for asynchronous actions to resolve...');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Refetch the final record state from DB
+    updatedRecord = await globalPrisma.record.findUnique({
+      where: { id: record.id }
+    }) || updatedRecord;
+
     console.log(`Status After High Update Evaluation: "${updatedRecord.status}" (Expected: "High Priority Case")`);
     console.log(`Node ID After High Update Evaluation: "${(updatedRecord.workflowState as any)?.currentNodeId}" (Expected: "high-priority-node")`);
 
