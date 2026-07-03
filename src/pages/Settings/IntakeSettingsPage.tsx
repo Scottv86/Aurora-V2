@@ -8,6 +8,146 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface VisualCondition {
+  fieldId: string;
+  operator: 'equals' | 'contains' | 'starts_with' | 'ends_with' | 'is_empty' | 'is_not_empty';
+  value: string;
+}
+
+interface VisualMapping {
+  type: 'source' | 'custom' | 'ignore';
+  value: string;
+}
+type VisualMappings = Record<string, VisualMapping>;
+
+const compileConditions = (list: VisualCondition[]): string => {
+  if (list.length === 0) return '';
+  
+  const parts = list.map(cond => {
+    const { fieldId, operator, value } = cond;
+    if (!fieldId) return 'true';
+    
+    const escapedValue = (value || '').replace(/"/g, '\\"');
+    
+    switch (operator) {
+      case 'equals':
+        return `String(record['${fieldId}'] || '') === "${escapedValue}"`;
+      case 'contains':
+        return `String(record['${fieldId}'] || '').toLowerCase().includes("${escapedValue}".toLowerCase())`;
+      case 'starts_with':
+        return `String(record['${fieldId}'] || '').toLowerCase().startsWith("${escapedValue}".toLowerCase())`;
+      case 'ends_with':
+        return `String(record['${fieldId}'] || '').toLowerCase().endsWith("${escapedValue}".toLowerCase())`;
+      case 'is_empty':
+        return `(!record['${fieldId}'] || String(record['${fieldId}']).trim() === '')`;
+      case 'is_not_empty':
+        return `(record['${fieldId}'] && String(record['${fieldId}']).trim() !== '')`;
+      default:
+        return 'true';
+    }
+  });
+  
+  return parts.filter(p => p !== 'true').join(' && ') || '';
+};
+
+const parseConditions = (condStr: string): VisualCondition[] => {
+  if (!condStr || condStr.trim() === '') return [];
+  
+  const parts = condStr.split(' && ');
+  const list: VisualCondition[] = [];
+  
+  for (const part of parts) {
+    const trimmed = part.trim();
+    
+    const equalsMatch = trimmed.match(/^String\(record\['([^']+)'\]\s*\|\|\s*''\)\s*===\s*"([^"]*)"$/);
+    if (equalsMatch) {
+      list.push({ fieldId: equalsMatch[1], operator: 'equals', value: equalsMatch[2] });
+      continue;
+    }
+    
+    const containsMatch = trimmed.match(/^String\(record\['([^']+)'\]\s*\|\|\s*''\)\.toLowerCase\(\)\.includes\("([^"]*)"\.toLowerCase\(\)\)$/);
+    if (containsMatch) {
+      list.push({ fieldId: containsMatch[1], operator: 'contains', value: containsMatch[2] });
+      continue;
+    }
+    
+    const startsMatch = trimmed.match(/^String\(record\['([^']+)'\]\s*\|\|\s*''\)\.toLowerCase\(\)\.startsWith\("([^"]*)"\.toLowerCase\(\)\)$/);
+    if (startsMatch) {
+      list.push({ fieldId: startsMatch[1], operator: 'starts_with', value: startsMatch[2] });
+      continue;
+    }
+    
+    const endsMatch = trimmed.match(/^String\(record\['([^']+)'\]\s*\|\|\s*''\)\.toLowerCase\(\)\.endsWith\("([^"]*)"\.toLowerCase\(\)\)$/);
+    if (endsMatch) {
+      list.push({ fieldId: endsMatch[1], operator: 'ends_with', value: endsMatch[2] });
+      continue;
+    }
+    
+    const emptyMatch = trimmed.match(/^\(!record\['([^']+)'\]\s*\|\|\s*String\(record\['[^']+'\]\)\.trim\(\)\s*===\s*''\)$/);
+    if (emptyMatch) {
+      list.push({ fieldId: emptyMatch[1], operator: 'is_empty', value: '' });
+      continue;
+    }
+    
+    const notEmptyMatch = trimmed.match(/^\(record\['([^']+)'\]\s*&&\s*String\(record\['[^']+'\]\)\.trim\(\)\s*!==\s*''\)$/);
+    if (notEmptyMatch) {
+      list.push({ fieldId: notEmptyMatch[1], operator: 'is_not_empty', value: '' });
+      continue;
+    }
+
+    const legacyIncludes = trimmed.match(/^([a-zA-Z0-9_-]+)\.includes\("([^"]*)"\)$/);
+    if (legacyIncludes) {
+      list.push({ fieldId: legacyIncludes[1], operator: 'contains', value: legacyIncludes[2] });
+      continue;
+    }
+
+    const legacyEquals = trimmed.match(/^([a-zA-Z0-9_-]+)\s*===\s*"([^"]*)"$/);
+    if (legacyEquals) {
+      list.push({ fieldId: legacyEquals[1], operator: 'equals', value: legacyEquals[2] });
+      continue;
+    }
+    
+    list.push({ fieldId: 'email', operator: 'contains', value: trimmed });
+  }
+  
+  return list;
+};
+
+const serializeMappings = (mappings: VisualMappings): Record<string, string> => {
+  const result: Record<string, string> = {};
+  
+  Object.entries(mappings).forEach(([targetId, config]) => {
+    if (config.type === 'ignore') return;
+    if (config.type === 'source') {
+      result[targetId] = `{{ trigger.record.${config.value} }}`;
+    } else {
+      result[targetId] = config.value || '';
+    }
+  });
+  
+  return result;
+};
+
+const parseMappings = (rawMap: Record<string, string>): VisualMappings => {
+  const result: VisualMappings = {};
+  
+  Object.entries(rawMap || {}).forEach(([targetId, rawValue]) => {
+    if (!rawValue) {
+      result[targetId] = { type: 'ignore', value: '' };
+      return;
+    }
+    
+    const match = String(rawValue).match(/^\{\{\s*trigger\.record\.([a-zA-Z0-9_-]+)\s*\}\}$/);
+    if (match) {
+      result[targetId] = { type: 'source', value: match[1] };
+    } else {
+      result[targetId] = { type: 'custom', value: String(rawValue) };
+    }
+  });
+  
+  return result;
+};
+
 export const IntakeSettingsPage = () => {
   const { tenant, modules, refreshModules } = usePlatform();
   const { session } = useAuth();
@@ -19,13 +159,13 @@ export const IntakeSettingsPage = () => {
 
   // Rule editor form state
   const [ruleName, setRuleName] = useState('');
-  const [ruleCondition, setRuleCondition] = useState('');
   const [targetModuleId, setTargetModuleId] = useState('');
-  const [fieldMappingText, setFieldMappingText] = useState('{\n  "name": "{{ trigger.record.submitted_by }}",\n  "description": "{{ trigger.record.description }}"\n}');
   const [archiveSource, setArchiveSource] = useState(true);
   const [triggerMode, setTriggerMode] = useState<'IMMEDIATE' | 'GLOBAL_SCHEDULE' | 'CUSTOM_SCHEDULE'>('GLOBAL_SCHEDULE');
   const [cronExpression, setCronExpression] = useState('GLOBAL');
   const [sourceModuleId, setSourceModuleId] = useState('public_form');
+  const [conditionsList, setConditionsList] = useState<VisualCondition[]>([]);
+  const [fieldMappings, setFieldMappings] = useState<VisualMappings>({});
 
   useEffect(() => {
     loadTriageConfig();
@@ -194,7 +334,7 @@ export const IntakeSettingsPage = () => {
   const handleSelectRule = (rule: any) => {
     setSelectedRuleId(rule.id);
     setRuleName(rule.name);
-    setRuleCondition(rule.conditions || '');
+    setConditionsList(parseConditions(rule.conditions || ''));
     
     const trigger = rule.triggers?.[0];
     if (trigger?.type === 'CRON') {
@@ -215,11 +355,11 @@ export const IntakeSettingsPage = () => {
     const routeAction = rule.actions?.find((a: any) => a.type === 'ROUTE_TO_MODULE');
     if (routeAction) {
       setTargetModuleId(routeAction.config.targetModuleId || '');
-      setFieldMappingText(JSON.stringify(routeAction.config.fieldMapping || {}, null, 2));
+      setFieldMappings(parseMappings(routeAction.config.fieldMapping || {}));
       setArchiveSource(routeAction.config.archiveSource !== false);
     } else {
       setTargetModuleId('');
-      setFieldMappingText('{}');
+      setFieldMappings({});
       setArchiveSource(true);
     }
   };
@@ -227,12 +367,12 @@ export const IntakeSettingsPage = () => {
   const handleCreateRule = () => {
     setSelectedRuleId('new');
     setRuleName('New Triage Route Rule');
-    setRuleCondition('email.includes("@company.com")');
+    setConditionsList([]);
     setTriggerMode('GLOBAL_SCHEDULE');
     setCronExpression('GLOBAL');
     setSourceModuleId('public_form');
     setTargetModuleId('');
-    setFieldMappingText('{\n  "name": "{{ trigger.record.submitted_by }}",\n  "description": "{{ trigger.record.description }}"\n}');
+    setFieldMappings({});
     setArchiveSource(true);
   };
 
@@ -246,13 +386,8 @@ export const IntakeSettingsPage = () => {
       return;
     }
 
-    let parsedMapping = {};
-    try {
-      parsedMapping = JSON.parse(fieldMappingText);
-    } catch (err) {
-      toast.error('Field mapping is not valid JSON');
-      return;
-    }
+    const compiledCondition = compileConditions(conditionsList);
+    const serializedMapping = serializeMappings(fieldMappings);
 
     let triggers = [];
     if (triggerMode === 'IMMEDIATE') {
@@ -267,14 +402,14 @@ export const IntakeSettingsPage = () => {
       name: ruleName,
       moduleId: triageModule.id,
       isActive: true,
-      conditions: ruleCondition || null,
+      conditions: compiledCondition || null,
       triggers,
       actions: [
         {
           type: 'ROUTE_TO_MODULE',
           config: {
             targetModuleId,
-            fieldMapping: parsedMapping,
+            fieldMapping: serializedMapping,
             archiveSource
           }
         }
@@ -515,15 +650,88 @@ export const IntakeSettingsPage = () => {
                     />
                   </div>
 
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="text-[10px] font-bold text-zinc-400">JavaScript Matching Condition (optional)</label>
-                    <input 
-                      type="text"
-                      value={ruleCondition}
-                      onChange={(e) => setRuleCondition(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-                      placeholder="e.g. email.includes('@company.com')"
-                    />
+                  <div className="space-y-2 col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Rule Matching Conditions</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const firstField = triageModule?.layout?.[0]?.name || 'email';
+                          setConditionsList(prev => [...prev, { fieldId: firstField, operator: 'contains', value: '' }]);
+                        }}
+                        className="flex items-center gap-1 text-[9px] font-black text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2 py-1 rounded-lg uppercase tracking-wider transition-all cursor-pointer"
+                      >
+                        <Plus size={10} />
+                        Add Condition
+                      </button>
+                    </div>
+
+                    {conditionsList.length === 0 ? (
+                      <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 text-center text-[10px] font-medium text-zinc-500">
+                        Always matches (No conditions set - runs for all incoming queue submissions).
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {conditionsList.map((cond, idx) => (
+                          <div key={idx} className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-900/60 p-2.5 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-150">
+                            <select
+                              value={cond.fieldId}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setConditionsList(prev => prev.map((c, i) => i === idx ? { ...c, fieldId: val } : c));
+                              }}
+                              className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer shrink-0 min-w-[140px]"
+                            >
+                              {(triageModule?.layout || []).map((f: any) => (
+                                <option key={f.id || f.name} value={f.name || f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+
+                            <select
+                              value={cond.operator}
+                              onChange={(e) => {
+                                const val = e.target.value as any;
+                                setConditionsList(prev => prev.map((c, i) => i === idx ? { ...c, operator: val } : c));
+                              }}
+                              className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer shrink-0"
+                            >
+                              <option value="equals">Equals</option>
+                              <option value="contains">Contains</option>
+                              <option value="starts_with">Starts With</option>
+                              <option value="ends_with">Ends With</option>
+                              <option value="is_empty">Is Empty</option>
+                              <option value="is_not_empty">Is Not Empty</option>
+                            </select>
+
+                            {cond.operator !== 'is_empty' && cond.operator !== 'is_not_empty' ? (
+                              <input
+                                type="text"
+                                value={cond.value}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setConditionsList(prev => prev.map((c, i) => i === idx ? { ...c, value: val } : c));
+                                }}
+                                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/30"
+                                placeholder="Value..."
+                              />
+                            ) : (
+                              <div className="flex-1 text-[10px] text-zinc-650 font-bold uppercase tracking-wider px-2">No value required</div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConditionsList(prev => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                              title="Remove Condition"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 col-span-2">
@@ -659,13 +867,123 @@ export const IntakeSettingsPage = () => {
                         </select>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-zinc-450">Fields Mapping Template (JSON)</label>
-                        <textarea 
-                          value={fieldMappingText}
-                          onChange={(e) => setFieldMappingText(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 font-mono text-[10px] text-zinc-200 h-32 focus:outline-none focus:border-indigo-500/50"
-                        />
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider block">Fields Mapping Setup</label>
+                        {targetModuleId ? (
+                          (() => {
+                            const targetModule = modules?.find((m: any) => m.id === targetModuleId);
+                            const flattenFields = (layoutFields: any[]): any[] => {
+                              const result: any[] = [];
+                              (layoutFields || []).forEach(f => {
+                                if (f.type !== 'section') {
+                                  result.push(f);
+                                }
+                                if (f.fields && Array.isArray(f.fields)) {
+                                  result.push(...flattenFields(f.fields));
+                                }
+                              });
+                              return result;
+                            };
+                            const customFields = targetModule ? flattenFields(targetModule.layout) : [];
+                            const allTargetFields = [
+                              { id: 'name', label: 'Record Name / Title', type: 'text' },
+                              { id: 'description', label: 'Record Description', type: 'longText' },
+                              ...customFields
+                            ];
+
+                            return (
+                              <div className="border border-zinc-900 rounded-2xl bg-zinc-950/20 overflow-hidden">
+                                <table className="w-full text-left border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-zinc-900 text-[9px] font-bold text-zinc-500 uppercase tracking-wider bg-zinc-950/40">
+                                      <th className="px-4 py-2">Destination Field</th>
+                                      <th className="px-4 py-2">Mapping Type</th>
+                                      <th className="px-4 py-2">Source Value</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {allTargetFields.map((field) => {
+                                      const currentMap = fieldMappings[field.id] || { type: 'ignore', value: '' };
+
+                                      return (
+                                        <tr key={field.id} className="border-b border-zinc-900/60 last:border-0 hover:bg-zinc-900/10 transition-colors">
+                                          <td className="px-4 py-3">
+                                            <div className="flex flex-col">
+                                              <span className="text-xs font-semibold text-zinc-200">{field.label || field.name || field.id}</span>
+                                              <span className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase">
+                                                {field.id === 'name' || field.id === 'description' ? 'Standard' : `Custom (${field.type})`}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3">
+                                            <select
+                                              value={currentMap.type}
+                                              onChange={(e) => {
+                                                const val = e.target.value as any;
+                                                setFieldMappings(prev => ({
+                                                  ...prev,
+                                                  [field.id]: { type: val, value: val === 'source' ? (triageModule?.layout?.[0]?.name || 'email') : '' }
+                                                }));
+                                              }}
+                                              className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer min-w-[150px]"
+                                            >
+                                              <option value="ignore">Do Not Map</option>
+                                              <option value="source">Map from Ingested Field</option>
+                                              <option value="custom">Custom Static Value</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-3">
+                                            {currentMap.type === 'source' && (
+                                              <select
+                                                value={currentMap.value}
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  setFieldMappings(prev => ({
+                                                    ...prev,
+                                                    [field.id]: { ...prev[field.id], value: val }
+                                                  }));
+                                                }}
+                                                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer w-full"
+                                              >
+                                                {(triageModule?.layout || []).map((f: any) => (
+                                                  <option key={f.id || f.name} value={f.name || f.id}>{f.label || f.name}</option>
+                                                ))}
+                                              </select>
+                                            )}
+
+                                            {currentMap.type === 'custom' && (
+                                              <input
+                                                type="text"
+                                                value={currentMap.value}
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  setFieldMappings(prev => ({
+                                                    ...prev,
+                                                    [field.id]: { ...prev[field.id], value: val }
+                                                  }));
+                                                }}
+                                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/30"
+                                                placeholder="Static text..."
+                                              />
+                                            )}
+
+                                            {currentMap.type === 'ignore' && (
+                                              <span className="text-[10px] text-zinc-650 font-bold tracking-wider uppercase pl-2">Ignored</span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <div className="bg-zinc-950/40 border border-zinc-900 border-dashed rounded-2xl p-6 text-center text-[10px] font-medium text-zinc-500">
+                            Select a destination module above to configure fields mapping.
+                          </div>
+                        )}
                       </div>
 
                       <label className="flex items-center gap-2.5 cursor-pointer text-[10px] text-zinc-300 font-bold select-none pt-1">
