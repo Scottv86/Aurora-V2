@@ -458,9 +458,7 @@ export const TriageInboxPage = () => {
       const res = await fetch(`${API_BASE_URL}/api/data/records?moduleId=${triageModule.id}&page=1&limit=100&_t=${Date.now()}`, {
         headers: { 
           'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'Authorization': `Bearer ${token}`
         }
       });
       if (res.ok) {
@@ -480,9 +478,7 @@ export const TriageInboxPage = () => {
       const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triageModule.id}&_t=${Date.now()}`, {
         headers: { 
           'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'Authorization': `Bearer ${token}`
         }
       });
       if (res.ok) {
