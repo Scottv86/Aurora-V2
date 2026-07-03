@@ -232,10 +232,10 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
 
       // Resolve autonumber record keys if configured
       let recordKey = undefined;
-      if (targetConfig.customerRefPrefix) {
-        const prefix = targetConfig.customerRefPrefix;
-        const suffix = targetConfig.customerRefSuffix || '';
-        const nextNum = targetConfig.customerRefNextNumber !== undefined ? Number(targetConfig.customerRefNextNumber) : 1;
+      if (targetConfig.recordKeyPrefix) {
+        const prefix = targetConfig.recordKeyPrefix;
+        const suffix = targetConfig.recordKeySuffix || '';
+        const nextNum = targetConfig.nextKeyNumber !== undefined ? Number(targetConfig.nextKeyNumber) : 1;
         recordKey = `${prefix}-${nextNum}${suffix}`;
         
         await globalPrisma.module.update({
@@ -243,7 +243,7 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
           data: {
             config: {
               ...targetConfig,
-              customerRefNextNumber: nextNum + 1
+              nextKeyNumber: nextNum + 1
             }
           }
         });

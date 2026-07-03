@@ -189,6 +189,13 @@ export const IntakeSettingsPage = () => {
     return triageModule?.layout || [];
   };
 
+  const getFieldDatabaseKey = (f: any): string => {
+    if (f.id && f.id.startsWith('field-')) {
+      return f.id;
+    }
+    return f.name || f.id || '';
+  };
+
   useEffect(() => {
     loadTriageConfig();
   }, [modules]);
@@ -706,7 +713,7 @@ export const IntakeSettingsPage = () => {
                               className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer shrink-0 min-w-[140px]"
                             >
                               {getSourceFieldsList().map((f: any) => (
-                                <option key={f.id || f.name} value={f.name || f.id}>{f.label || f.name}</option>
+                                <option key={f.id || f.name} value={getFieldDatabaseKey(f)}>{f.label || f.name}</option>
                               ))}
                             </select>
 
@@ -969,7 +976,7 @@ export const IntakeSettingsPage = () => {
                                                 className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer w-full"
                                               >
                                                 {getSourceFieldsList().map((f: any) => (
-                                                  <option key={f.id || f.name} value={f.name || f.id}>{f.label || f.name}</option>
+                                                  <option key={f.id || f.name} value={getFieldDatabaseKey(f)}>{f.label || f.name}</option>
                                                 ))}
                                               </select>
                                             )}
