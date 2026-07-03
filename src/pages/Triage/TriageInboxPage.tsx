@@ -455,10 +455,12 @@ export const TriageInboxPage = () => {
     if (!triageModule) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/data/records?moduleId=${triageModule.id}&page=1&limit=100`, {
+      const res = await fetch(`${API_BASE_URL}/api/data/records?moduleId=${triageModule.id}&page=1&limit=100&_t=${Date.now()}`, {
         headers: { 
           'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}` 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
       if (res.ok) {
@@ -475,10 +477,12 @@ export const TriageInboxPage = () => {
   const loadTriageRules = async () => {
     if (!triageModule) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triageModule.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triageModule.id}&_t=${Date.now()}`, {
         headers: { 
           'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}` 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
       if (res.ok) {
