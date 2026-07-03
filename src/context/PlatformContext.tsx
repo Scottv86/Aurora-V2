@@ -132,7 +132,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     setBreadcrumbOverrides(prev => ({ ...prev, [id]: label }));
   }, []);
 
-  const refreshModules = async () => {
+  const refreshModules = useCallback(async () => {
     if (!supabaseUser || !tenant?.id) return;
     
     setModulesLoading(true);
@@ -153,7 +153,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setModulesLoading(false);
     }
-  };
+  }, [supabaseUser, tenant?.id, session?.access_token]);
 
   const updateMenuConfig = async (config: MenuConfig, scope: 'user' | 'tenant' = 'user') => {
     if (!tenant?.id) return;
@@ -439,7 +439,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       refreshMembers();
       refreshTeams();
     }
-  }, [tenant?.id, supabaseUser, refreshBilling, refreshMembers, refreshTeams]);
+  }, [tenant?.id, supabaseUser, refreshModules, refreshBilling, refreshMembers, refreshTeams]);
 
   return (
     <PlatformContext.Provider value={{ 
