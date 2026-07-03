@@ -167,6 +167,28 @@ export const IntakeSettingsPage = () => {
   const [conditionsList, setConditionsList] = useState<VisualCondition[]>([]);
   const [fieldMappings, setFieldMappings] = useState<VisualMappings>({});
 
+  const getSourceFieldsList = () => {
+    if (sourceModuleId && sourceModuleId !== 'public_form') {
+      const sourceModule = modules?.find((m: any) => m.id === sourceModuleId);
+      if (sourceModule) {
+        const flattenFields = (layoutFields: any[]): any[] => {
+          const result: any[] = [];
+          (layoutFields || []).forEach(f => {
+            if (f.type !== 'section') {
+              result.push(f);
+            }
+            if (f.fields && Array.isArray(f.fields)) {
+              result.push(...flattenFields(f.fields));
+            }
+          });
+          return result;
+        };
+        return flattenFields(sourceModule.layout);
+      }
+    }
+    return triageModule?.layout || [];
+  };
+
   useEffect(() => {
     loadTriageConfig();
   }, [modules]);
@@ -656,7 +678,8 @@ export const IntakeSettingsPage = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          const firstField = triageModule?.layout?.[0]?.name || 'email';
+                          const fields = getSourceFieldsList();
+                          const firstField = fields?.[0]?.name || fields?.[0]?.id || 'email';
                           setConditionsList(prev => [...prev, { fieldId: firstField, operator: 'contains', value: '' }]);
                         }}
                         className="flex items-center gap-1 text-[9px] font-black text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2 py-1 rounded-lg uppercase tracking-wider transition-all cursor-pointer"
@@ -682,7 +705,7 @@ export const IntakeSettingsPage = () => {
                               }}
                               className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer shrink-0 min-w-[140px]"
                             >
-                              {(triageModule?.layout || []).map((f: any) => (
+                              {getSourceFieldsList().map((f: any) => (
                                 <option key={f.id || f.name} value={f.name || f.id}>{f.label || f.name}</option>
                               ))}
                             </select>
@@ -918,9 +941,11 @@ export const IntakeSettingsPage = () => {
                                               value={currentMap.type}
                                               onChange={(e) => {
                                                 const val = e.target.value as any;
+                                                const fields = getSourceFieldsList();
+                                                const defaultSourceField = fields?.[0]?.name || fields?.[0]?.id || 'email';
                                                 setFieldMappings(prev => ({
                                                   ...prev,
-                                                  [field.id]: { type: val, value: val === 'source' ? (triageModule?.layout?.[0]?.name || 'email') : '' }
+                                                  [field.id]: { type: val, value: val === 'source' ? defaultSourceField : '' }
                                                 }));
                                               }}
                                               className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer min-w-[150px]"
@@ -943,7 +968,7 @@ export const IntakeSettingsPage = () => {
                                                 }}
                                                 className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer w-full"
                                               >
-                                                {(triageModule?.layout || []).map((f: any) => (
+                                                {getSourceFieldsList().map((f: any) => (
                                                   <option key={f.id || f.name} value={f.name || f.id}>{f.label || f.name}</option>
                                                 ))}
                                               </select>
