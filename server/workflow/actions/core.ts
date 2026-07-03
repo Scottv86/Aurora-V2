@@ -205,15 +205,93 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
           targetData[targetKey] = sourceExpr;
         }
       }
+      // 1. Get workflow configuration
+      let workflowState = null;
+      const targetConfig = (targetModule.config || {}) as any;
+      const workflow = targetConfig.workflow || (targetConfig.workflows && targetConfig.workflows[0]);
+      
+      const getStatusFromState = (state: any, wf: any, fallback: string): string => {
+        if (!state || !wf) return fallback;
+        const currentNode = wf.nodes.find((n: any) => n.id === state.currentNodeId);
+        return currentNode ? currentNode.name : fallback;
+      };
 
-      const createdRecord = await globalPrisma.record.create({
+      if (workflow && workflow.nodes && workflow.nodes.length > 0) {
+        const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
+        workflowState = {
+          currentNodeId: startNode.id,
+          activeNodeIds: [startNode.id],
+          history: [{
+            nodeId: startNode.id,
+            timestamp: new Date().toISOString(),
+            action: 'Initialized',
+            triggeredBy: 'System Triage'
+          }]
+        };
+      }
+
+      // Resolve autonumber record keys if configured
+      let recordKey = undefined;
+      if (targetConfig.customerRefPrefix) {
+        const prefix = targetConfig.customerRefPrefix;
+        const suffix = targetConfig.customerRefSuffix || '';
+        const nextNum = targetConfig.customerRefNextNumber !== undefined ? Number(targetConfig.customerRefNextNumber) : 1;
+        recordKey = `${prefix}-${nextNum}${suffix}`;
+        
+        await globalPrisma.module.update({
+          where: { id: targetModuleId },
+          data: {
+            config: {
+              ...targetConfig,
+              customerRefNextNumber: nextNum + 1
+            }
+          }
+        });
+      }
+
+      if (recordKey) {
+        targetData._record_key = recordKey;
+      }
+
+      let createdRecord = await globalPrisma.record.create({
         data: {
           tenantId: record.tenantId || 'cmnx01qd00002mon316pjfg9p',
           moduleId: targetModuleId,
-          status: 'New',
-          data: targetData
+          status: workflowState ? getStatusFromState(workflowState, workflow, 'New') : 'New',
+          data: targetData,
+          workflowState: workflowState as any
         }
       });
+
+      // 2. Evaluate workflow transitions
+      if (workflow && workflowState) {
+        try {
+          const { WorkflowEngine } = await import('../../services/workflowEngine');
+          const evaluatedState = await WorkflowEngine.evaluate(
+            { id: createdRecord.id, ...targetData },
+            workflow,
+            workflowState,
+            targetConfig.layout
+          );
+
+          if (
+            evaluatedState.currentNodeId !== workflowState.currentNodeId ||
+            JSON.stringify(evaluatedState.activeNodeIds) !== JSON.stringify(workflowState.activeNodeIds)
+          ) {
+            const finalStatus = getStatusFromState(evaluatedState, workflow, createdRecord.status);
+
+            createdRecord = await globalPrisma.record.update({
+              where: { id: createdRecord.id },
+              data: {
+                status: finalStatus,
+                workflowState: evaluatedState as any
+              }
+            });
+          }
+        } catch (err) {
+          console.error('[Action: ROUTE_TO_MODULE] Workflow transition evaluation failed:', err);
+        }
+      }
 
       console.log(`[Action: ROUTE_TO_MODULE] Route success: Created record ${createdRecord.id} in module ${targetModuleId}`);
 
