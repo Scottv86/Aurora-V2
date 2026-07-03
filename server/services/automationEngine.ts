@@ -70,7 +70,7 @@ export class AutomationEngine {
           }
           if (t.type === 'USER_MENTIONED' && event.type === 'USER_MENTIONED') return true;
           if (t.type === 'FORM_SUBMITTED' && event.type === 'FORM_SUBMITTED') {
-            return !t.formId || t.formId === event.metadata?.formId;
+            return !t.formId || t.formId === 'public_form' || t.formId === event.metadata?.formId;
           }
           return false;
         });
@@ -215,18 +215,74 @@ export class AutomationEngine {
 
           if (!targetRecordId) throw new Error('Could not resolve target record ID for SET_ASSIGNEE');
 
-          const assigneeId = this.interpolateString(action.config.assigneeId || '', context);
-
           const existing = await db.record.findUnique({
             where: { id: targetRecordId }
           });
 
           if (!existing) throw new Error(`Record with ID ${targetRecordId} not found`);
 
+          const assignmentType = action.config.assignmentType || 'USER';
+          let chosenAssigneeId = '';
+
+          if (assignmentType === 'USER') {
+            chosenAssigneeId = this.interpolateString(action.config.assigneeId || '', context);
+          } else if (assignmentType === 'TEAM' || assignmentType === 'POSITION') {
+            const teamId = action.config.teamId;
+            const positionId = action.config.positionId;
+
+            // 1. Get all active members in the team or position
+            const members = await db.tenantMember.findMany({
+              where: {
+                tenantId: existing.tenantId,
+                ...(assignmentType === 'TEAM' ? { teamId } : { positionId }),
+                status: 'Active'
+              }
+            });
+
+            if (members.length === 0) {
+              console.warn(`[Automation Engine] No active members found for assignmentType ${assignmentType} (targetId: ${assignmentType === 'TEAM' ? teamId : positionId})`);
+            } else {
+              const memberIds = members.map(m => m.id);
+
+              // 2. Fetch recent records to check latest assignments (up to 200 records)
+              const recentRecords = await db.record.findMany({
+                where: { tenantId: existing.tenantId },
+                orderBy: { updatedAt: 'desc' },
+                take: 200
+              });
+
+              // Map each memberId to the updatedAt timestamp of their most recent assignment
+              const memberLastAssignedMap: Record<string, number> = {};
+              memberIds.forEach(mId => {
+                memberLastAssignedMap[mId] = 0; // default (never assigned)
+              });
+
+              for (const rec of recentRecords) {
+                const rData = rec.data as Record<string, any> || {};
+                const assId = rData.assigneeId;
+                if (assId && memberIds.includes(assId) && memberLastAssignedMap[assId] === 0) {
+                  memberLastAssignedMap[assId] = rec.updatedAt.getTime();
+                }
+              }
+
+              const recentAssignments = memberIds.map(mId => ({
+                memberId: mId,
+                lastAssignedAt: memberLastAssignedMap[mId]
+              }));
+
+              // Sort ascending so least recently assigned (or never assigned) comes first
+              recentAssignments.sort((a, b) => a.lastAssignedAt - b.lastAssignedAt);
+              chosenAssigneeId = recentAssignments[0].memberId;
+            }
+          }
+
           const mergedData = {
-            ...(existing.data as Record<string, any> || {}),
-            assigneeId: assigneeId
+            ...(existing.data as Record<string, any> || {})
           };
+
+          if (chosenAssigneeId) {
+            mergedData.assigneeId = chosenAssigneeId;
+          }
 
           const finalData = await this.generateKeysAndAutonumbers(existing.moduleId, mergedData, db);
 

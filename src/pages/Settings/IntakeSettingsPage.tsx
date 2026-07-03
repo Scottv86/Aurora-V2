@@ -23,6 +23,9 @@ export const IntakeSettingsPage = () => {
   const [targetModuleId, setTargetModuleId] = useState('');
   const [fieldMappingText, setFieldMappingText] = useState('{\n  "name": "{{ trigger.record.submitted_by }}",\n  "description": "{{ trigger.record.description }}"\n}');
   const [archiveSource, setArchiveSource] = useState(true);
+  const [triggerMode, setTriggerMode] = useState<'IMMEDIATE' | 'GLOBAL_SCHEDULE' | 'CUSTOM_SCHEDULE'>('GLOBAL_SCHEDULE');
+  const [cronExpression, setCronExpression] = useState('GLOBAL');
+  const [sourceModuleId, setSourceModuleId] = useState('public_form');
 
   useEffect(() => {
     loadTriageConfig();
@@ -136,11 +139,79 @@ export const IntakeSettingsPage = () => {
     }
   };
 
+  const handleSaveGlobalSchedule = async (newCron: string) => {
+    if (!triageModule) return;
+    try {
+      const {
+        id,
+        name,
+        category,
+        iconName,
+        type,
+        enabled,
+        isGlobal,
+        templateId,
+        status,
+        createdAt,
+        isIntakeTriage,
+        ...restConfig
+      } = triageModule;
+
+      const res = await fetch(`${API_BASE_URL}/api/data/modules/${triageModule.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name,
+          category,
+          iconName,
+          type,
+          enabled,
+          isGlobal,
+          templateId,
+          ...restConfig,
+          config: {
+            ...(triageModule.config || {}),
+            globalSchedule: newCron
+          }
+        })
+      });
+
+      if (res.ok) {
+        toast.success(`Global queue schedule updated`);
+        await refreshModules();
+      } else {
+        throw new Error('Failed to update global schedule');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save global schedule');
+    }
+  };
+
   const handleSelectRule = (rule: any) => {
     setSelectedRuleId(rule.id);
     setRuleName(rule.name);
     setRuleCondition(rule.conditions || '');
     
+    const trigger = rule.triggers?.[0];
+    if (trigger?.type === 'CRON') {
+      if (trigger.cronExpression === 'GLOBAL') {
+        setTriggerMode('GLOBAL_SCHEDULE');
+        setCronExpression('GLOBAL');
+      } else {
+        setTriggerMode('CUSTOM_SCHEDULE');
+        setCronExpression(trigger.cronExpression || '*/5 * * * *');
+      }
+      setSourceModuleId('public_form');
+    } else {
+      setTriggerMode('IMMEDIATE');
+      setCronExpression('GLOBAL');
+      setSourceModuleId(trigger?.formId || 'public_form');
+    }
+
     const routeAction = rule.actions?.find((a: any) => a.type === 'ROUTE_TO_MODULE');
     if (routeAction) {
       setTargetModuleId(routeAction.config.targetModuleId || '');
@@ -157,6 +228,9 @@ export const IntakeSettingsPage = () => {
     setSelectedRuleId('new');
     setRuleName('New Triage Route Rule');
     setRuleCondition('email.includes("@company.com")');
+    setTriggerMode('GLOBAL_SCHEDULE');
+    setCronExpression('GLOBAL');
+    setSourceModuleId('public_form');
     setTargetModuleId('');
     setFieldMappingText('{\n  "name": "{{ trigger.record.submitted_by }}",\n  "description": "{{ trigger.record.description }}"\n}');
     setArchiveSource(true);
@@ -180,12 +254,21 @@ export const IntakeSettingsPage = () => {
       return;
     }
 
+    let triggers = [];
+    if (triggerMode === 'IMMEDIATE') {
+      triggers = [{ type: 'FORM_SUBMITTED', formId: sourceModuleId || 'public_form' }];
+    } else if (triggerMode === 'GLOBAL_SCHEDULE') {
+      triggers = [{ type: 'CRON', cronExpression: 'GLOBAL', moduleId: triageModule.id }];
+    } else {
+      triggers = [{ type: 'CRON', cronExpression: cronExpression || '*/5 * * * *', moduleId: triageModule.id }];
+    }
+
     const ruleData = {
       name: ruleName,
       moduleId: triageModule.id,
       isActive: true,
       conditions: ruleCondition || null,
-      triggers: [{ type: 'FORM_SUBMITTED', formId: 'public_form' }],
+      triggers,
       actions: [
         {
           type: 'ROUTE_TO_MODULE',
@@ -337,7 +420,7 @@ export const IntakeSettingsPage = () => {
                 );
               })}
               {triageRules.length === 0 && (
-                <div className="py-8 text-center border border-dashed border-zinc-850 rounded-2xl">
+                <div className="py-8 text-center border border-dashed border-zinc-800 rounded-2xl">
                   <p className="text-[10px] text-zinc-500 italic">No triage routing rules configured yet.</p>
                 </div>
               )}
@@ -360,6 +443,51 @@ export const IntakeSettingsPage = () => {
                 </div>
                 <div className="bg-zinc-900 p-2.5 rounded font-mono text-[9px] text-zinc-400 break-all select-all select-none">
                   {publicFormLink}
+                </div>
+              </div>
+
+              {/* Global Queue Schedule Settings */}
+              <div className="border-t border-zinc-900/60 pt-4 space-y-3">
+                <div>
+                  <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Global Queue Schedule</h4>
+                  <p className="text-[8px] text-zinc-400">Processing interval for rules set to use the Global Schedule.</p>
+                </div>
+                
+                <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-zinc-500">Distribution Interval</label>
+                    <select
+                      value={
+                        ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triageModule?.config?.globalSchedule || '*/5 * * * *')
+                          ? (triageModule?.config?.globalSchedule || '*/5 * * * *')
+                          : 'CUSTOM'
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const nextCron = val !== 'CUSTOM' ? val : '*/5 9-17 * * 1-5';
+                        handleSaveGlobalSchedule(nextCron);
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 cursor-pointer"
+                    >
+                      <option value="*/5 * * * *">Every 5 Minutes</option>
+                      <option value="*/15 * * * *">Every 15 Minutes</option>
+                      <option value="0 * * * *">Hourly</option>
+                      <option value="0 0 * * *">Daily at Midnight</option>
+                      <option value="CUSTOM">Custom Cron Expression</option>
+                    </select>
+                  </div>
+
+                  {(!['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triageModule?.config?.globalSchedule || '*/5 * * * *') || triageModule?.config?.globalSchedule === 'CUSTOM') && (
+                    <div className="space-y-1 animate-in fade-in duration-200">
+                      <label className="text-[9px] font-bold text-zinc-550">Cron Expression</label>
+                      <input
+                        type="text"
+                        value={triageModule?.config?.globalSchedule || '*/5 * * * *'}
+                        onChange={(e) => handleSaveGlobalSchedule(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 font-mono text-xs text-zinc-250 focus:outline-none focus:border-indigo-500/50"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -397,6 +525,122 @@ export const IntakeSettingsPage = () => {
                       placeholder="e.g. email.includes('@company.com')"
                     />
                   </div>
+
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="text-[10px] font-bold text-zinc-400">Trigger Mode</label>
+                    <div className="grid grid-cols-3 gap-4">
+                      <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
+                        triggerMode === 'IMMEDIATE' 
+                          ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
+                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
+                      }`}>
+                        <input 
+                          type="radio" 
+                          name="triggerMode"
+                          checked={triggerMode === 'IMMEDIATE'}
+                          onChange={() => setTriggerMode('IMMEDIATE')}
+                          className="sr-only"
+                        />
+                        <span className="text-xs font-bold text-zinc-200">Immediately</span>
+                        <span className="text-[8.5px] text-zinc-500 leading-normal">Route records instantly on form ingestion.</span>
+                      </label>
+
+                      <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
+                        triggerMode === 'GLOBAL_SCHEDULE' 
+                          ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
+                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
+                      }`}>
+                        <input 
+                          type="radio" 
+                          name="triggerMode"
+                          checked={triggerMode === 'GLOBAL_SCHEDULE'}
+                          onChange={() => {
+                            setTriggerMode('GLOBAL_SCHEDULE');
+                            setCronExpression('GLOBAL');
+                          }}
+                          className="sr-only"
+                        />
+                        <span className="text-xs font-bold text-zinc-200">Global Schedule</span>
+                        <span className="text-[8.5px] text-zinc-500 leading-normal">Run according to the shared Inbound queue interval.</span>
+                      </label>
+
+                      <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
+                        triggerMode === 'CUSTOM_SCHEDULE' 
+                          ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
+                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
+                      }`}>
+                        <input 
+                          type="radio" 
+                          name="triggerMode"
+                          checked={triggerMode === 'CUSTOM_SCHEDULE'}
+                          onChange={() => {
+                            setTriggerMode('CUSTOM_SCHEDULE');
+                            setCronExpression('*/5 * * * *');
+                          }}
+                          className="sr-only"
+                        />
+                        <span className="text-xs font-bold text-zinc-200">Custom Schedule</span>
+                        <span className="text-[8.5px] text-zinc-500 leading-normal">Configure a custom cron frequency for this rule.</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {triggerMode === 'CUSTOM_SCHEDULE' && (
+                    <div className="grid grid-cols-2 gap-6 col-span-2 animate-in fade-in duration-200">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400">Distribution Schedule</label>
+                        <select 
+                          value={
+                            ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(cronExpression)
+                              ? cronExpression
+                              : 'CUSTOM'
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val !== 'CUSTOM') {
+                              setCronExpression(val);
+                            } else {
+                              setCronExpression('*/5 9-17 * * 1-5');
+                            }
+                          }}
+                          className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2 text-xs text-zinc-200 cursor-pointer"
+                        >
+                          <option value="*/5 * * * *">Every 5 Minutes</option>
+                          <option value="*/15 * * * *">Every 15 Minutes</option>
+                          <option value="0 * * * *">Hourly</option>
+                          <option value="0 0 * * *">Daily at Midnight</option>
+                          <option value="CUSTOM">Custom Cron Expression</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400">Cron Expression</label>
+                        <input 
+                          type="text"
+                          value={cronExpression}
+                          onChange={(e) => setCronExpression(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                          placeholder="e.g. */5 * * * *"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {triggerMode === 'IMMEDIATE' && (
+                    <div className="space-y-1.5 col-span-2 animate-in fade-in duration-200">
+                      <label className="text-[10px] font-bold text-zinc-400">Ingestion Data Source (Form)</label>
+                      <select 
+                        value={sourceModuleId}
+                        onChange={(e) => setSourceModuleId(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-zinc-200 cursor-pointer"
+                      >
+                        <option value="public_form">All Ingestion Forms</option>
+                        {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                          <option key={m.id} value={m.id}>{m.name} Form</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5 col-span-2">
                     <label className="text-[10px] font-bold text-zinc-400 font-mono">Triage Action: Route Record</label>

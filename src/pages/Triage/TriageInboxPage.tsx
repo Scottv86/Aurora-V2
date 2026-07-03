@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
+import { usePositions } from '../../hooks/usePositions';
 import { API_BASE_URL } from '../../config';
 import { 
   Inbox, Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { FieldInput } from '../../components/FieldInput';
 
 // Helper: Reconstruct dynamic form fields by filtering standard DB fields
 const getRecordFields = (rec: any) => {
@@ -118,7 +120,7 @@ const getStatusStyles = (status: string) => {
 };
 
 export const TriageInboxPage = () => {
-  const { tenant, modules } = usePlatform();
+  const { tenant, modules, members = [], teams = [] } = usePlatform();
   const { session, user } = useAuth();
   const queryClient = useQueryClient();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
@@ -127,6 +129,52 @@ export const TriageInboxPage = () => {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [triageRules, setTriageRules] = useState<any[]>([]);
+  const [countdownText, setCountdownText] = useState<string>('');
+  const [isRunningTriage, setIsRunningTriage] = useState(false);
+
+  useEffect(() => {
+    const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
+    let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
+
+    if (cronExpr === 'GLOBAL') {
+      cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+    }
+
+    if (!cronExpr && triageModule) {
+      cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+    }
+
+    if (!cronExpr) {
+      setCountdownText('');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      const nextRun = getNextCronDate(cronExpr, now);
+      const diffMs = nextRun.getTime() - now.getTime();
+      
+      if (diffMs <= 0) {
+        setCountdownText('Running...');
+        return;
+      }
+
+      const totalSec = Math.floor(diffMs / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      
+      if (min > 0) {
+        setCountdownText(`${min}m ${sec}s`);
+      } else {
+        setCountdownText(`${sec}s`);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [triageRules, triageModule]);
   
   // Collaboration / Tabs / Filter states
   const [comments, setComments] = useState<any[]>([]);
@@ -140,6 +188,134 @@ export const TriageInboxPage = () => {
   const [selectedTargetModuleId, setSelectedTargetModuleId] = useState('');
   const [mappings, setMappings] = useState<Record<string, { type: 'source' | 'custom' | 'ignore', value: string }>>({});
   const [routingInProgress, setRoutingInProgress] = useState(false);
+  const [isEditingForm, setIsEditingForm] = useState(false);
+  const [editedFormData, setEditedFormData] = useState<Record<string, any>>({});
+
+  const { positions } = usePositions();
+
+  const currentMember = members?.find((m: any) => m.userId === user?.id);
+  const currentMemberId = currentMember?.id || '';
+
+  const handleAssigneeChange = async (newAssigneeId: string | null, assigneeType: string = 'USER') => {
+    if (!selectedRecord) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/data/records/${selectedRecord.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          moduleId: triageModule.id,
+          assigneeId: newAssigneeId,
+          assigneeType: newAssigneeId ? assigneeType : 'USER'
+        })
+      });
+
+      if (!res.ok) {
+        const errObj = await res.json();
+        throw new Error(errObj.error || 'Failed to update assignee');
+      }
+
+      const updatedRecord = await res.json();
+
+      // Update in state
+      setSelectedRecord(updatedRecord);
+      setRecords(prev => prev.map(r => r.id === updatedRecord.id ? updatedRecord : r));
+      
+      let assigneeName = 'Unassigned';
+      if (newAssigneeId) {
+        if (assigneeType === 'USER') {
+          const m = members.find((mem: any) => mem.id === newAssigneeId);
+          assigneeName = m ? m.name : 'Unknown User';
+        } else if (assigneeType === 'TEAM') {
+          const t = teams.find((team: any) => team.id === newAssigneeId);
+          assigneeName = t ? `Team: ${t.name}` : 'Unknown Team';
+        } else {
+          const p = positions.find((pos: any) => pos.id === newAssigneeId);
+          assigneeName = p ? `Position: ${p.title}` : 'Unknown Position';
+        }
+      }
+
+      toast.success(newAssigneeId ? `Assigned to ${assigneeName}` : 'Set to unassigned');
+
+      // Post a system note
+      const userLabel = user?.user_metadata?.full_name || user?.email || 'System User';
+      await postSystemComment(
+        selectedRecord.id,
+        `Assignee updated to "${assigneeName}" by ${userLabel}`
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Assignment failed');
+    }
+  };
+
+  const handleAssigneeTypeChange = async (newType: string) => {
+    if (!selectedRecord) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/data/records/${selectedRecord.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          moduleId: triageModule.id,
+          assigneeId: null,
+          assigneeType: newType
+        })
+      });
+
+      if (!res.ok) {
+        const errObj = await res.json();
+        throw new Error(errObj.error || 'Failed to update assignee type');
+      }
+
+      const updatedRecord = await res.json();
+      setSelectedRecord(updatedRecord);
+      setRecords(prev => prev.map(r => r.id === updatedRecord.id ? updatedRecord : r));
+      toast.success(`Switched assignment type to ${newType.toLowerCase()}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update assignee type');
+    }
+  };
+  
+  // Port coordinates state for node connection curves
+  const [portCoords, setPortCoords] = useState<Record<string, { x: number, y: number }>>({});
+  const [activeSourcePort, setActiveSourcePort] = useState<string | null>(null);
+  const canvasRef = useRef<SVGSVGElement>(null);
+
+  const updatePortCoordinates = () => {
+    if (!canvasRef.current) return;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const newCoords: Record<string, { x: number, y: number }> = {};
+
+    const ports = document.querySelectorAll('[data-port-id]');
+    ports.forEach((portEl) => {
+      const portId = portEl.getAttribute('data-port-id');
+      if (portId) {
+        const rect = portEl.getBoundingClientRect();
+        newCoords[portId] = {
+          x: rect.left + rect.width / 2 - canvasRect.left,
+          y: rect.top + rect.height / 2 - canvasRect.top
+        };
+      }
+    });
+    setPortCoords(newCoords);
+  };
+
+  useEffect(() => {
+    if (isRouting) {
+      const timer = setTimeout(updatePortCoordinates, 100);
+      window.addEventListener('resize', updatePortCoordinates);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('resize', updatePortCoordinates);
+      };
+    }
+  }, [isRouting, selectedTargetModuleId, mappings]);
 
   useEffect(() => {
     if (modules) {
@@ -161,6 +337,11 @@ export const TriageInboxPage = () => {
       setIsRouting(false);
       setSelectedTargetModuleId('');
       setMappings({});
+      setIsEditingForm(false);
+      setEditedFormData(getRecordFields(selectedRecord));
+    } else {
+      setIsEditingForm(false);
+      setEditedFormData({});
     }
   }, [selectedRecord]);
 
@@ -190,6 +371,85 @@ export const TriageInboxPage = () => {
     });
     setMappings(newMappings);
   }, [selectedTargetModuleId, selectedRecord, modules]);
+
+  const getFormFields = () => {
+    if (!selectedRecord || !modules) return [];
+    const originalModule = getOriginalModule(selectedRecord, modules);
+    if (!originalModule) return [];
+    
+    const publicForm = originalModule.forms?.find((f: any) => f.usage === 'public_link');
+    if (!publicForm) return [];
+
+    const formFields: any[] = [];
+    
+    const formFieldsSource = publicForm.isMultistep && publicForm.steps
+      ? publicForm.steps.flatMap((step: any) => step.fields || [])
+      : (publicForm.fields || []);
+      
+    const allLayoutFields = flattenFields(originalModule.layout || originalModule.config?.layout || []);
+    
+    formFieldsSource.forEach((fObj: any) => {
+      if (fObj.id && !fObj.id.startsWith('visual-')) {
+        const fieldDef = allLayoutFields.find((f: any) => f.id === fObj.id);
+        if (fieldDef) {
+          formFields.push({
+            id: fObj.id,
+            field: fieldDef,
+            label: fObj.labelOverride || fieldDef.label || fieldDef.name || fObj.id,
+            width: fObj.width || 'full',
+            required: fObj.required || fieldDef.required
+          });
+        }
+      }
+    });
+    
+    return formFields;
+  };
+
+  const getAdditionalFields = (formFields: any[]) => {
+    if (!selectedRecord) return [];
+    const recordFields = getRecordFields(selectedRecord);
+    const formFieldIds = new Set(formFields.map(f => f.id));
+    
+    const additional: any[] = [];
+    Object.entries(recordFields)
+      .filter(([k]) => !k.startsWith('_') && !formFieldIds.has(k))
+      .forEach(([key, val]) => {
+        additional.push({
+          id: key,
+          label: key.replace(/_/g, ' '),
+          value: val
+        });
+      });
+      
+    return additional;
+  };
+
+  const handleManualRunTriage = async () => {
+    setIsRunningTriage(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/automations/run-triage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || 'Queue auto-distribution completed');
+        loadInboxRecords();
+      } else {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to trigger queue');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Manual run failed');
+    } finally {
+      setIsRunningTriage(false);
+    }
+  };
 
   const loadInboxRecords = async () => {
     if (!triageModule) return;
@@ -320,6 +580,37 @@ export const TriageInboxPage = () => {
       toast.error(err.message || 'Failed to update status');
     }
   };
+
+  const handleSaveForm = async () => {
+    if (!selectedRecord || !triageModule) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/data/records/${selectedRecord.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          moduleId: triageModule.id,
+          ...editedFormData
+        })
+      });
+      if (res.ok) {
+        const updatedRecord = await res.json();
+        toast.success('Pre-assessment form updated successfully');
+        await loadInboxRecords();
+        setSelectedRecord(updatedRecord);
+        setIsEditingForm(false);
+      } else {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to save pre-assessment form changes');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save pre-assessment form changes');
+    }
+  };
+
 
   const handleTriggerRule = async (ruleId: string) => {
     if (!selectedRecord) return;
@@ -542,6 +833,426 @@ export const TriageInboxPage = () => {
 
   const kpis = getKPIStats();
 
+  const renderRoutingModal = () => {
+    if (!selectedRecord) return null;
+    const originalModule = getOriginalModule(selectedRecord, modules);
+    
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
+        <div className="bg-zinc-950 border border-zinc-900 w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-950/50 backdrop-blur-md">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                <GitFork size={14} className="text-indigo-400" />
+                Manual Ingestion Work Dispatcher
+              </h3>
+              <p className="text-[10px] text-zinc-550 mt-0.5">
+                Map incoming form data to the target business module's schema.
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Destination dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Destination:</span>
+                <select
+                  value={selectedTargetModuleId}
+                  onChange={(e) => setSelectedTargetModuleId(e.target.value)}
+                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+                >
+                  <option value="">Select Target Module...</option>
+                  {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Close Button */}
+              <button
+                onClick={() => setIsRouting(false)}
+                className="p-1.5 hover:bg-zinc-900 rounded-lg text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
+              >
+                <XCircle size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Body / Canvas */}
+          <div className="flex-1 overflow-hidden relative flex bg-zinc-950/30">
+            {selectedTargetModuleId ? (
+              <div className="flex-1 flex overflow-hidden relative">
+                
+                {/* SVG Connections Overlay Canvas */}
+                <svg
+                  ref={canvasRef}
+                  className="absolute inset-0 pointer-events-none w-full h-full z-10"
+                >
+                  <defs>
+                    <linearGradient id="wire-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#6366f1" stopOpacity="0.8" />
+                      <stop offset="100%" stopColor="#a855f7" stopOpacity="0.8" />
+                    </linearGradient>
+                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="2" result="blur" />
+                      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+                  </defs>
+
+                  {/* Render mapping connection lines */}
+                  {(() => {
+                    const targetModule = modules.find((m: any) => m.id === selectedTargetModuleId);
+                    if (!targetModule) return null;
+                    const targetFields = flattenFields(targetModule.layout || targetModule.config?.layout || []);
+                    
+                    return targetFields.map((field: any) => {
+                      const currentMap = mappings[field.id];
+                      if (!currentMap || currentMap.type !== 'source') return null;
+                      
+                      const sourceId = currentMap.value;
+                      const sourcePortId = `source-${sourceId}`;
+                      const targetPortId = `target-${field.id}`;
+                      
+                      const start = portCoords[sourcePortId];
+                      const end = portCoords[targetPortId];
+                      
+                      if (!start || !end) return null;
+                      
+                      const dx = Math.abs(end.x - start.x) * 0.4;
+                      const pathData = `M ${start.x} ${start.y} C ${start.x + dx} ${start.y}, ${end.x - dx} ${end.y}, ${end.x} ${end.y}`;
+                      
+                      return (
+                        <g key={field.id}>
+                          <path
+                            d={pathData}
+                            fill="none"
+                            stroke="rgba(99, 102, 241, 0.15)"
+                            strokeWidth="4"
+                          />
+                          <path
+                            d={pathData}
+                            fill="none"
+                            stroke="url(#wire-gradient)"
+                            strokeWidth="1.5"
+                            filter="url(#glow)"
+                            className="animate-pulse"
+                          />
+                        </g>
+                      );
+                    });
+                  })()}
+                </svg>
+
+                {/* Left Column: Source Fields */}
+                <div
+                  onScroll={updatePortCoordinates}
+                  className="w-[38%] overflow-y-auto p-6 space-y-3 custom-scrollbar border-r border-zinc-900 bg-zinc-950/20"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-black text-zinc-550 uppercase tracking-widest">
+                      Source Fields (Client Request)
+                    </span>
+                    <span className="text-[8px] text-zinc-650 font-bold bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                      Select a port to connect
+                    </span>
+                  </div>
+
+                  {Object.keys(getRecordFields(selectedRecord)).filter(k => !k.startsWith('_')).map(k => {
+                    const label = getFieldLabel(k, originalModule);
+                    const val = getRecordFields(selectedRecord)[k];
+                    const displayValue = val === undefined || val === null ? '' : typeof val === 'object' ? JSON.stringify(val) : String(val);
+                    const isSelected = activeSourcePort === k;
+
+                    return (
+                      <div
+                        key={k}
+                        className={`p-3 bg-zinc-900/20 border rounded-xl flex items-center justify-between group transition-all duration-200 ${
+                          isSelected 
+                            ? 'border-indigo-500/50 bg-indigo-500/[0.02] shadow-lg shadow-indigo-500/5' 
+                            : 'border-zinc-900 hover:border-zinc-800'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 pr-4">
+                          <span className="text-[10px] font-bold text-zinc-350 block truncate">{label}</span>
+                          <span className="text-[8px] font-mono text-zinc-550 truncate block mt-0.5 bg-zinc-950/50 px-1.5 py-0.5 rounded border border-zinc-900/60 max-w-max">
+                            {displayValue || 'empty'}
+                          </span>
+                        </div>
+                        
+                        {/* Source Port */}
+                        <button
+                          data-port-id={`source-${k}`}
+                          onClick={() => {
+                            if (activeSourcePort === k) {
+                              setActiveSourcePort(null);
+                            } else {
+                              setActiveSourcePort(k);
+                            }
+                          }}
+                          className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300 relative cursor-pointer outline-none ${
+                            isSelected 
+                              ? 'bg-indigo-500 text-white scale-110 shadow-lg shadow-indigo-500/30' 
+                              : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-500 border border-zinc-800'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-zinc-500 group-hover:bg-zinc-400'}`} />
+                          
+                          {/* Pulse ring for active port */}
+                          {isSelected && (
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-30 animate-ping" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Middle Connector Space */}
+                <div className="w-[24%] border-r border-zinc-900 bg-zinc-950/40 relative flex flex-col justify-center items-center p-4">
+                  <div className="text-center space-y-3 select-none">
+                    {activeSourcePort ? (
+                      <>
+                        <div className="w-8 h-8 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                          <GitFork size={14} />
+                        </div>
+                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-wider">
+                          Select Destination Port
+                        </p>
+                        <p className="text-[8px] text-zinc-500 leading-normal max-w-[130px] mx-auto">
+                          Click any target port on the right to connect **{getFieldLabel(activeSourcePort, originalModule)}**
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-full flex items-center justify-center mx-auto">
+                          <Info size={14} />
+                        </div>
+                        <p className="text-[9px] font-bold text-zinc-450 uppercase tracking-widest">
+                          Visual Mapper
+                        </p>
+                        <p className="text-[8px] text-zinc-500 leading-normal max-w-[130px] mx-auto">
+                          Select a source port on the left, then select a target port on the right to map them.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Target Fields */}
+                <div
+                  onScroll={updatePortCoordinates}
+                  className="w-[38%] overflow-y-auto p-6 space-y-4 custom-scrollbar bg-zinc-950/20"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-black text-zinc-550 uppercase tracking-widest">
+                      Destination Fields (Target Module)
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAutoMap}
+                        className="px-2 py-0.5 text-[8px] font-bold bg-indigo-900/20 hover:bg-indigo-900/40 text-indigo-400 rounded border border-indigo-900/30 cursor-pointer"
+                      >
+                        Auto-Map
+                      </button>
+                      <button
+                        onClick={handleClearAllMappings}
+                        className="px-2 py-0.5 text-[8px] font-bold bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded border border-zinc-800 cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const targetModule = modules.find((m: any) => m.id === selectedTargetModuleId);
+                    if (!targetModule) return null;
+                    const targetFields = flattenFields(targetModule.layout || targetModule.config?.layout || []);
+                    
+                    return targetFields.map((field: any) => {
+                      if (field.type === 'section' || field.type === 'row') return null;
+                      const currentMap = mappings[field.id] || { type: 'ignore', value: '' };
+                      const isMapped = currentMap.type === 'source';
+                      const isCustom = currentMap.type === 'custom';
+                      const isIgnored = currentMap.type === 'ignore';
+                      
+                      return (
+                        <div
+                          key={field.id}
+                          className={`p-3 bg-zinc-900/20 border rounded-xl flex flex-col gap-2 transition-all duration-200 ${
+                            isMapped 
+                              ? 'border-indigo-500/20 bg-indigo-500/[0.01]' 
+                              : isCustom 
+                                ? 'border-amber-500/20 bg-amber-500/[0.01]' 
+                                : 'border-zinc-900 opacity-80 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {/* Target Input Port */}
+                              <button
+                                data-port-id={`target-${field.id}`}
+                                onClick={() => {
+                                  if (activeSourcePort) {
+                                    setMappings(prev => ({
+                                      ...prev,
+                                      [field.id]: { type: 'source', value: activeSourcePort }
+                                    }));
+                                    setActiveSourcePort(null);
+                                    setTimeout(updatePortCoordinates, 100);
+                                  }
+                                }}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-300 relative cursor-pointer outline-none ${
+                                  isMapped 
+                                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' 
+                                    : activeSourcePort 
+                                      ? 'bg-zinc-900 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 animate-pulse scale-105' 
+                                      : 'bg-zinc-900 text-zinc-550 border border-zinc-800'
+                                }`}
+                              >
+                                <div className={`w-2 h-2 rounded-full ${isMapped ? 'bg-white' : activeSourcePort ? 'bg-indigo-400' : 'bg-zinc-650'}`} />
+                              </button>
+
+                              <div>
+                                <span className="text-[10px] font-bold text-zinc-300 block">
+                                  {field.label || field.id}
+                                  {field.required && <span className="text-rose-500 ml-0.5">*</span>}
+                                </span>
+                                <span className="text-[7.5px] text-zinc-550 capitalize font-medium">
+                                  {field.type}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Control Pill Bar */}
+                            <div className="flex items-center bg-zinc-950 border border-zinc-900 rounded-lg p-0.5 text-[7.5px] font-bold">
+                              <button
+                                onClick={() => {
+                                  setMappings(prev => ({ ...prev, [field.id]: { type: 'ignore', value: '' } }));
+                                  setTimeout(updatePortCoordinates, 100);
+                                }}
+                                className={`px-2 py-0.5 rounded transition-all cursor-pointer ${isIgnored ? 'bg-zinc-900 text-zinc-400' : 'text-zinc-550 hover:text-zinc-400'}`}
+                              >
+                                Ignore
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setMappings(prev => ({ ...prev, [field.id]: { type: 'custom', value: '' } }));
+                                  setTimeout(updatePortCoordinates, 100);
+                                }}
+                                className={`px-2 py-0.5 rounded transition-all cursor-pointer ${isCustom ? 'bg-amber-900/30 text-amber-400 border border-amber-900/40' : 'text-zinc-550 hover:text-zinc-400'}`}
+                              >
+                                Custom
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Detail / Value Panel */}
+                          {isMapped && (
+                            <div className="flex items-center justify-between bg-indigo-950/15 border border-indigo-900/20 px-2.5 py-1.5 rounded-lg text-[8px] text-indigo-300">
+                              <div className="truncate pr-2">
+                                <span className="font-bold uppercase tracking-wider text-indigo-400 block text-[6.5px]">Connected to source:</span>
+                                <span className="font-semibold">{getFieldLabel(currentMap.value, originalModule)}</span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setMappings(prev => {
+                                    const next = { ...prev };
+                                    delete next[field.id];
+                                    return next;
+                                  });
+                                  setTimeout(updatePortCoordinates, 100);
+                                }}
+                                className="text-zinc-500 hover:text-rose-400 font-bold p-0.5 cursor-pointer"
+                                title="Disconnect"
+                              >
+                                Disconnect
+                              </button>
+                            </div>
+                          )}
+
+                          {isCustom && (
+                            <div className="w-full">
+                              <input
+                                type="text"
+                                value={currentMap.value || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setMappings(prev => ({ ...prev, [field.id]: { type: 'custom', value: val } }));
+                                }}
+                                placeholder="Enter custom value..."
+                                className="w-full bg-zinc-950 border border-zinc-900 rounded-lg px-2.5 py-1 text-[9px] text-zinc-200 focus:outline-none focus:border-indigo-500/50 font-medium"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-550 bg-zinc-950/20">
+                <GitFork size={28} className="text-zinc-750 mb-3 animate-pulse" />
+                <p className="text-xs font-bold text-zinc-450">Select Target Module</p>
+                <p className="text-[9px] text-zinc-550 mt-1 max-w-xs leading-normal font-medium">
+                  Select a business module in the header to load the destination fields and start mapping form data.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-zinc-900 flex items-center justify-end gap-3 bg-zinc-950/50 backdrop-blur-md">
+            <button
+              onClick={() => setIsRouting(false)}
+              className="px-3.5 py-1.5 border border-zinc-900 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleManualDispatch}
+              disabled={routingInProgress || !selectedTargetModuleId}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <GitFork size={12} className={routingInProgress ? 'animate-spin' : ''} />
+              Dispatch Submission
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
+  const handleAutoMap = () => {
+    if (!selectedTargetModuleId) return;
+    const targetModule = modules.find((m: any) => m.id === selectedTargetModuleId);
+    if (!targetModule) return;
+    
+    const targetFields = flattenFields(targetModule.layout || targetModule.config?.layout || []);
+    const sourceFields = getRecordFields(selectedRecord);
+    const sourceKeys = Object.keys(sourceFields);
+    
+    const newMappings = { ...mappings };
+    targetFields.forEach((field: any) => {
+      if (field.type === 'section' || field.type === 'row') return;
+      const autoKey = findAutoMapKey(field.id, field.label || '', sourceKeys);
+      if (autoKey) {
+        newMappings[field.id] = { type: 'source', value: autoKey };
+      }
+    });
+    setMappings(newMappings);
+    toast.success('Auto-mapped matching fields');
+    setTimeout(updatePortCoordinates, 100);
+  };
+
+  const handleClearAllMappings = () => {
+    setMappings({});
+    toast.success('Cleared all mappings');
+    setTimeout(updatePortCoordinates, 100);
+  };
+
   return (
     <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar flex flex-col gap-6">
       {/* Header section */}
@@ -558,6 +1269,57 @@ export const TriageInboxPage = () => {
           </h1>
           <p className="text-xs text-zinc-400 mt-1">Review external client request submissions, run pre-assessment staging, and dispatch work pathways.</p>
         </div>
+
+        {/* Countdown to Next Job Run */}
+        {(() => {
+          const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
+          let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
+
+          if (cronExpr === 'GLOBAL') {
+            cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+          }
+
+          if (!cronExpr && triageModule) {
+            cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+          }
+
+          if (!cronExpr || !countdownText) return null;
+
+          return (
+            <div className="flex items-center gap-3 bg-zinc-900/40 border border-zinc-900 px-4 py-2.5 rounded-2xl animate-in fade-in duration-200 shadow-sm shrink-0">
+              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="flex flex-col">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                  {scheduledRule ? 'Auto-Distribution' : 'Global Queue Check'}
+                </span>
+                <span className="text-xs font-bold text-zinc-200 mt-0.5">
+                  Running in: <span className="font-mono text-indigo-400 font-black">{countdownText}</span>
+                </span>
+              </div>
+              <span className="h-6 w-px bg-zinc-800" />
+              <button
+                onClick={handleManualRunTriage}
+                disabled={isRunningTriage}
+                className="flex items-center gap-1.5 bg-indigo-500/10 hover:bg-indigo-500/25 disabled:opacity-50 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer select-none"
+                title="Run Auto-Distribution Now"
+              >
+                <Zap size={10} className={isRunningTriage ? 'animate-pulse' : ''} />
+                {isRunningTriage ? 'Running...' : 'Run Now'}
+              </button>
+              <span className="h-6 w-px bg-zinc-800" />
+              <div className="flex flex-col text-right">
+                <span className="text-[7.5px] font-semibold text-zinc-550">
+                  {scheduledRule ? `Rule: ${scheduledRule.name}` : 'Queue Schedule'}
+                </span>
+                <span className="text-[8px] font-mono text-zinc-450 opacity-80 mt-0.5">
+                  ({scheduledRule && scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression === 'GLOBAL'
+                    ? `Global: ${cronExpr}`
+                    : cronExpr})
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </header>
 
       {triageModule ? (
@@ -701,7 +1463,7 @@ export const TriageInboxPage = () => {
                       className={`p-3.5 border rounded-2xl text-left cursor-pointer transition-all flex items-start justify-between gap-3 ${
                         isSelected 
                           ? 'bg-indigo-950/20 border-indigo-500/40 shadow shadow-indigo-500/5' 
-                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-850 hover:bg-zinc-950/70'
+                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800 hover:bg-zinc-950/70'
                       }`}
                     >
                       <div className="flex-1 min-w-0">
@@ -767,183 +1529,143 @@ export const TriageInboxPage = () => {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      {!isRouting ? (
-                        <>
-                          <button
-                            onClick={() => setIsRouting(true)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer animate-pulse"
-                          >
-                            <GitFork size={12} />
-                            Route Submission
-                          </button>
-                          
-                          {selectedRecord.status?.toLowerCase() !== 'needs info' && selectedRecord.status?.toLowerCase() !== 'needs_info' && (
-                            <button
-                              onClick={() => handleStatusChange('Needs Info')}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-amber-400 hover:bg-zinc-850 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                            >
-                              <HelpCircle size={12} />
-                              Needs Info
-                            </button>
-                          )}
-                          
-                          {selectedRecord.status?.toLowerCase() !== 'rejected' && (
-                            <button
-                              onClick={() => handleStatusChange('Rejected')}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-850 text-rose-500 hover:bg-rose-950/20 hover:border-rose-900/50 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                            >
-                              <XCircle size={12} />
-                              Reject
-                            </button>
-                          )}
-
-                          {selectedRecord.status?.toLowerCase() !== 'new' && (
-                            <button
-                              onClick={() => handleStatusChange('New')}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-zinc-850 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                            >
-                              <RotateCcw size={12} />
-                              Re-open
-                            </button>
-                          )}
-                        </>
-                      ) : (
+                      <button
+                        onClick={() => setIsRouting(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer animate-pulse"
+                      >
+                        <GitFork size={12} />
+                        Route Submission
+                      </button>
+                      
+                      {selectedRecord.status?.toLowerCase() !== 'needs info' && selectedRecord.status?.toLowerCase() !== 'needs_info' && (
                         <button
-                          onClick={() => setIsRouting(false)}
-                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                          onClick={() => handleStatusChange('Needs Info')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-amber-400 hover:bg-zinc-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
                         >
-                          Back to Review
+                          <HelpCircle size={12} />
+                          Needs Info
                         </button>
                       )}
+                      
+                      {selectedRecord.status?.toLowerCase() !== 'rejected' && (
+                        <button
+                          onClick={() => handleStatusChange('Rejected')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-rose-500 hover:bg-rose-950/20 hover:border-rose-900/50 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          <XCircle size={12} />
+                          Reject
+                        </button>
+                      )}
+
+                      {selectedRecord.status?.toLowerCase() !== 'new' && (
+                        <button
+                          onClick={() => handleStatusChange('New')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-zinc-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          <RotateCcw size={12} />
+                          Re-open
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between border-t border-zinc-900/60 pt-3.5 mt-2.5 w-full gap-3">
+                      {/* Assignee Control */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-wider">Assign To:</span>
+                          <select
+                            value={getRecordFields(selectedRecord).assigneeType || 'USER'}
+                            onChange={(e) => {
+                              const newType = e.target.value;
+                              handleAssigneeTypeChange(newType);
+                            }}
+                            className="bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-zinc-350 rounded-xl px-2.5 py-1 text-xs focus:outline-none focus:ring-0 focus:border-indigo-500/50 cursor-pointer transition-all"
+                          >
+                            <option value="USER">User</option>
+                            <option value="TEAM">Team</option>
+                            <option value="POSITION">Position</option>
+                          </select>
+                        </div>
+
+                        {/* Value Dropdown */}
+                        {(() => {
+                          const type = getRecordFields(selectedRecord).assigneeType || 'USER';
+                          const currentValue = getRecordFields(selectedRecord).assigneeId || '';
+                          
+                          if (type === 'USER') {
+                            return (
+                              <select
+                                value={currentValue}
+                                onChange={(e) => handleAssigneeChange(e.target.value || null, 'USER')}
+                                className="bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-zinc-350 rounded-xl px-2.5 py-1 text-xs focus:outline-none focus:ring-0 focus:border-indigo-500/50 cursor-pointer transition-all"
+                              >
+                                <option value="">Unassigned</option>
+                                {members?.map((m: any) => {
+                                  const memberTeam = teams?.find((t: any) => t.id === m.teamId)?.name || '';
+                                  const suffix = [m.position, memberTeam].filter(Boolean).join(' - ');
+                                  return (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name || m.email} {suffix ? `(${suffix})` : ''}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            );
+                          } else if (type === 'TEAM') {
+                            return (
+                              <select
+                                value={currentValue}
+                                onChange={(e) => handleAssigneeChange(e.target.value || null, 'TEAM')}
+                                className="bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-zinc-350 rounded-xl px-2.5 py-1 text-xs focus:outline-none focus:ring-0 focus:border-indigo-500/50 cursor-pointer transition-all"
+                              >
+                                <option value="">Select Team...</option>
+                                {teams?.map((t: any) => (
+                                  <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                              </select>
+                            );
+                          } else {
+                            return (
+                              <select
+                                value={currentValue}
+                                onChange={(e) => handleAssigneeChange(e.target.value || null, 'POSITION')}
+                                className="bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-zinc-350 rounded-xl px-2.5 py-1 text-xs focus:outline-none focus:ring-0 focus:border-indigo-500/50 cursor-pointer transition-all"
+                              >
+                                <option value="">Select Position...</option>
+                                {positions?.map((p: any) => (
+                                  <option key={p.id} value={p.id}>{p.title}</option>
+                                ))}
+                              </select>
+                            );
+                          }
+                        })()}
+                      </div>
+
+                      {/* Quick assignment action buttons */}
+                      <div className="flex gap-2">
+                        {getRecordFields(selectedRecord).assigneeType === 'USER' && getRecordFields(selectedRecord).assigneeId === currentMemberId ? (
+                          <button
+                            onClick={() => handleAssigneeChange(null, 'USER')}
+                            className="px-2.5 py-1 text-[10px] font-bold border border-zinc-900 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-lg transition-all cursor-pointer"
+                          >
+                            Set to unassigned
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleAssigneeChange(currentMemberId, 'USER')}
+                            className="px-2.5 py-1 text-[10px] font-bold bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-200 rounded-lg transition-all cursor-pointer"
+                          >
+                            Assign to me
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {/* Main display card content */}
                   <div className="flex-1 min-h-[350px]">
-                    {isRouting ? (
-                      /* Manual Routing Wizard */
-                      <div className="space-y-5">
-                        <div className="bg-indigo-950/10 border border-indigo-900/30 rounded-2xl p-4 flex gap-3">
-                          <Info size={16} className="text-indigo-400 shrink-0 mt-0.5" />
-                          <div className="text-[10px] text-zinc-400 leading-normal">
-                            <span className="font-bold text-zinc-200 block mb-0.5 font-sans">Manual Work Dispatch</span>
-                            Select a target business module below. The system will load the destination fields and attempt to auto-map values extracted from the client's form submission.
-                          </div>
-                        </div>
-
-                        {/* Step 1: Destination selection */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-zinc-450">Destination Business Module</label>
-                          <select
-                            value={selectedTargetModuleId}
-                            onChange={(e) => setSelectedTargetModuleId(e.target.value)}
-                            className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                          >
-                            <option value="">Select Destination Module...</option>
-                            {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Step 2: Mapping controls */}
-                        {selectedTargetModuleId && (
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Field Mapping Template</h4>
-                              <span className="text-[8px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">Auto-mapping enabled</span>
-                            </div>
-
-                            <div className="border border-zinc-900 bg-zinc-950/30 rounded-2xl overflow-hidden max-h-[220px] overflow-y-auto custom-scrollbar">
-                              <div className="grid grid-cols-12 gap-3 p-3 text-[9px] font-bold text-zinc-550 border-b border-zinc-900 bg-zinc-950">
-                                <span className="col-span-5">Target Field (Destination)</span>
-                                <span className="col-span-7">Source Field / Custom Value</span>
-                              </div>
-
-                              <div className="divide-y divide-zinc-900/60">
-                                {flattenFields(
-                                  (() => {
-                                    const m = modules.find((m: any) => m.id === selectedTargetModuleId);
-                                    return m ? (m.layout || m.config?.layout || []) : [];
-                                  })()
-                                ).map((field) => {
-                                  if (field.type === 'section' || field.type === 'row') return null;
-                                  const currentMap = mappings[field.id] || { type: 'ignore', value: '' };
-
-                                  return (
-                                    <div key={field.id} className="grid grid-cols-12 gap-3 p-3 items-center text-[10px]">
-                                      <div className="col-span-5 flex flex-col">
-                                        <span className="font-bold text-zinc-300">
-                                          {field.label || field.id}
-                                          {field.required && <span className="text-rose-500 ml-0.5">*</span>}
-                                        </span>
-                                        <span className="text-[8px] text-zinc-550 capitalize">{field.type}</span>
-                                      </div>
-
-                                      <div className="col-span-7 space-y-1.5">
-                                        <select
-                                          value={currentMap.type === 'source' ? currentMap.value : currentMap.type}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val === 'ignore') {
-                                              setMappings(prev => ({ ...prev, [field.id]: { type: 'ignore', value: '' } }));
-                                            } else if (val === 'custom') {
-                                              setMappings(prev => ({ ...prev, [field.id]: { type: 'custom', value: '' } }));
-                                            } else {
-                                              setMappings(prev => ({ ...prev, [field.id]: { type: 'source', value: val } }));
-                                            }
-                                          }}
-                                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-300 cursor-pointer focus:outline-none focus:border-indigo-500/50"
-                                        >
-                                          <option value="ignore">[Ignore / Keep Empty]</option>
-                                          <option value="custom">[Use Static Custom Value]</option>
-                                          {Object.keys(getRecordFields(selectedRecord)).filter(k => !k.startsWith('_')).map(k => (
-                                            <option key={k} value={k}>Map: {k}</option>
-                                          ))}
-                                        </select>
-
-                                        {currentMap.type === 'custom' && (
-                                          <input
-                                            type="text"
-                                            value={currentMap.value || ''}
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              setMappings(prev => ({ ...prev, [field.id]: { type: 'custom', value: val } }));
-                                            }}
-                                            placeholder="Enter static value..."
-                                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-[10px] text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-                                          />
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* Dispatch actions footer */}
-                            <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-900">
-                              <button
-                                onClick={() => setIsRouting(false)}
-                                className="px-3.5 py-1.5 border border-zinc-900 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={handleManualDispatch}
-                                disabled={routingInProgress}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer disabled:opacity-50"
-                              >
-                                <GitFork size={12} className={routingInProgress ? 'animate-spin' : ''} />
-                                Dispatch Submission
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Main View Tabs (Assessment / Activity / Automation Rules) */
-                      <div className="flex flex-col h-full gap-4">
+                    {/* Main View Tabs (Assessment / Activity / Automation Rules) */}
+                    <div className="flex flex-col h-full gap-4">
                         {/* Tab Headers */}
                         <div className="flex gap-4 border-b border-zinc-900 pb-2">
                           <button
@@ -1002,79 +1724,295 @@ export const TriageInboxPage = () => {
 
                         {/* Tab Content Panels */}
                         <div className="flex-1 overflow-y-auto max-h-[360px] custom-scrollbar pr-1">
-                          {activeTab === 'assessment' && (
-                            /* Submissions field mapping details */
-                            <div className="grid grid-cols-2 gap-4">
-                              {Object.entries(getRecordFields(selectedRecord))
-                                .filter(([k]) => !k.startsWith('_'))
-                                .map(([key, val]) => {
-                                  const originalModule = getOriginalModule(selectedRecord, modules);
-                                  const cleanLabel = getFieldLabel(key, originalModule);
-                                  let Icon = FileText;
-                                  let isLink = false;
-                                  
-                                  if (key.toLowerCase().includes('email')) Icon = Mail;
-                                  else if (key.toLowerCase().includes('phone') || key.toLowerCase().includes('tel')) Icon = Phone;
-                                  else if (key.toLowerCase().includes('user') || key.toLowerCase().includes('name')) Icon = User;
-                                  
-                                  const displayValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
-                                  if (String(val).startsWith('http://') || String(val).startsWith('https://')) {
-                                    isLink = true;
-                                  }
-
-                                  return (
-                                    <div 
-                                      key={key} 
-                                      className={`p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl space-y-1.5 flex flex-col justify-between hover:border-zinc-850 group transition-all ${
-                                        key.toLowerCase().includes('description') || key.toLowerCase().includes('content') || displayValue.length > 50 
-                                          ? 'col-span-2' 
-                                          : 'col-span-1'
-                                      }`}
-                                    >
-                                      <div>
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
-                                            <Icon size={9} className="text-zinc-500" />
-                                            {cleanLabel}
-                                          </span>
-                                          <button
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(displayValue);
-                                              toast.success(`Copied ${cleanLabel} value`);
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-900 rounded text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer"
-                                            title="Copy value"
-                                          >
-                                            <Copy size={9} />
-                                          </button>
-                                        </div>
-                                        {isLink ? (
-                                          <a 
-                                            href={displayValue} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="text-xs font-medium text-indigo-400 hover:underline inline-flex items-center gap-1 font-mono break-all mt-1"
-                                          >
-                                            {displayValue}
-                                            <ExternalLink size={10} />
-                                          </a>
-                                        ) : (
-                                          <p className="text-xs font-semibold text-zinc-250 leading-relaxed font-mono break-words mt-1">
-                                            {displayValue}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-
-                              {Object.entries(getRecordFields(selectedRecord)).filter(([k]) => !k.startsWith('_')).length === 0 && (
-                                <div className="col-span-2 py-10 text-center text-zinc-650 italic text-[10px]">
-                                  No fields available on this submission record.
+                          {activeTab === 'assessment' && (() => {
+                            const originalModule = getOriginalModule(selectedRecord, modules);
+                            const formFields = getFormFields();
+                            const hasForm = formFields.length > 0;
+                            const additionalFields = hasForm ? getAdditionalFields(formFields) : [];
+                            
+                            return (
+                              <div className="space-y-4">
+                                {/* Form controls header */}
+                                <div className="flex items-center justify-between pb-2 border-b border-zinc-900/60">
+                                  <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                                    {isEditingForm ? 'Editing Pre-Assessment Data' : 'Pre-Assessment Form Content'}
+                                  </div>
+                                  <div className="flex gap-2">
+                                    {isEditingForm ? (
+                                      <>
+                                        <button
+                                          onClick={() => {
+                                            setIsEditingForm(false);
+                                            setEditedFormData(getRecordFields(selectedRecord));
+                                          }}
+                                          className="px-2.5 py-1 text-[10px] font-bold border border-zinc-805 hover:bg-zinc-900/40 rounded-lg text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          onClick={handleSaveForm}
+                                          className="px-2.5 py-1 text-[10px] font-bold bg-indigo-650 hover:bg-indigo-600 rounded-lg text-white transition-all cursor-pointer"
+                                        >
+                                          Save Changes
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        onClick={() => {
+                                          setEditedFormData(getRecordFields(selectedRecord));
+                                          setIsEditingForm(true);
+                                        }}
+                                        className="px-2.5 py-1 text-[10px] font-bold bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-zinc-200 transition-all cursor-pointer"
+                                      >
+                                        Edit Form
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          )}
+
+                                <div className="grid grid-cols-2 gap-4">
+                                  {/* Render Form-ordered Fields */}
+                                  {hasForm ? (
+                                    <>
+                                      {formFields.map(({ id, field, label, width }) => {
+                                        const val = isEditingForm ? editedFormData[id] : (selectedRecord[id] !== undefined ? selectedRecord[id] : (selectedRecord.data?.[id]));
+                                        const displayValue = val === undefined || val === null ? '' : typeof val === 'object' ? JSON.stringify(val) : String(val);
+                                        const isLink = !isEditingForm && (displayValue.startsWith('http://') || displayValue.startsWith('https://'));
+                                        let Icon = FileText;
+                                        if (id.toLowerCase().includes('email')) Icon = Mail;
+                                        else if (id.toLowerCase().includes('phone') || id.toLowerCase().includes('tel')) Icon = Phone;
+                                        else if (id.toLowerCase().includes('user') || id.toLowerCase().includes('name')) Icon = User;
+
+                                        return (
+                                          <div
+                                            key={id}
+                                            className={`p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl space-y-1.5 flex flex-col justify-between hover:border-zinc-800 group transition-all ${
+                                              width === 'half' ? 'col-span-1' : 'col-span-2'
+                                            }`}
+                                          >
+                                            {isEditingForm ? (
+                                              <div className="space-y-1 w-full">
+                                                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                                                  <Icon size={9} className="text-zinc-500" />
+                                                  {label}
+                                                </label>
+                                                <FieldInput
+                                                  field={field}
+                                                  value={editedFormData[id]}
+                                                  onChange={(newVal) => {
+                                                    setEditedFormData(prev => ({ ...prev, [id]: newVal }));
+                                                  }}
+                                                  density="compact"
+                                                />
+                                              </div>
+                                            ) : (
+                                              <div>
+                                                <div className="flex items-center justify-between">
+                                                  <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
+                                                    <Icon size={9} className="text-zinc-500" />
+                                                    {label}
+                                                  </span>
+                                                  <button
+                                                    onClick={() => {
+                                                      navigator.clipboard.writeText(displayValue);
+                                                      toast.success(`Copied ${label} value`);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-900 rounded text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer"
+                                                    title="Copy value"
+                                                  >
+                                                    <Copy size={9} />
+                                                  </button>
+                                                </div>
+                                                {isLink ? (
+                                                  <a
+                                                    href={displayValue}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs font-medium text-indigo-400 hover:underline inline-flex items-center gap-1 font-mono break-all mt-1"
+                                                  >
+                                                    {displayValue}
+                                                    <ExternalLink size={10} />
+                                                  </a>
+                                                ) : (
+                                                  <p className="text-xs font-semibold text-zinc-250 leading-relaxed font-mono break-words mt-1">
+                                                    {displayValue || <span className="text-zinc-650 italic text-[10px]">Empty</span>}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+
+                                      {/* Render Additional Fields */}
+                                      {additionalFields.length > 0 && (
+                                        <div className="col-span-2 pt-4 pb-2 border-t border-zinc-900/60">
+                                          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                                            Additional Record Metadata
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {additionalFields.map(({ id, label, value }) => {
+                                        const val = isEditingForm ? editedFormData[id] : value;
+                                        const displayValue = val === undefined || val === null ? '' : typeof val === 'object' ? JSON.stringify(val) : String(val);
+                                        const isLink = !isEditingForm && (displayValue.startsWith('http://') || displayValue.startsWith('https://'));
+                                        
+                                        return (
+                                          <div
+                                            key={id}
+                                            className={`p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl space-y-1.5 flex flex-col justify-between hover:border-zinc-800 group transition-all ${
+                                              displayValue.length > 50 ? 'col-span-2' : 'col-span-1'
+                                            }`}
+                                          >
+                                            {isEditingForm ? (
+                                              <div className="space-y-1 w-full">
+                                                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                                                  <FileText size={9} className="text-zinc-500" />
+                                                  {label}
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={displayValue}
+                                                  onChange={(e) => {
+                                                    setEditedFormData(prev => ({ ...prev, [id]: e.target.value }));
+                                                  }}
+                                                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-[10px] text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                                                />
+                                              </div>
+                                            ) : (
+                                              <div>
+                                                <div className="flex items-center justify-between">
+                                                  <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
+                                                    <FileText size={9} className="text-zinc-500" />
+                                                    {label}
+                                                  </span>
+                                                  <button
+                                                    onClick={() => {
+                                                      navigator.clipboard.writeText(displayValue);
+                                                      toast.success(`Copied ${label} value`);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-900 rounded text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer"
+                                                    title="Copy value"
+                                                  >
+                                                    <Copy size={9} />
+                                                  </button>
+                                                </div>
+                                                {isLink ? (
+                                                  <a
+                                                    href={displayValue}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs font-medium text-indigo-400 hover:underline inline-flex items-center gap-1 font-mono break-all mt-1"
+                                                  >
+                                                    {displayValue}
+                                                    <ExternalLink size={10} />
+                                                  </a>
+                                                ) : (
+                                                  <p className="text-xs font-semibold text-zinc-250 leading-relaxed font-mono break-words mt-1">
+                                                    {displayValue || <span className="text-zinc-650 italic text-[10px]">Empty</span>}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </>
+                                  ) : (
+                                    /* Fallback Layout */
+                                    <>
+                                      {Object.entries(getRecordFields(selectedRecord))
+                                        .filter(([k]) => !k.startsWith('_'))
+                                        .map(([key, val]) => {
+                                          const cleanLabel = getFieldLabel(key, originalModule);
+                                          let Icon = FileText;
+                                          let isLink = false;
+                                          
+                                          if (key.toLowerCase().includes('email')) Icon = Mail;
+                                          else if (key.toLowerCase().includes('phone') || key.toLowerCase().includes('tel')) Icon = Phone;
+                                          else if (key.toLowerCase().includes('user') || key.toLowerCase().includes('name')) Icon = User;
+                                          
+                                          const currentVal = isEditingForm ? editedFormData[key] : val;
+                                          const displayValue = currentVal === undefined || currentVal === null ? '' : typeof currentVal === 'object' ? JSON.stringify(currentVal) : String(currentVal);
+                                          if (!isEditingForm && (displayValue.startsWith('http://') || displayValue.startsWith('https://'))) {
+                                            isLink = true;
+                                          }
+
+                                          return (
+                                            <div 
+                                              key={key} 
+                                              className={`p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl space-y-1.5 flex flex-col justify-between hover:border-zinc-800 group transition-all ${
+                                                key.toLowerCase().includes('description') || key.toLowerCase().includes('content') || displayValue.length > 50 
+                                                  ? 'col-span-2' 
+                                                  : 'col-span-1'
+                                              }`}
+                                            >
+                                              {isEditingForm ? (
+                                                <div className="space-y-1 w-full">
+                                                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                                                    <Icon size={9} className="text-zinc-500" />
+                                                    {cleanLabel}
+                                                  </label>
+                                                  <input
+                                                    type="text"
+                                                    value={displayValue}
+                                                    onChange={(e) => {
+                                                      setEditedFormData(prev => ({ ...prev, [key]: e.target.value }));
+                                                    }}
+                                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-[10px] text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                                                  />
+                                                </div>
+                                              ) : (
+                                                <div>
+                                                  <div className="flex items-center justify-between">
+                                                    <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
+                                                      <Icon size={9} className="text-zinc-500" />
+                                                      {cleanLabel}
+                                                    </span>
+                                                    <button
+                                                      onClick={() => {
+                                                        navigator.clipboard.writeText(displayValue);
+                                                        toast.success(`Copied ${cleanLabel} value`);
+                                                      }}
+                                                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-900 rounded text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer"
+                                                      title="Copy value"
+                                                    >
+                                                      <Copy size={9} />
+                                                    </button>
+                                                  </div>
+                                                  {isLink ? (
+                                                    <a 
+                                                      href={displayValue} 
+                                                      target="_blank" 
+                                                      rel="noopener noreferrer" 
+                                                      className="text-xs font-medium text-indigo-400 hover:underline inline-flex items-center gap-1 font-mono break-all mt-1"
+                                                    >
+                                                      {displayValue}
+                                                      <ExternalLink size={10} />
+                                                    </a>
+                                                  ) : (
+                                                    <p className="text-xs font-semibold text-zinc-250 leading-relaxed font-mono break-words mt-1">
+                                                      {displayValue || <span className="text-zinc-650 italic text-[10px]">Empty</span>}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+
+                                      {Object.entries(getRecordFields(selectedRecord)).filter(([k]) => !k.startsWith('_')).length === 0 && (
+                                        <div className="col-span-2 py-10 text-center text-zinc-650 italic text-[10px]">
+                                          No fields available on this submission record.
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {activeTab === 'source' && (
                             /* Visualizes form ingestion source metadata */
@@ -1093,7 +2031,7 @@ export const TriageInboxPage = () => {
                                 return (
                                   <div className="grid grid-cols-2 gap-4">
                                     {/* Channel card */}
-                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-850 transition-all col-span-1">
+                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition-all col-span-1">
                                       <div className="space-y-1">
                                         <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
                                           <Layers size={9} className="text-zinc-500" />
@@ -1105,7 +2043,7 @@ export const TriageInboxPage = () => {
                                     </div>
 
                                     {/* Form Name card */}
-                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-850 transition-all col-span-1">
+                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition-all col-span-1">
                                       <div className="space-y-1">
                                         <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
                                           <FileText size={9} className="text-zinc-500" />
@@ -1117,7 +2055,7 @@ export const TriageInboxPage = () => {
                                     </div>
 
                                     {/* Link / URL Card */}
-                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-850 transition-all col-span-2">
+                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition-all col-span-2">
                                       <div className="flex items-center justify-between">
                                         <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
                                           <ExternalLink size={9} className="text-zinc-500" />
@@ -1143,14 +2081,14 @@ export const TriageInboxPage = () => {
                                         >
                                           {publicUrl}
                                         </a>
-                                        <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-850 text-zinc-400 text-[8px] font-bold rounded-md uppercase tracking-wider shrink-0">
+                                        <span className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-zinc-400 text-[8px] font-bold rounded-md uppercase tracking-wider shrink-0">
                                           Active Form
                                         </span>
                                       </div>
                                     </div>
 
                                     {/* Origin module card */}
-                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-850 transition-all col-span-2">
+                                    <div className="p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl flex flex-col justify-between hover:border-zinc-800 transition-all col-span-2">
                                       <div className="space-y-1">
                                         <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
                                           <CheckCircle size={9} className="text-zinc-500" />
@@ -1315,7 +2253,7 @@ export const TriageInboxPage = () => {
                           )}
                         </div>
                       </div>
-                    )}
+
                   </div>
                 </div>
               ) : (
@@ -1338,6 +2276,62 @@ export const TriageInboxPage = () => {
           <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Inbound Queue system is currently disabled. Please contact your system administrator to enable the triage module inside Triage settings.</p>
         </div>
       )}
+      
+      {/* Visual Work Dispatch Modal */}
+      {isRouting && renderRoutingModal()}
     </div>
   );
 };
+
+// Helper to calculate next run date for standard cron expressions
+function getNextCronDate(expression: string, now: Date): Date {
+  const fields = expression.split(' ');
+  if (fields.length !== 5) {
+    return new Date(now.getTime() + 60000);
+  }
+
+  const matchesField = (field: string, val: number): boolean => {
+    if (field === '*') return true;
+    if (field.includes('/')) {
+      const parts = field.split('/');
+      const step = parseInt(parts[1], 10);
+      if (parts[0] === '*' || parts[0] === '0') {
+        return val % step === 0;
+      }
+    }
+    if (field.includes(',')) {
+      return field.split(',').map(Number).includes(val);
+    }
+    if (field.includes('-')) {
+      const [start, end] = field.split('-').map(Number);
+      return val >= start && val <= end;
+    }
+    return parseInt(field, 10) === val;
+  };
+
+  const candidate = new Date(now.getTime());
+  candidate.setSeconds(0);
+  candidate.setMilliseconds(0);
+
+  for (let i = 0; i < 1440; i++) {
+    candidate.setMinutes(candidate.getMinutes() + 1);
+    
+    const m = candidate.getMinutes();
+    const h = candidate.getHours();
+    const dom = candidate.getDate();
+    const mo = candidate.getMonth() + 1;
+    const dow = candidate.getDay();
+
+    if (
+      matchesField(fields[0], m) &&
+      matchesField(fields[1], h) &&
+      matchesField(fields[2], dom) &&
+      matchesField(fields[3], mo) &&
+      matchesField(fields[4], dow)
+    ) {
+      return candidate;
+    }
+  }
+
+  return new Date(now.getTime() + 300000);
+}

@@ -214,7 +214,7 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
       tenantId: moduleData.tenantId,
       moduleId: targetModuleId,
       record: { id: record.id, ...submissionData },
-      metadata: { formId: 'public_form', targetModuleId: originalTargetModuleId }
+      metadata: { formId: moduleData.id, targetModuleId: originalTargetModuleId }
     }, globalPrisma).catch(err => {
       console.error('[PublicAPI] Error triggering FORM_SUBMITTED event:', err);
     });

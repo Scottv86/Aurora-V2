@@ -1,6 +1,7 @@
 import express from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { AutomationEngine } from '../services/automationEngine';
+import { WorkflowEngine } from '../services/workflowEngine';
 
 const router = express.Router();
 
@@ -184,6 +185,85 @@ router.post('/:id/trigger', async (req: TenantRequest, res) => {
   } catch (err: any) {
     console.error('[AutomationRoutes] POST /:id/trigger Error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/run-triage', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+
+    // 1. Find the triage/intake module for this tenant
+    const triageModule = await db.module.findFirst({
+      where: {
+        tenantId,
+        config: { path: ['isIntakeTriage'], equals: true }
+      }
+    });
+
+    if (!triageModule) {
+      return res.status(404).json({ error: 'Central Triage module not enabled for this tenant' });
+    }
+
+    // 2. Fetch all active automations (rules) for this triage module
+    const automations = await db.automation.findMany({
+      where: {
+        tenantId,
+        moduleId: triageModule.id,
+        isActive: true
+      }
+    });
+
+    if (automations.length === 0) {
+      return res.json({ success: true, processedCount: 0, message: 'No active triage rules configured' });
+    }
+
+    // 3. Retrieve all pending records in this module
+    const pendingRecords = await db.record.findMany({
+      where: {
+        moduleId: triageModule.id,
+        tenantId,
+        status: { in: ['New', 'new', 'active', 'Pending', 'pending'] }
+      }
+    });
+
+    if (pendingRecords.length === 0) {
+      return res.json({ success: true, processedCount: 0, message: 'No pending records in the triage queue' });
+    }
+
+    console.log(`[AutomationRoutes] Manual run: processing ${pendingRecords.length} records across ${automations.length} rules`);
+
+    let processedCount = 0;
+    // 4. Run matching automations for each record sequentially (to prevent DB race conditions on assignee load-balancing)
+    for (const record of pendingRecords) {
+      const recordData = { id: record.id, ...(record.data as any || {}) };
+      
+      for (const automation of automations) {
+        // Evaluate conditions on the record
+        const isMatched = WorkflowEngine.evaluateCondition(
+          recordData,
+          automation.conditions,
+          null
+        );
+
+        if (isMatched) {
+          console.log(`[AutomationRoutes] Manual run matched rule "${automation.name}" for record ${record.id}`);
+          await AutomationEngine.runPipeline(automation, record, {}, 'MANUAL_RUN', db);
+          processedCount++;
+          // Break so we don't route the same record multiple times if multiple rules match
+          break;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      processedCount,
+      message: `Queue processed successfully. Routed ${processedCount} records.`
+    });
+  } catch (err: any) {
+    console.error('[AutomationRoutes] POST /run-triage Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to process triage queue' });
   }
 });
 

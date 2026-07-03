@@ -48,13 +48,47 @@ export class AutomationScheduler {
       
       for (const trigger of triggersConfig) {
         if (trigger.type === 'CRON') {
-          const cronExpression = trigger.cronExpression;
+          let cronExpression = trigger.cronExpression;
+          if (cronExpression === 'GLOBAL' && automation.moduleId) {
+            const triageModule = await globalPrisma.module.findUnique({
+              where: { id: automation.moduleId }
+            });
+            const modConfig = (triageModule?.config || {}) as any;
+            cronExpression = modConfig.globalSchedule || '*/5 * * * *';
+          }
           if (cronExpression && this.matchesCron(cronExpression, now)) {
             console.log(`[Scheduler] CRON Trigger Matched for "${automation.name}" (${automation.id})`);
-            // Run the automation pipeline with an empty trigger record
-            AutomationEngine.runPipeline(automation, null, {}, 'CRON_SCHEDULE', globalPrisma).catch(err => {
-              console.error(`[Scheduler] Pipeline failed for scheduled automation:`, err);
-            });
+            
+            if (automation.moduleId) {
+              // Retrieve all pending/active records in this module
+              const pendingRecords = await globalPrisma.record.findMany({
+                where: {
+                  moduleId: automation.moduleId,
+                  tenantId: automation.tenantId,
+                  status: { in: ['New', 'new', 'active', 'Pending', 'pending'] }
+                }
+              });
+
+              console.log(`[Scheduler] Processing ${pendingRecords.length} records on CRON schedule for automation "${automation.name}"`);
+              
+              for (const record of pendingRecords) {
+                // Evaluate condition if set
+                if (automation.conditions) {
+                  const { WorkflowEngine } = await import('./workflowEngine');
+                  const match = WorkflowEngine.evaluateCondition(record, automation.conditions, null);
+                  if (!match) continue;
+                }
+
+                AutomationEngine.runPipeline(automation, record, {}, 'CRON_SCHEDULE', globalPrisma).catch(err => {
+                  console.error(`[Scheduler] Pipeline failed for record ${record.id} in scheduled automation:`, err);
+                });
+              }
+            } else {
+              // Global scheduled automation with no specific module
+              AutomationEngine.runPipeline(automation, null, {}, 'CRON_SCHEDULE', globalPrisma).catch(err => {
+                console.error(`[Scheduler] Pipeline failed for scheduled automation:`, err);
+              });
+            }
           }
         } 
         

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
+import { usePositions } from '../../hooks/usePositions';
 import { API_BASE_URL } from '../../config';
 import { 
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
@@ -670,8 +671,10 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
 };
 
 export const AutomationsPage: React.FC = () => {
-  const { tenant, modules, members = [] } = usePlatform();
+  const { tenant, modules, members = [], teams = [] } = usePlatform();
+  const { positions } = usePositions();
   const { session } = useAuth();
+  const triageModule = modules.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);
   const [automations, setAutomations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
@@ -765,6 +768,9 @@ export const AutomationsPage: React.FC = () => {
         } else if (triggerConfig.type === 'TIMER') {
           setTriggerType('TIMER');
           setCronExpression(triggerConfig.cron || '0 9 * * *');
+        } else if (triggerConfig.type === 'CRON') {
+          setTriggerType('CRON');
+          setCronExpression(triggerConfig.cronExpression || '*/5 * * * *');
         } else {
           setTriggerType(triggerConfig.type);
         }
@@ -981,12 +987,18 @@ export const AutomationsPage: React.FC = () => {
           type: 'FORM_SUBMITTED',
           formId: 'public_form'
         });
+      } else if (triggerType === 'CRON') {
+        triggersPayload.push({
+          type: 'CRON',
+          cronExpression: cronExpression,
+          moduleId: selectedModuleId
+        });
       }
     } else {
-      if (triggerType === 'TIMER') {
+      if (triggerType === 'TIMER' || triggerType === 'CRON') {
         triggersPayload.push({
-          type: 'TIMER',
-          cron: cronExpression
+          type: 'CRON',
+          cronExpression: cronExpression
         });
       }
     }
@@ -1523,19 +1535,98 @@ export const AutomationsPage: React.FC = () => {
                               />
                             </div>
                           )}
-                          
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-zinc-400">Assign To</label>
-                            <AssigneeSelect
-                              value={action.config.assigneeId || ''}
-                              onChange={(val) => {
-                                const updated = [...actions];
-                                updated[idx].config.assigneeId = val;
-                                setActions(updated);
-                              }}
-                              members={members}
-                            />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Assignment Type</label>
+                              <select
+                                value={action.config.assignmentType || 'USER'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const updated = [...actions];
+                                  updated[idx].config.assignmentType = val;
+                                  // Clear other values when changing type
+                                  if (val === 'USER') {
+                                    updated[idx].config.teamId = '';
+                                    updated[idx].config.positionId = '';
+                                  } else if (val === 'TEAM') {
+                                    updated[idx].config.assigneeId = '';
+                                    updated[idx].config.positionId = '';
+                                    updated[idx].config.strategy = 'ROUND_ROBIN';
+                                  } else if (val === 'POSITION') {
+                                    updated[idx].config.assigneeId = '';
+                                    updated[idx].config.teamId = '';
+                                    updated[idx].config.strategy = 'ROUND_ROBIN';
+                                  }
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer focus:outline-none"
+                              >
+                                <option value="USER">Specific User</option>
+                                <option value="TEAM">Team (Workforce)</option>
+                                <option value="POSITION">Position (Role)</option>
+                              </select>
+                            </div>
+
+                            {(!action.config.assignmentType || action.config.assignmentType === 'USER') ? (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-zinc-400">Assign To User</label>
+                                <AssigneeSelect
+                                  value={action.config.assigneeId || ''}
+                                  onChange={(val) => {
+                                    const updated = [...actions];
+                                    updated[idx].config.assigneeId = val;
+                                    setActions(updated);
+                                  }}
+                                  members={members}
+                                />
+                              </div>
+                            ) : action.config.assignmentType === 'TEAM' ? (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-zinc-400">Select Team</label>
+                                <select
+                                  value={action.config.teamId || ''}
+                                  onChange={(e) => {
+                                    const updated = [...actions];
+                                    updated[idx].config.teamId = e.target.value;
+                                    setActions(updated);
+                                  }}
+                                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer focus:outline-none"
+                                >
+                                  <option value="">Select Team...</option>
+                                  {teams?.map((t: any) => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-zinc-400">Select Position</label>
+                                <select
+                                  value={action.config.positionId || ''}
+                                  onChange={(e) => {
+                                    const updated = [...actions];
+                                    updated[idx].config.positionId = e.target.value;
+                                    setActions(updated);
+                                  }}
+                                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer focus:outline-none"
+                                >
+                                  <option value="">Select Position...</option>
+                                  {positions?.map((p: any) => (
+                                    <option key={p.id} value={p.id}>{p.title}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                           </div>
+
+                          {(action.config.assignmentType === 'TEAM' || action.config.assignmentType === 'POSITION') && (
+                            <div className="bg-zinc-900/10 dark:bg-zinc-950/20 border border-zinc-250/20 dark:border-zinc-900/40 p-2.5 rounded-xl text-[9px] text-zinc-550 flex items-center gap-2">
+                              <Sparkles size={11} className="text-indigo-400 shrink-0" />
+                              <span>
+                                <strong>Round-Robin Auto-balancing:</strong> The system will assign new records to the active member who was assigned a record least recently.
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -2158,6 +2249,98 @@ export const AutomationsPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Trigger configuration details */}
+                {(selectedRuleId === 'new' || selectedRule) && (
+                  <div className="space-y-3">
+                    <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Trigger Config</h4>
+                    <div className="space-y-3 bg-zinc-55/35 dark:bg-zinc-900/10 p-4 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500">Trigger Type</label>
+                        <div className="text-xs font-bold text-indigo-655 dark:text-indigo-400 capitalize bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg max-w-max animate-in fade-in duration-100">
+                          {triggerType.replace(/_/g, ' ')}
+                        </div>
+                      </div>
+
+                      {/* If LOCAL scope and (triageModule and selectedModuleId === triageModule.id || triggerType === 'FORM_SUBMITTED' || triggerType === 'CRON') */}
+                      {scope === 'LOCAL' && ((selectedModuleId && triageModule && selectedModuleId === triageModule.id) || triggerType === 'FORM_SUBMITTED' || triggerType === 'CRON') && (
+                        <div className="space-y-3 pt-1.5 border-t border-dashed border-zinc-200 dark:border-zinc-850">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-555 dark:text-zinc-500">Trigger Mode</label>
+                            <select
+                              value={
+                                triggerType === 'CRON'
+                                  ? (cronExpression === 'GLOBAL' ? 'GLOBAL_SCHEDULE' : 'CUSTOM_SCHEDULE')
+                                  : 'IMMEDIATE'
+                              }
+                              onChange={(e) => {
+                                const mode = e.target.value;
+                                if (mode === 'IMMEDIATE') {
+                                  setTriggerType('FORM_SUBMITTED');
+                                } else if (mode === 'GLOBAL_SCHEDULE') {
+                                  setTriggerType('CRON');
+                                  setCronExpression('GLOBAL');
+                                } else {
+                                  setTriggerType('CRON');
+                                  setCronExpression('*/5 * * * *');
+                                }
+                              }}
+                              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:border-indigo-500"
+                            >
+                              <option value="IMMEDIATE">Immediately (On Form Submission)</option>
+                              <option value="GLOBAL_SCHEDULE">Use Global Queue Schedule</option>
+                              <option value="CUSTOM_SCHEDULE">Custom Schedule</option>
+                            </select>
+                          </div>
+
+                          {triggerType === 'CRON' && cronExpression !== 'GLOBAL' && (
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-zinc-555 dark:text-zinc-500">Distribution Schedule</label>
+                                <select
+                                  value={
+                                    ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(cronExpression)
+                                      ? cronExpression
+                                      : 'CUSTOM'
+                                  }
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val !== 'CUSTOM') {
+                                      setCronExpression(val);
+                                    } else {
+                                      setCronExpression('*/5 9-17 * * 1-5'); // Default custom cron
+                                    }
+                                  }}
+                                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer focus:outline-none focus:border-indigo-500"
+                                >
+                                  <option value="*/5 * * * *">Every 5 Minutes</option>
+                                  <option value="*/15 * * * *">Every 15 Minutes</option>
+                                  <option value="0 * * * *">Hourly</option>
+                                  <option value="0 0 * * *">Daily at Midnight</option>
+                                  <option value="CUSTOM">Custom Cron Expression</option>
+                                </select>
+                              </div>
+
+                              {(!['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(cronExpression) || cronExpression === 'CUSTOM') && (
+                                <div className="space-y-1 animate-in fade-in duration-100">
+                                  <label className="text-[10px] font-bold text-zinc-555 dark:text-zinc-500">Cron Expression</label>
+                                  <input
+                                    type="text"
+                                    value={cronExpression}
+                                    onChange={(e) => setCronExpression(e.target.value)}
+                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 font-mono text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                    placeholder="e.g. */5 9-17 * * 1-5"
+                                  />
+                                  <p className="text-[8px] text-zinc-400 leading-normal px-1">Five space-separated values: minute hour day-of-month month day-of-week.</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Precondition gates (LOCAL scope only) */}
                 {scope === 'LOCAL' && (
