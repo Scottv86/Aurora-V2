@@ -255,7 +255,7 @@ export const ActionRegistry: Record<string, WorkflowAction> = {
 
       let createdRecord = await globalPrisma.record.create({
         data: {
-          tenantId: record.tenantId || 'cmnx01qd00002mon316pjfg9p',
+          tenantId: targetModule.tenantId,
           moduleId: targetModuleId,
           status: workflowState ? getStatusFromState(workflowState, workflow, 'New') : 'New',
           data: targetData,
