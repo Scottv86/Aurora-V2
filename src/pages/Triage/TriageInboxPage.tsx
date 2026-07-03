@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
@@ -410,7 +410,7 @@ export const TriageInboxPage = () => {
     }
   };
 
-  const loadInboxRecords = async () => {
+  const loadInboxRecords = useCallback(async () => {
     if (!triageModule) return;
     setLoading(true);
     try {
@@ -429,9 +429,9 @@ export const TriageInboxPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [triageModule, tenant?.id, token]);
 
-  const loadTriageRules = async () => {
+  const loadTriageRules = useCallback(async () => {
     if (!triageModule) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triageModule.id}&_t=${Date.now()}`, {
@@ -447,7 +447,50 @@ export const TriageInboxPage = () => {
     } catch (err) {
       console.error('Failed to load rules:', err);
     }
-  };
+  }, [triageModule, tenant?.id, token]);
+
+  // Setup Socket.IO for real-time updates
+  useEffect(() => {
+    if (!tenant?.id || !token) return;
+
+    let socket: any = null;
+    let isActive = true;
+
+    const connectSocket = async () => {
+      try {
+        const { io } = await import('socket.io-client');
+        if (!isActive) return;
+
+        socket = io('http://127.0.0.1:3001', {
+          auth: { token }
+        });
+
+        socket.on('connect', () => {
+          socket.emit('join_tenant', tenant.id);
+        });
+
+        const refreshQueue = () => {
+          loadInboxRecords();
+        };
+
+        socket.on('record_added', refreshQueue);
+        socket.on('record_updated', refreshQueue);
+        socket.on('record_deleted', refreshQueue);
+      } catch (err) {
+        console.error('[Socket] Connection failed:', err);
+      }
+    };
+
+    connectSocket();
+
+    return () => {
+      isActive = false;
+      if (socket) {
+        socket.emit('leave_tenant', tenant.id);
+        socket.disconnect();
+      }
+    };
+  }, [tenant?.id, token, loadInboxRecords]);
 
   useEffect(() => {
     const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
