@@ -132,49 +132,8 @@ export const TriageInboxPage = () => {
   const [countdownText, setCountdownText] = useState<string>('');
   const [isRunningTriage, setIsRunningTriage] = useState(false);
 
-  useEffect(() => {
-    const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
-    let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
+  const autoRunTriggeredRef = useRef<number>(0);
 
-    if (cronExpr === 'GLOBAL') {
-      cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
-    }
-
-    if (!cronExpr && triageModule) {
-      cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
-    }
-
-    if (!cronExpr) {
-      setCountdownText('');
-      return;
-    }
-
-    const updateTimer = () => {
-      const now = new Date();
-      const nextRun = getNextCronDate(cronExpr, now);
-      const diffMs = nextRun.getTime() - now.getTime();
-      
-      if (diffMs <= 0) {
-        setCountdownText('Running...');
-        return;
-      }
-
-      const totalSec = Math.floor(diffMs / 1000);
-      const min = Math.floor(totalSec / 60);
-      const sec = totalSec % 60;
-      
-      if (min > 0) {
-        setCountdownText(`${min}m ${sec}s`);
-      } else {
-        setCountdownText(`${sec}s`);
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-
-    return () => clearInterval(interval);
-  }, [triageRules, triageModule]);
   
   // Collaboration / Tabs / Filter states
   const [comments, setComments] = useState<any[]>([]);
@@ -489,6 +448,57 @@ export const TriageInboxPage = () => {
       console.error('Failed to load rules:', err);
     }
   };
+
+  useEffect(() => {
+    const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
+    let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
+
+    if (cronExpr === 'GLOBAL') {
+      cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+    }
+
+    if (!cronExpr && triageModule) {
+      cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+    }
+
+    if (!cronExpr) {
+      setCountdownText('');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      const nextRun = getNextCronDate(cronExpr, now);
+      const diffMs = nextRun.getTime() - now.getTime();
+      
+      if (diffMs <= 0) {
+        setCountdownText('Running...');
+        
+        // Trigger auto-distribution if we haven't triggered it for this scheduled tick
+        const minuteKey = Math.floor(nextRun.getTime() / 60000);
+        if (autoRunTriggeredRef.current !== minuteKey) {
+          autoRunTriggeredRef.current = minuteKey;
+          handleManualRunTriage();
+        }
+        return;
+      }
+
+      const totalSec = Math.floor(diffMs / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      
+      if (min > 0) {
+        setCountdownText(`${min}m ${sec}s`);
+      } else {
+        setCountdownText(`${sec}s`);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [triageRules, triageModule]);
 
   const loadRecordComments = async (recordId: string) => {
     try {
