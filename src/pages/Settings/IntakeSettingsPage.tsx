@@ -345,7 +345,7 @@ export const IntakeSettingsPage = () => {
         setTriggerMode('CUSTOM_SCHEDULE');
         setCronExpression(trigger.cronExpression || '*/5 * * * *');
       }
-      setSourceModuleId('public_form');
+      setSourceModuleId(trigger.formId || 'public_form');
     } else {
       setTriggerMode('IMMEDIATE');
       setCronExpression('GLOBAL');
@@ -393,9 +393,9 @@ export const IntakeSettingsPage = () => {
     if (triggerMode === 'IMMEDIATE') {
       triggers = [{ type: 'FORM_SUBMITTED', formId: sourceModuleId || 'public_form' }];
     } else if (triggerMode === 'GLOBAL_SCHEDULE') {
-      triggers = [{ type: 'CRON', cronExpression: 'GLOBAL', moduleId: triageModule.id }];
+      triggers = [{ type: 'CRON', cronExpression: 'GLOBAL', moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
     } else {
-      triggers = [{ type: 'CRON', cronExpression: cronExpression || '*/5 * * * *', moduleId: triageModule.id }];
+      triggers = [{ type: 'CRON', cronExpression: cronExpression || '*/5 * * * *', moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
     }
 
     const ruleData = {
@@ -834,21 +834,19 @@ export const IntakeSettingsPage = () => {
                     </div>
                   )}
 
-                  {triggerMode === 'IMMEDIATE' && (
-                    <div className="space-y-1.5 col-span-2 animate-in fade-in duration-200">
-                      <label className="text-[10px] font-bold text-zinc-400">Ingestion Data Source (Form)</label>
-                      <select 
-                        value={sourceModuleId}
-                        onChange={(e) => setSourceModuleId(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-zinc-200 cursor-pointer"
-                      >
-                        <option value="public_form">All Ingestion Forms</option>
-                        {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
-                          <option key={m.id} value={m.id}>{m.name} Form</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  <div className="space-y-1.5 col-span-2">
+                    <label className="text-[10px] font-bold text-zinc-400">Ingestion Data Source (Form)</label>
+                    <select 
+                      value={sourceModuleId}
+                      onChange={(e) => setSourceModuleId(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-zinc-200 cursor-pointer"
+                    >
+                      <option value="public_form">All Ingestion Forms</option>
+                      {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.name} Form</option>
+                      ))}
+                    </select>
+                  </div>
 
                   <div className="space-y-1.5 col-span-2">
                     <label className="text-[10px] font-bold text-zinc-400 font-mono">Triage Action: Route Record</label>

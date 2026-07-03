@@ -239,6 +239,15 @@ router.post('/run-triage', async (req: TenantRequest, res) => {
       const recordData = { id: record.id, ...(record.data as any || {}) };
       
       for (const automation of automations) {
+        // Filter by source formId if specified in trigger
+        const trigger = automation.triggers?.[0] as any;
+        if (trigger && trigger.formId && trigger.formId !== 'public_form') {
+          const recordOriginalModuleId = record.data && (record.data as any)._originalModuleId;
+          if (recordOriginalModuleId !== trigger.formId) {
+            continue;
+          }
+        }
+
         // Evaluate conditions on the record
         const isMatched = WorkflowEngine.evaluateCondition(
           recordData,

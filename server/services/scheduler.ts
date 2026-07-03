@@ -72,6 +72,14 @@ export class AutomationScheduler {
               console.log(`[Scheduler] Processing ${pendingRecords.length} records on CRON schedule for automation "${automation.name}"`);
               
               for (const record of pendingRecords) {
+                // Filter by source formId if specified
+                if (trigger.formId && trigger.formId !== 'public_form') {
+                  const recordOriginalModuleId = record.data && (record.data as any)._originalModuleId;
+                  if (recordOriginalModuleId !== trigger.formId) {
+                    continue;
+                  }
+                }
+
                 // Evaluate condition if set
                 if (automation.conditions) {
                   const { WorkflowEngine } = await import('./workflowEngine');
