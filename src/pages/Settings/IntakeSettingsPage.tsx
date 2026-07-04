@@ -154,7 +154,10 @@ export const IntakeSettingsPage = () => {
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
   const [loading, setLoading] = useState(false);
   const isNested = window.location.pathname.includes('/platform-modules/');
-  const [activeTab, setActiveTab] = useState<'routing' | 'security'>('routing');
+  const [activeTab, setActiveTab] = useState<'routing' | 'security'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'security' ? 'security' : 'routing';
+  });
   const [quarantineRecords, setQuarantineRecords] = useState<any[]>([]);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
   const [inspectedRecord, setInspectedRecord] = useState<any>(null);

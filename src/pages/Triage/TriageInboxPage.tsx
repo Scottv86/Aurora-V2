@@ -132,6 +132,7 @@ export const TriageInboxPage = () => {
   const [countdownText, setCountdownText] = useState<string>('');
   const [isRunningTriage, setIsRunningTriage] = useState(false);
   const [isTimerPaused, setIsTimerPaused] = useState<boolean>(() => localStorage.getItem('auto_distribution_paused') === 'true');
+  const [quarantineCount, setQuarantineCount] = useState<number>(0);
 
   const autoRunTriggeredRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(localStorage.getItem('auto_distribution_paused') === 'true' ? Date.now() : 0);
@@ -287,12 +288,7 @@ export const TriageInboxPage = () => {
     }
   }, [modules]);
 
-  useEffect(() => {
-    if (triageModule) {
-      loadInboxRecords();
-      loadTriageRules();
-    }
-  }, [triageModule]);
+
 
   useEffect(() => {
     if (selectedRecord) {
@@ -414,6 +410,24 @@ export const TriageInboxPage = () => {
     }
   };
 
+  const loadQuarantineCount = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/automations/quarantine`, {
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeQuarantined = (data || []).filter((r: any) => r.status === 'QUARANTINED');
+        setQuarantineCount(activeQuarantined.length);
+      }
+    } catch (err) {
+      console.error('Failed to load quarantine count:', err);
+    }
+  }, [tenant?.id, token]);
+
   const loadInboxRecords = useCallback(async () => {
     if (!triageModule) return;
     setLoading(true);
@@ -428,12 +442,13 @@ export const TriageInboxPage = () => {
         const data = await res.json();
         setRecords(data.records || []);
       }
+      loadQuarantineCount();
     } catch (err) {
       toast.error('Failed to load triage queue');
     } finally {
       setLoading(false);
     }
-  }, [triageModule, tenant?.id, token]);
+  }, [triageModule, tenant?.id, token, loadQuarantineCount]);
 
   const loadTriageRules = useCallback(async () => {
     if (!triageModule) return;
@@ -452,6 +467,14 @@ export const TriageInboxPage = () => {
       console.error('Failed to load rules:', err);
     }
   }, [triageModule, tenant?.id, token]);
+
+  useEffect(() => {
+    if (triageModule) {
+      loadInboxRecords();
+      loadTriageRules();
+      loadQuarantineCount();
+    }
+  }, [triageModule, loadInboxRecords, loadTriageRules, loadQuarantineCount]);
 
   // Setup Socket.IO for real-time updates
   useEffect(() => {
@@ -1431,7 +1454,7 @@ export const TriageInboxPage = () => {
       {triageModule ? (
         <>
           {/* Executive KPI Bar */}
-          <div className="grid grid-cols-4 gap-4 shrink-0">
+          <div className="grid grid-cols-5 gap-4 shrink-0">
             <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider">Pending Assessment</p>
@@ -1468,6 +1491,23 @@ export const TriageInboxPage = () => {
                 <XCircle size={18} />
               </div>
             </div>
+            <a 
+              href="/workspace/settings/intake?tab=security"
+              className="bg-zinc-900/30 border border-zinc-900 hover:border-rose-500/30 hover:bg-rose-950/5 hover:scale-[1.01] transition-all rounded-2xl p-4 flex items-center justify-between group cursor-pointer"
+            >
+              <div>
+                <p className="text-[10px] font-bold text-rose-400/90 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldAlert size={10} className="text-rose-450 animate-pulse" />
+                  Security Quarantine
+                </p>
+                <h3 className="text-2xl font-black text-rose-500 mt-1">
+                  {quarantineCount}
+                </h3>
+              </div>
+              <div className="h-10 w-10 bg-rose-500/10 group-hover:bg-rose-500/20 text-rose-400 rounded-xl flex items-center justify-center border border-rose-500/20 transition-all">
+                <ShieldAlert size={18} />
+              </div>
+            </a>
           </div>
 
           {/* Main Content Workspace Split Layout */}
