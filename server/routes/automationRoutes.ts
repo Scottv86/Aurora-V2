@@ -87,22 +87,64 @@ router.post('/quarantine/:id/release', async (req: TenantRequest, res) => {
 
       if (sourceModule) {
         const origConfig = (sourceModule.config || {}) as any;
-        if (origConfig.customerRefPrefix) {
-          const prefix = origConfig.customerRefPrefix;
-          const suffix = origConfig.customerRefSuffix || '';
-          const nextNum = origConfig.customerRefNextNumber !== undefined ? Number(origConfig.customerRefNextNumber) : 10001;
+        const forms = origConfig.forms || [];
+        const payloadObj = (qRecord.payload || {}) as any;
+        const submittedFormId = payloadObj._formId || sourceModule.id;
+        const form = forms.find((f: any) => f.id === submittedFormId);
 
+        let prefix = undefined;
+        let suffix = '';
+        let nextNum = 10001;
+        let isFormSpecific = false;
+
+        if (form && form.settings && form.settings.customerRefPrefix) {
+          prefix = form.settings.customerRefPrefix;
+          suffix = form.settings.customerRefSuffix || '';
+          nextNum = form.settings.customerRefNextNumber !== undefined ? Number(form.settings.customerRefNextNumber) : 10001;
+          isFormSpecific = true;
+        } else if (origConfig.customerRefPrefix) {
+          prefix = origConfig.customerRefPrefix;
+          suffix = origConfig.customerRefSuffix || '';
+          nextNum = origConfig.customerRefNextNumber !== undefined ? Number(origConfig.customerRefNextNumber) : 10001;
+        }
+
+        if (prefix) {
           customerRef = `${prefix}-${nextNum}${suffix}`;
 
-          await db.module.update({
-            where: { id: sourceModule.id },
-            data: {
-              config: {
-                ...origConfig,
-                customerRefNextNumber: nextNum + 1
+          if (isFormSpecific) {
+            const updatedForms = forms.map((f: any) => {
+              if (f.id === submittedFormId) {
+                return {
+                  ...f,
+                  settings: {
+                    ...(f.settings || {}),
+                    customerRefNextNumber: nextNum + 1
+                  }
+                };
               }
-            }
-          });
+              return f;
+            });
+
+            await db.module.update({
+              where: { id: sourceModule.id },
+              data: {
+                config: {
+                  ...origConfig,
+                  forms: updatedForms
+                }
+              }
+            });
+          } else {
+            await db.module.update({
+              where: { id: sourceModule.id },
+              data: {
+                config: {
+                  ...origConfig,
+                  customerRefNextNumber: nextNum + 1
+                }
+              }
+            });
+          }
         }
       }
 
@@ -376,7 +418,8 @@ router.post('/run-triage', async (req: TenantRequest, res) => {
         const trigger = automation.triggers?.[0] as any;
         if (trigger && trigger.formId && trigger.formId !== 'public_form') {
           const recordOriginalModuleId = record.data && (record.data as any)._originalModuleId;
-          if (recordOriginalModuleId !== trigger.formId) {
+          const recordFormId = record.data && (record.data as any)._formId;
+          if (recordOriginalModuleId !== trigger.formId && recordFormId !== trigger.formId) {
             continue;
           }
         }
@@ -454,7 +497,8 @@ router.post('/simulate', async (req: TenantRequest, res) => {
       let formFilterMatch = true;
       if (trigger && trigger.formId && trigger.formId !== 'public_form') {
         const payloadOriginalModuleId = payload._originalModuleId;
-        if (payloadOriginalModuleId !== trigger.formId) {
+        const payloadFormId = payload._formId;
+        if (payloadOriginalModuleId !== trigger.formId && payloadFormId !== trigger.formId) {
           formFilterMatch = false;
         }
       }

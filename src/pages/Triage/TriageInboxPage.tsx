@@ -2349,8 +2349,13 @@ export const TriageInboxPage = () => {
                                 const sourceChannel = fields._submissionSource || selectedRecord._submissionSource || 'Public Portal Form';
                                 
                                 // Find public link form inside module config if available
-                                const formName = origMod.forms?.find((f: any) => f.usage === 'public_link')?.name || `${origMod.name} Form`;
-                                const publicUrl = `${window.location.origin}/portal?moduleId=${origMod.id}`;
+                                const submittedFormId = fields?._formId || selectedRecord?.data?._formId;
+                                const publicForm = origMod.forms?.find((f: any) => f.id === submittedFormId) 
+                                  || origMod.forms?.find((f: any) => f.usage === 'public_link');
+                                const formName = publicForm?.name || `${origMod.name} Form`;
+                                const publicUrl = publicForm 
+                                  ? `${window.location.origin}/portal?moduleId=${origMod.id}&formId=${publicForm.id}`
+                                  : `${window.location.origin}/portal?moduleId=${origMod.id}`;
 
                                 return (
                                   <div className="grid grid-cols-2 gap-4">

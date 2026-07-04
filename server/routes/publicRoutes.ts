@@ -248,23 +248,63 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
     if (triageModule) {
       targetModuleId = triageModule.id;
       const origConfig = (moduleData.config || {}) as any;
+      const forms = origConfig.forms || [];
+      const submittedFormId = data?._formId || moduleData.id;
+      const form = forms.find((f: any) => f.id === submittedFormId);
 
-      if (origConfig.customerRefPrefix) {
-        const prefix = origConfig.customerRefPrefix;
-        const suffix = origConfig.customerRefSuffix || '';
-        const nextNum = origConfig.customerRefNextNumber !== undefined ? Number(origConfig.customerRefNextNumber) : 10001;
+      let prefix = undefined;
+      let suffix = '';
+      let nextNum = 10001;
+      let isFormSpecific = false;
 
+      if (form && form.settings && form.settings.customerRefPrefix) {
+        prefix = form.settings.customerRefPrefix;
+        suffix = form.settings.customerRefSuffix || '';
+        nextNum = form.settings.customerRefNextNumber !== undefined ? Number(form.settings.customerRefNextNumber) : 10001;
+        isFormSpecific = true;
+      } else if (origConfig.customerRefPrefix) {
+        prefix = origConfig.customerRefPrefix;
+        suffix = origConfig.customerRefSuffix || '';
+        nextNum = origConfig.customerRefNextNumber !== undefined ? Number(origConfig.customerRefNextNumber) : 10001;
+      }
+
+      if (prefix) {
         customerRef = `${prefix}-${nextNum}${suffix}`;
 
-        await globalPrisma.module.update({
-          where: { id: moduleData.id },
-          data: {
-            config: {
-              ...origConfig,
-              customerRefNextNumber: nextNum + 1
+        if (isFormSpecific) {
+          const updatedForms = forms.map((f: any) => {
+            if (f.id === submittedFormId) {
+              return {
+                ...f,
+                settings: {
+                  ...(f.settings || {}),
+                  customerRefNextNumber: nextNum + 1
+                }
+              };
             }
-          }
-        });
+            return f;
+          });
+
+          await globalPrisma.module.update({
+            where: { id: moduleData.id },
+            data: {
+              config: {
+                ...origConfig,
+                forms: updatedForms
+              }
+            }
+          });
+        } else {
+          await globalPrisma.module.update({
+            where: { id: moduleData.id },
+            data: {
+              config: {
+                ...origConfig,
+                customerRefNextNumber: nextNum + 1
+              }
+            }
+          });
+        }
       }
     }
 

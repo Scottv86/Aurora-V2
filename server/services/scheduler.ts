@@ -77,7 +77,8 @@ export class AutomationScheduler {
                 // Filter by source formId if specified
                 if (trigger.formId && trigger.formId !== 'public_form') {
                   const recordOriginalModuleId = record.data && (record.data as any)._originalModuleId;
-                  if (recordOriginalModuleId !== trigger.formId) {
+                  const recordFormId = record.data && (record.data as any)._formId;
+                  if (recordOriginalModuleId !== trigger.formId && recordFormId !== trigger.formId) {
                     continue;
                   }
                 }

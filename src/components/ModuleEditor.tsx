@@ -10305,12 +10305,12 @@ export const ModuleEditor = () => {
                                           <input 
                                             type="text" 
                                             readOnly 
-                                            value={`${window.location.origin}/portal?moduleId=${id}`}
+                                            value={`${window.location.origin}/portal?moduleId=${id}&formId=${selectedForm.id}`}
                                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
                                           />
                                           <button 
                                             onClick={() => {
-                                              navigator.clipboard.writeText(`${window.location.origin}/portal?moduleId=${id}`);
+                                              navigator.clipboard.writeText(`${window.location.origin}/portal?moduleId=${id}&formId=${selectedForm.id}`);
                                               toast.success('Public form URL copied to clipboard');
                                             }}
                                             className="px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -10335,8 +10335,14 @@ export const ModuleEditor = () => {
                                           <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Prefix</label>
                                           <input 
                                             type="text"
-                                            value={(moduleSettings as any).customerRefPrefix !== undefined ? (moduleSettings as any).customerRefPrefix : ''}
-                                            onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefPrefix: e.target.value.toUpperCase() }))}
+                                            value={selectedForm.settings?.customerRefPrefix !== undefined ? selectedForm.settings.customerRefPrefix : ''}
+                                            onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
+                                              ...f,
+                                              settings: {
+                                                ...(f.settings || {}),
+                                                customerRefPrefix: e.target.value.toUpperCase()
+                                              }
+                                            } : f))}
                                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                                             placeholder="e.g. APP"
                                           />
@@ -10345,8 +10351,14 @@ export const ModuleEditor = () => {
                                           <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Suffix</label>
                                           <input 
                                             type="text"
-                                            value={(moduleSettings as any).customerRefSuffix !== undefined ? (moduleSettings as any).customerRefSuffix : ''}
-                                            onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefSuffix: e.target.value.toUpperCase() }))}
+                                            value={selectedForm.settings?.customerRefSuffix !== undefined ? selectedForm.settings.customerRefSuffix : ''}
+                                            onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
+                                              ...f,
+                                              settings: {
+                                                ...(f.settings || {}),
+                                                customerRefSuffix: e.target.value.toUpperCase()
+                                              }
+                                            } : f))}
                                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                                             placeholder="e.g. -T"
                                           />
@@ -10357,8 +10369,14 @@ export const ModuleEditor = () => {
                                         <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Next Number</label>
                                         <input 
                                           type="number"
-                                          value={(moduleSettings as any).customerRefNextNumber !== undefined ? (moduleSettings as any).customerRefNextNumber : 10001}
-                                          onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefNextNumber: Number(e.target.value) }))}
+                                          value={selectedForm.settings?.customerRefNextNumber !== undefined ? selectedForm.settings.customerRefNextNumber : 10001}
+                                          onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
+                                            ...f,
+                                            settings: {
+                                              ...(f.settings || {}),
+                                              customerRefNextNumber: Number(e.target.value)
+                                            }
+                                          } : f))}
                                           className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                                         />
                                       </div>
