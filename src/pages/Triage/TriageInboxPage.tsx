@@ -7,7 +7,7 @@ import {
   Inbox, Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
   AlertCircle, Zap, Search, GitFork, 
   HelpCircle, XCircle, User, Mail, Phone, FileText, Check, 
-  RotateCcw, Info, ExternalLink, Layers, Copy, Play, Pause, ShieldAlert
+  RotateCcw, Info, ExternalLink, Layers, Copy, Play, Pause, ShieldAlert, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -120,7 +120,7 @@ const getStatusStyles = (status: string) => {
 };
 
 export const TriageInboxPage = () => {
-  const { tenant, modules, members = [], teams = [] } = usePlatform();
+  const { tenant, modules, modulesLoading, members = [], teams = [] } = usePlatform();
   const { session, user } = useAuth();
   const queryClient = useQueryClient();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
@@ -1451,7 +1451,12 @@ export const TriageInboxPage = () => {
         })()}
       </header>
 
-      {triageModule ? (
+      {modulesLoading ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
+          <p className="text-xs font-bold text-zinc-450 font-sans">Loading Work Distribution...</p>
+        </div>
+      ) : triageModule ? (
         <>
           {/* Executive KPI Bar */}
           <div className="grid grid-cols-5 gap-4 shrink-0">
@@ -2435,7 +2440,7 @@ export const TriageInboxPage = () => {
         <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
           <AlertCircle size={36} className="text-zinc-700 mb-4" />
           <h3 className="text-sm font-black text-zinc-300">Work Distribution is not configured</h3>
-          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently disabled. Please contact your system administrator to enable the triage module inside Triage settings.</p>
+          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
         </div>
       )}
       

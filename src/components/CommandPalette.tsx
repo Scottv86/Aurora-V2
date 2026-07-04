@@ -31,7 +31,7 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs:
   const navigationActions = [
     { id: 'tab:details', label: 'Go to Setup', icon: Settings, shortcut: 'G D', type: 'nav' },
     { id: 'tab:schema', label: 'Go to Schema', icon: Play, shortcut: 'G S', type: 'nav' },
-    { id: 'tab:builder', label: 'Go to Module', icon: Zap, shortcut: 'G B', type: 'nav' },
+    { id: 'tab:builder', label: 'Go to Interface', icon: Zap, shortcut: 'G B', type: 'nav' },
     { id: 'tab:workflow', label: 'Go to Workflow', icon: Play, shortcut: 'G W', type: 'nav' },
     { id: 'tab:validations', label: 'Go to Validations', icon: ShieldCheck, shortcut: 'G V', type: 'nav' },
     { id: 'tab:automation', label: 'Go to Automation', icon: Zap, shortcut: 'G A', type: 'nav' },

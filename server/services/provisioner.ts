@@ -33,6 +33,27 @@ export async function spawnTenant(options: ProvisioningOptions) {
       }
     });
 
+    // 2b. Auto-provision Work Distribution module
+    await tx.module.create({
+      data: {
+        tenantId: tenant.id,
+        workspaceId: workspace.id,
+        name: 'Work Distribution',
+        category: 'Intake & Requests',
+        icon: 'Inbox',
+        type: 'WORK_ITEM',
+        enabled: true,
+        config: {
+          isIntakeTriage: true,
+          layout: [
+            { id: 'f1', name: 'submitted_by', label: 'Submitted By', type: 'text', colSpan: 6, rowIndex: 0 },
+            { id: 'f2', name: 'email', label: 'Email', type: 'text', colSpan: 6, rowIndex: 0 },
+            { id: 'f3', name: 'description', label: 'Description', type: 'longText', colSpan: 12, rowIndex: 1 }
+          ]
+        }
+      }
+    });
+
     // 3. Set up Initial Admin User
     const admin = await tx.user.create({
       data: {

@@ -3,10 +3,11 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { 
-  ShieldCheck, ToggleLeft, ToggleRight, Plus, Trash2,
-  Info, Link, Settings, ShieldAlert
+  ShieldCheck, Plus, Trash2,
+  Info, Link, Settings, ShieldAlert, GitFork, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tabs } from '../../components/UI/TabsAndModal';
 
 interface VisualCondition {
   fieldId: string;
@@ -147,17 +148,21 @@ const parseMappings = (rawMap: Record<string, string>): VisualMappings => {
   
   return result;
 };
-
 export const IntakeSettingsPage = () => {
-  const { tenant, modules, refreshModules } = usePlatform();
+  const { tenant, modules, modulesLoading, refreshModules } = usePlatform();
   const { session } = useAuth();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-  const [loading, setLoading] = useState(false);
   const isNested = window.location.pathname.includes('/platform-modules/');
   const [activeTab, setActiveTab] = useState<'routing' | 'security'>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') === 'security' ? 'security' : 'routing';
   });
+  
+  const tabs = [
+    { id: 'routing', label: 'Routing & Channels', icon: GitFork },
+    { id: 'security', label: 'Security & Quarantine', icon: ShieldCheck }
+  ];
+
   const [quarantineRecords, setQuarantineRecords] = useState<any[]>([]);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
   const [inspectedRecord, setInspectedRecord] = useState<any>(null);
@@ -232,89 +237,7 @@ export const IntakeSettingsPage = () => {
     }
   };
 
-  const handleToggleTriage = async () => {
-    setLoading(true);
-    try {
-      if (triageModule) {
-        // Disable: update module config
-        const {
-          id,
-          name,
-          category,
-          iconName,
-          type,
-          enabled,
-          isGlobal,
-          templateId,
-          status,
-          createdAt,
-          isIntakeTriage,
-          ...restConfig
-        } = triageModule;
 
-        const res = await fetch(`${API_BASE_URL}/api/data/modules/${triageModule.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenant?.id || '',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name,
-            category,
-            iconName,
-            type,
-            enabled,
-            isGlobal,
-            templateId,
-            ...restConfig
-          })
-        });
-
-        if (res.ok) {
-          toast.success('Work Distribution system disabled successfully');
-          setTriageModule(null);
-          setTriageRules([]);
-          await refreshModules();
-        } else {
-          throw new Error('Failed to update triage module config');
-        }
-      } else {
-        // Enable: Find if there's a template or create a new one
-        const res = await fetch(`${API_BASE_URL}/api/data/modules`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenant?.id || '',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: 'Work Distribution',
-            category: 'Intake & Requests',
-            iconName: 'FileText',
-            type: 'WORK_ITEM',
-            isIntakeTriage: true,
-            layout: [
-              { id: 'f1', name: 'submitted_by', label: 'Submitted By', type: 'text', colSpan: 6, rowIndex: 0 },
-              { id: 'f2', name: 'email', label: 'Email', type: 'text', colSpan: 6, rowIndex: 0 },
-              { id: 'f3', name: 'description', label: 'Description', type: 'longText', colSpan: 12, rowIndex: 1 }
-            ]
-          })
-        });
-
-        if (res.ok) {
-          toast.success('Work Distribution system enabled!');
-          await refreshModules();
-        } else {
-          throw new Error('Failed to create triage module');
-        }
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Operation failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSaveGlobalSchedule = async (newCron: string) => {
     if (!triageModule) return;
@@ -674,7 +597,7 @@ export const IntakeSettingsPage = () => {
   return (
     <div className={`flex-1 flex flex-col gap-8 ${isNested ? 'p-0 bg-transparent' : 'bg-zinc-950 p-10 overflow-y-auto custom-scrollbar'}`}>
       {/* Header section */}
-      {!isNested ? (
+      {!isNested && (
         <header className="flex items-center justify-between border-b border-zinc-900 pb-6 shrink-0">
           <div>
             <div className="flex items-center gap-2">
@@ -688,65 +611,24 @@ export const IntakeSettingsPage = () => {
             </h1>
             <p className="text-xs text-zinc-400 mt-1">Configure tenancy-wide rules to automatically route, validate, and distribute incoming requests.</p>
           </div>
-
-          <button 
-            onClick={handleToggleTriage}
-            disabled={loading}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
-              triageModule 
-                ? 'bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:bg-zinc-700/85 hover:border-zinc-600'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10'
-            }`}
-          >
-            {triageModule ? <ToggleRight className="text-indigo-400" /> : <ToggleLeft className="text-zinc-400" />}
-            {triageModule ? 'Disable Work Distribution' : 'Enable Work Distribution'}
-          </button>
         </header>
-      ) : (
-        <div className="flex items-center justify-end pb-4 border-b border-zinc-900/60 shrink-0">
-          <button 
-            onClick={handleToggleTriage}
-            disabled={loading}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
-              triageModule 
-                ? 'bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:bg-zinc-700/85 hover:border-zinc-600'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10'
-            }`}
-          >
-            {triageModule ? <ToggleRight className="text-indigo-400" /> : <ToggleLeft className="text-zinc-400" />}
-            {triageModule ? 'Disable Work Distribution' : 'Enable Work Distribution'}
-          </button>
-        </div>
       )}
 
       {/* Sub-navigation tabs */}
-      <div className="flex border-b border-zinc-900 gap-6 pb-px shrink-0">
-        <button
-          onClick={() => setActiveTab('routing')}
-          className={`pb-3 text-xs font-bold transition-all relative cursor-pointer ${
-            activeTab === 'routing' ? 'text-indigo-400 font-black' : 'text-zinc-450 hover:text-zinc-300 font-medium'
-          }`}
-        >
-          Routing & Channels
-          {activeTab === 'routing' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full animate-in fade-in duration-200" />
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('security')}
-          className={`pb-3 text-xs font-bold transition-all relative cursor-pointer ${
-            activeTab === 'security' ? 'text-indigo-400 font-black' : 'text-zinc-450 hover:text-zinc-300 font-medium'
-          }`}
-        >
-          Security & Quarantine
-          {activeTab === 'security' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full animate-in fade-in duration-200" />
-          )}
-        </button>
-      </div>
+      <Tabs 
+        tabs={tabs} 
+        activeTab={activeTab} 
+        onChange={(id) => setActiveTab(id as any)} 
+        firstTabPadding={false}
+      />
 
       {activeTab === 'routing' ? (
-        triageModule ? (
+        modulesLoading ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
+            <p className="text-xs font-bold text-zinc-450 font-sans">Loading Work Distribution settings...</p>
+          </div>
+        ) : triageModule ? (
           <div className="grid grid-cols-12 gap-8 items-start flex-1 min-h-0">
             {/* Rules Dashboard section */}
             <div className="col-span-4 bg-zinc-900/40 border border-zinc-900 rounded-3xl p-6 space-y-6">
@@ -1123,8 +1005,8 @@ export const IntakeSettingsPage = () => {
         ) : (
           <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
             <Info size={36} className="text-zinc-700 mb-4" />
-            <h3 className="text-sm font-black text-zinc-300">Work Distribution is inactive</h3>
-            <p className="text-[10px] text-zinc-500 mt-1 max-w-md">Enable the system to mount the centralized incoming mailbox and sequential routing rules.</p>
+            <h3 className="text-sm font-black text-zinc-300">Work Distribution is not configured</h3>
+            <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
           </div>
         )
       ) : (

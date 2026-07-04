@@ -33,6 +33,7 @@ const PATH_MAP: Record<string, string> = {
   finance: 'Finance',
   intake: 'Work Distribution',
   'work-distribution': 'Work Distribution',
+  'people-organisations': 'People & Organisations',
   reset: 'Factory Reset',
   migration: 'Migration Tools',
   connectors: 'Integrations'

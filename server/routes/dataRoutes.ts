@@ -86,10 +86,54 @@ function processAutonumbers(dataObject: any, fields: any[], updatedConfig: any):
   return changed;
 }
 
+async function ensureWorkDistributionModule(db: any, tenantId: string) {
+  const triageModule = await db.module.findFirst({
+    where: {
+      tenantId,
+      config: { path: ['isIntakeTriage'], equals: true }
+    }
+  });
+
+  if (!triageModule) {
+    console.log(`[DataAPI] Auto-provisioning Work Distribution module for tenant: ${tenantId}`);
+    let workspace = await db.workspace.findFirst();
+    if (!workspace) {
+      workspace = await db.workspace.create({
+        data: {
+          name: 'Main Workspace',
+          tenantId
+        }
+      });
+    }
+
+    await db.module.create({
+      data: {
+        tenantId,
+        workspaceId: workspace.id,
+        name: 'Work Distribution',
+        category: 'Intake & Requests',
+        icon: 'Inbox',
+        type: 'WORK_ITEM',
+        enabled: true,
+        config: {
+          isIntakeTriage: true,
+          layout: [
+            { id: 'f1', name: 'submitted_by', label: 'Submitted By', type: 'text', colSpan: 6, rowIndex: 0 },
+            { id: 'f2', name: 'email', label: 'Email', type: 'text', colSpan: 6, rowIndex: 0 },
+            { id: 'f3', name: 'description', label: 'Description', type: 'longText', colSpan: 12, rowIndex: 1 }
+          ]
+        }
+      }
+    });
+  }
+}
+
 // GET all modules for this tenant
 router.get('/modules', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
+    const tenantId = req.tenantId!;
+    await ensureWorkDistributionModule(db, tenantId);
     const modules = await db.module.findMany();
     // Flatten config for frontend
     const formatted = modules.map(m => {

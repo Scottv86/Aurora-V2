@@ -68,6 +68,11 @@ import { AutomationsPage } from './pages/Settings/AutomationsPage';
 import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
 import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
 
+const NavigateWithSearch = ({ to, replace }: { to: string; replace?: boolean }) => {
+  const location = useLocation();
+  return <Navigate to={{ pathname: to, search: location.search }} replace={replace} />;
+};
+
 const SettingsLayout = () => {
   const location = useLocation();
   const isFullBleed = location.pathname.includes('/builder/') || 
@@ -192,8 +197,8 @@ const App = () => {
                 <Route path="records" element={<ComingSoon title="Records" description="Manage system records, data entries, and historical logs across all modules." />} />
                 <Route path="fees-products" element={<ComingSoon title="Fees & Products" description="Configure service fees, product catalogs, and pricing structures." />} />
                 <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
-                <Route path="work-distribution" element={<Navigate to="/workspace/settings/platform-modules/work-distribution" replace />} />
-                <Route path="intake" element={<Navigate to="/workspace/settings/platform-modules/work-distribution" replace />} />
+                <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
+                <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                 <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
                 <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
                 <Route path="integrations" element={<ConnectorsPage />} />

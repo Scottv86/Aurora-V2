@@ -4628,7 +4628,7 @@ export const ModuleEditor = () => {
                     : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                 )}
               >
-                {tab === 'connectors' ? 'integrations' : tab === 'builder' ? 'module' : tab === 'details' ? 'setup' : tab}
+                {tab === 'connectors' ? 'integrations' : tab === 'builder' ? 'interface' : tab === 'details' ? 'setup' : tab}
               </button>
             ))}
           </div>

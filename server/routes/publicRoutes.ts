@@ -4,6 +4,50 @@ import { SecurityScreeningService } from '../services/securityScreening';
 
 const router = Router();
 
+async function ensureTriageModule(tenantId: string) {
+  let targetModule = await globalPrisma.module.findFirst({
+    where: {
+      tenantId,
+      config: { path: ['isIntakeTriage'], equals: true }
+    }
+  });
+
+  if (!targetModule) {
+    console.log(`[PublicAPI] Auto-provisioning Work Distribution module for tenant: ${tenantId}`);
+    let workspace = await globalPrisma.workspace.findFirst({
+      where: { tenantId }
+    });
+    if (!workspace) {
+      workspace = await globalPrisma.workspace.create({
+        data: {
+          name: 'Main Workspace',
+          tenantId
+        }
+      });
+    }
+    targetModule = await globalPrisma.module.create({
+      data: {
+        tenantId,
+        workspaceId: workspace.id,
+        name: 'Work Distribution',
+        category: 'Intake & Requests',
+        icon: 'Inbox',
+        type: 'WORK_ITEM',
+        enabled: true,
+        config: {
+          isIntakeTriage: true,
+          layout: [
+            { id: 'f1', name: 'submitted_by', label: 'Submitted By', type: 'text', colSpan: 6, rowIndex: 0 },
+            { id: 'f2', name: 'email', label: 'Email', type: 'text', colSpan: 6, rowIndex: 0 },
+            { id: 'f3', name: 'description', label: 'Description', type: 'longText', colSpan: 12, rowIndex: 1 }
+          ]
+        }
+      }
+    });
+  }
+  return targetModule;
+}
+
 /**
  * POST /api/public/submissions
  * Public endpoint for external form submissions (e.g. from Landing Pages or Portals).
@@ -56,37 +100,9 @@ router.post('/submissions', async (req, res) => {
       return res.status(400).json({ error: 'Missing required email field' });
     }
 
-    // 2. Find a suitable module for this type of intake (preferring Intake Triage)
-    let targetModule = await globalPrisma.module.findFirst({
-      where: {
-        tenantId: tenant.id,
-        config: { path: ['isIntakeTriage'], equals: true }
-      }
-    });
-
-    let isRoutedToTriage = !!targetModule;
-
-    if (!targetModule) {
-      targetModule = await globalPrisma.module.findFirst({
-        where: { 
-          tenantId: tenant.id,
-          name: { contains: type, mode: 'insensitive' }
-        }
-      });
-    }
-
-    if (!targetModule) {
-      targetModule = await globalPrisma.module.findFirst({
-        where: { 
-          tenantId: tenant.id,
-          config: { path: ['type'], equals: 'WORK_ITEM' }
-        }
-      });
-    }
-
-    if (!targetModule) {
-      return res.status(400).json({ error: 'No suitable intake module found for this tenant' });
-    }
+    // 2. Ensure the Intake Triage module exists and use it
+    let targetModule = await ensureTriageModule(tenant.id);
+    let isRoutedToTriage = true;
 
     // 3. Create the Record
     let customerRef = undefined;
@@ -215,13 +231,8 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
 
     const cleanData = screeningResult.sanitizedData;
 
-    // Find the Intake Triage module for the tenant if it exists
-    const triageModule = await globalPrisma.module.findFirst({
-      where: {
-        tenantId: moduleData.tenantId,
-        config: { path: ['isIntakeTriage'], equals: true }
-      }
-    });
+    // Ensure the Intake Triage module exists and use it
+    const triageModule = await ensureTriageModule(moduleData.tenantId);
 
     let targetModuleId = moduleData.id;
     let originalTargetModuleId = moduleData.id;
