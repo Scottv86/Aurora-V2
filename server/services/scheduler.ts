@@ -36,7 +36,9 @@ export class AutomationScheduler {
    */
   private static async pollAndRun() {
     const now = new Date();
-    // console.log(`[Scheduler] Polling triggers at ${now.toISOString()}...`);
+    
+    // Check SLA warning and breach deadlines
+    await this.checkSLAs();
 
     // Fetch all active automations
     const automations = await globalPrisma.automation.findMany({
@@ -203,5 +205,65 @@ export class AutomationScheduler {
       checkPart(month, currentMonth) &&
       checkPart(dayOfWeek, currentDayOfWeek, true)
     );
+  }
+
+  /**
+   * Scans active records with set SLAs and updates their status if they breach or enter warning periods.
+   */
+  private static async checkSLAs() {
+    const now = new Date();
+    try {
+      const records = await globalPrisma.record.findMany({
+        where: {
+          slaDeadline: { not: null },
+          status: { notIn: ['Routed', 'routed', 'Rejected', 'rejected', 'Archived', 'archived'] }
+        },
+        include: {
+          module: true
+        }
+      });
+
+      for (const record of records) {
+        const slaDeadline = record.slaDeadline!;
+        const config = (record.module.config || {}) as any;
+        const slaConfig = config.slaConfig || {};
+        
+        const breachHours = parseFloat(slaConfig.breachHours || '24');
+        const warningHours = parseFloat(slaConfig.warningHours || '0.5'); // default 30 mins
+        
+        const createdAt = record.createdAt.getTime();
+        const warningTime = new Date(createdAt + warningHours * 60 * 60 * 1000);
+
+        let newStatus: string | null = null;
+
+        if (now >= slaDeadline) {
+          if (record.slaStatus !== 'BREACHED') {
+            newStatus = 'BREACHED';
+          }
+        } else if (now >= warningTime) {
+          if (record.slaStatus === 'MET') {
+            newStatus = 'WARNING';
+          }
+        }
+
+        if (newStatus) {
+          console.log(`[Scheduler] SLA state transition for record ${record.id}: ${record.slaStatus} -> ${newStatus}`);
+          
+          await globalPrisma.record.update({
+            where: { id: record.id },
+            data: {
+              slaStatus: newStatus
+            }
+          });
+
+          // If breached, we can trigger custom escalation triggers (like sending emails or firing automation events)
+          if (newStatus === 'BREACHED') {
+            console.log(`[Scheduler] SLA Breach Escalation for record ${record.id}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('[Scheduler] SLA evaluation loop error:', err);
+    }
   }
 }

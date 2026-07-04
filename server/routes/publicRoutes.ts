@@ -136,12 +136,19 @@ router.post('/submissions', async (req, res) => {
       ...otherData
     };
 
+    // Calculate SLA if configured in module settings
+    let slaDeadline = undefined;
+    if (targetConfig.slaConfig && targetConfig.slaConfig.breachHours) {
+      slaDeadline = new Date(Date.now() + parseFloat(targetConfig.slaConfig.breachHours) * 60 * 60 * 1000);
+    }
+
     const record = await globalPrisma.record.create({
       data: {
         tenantId: tenant.id,
         moduleId: targetModule.id,
         status: 'New',
-        data: recordData
+        data: recordData,
+        slaDeadline
       }
     });
 
@@ -269,22 +276,31 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
       ...(screeningResult.reasons.length > 0 ? { _sanitizationFlags: screeningResult.reasons } : {})
     };
 
+    // Calculate SLA if configured in module settings
+    let slaDeadline = undefined;
+    const moduleConfig = (moduleData.config || {}) as any;
+    if (moduleConfig.slaConfig && moduleConfig.slaConfig.breachHours) {
+      slaDeadline = new Date(Date.now() + parseFloat(moduleConfig.slaConfig.breachHours) * 60 * 60 * 1000);
+    }
+
     const record = await globalPrisma.record.create({
       data: {
         tenantId: moduleData.tenantId,
         moduleId: targetModuleId,
         status: 'New',
-        data: submissionData
+        data: submissionData,
+        slaDeadline
       }
     });
 
     const { AutomationEngine } = await import('../services/automationEngine');
+    const submittedFormId = data?._formId || moduleData.id;
     AutomationEngine.handleEvent({
       type: 'FORM_SUBMITTED',
       tenantId: moduleData.tenantId,
       moduleId: targetModuleId,
       record: { id: record.id, ...submissionData },
-      metadata: { formId: moduleData.id, targetModuleId: originalTargetModuleId }
+      metadata: { formId: submittedFormId, targetModuleId: originalTargetModuleId }
     }, globalPrisma).catch(err => {
       console.error('[PublicAPI] Error triggering FORM_SUBMITTED event:', err);
     });

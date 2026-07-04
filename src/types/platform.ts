@@ -225,6 +225,7 @@ export interface Module {
 
   config?: ModuleConfig;
   connectorMappings?: Record<string, Record<string, string>>;
+  forms?: any[];
 }
 
 

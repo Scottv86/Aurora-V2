@@ -1594,6 +1594,7 @@ export const ModuleEditor = () => {
   });
   const [isFieldSelectorOpen, setIsFieldSelectorOpen] = useState(false);
   const [localAutomations, setLocalAutomations] = useState<any[]>([]);
+  const [allTenantAutomations, setAllTenantAutomations] = useState<any[]>([]);
   const [deletedAutomationIds, setDeletedAutomationIds] = useState<string[]>([]);
   
   const [layout, setLayout] = useState<Layout>([]);
@@ -2306,6 +2307,22 @@ export const ModuleEditor = () => {
           }
         } catch (err) {
           console.error("Error loading automations:", err);
+        }
+
+        // Load all tenant automations for delete mapping safeguards
+        try {
+          const allAutResponse = await fetch(`${API_BASE_URL}/api/automations`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant.id || ''
+            }
+          });
+          if (allAutResponse.ok) {
+            const allAutData = await allAutResponse.json();
+            setAllTenantAutomations(allAutData);
+          }
+        } catch (err) {
+          console.error("Error loading all tenant automations:", err);
         }
         
       } catch (error) {
@@ -3431,6 +3448,25 @@ export const ModuleEditor = () => {
   };
 
   const deleteBlocks = (ids: string[]) => {
+    // Mapping safeguards: warn/block if mapped in triage rules
+    const mappedRules: string[] = [];
+    ids.forEach(fieldId => {
+      allTenantAutomations.forEach(aut => {
+        const routeAction = aut.actions?.find((a: any) => a.type === 'ROUTE_TO_MODULE');
+        if (routeAction && routeAction.config?.targetModuleId === id) {
+          const fieldMapping = routeAction.config.fieldMapping || {};
+          if (fieldMapping.hasOwnProperty(fieldId)) {
+            mappedRules.push(`"${aut.name}"`);
+          }
+        }
+      });
+    });
+
+    if (mappedRules.length > 0) {
+      toast.error(`Cannot delete field: It is actively mapped in Work Distribution rule(s): ${Array.from(new Set(mappedRules)).join(', ')}. Please update or remove those mappings first.`);
+      return;
+    }
+
     setLayout(prev => {
       let next = prev;
       ids.forEach(id => {

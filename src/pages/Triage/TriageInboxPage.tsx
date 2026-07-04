@@ -128,6 +128,9 @@ export const TriageInboxPage = () => {
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [suggestedMatches, setSuggestedMatches] = useState<any[]>([]);
+  const [executionRuns, setExecutionRuns] = useState<any[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(false);
   const [triageRules, setTriageRules] = useState<any[]>([]);
   const [countdownText, setCountdownText] = useState<string>('');
   const [isRunningTriage, setIsRunningTriage] = useState(false);
@@ -475,6 +478,116 @@ export const TriageInboxPage = () => {
       loadQuarantineCount();
     }
   }, [triageModule, loadInboxRecords, loadTriageRules, loadQuarantineCount]);
+
+  useEffect(() => {
+    if (!selectedRecord) {
+      setSuggestedMatches([]);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      try {
+        const recordFields = getRecordFields(selectedRecord);
+        const name = recordFields.submitted_by || recordFields.name || '';
+        const email = recordFields.email || recordFields.personal_email || '';
+        
+        const res = await fetch(`${API_BASE_URL}/api/data/records/suggest-associations?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`, {
+          headers: {
+            'x-tenant-id': tenant?.id || '',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestedMatches(data);
+        }
+      } catch (err) {
+        console.error('Failed to load suggestion matches:', err);
+      }
+    };
+
+    fetchSuggestions();
+  }, [selectedRecord, tenant?.id, token]);
+
+  useEffect(() => {
+    if (!selectedRecord) {
+      setExecutionRuns([]);
+      return;
+    }
+
+    const fetchRuns = async () => {
+      setLoadingRuns(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/automations/runs/record/${selectedRecord.id}`, {
+          headers: {
+            'x-tenant-id': tenant?.id || '',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          setExecutionRuns(data);
+        }
+      } catch (err) {
+        console.error('Failed to load runs:', err);
+      } finally {
+        setLoadingRuns(false);
+      }
+    };
+
+    fetchRuns();
+  }, [selectedRecord, tenant?.id, token]);
+
+  const handleLinkAssociation = async (match: any) => {
+    if (!selectedRecord || !triageModule) return;
+    try {
+      const currentAssoc = Array.isArray(selectedRecord.associations) 
+        ? selectedRecord.associations 
+        : [];
+      
+      if (currentAssoc.some((a: any) => a.record_id === match.id)) {
+        toast.info('Already associated with this record');
+        return;
+      }
+
+      const updatedAssoc = [
+        ...currentAssoc,
+        {
+          record_id: match.id,
+          module_id: match.type.startsWith('party:') ? 'platform:party' : 'platform:workforce',
+          relationship: match.type === 'workforce' ? 'Assigned Employee' : 'Primary Contact',
+          displayName: match.name
+        }
+      ];
+
+      const res = await fetch(`${API_BASE_URL}/api/data/records/${selectedRecord.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          moduleId: triageModule.id,
+          associations: updatedAssoc
+        })
+      });
+
+      if (res.ok) {
+        const updatedRecord = await res.json();
+        setSelectedRecord(updatedRecord);
+        setRecords(prev => prev.map(r => r.id === updatedRecord.id ? updatedRecord : r));
+        toast.success(`Linked to ${match.name}!`);
+      } else {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to link');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Linking failed');
+    }
+  };
 
   // Setup Socket.IO for real-time updates
   useEffect(() => {
@@ -1899,6 +2012,26 @@ export const TriageInboxPage = () => {
                             
                             return (
                               <div className="space-y-4">
+                                {/* SLA Target Banner */}
+                                {selectedRecord.slaDeadline && (
+                                  <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
+                                    selectedRecord.slaStatus === 'BREACHED'
+                                      ? 'bg-rose-955/20 border-rose-500/20 text-rose-455'
+                                      : selectedRecord.slaStatus === 'WARNING'
+                                      ? 'bg-amber-955/20 border-amber-500/20 text-amber-455'
+                                      : 'bg-emerald-955/20 border-emerald-500/20 text-emerald-455'
+                                  }`}>
+                                    <div className="flex items-center gap-2">
+                                      <Clock size={14} />
+                                      <span className="font-bold">
+                                        SLA Response Limit: {selectedRecord.slaStatus || 'MET'}
+                                      </span>
+                                    </div>
+                                    <span className="font-mono text-[10px]">
+                                      Deadline: {new Date(selectedRecord.slaDeadline).toLocaleString()}
+                                    </span>
+                                  </div>
+                                )}
                                 {/* Form controls header */}
                                 <div className="flex items-center justify-between pb-2 border-b border-zinc-900/60">
                                   <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
@@ -2177,6 +2310,30 @@ export const TriageInboxPage = () => {
                                     </>
                                   )}
                                 </div>
+                                {/* Suggested Entity Matches */}
+                                {suggestedMatches.length > 0 && (
+                                  <div className="mt-4 border-t border-zinc-900 pt-4 space-y-2">
+                                    <div className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">
+                                      AI-Suggested Contact/Org Matches
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      {suggestedMatches.map((match: any) => (
+                                        <div key={match.id} className="p-3 bg-zinc-950/30 border border-zinc-900 rounded-xl flex items-center justify-between col-span-1">
+                                          <div>
+                                            <p className="text-[11px] font-bold text-zinc-200">{match.name}</p>
+                                            <p className="text-[9px] text-zinc-500 mt-0.5">{match.details} {match.email ? `(${match.email})` : ''}</p>
+                                          </div>
+                                          <button
+                                            onClick={() => handleLinkAssociation(match)}
+                                            className="px-2 py-1 text-[9px] font-bold bg-indigo-500/10 hover:bg-indigo-500 hover:text-white text-indigo-400 border border-indigo-500/20 rounded-lg transition-all cursor-pointer"
+                                          >
+                                            Link
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()}
@@ -2387,34 +2544,79 @@ export const TriageInboxPage = () => {
                           )}
 
                           {activeTab === 'rules' && (
-                            /* Automated Rules automations */
-                            <div className="space-y-3">
+                            /* Automated Rules automations & execution runs */
+                            <div className="space-y-4">
                               <div className="bg-zinc-950/50 border border-zinc-900 rounded-2xl p-4 flex gap-3 mb-2">
                                 <Zap size={15} className="text-indigo-400 shrink-0 mt-0.5" />
                                 <p className="text-[9.5px] text-zinc-450 leading-normal">
-                                  You can run saved automated dispatch pipelines. These rules apply conditions (like email domain suffix) and run field mapping automations in the background.
+                                  Verify the automated dispatch pipelines or trigger manual routing rules. You can also view recent run audits for this record.
                                 </p>
                               </div>
 
-                              <div className="flex flex-col gap-2">
-                                {triageRules.map((rule) => (
-                                  <button 
-                                    key={rule.id}
-                                    onClick={() => handleTriggerRule(rule.id)}
-                                    className="w-full p-3.5 border border-zinc-900 bg-zinc-950/20 hover:border-indigo-500/30 rounded-xl text-left flex items-center justify-between cursor-pointer transition-all hover:bg-zinc-900/40 group"
-                                  >
-                                    <div>
-                                      <p className="text-xs font-bold text-zinc-200 group-hover:text-indigo-400">{rule.name}</p>
-                                      <p className="text-[9px] text-zinc-500 mt-1 leading-normal font-mono">
-                                        Condition: {rule.conditions || 'Unconditional trigger matching'}
-                                      </p>
-                                    </div>
-                                    <Send size={12} className="text-zinc-550 group-hover:text-indigo-400 transition-colors" />
-                                  </button>
-                                ))}
-                                {triageRules.length === 0 && (
-                                  <p className="text-[9px] text-zinc-550 italic text-center py-8">No automated triage rules configured for this workspace.</p>
-                                )}
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Left half: Trigger rules */}
+                                <div className="space-y-2 col-span-1">
+                                  <div className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Available Rules</div>
+                                  <div className="flex flex-col gap-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                                    {triageRules.map((rule) => (
+                                      <button 
+                                        key={rule.id}
+                                        onClick={() => handleTriggerRule(rule.id)}
+                                        className="w-full p-3.5 border border-zinc-900 bg-zinc-950/20 hover:border-indigo-500/30 rounded-xl text-left flex items-center justify-between cursor-pointer transition-all hover:bg-zinc-900/40 group"
+                                      >
+                                        <div>
+                                          <p className="text-xs font-bold text-zinc-200 group-hover:text-indigo-400">{rule.name}</p>
+                                          <p className="text-[9px] text-zinc-500 mt-1 leading-normal font-mono">
+                                            Condition: {rule.conditions || 'Unconditional'}
+                                          </p>
+                                        </div>
+                                        <Send size={12} className="text-zinc-550 group-hover:text-indigo-400 transition-colors" />
+                                      </button>
+                                    ))}
+                                    {triageRules.length === 0 && (
+                                      <p className="text-[9px] text-zinc-555 italic text-center py-8">No automated rules configured.</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Right half: Run trace logs */}
+                                <div className="space-y-2 col-span-1">
+                                  <div className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Rule Run Audit Logs</div>
+                                  <div className="flex flex-col gap-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                                    {loadingRuns ? (
+                                      <p className="text-[9.5px] text-zinc-500 animate-pulse text-center py-8">Loading audits...</p>
+                                    ) : executionRuns.map((run) => (
+                                      <div key={run.id} className="p-3 border border-zinc-900 bg-zinc-950/30 rounded-xl space-y-1.5 text-left">
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-[10px] font-bold text-zinc-300">
+                                            {run.triggerSource}
+                                          </span>
+                                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                            run.status === 'SUCCESS' ? 'bg-emerald-950/40 text-emerald-400' : 'bg-rose-950/40 text-rose-400'
+                                          }`}>
+                                            {run.status}
+                                          </span>
+                                        </div>
+                                        <p className="text-[9px] text-zinc-500 font-mono">
+                                          Ran at: {new Date(run.startedAt).toLocaleString()}
+                                        </p>
+                                        {run.stepLogs && Array.isArray(run.stepLogs) && run.stepLogs.length > 0 && (
+                                          <div className="pt-1.5 border-t border-zinc-900/60 mt-1.5 space-y-1">
+                                            {run.stepLogs.map((step: any, sIdx: number) => (
+                                              <div key={sIdx} className="text-[9px] text-zinc-450 flex items-center justify-between">
+                                                <span>{step.actionType}</span>
+                                                <span className="text-zinc-500 font-mono">{step.status}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {executionRuns.length === 0 && !loadingRuns && (
+                                      <p className="text-[9px] text-zinc-555 italic text-center py-8">No run logs for this record.</p>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           )}

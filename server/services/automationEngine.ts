@@ -131,7 +131,10 @@ export class AutomationEngine {
         tenantId: automation.tenantId,
         status: 'RUNNING',
         triggerSource,
-        inputData: inputs || {},
+        inputData: {
+          ...(inputs || {}),
+          triggerRecordId: triggerRecord?.id
+        },
         stepLogs: []
       }
     });
@@ -140,12 +143,17 @@ export class AutomationEngine {
       // Execute the step chain recursively
       await this.executeSteps(actions, context, stepLogs, automation.tenantId, db);
 
+      // Extract targetRecordId if present in any of the route actions
+      const routeStep = stepLogs.find((s: any) => s.actionType === 'ROUTE_TO_MODULE' && s.status === 'SUCCESS');
+      const targetRecordId = routeStep?.output?.createdRecordId;
+
       await db.automationRun.update({
         where: { id: run.id },
         data: {
           status: 'SUCCESS',
           completedAt: new Date(),
-          stepLogs
+          stepLogs,
+          ...(targetRecordId ? { targetRecordId } : {})
         }
       });
       console.log(`[AutomationEngine] Successfully executed automation "${automation.name}"`);

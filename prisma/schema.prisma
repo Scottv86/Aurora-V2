@@ -253,6 +253,8 @@ model Record {
   path          String?  @map("_path")
   associations  Json     @default("[]")
   workflowState Json?    @map("workflow_state")
+  slaDeadline   DateTime? @map("sla_deadline")
+  slaStatus     String?   @default("MET") @map("sla_status")
   module        Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
   createdByMember TenantMember? @relation("RecordCreator", fields: [createdByMemberId, tenantId], references: [id, tenantId])
 
@@ -655,6 +657,10 @@ model Automation {
   inputs      Json              @default("{}")
   actions     Json              @default("[]")
   triggers    Json              @default("[]")
+  version     Int               @default(1)
+  status      String            @default("PUBLISHED")
+  parentRuleId String?          @map("parent_rule_id")
+  slaConfig   Json?             @map("sla_config")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
   runs        AutomationRun[]
@@ -675,6 +681,7 @@ model AutomationRun {
   errorMessage  String?     @map("error_message")
   inputData     Json        @map("input_data")
   stepLogs      Json        @map("step_logs")
+  targetRecordId String?      @map("target_record_id")
   automation    Automation  @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@index([automationId])

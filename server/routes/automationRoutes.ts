@@ -409,7 +409,190 @@ router.post('/run-triage', async (req: TenantRequest, res) => {
   }
 });
 
-// GET all quarantined records
+// POST /simulate - Dry-run rule matching simulator
+router.post('/simulate', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { payload, rules } = req.body;
 
+    if (!payload) {
+      return res.status(400).json({ error: 'Payload is required for simulation' });
+    }
+
+    let automationsToRun = rules;
+    if (!automationsToRun) {
+      const triageModule = await db.module.findFirst({
+        where: {
+          tenantId,
+          config: { path: ['isIntakeTriage'], equals: true }
+        }
+      });
+      if (triageModule) {
+        automationsToRun = await db.automation.findMany({
+          where: {
+            tenantId,
+            moduleId: triageModule.id,
+            isActive: true
+          }
+        });
+      } else {
+        automationsToRun = [];
+      }
+    }
+
+    const { WorkflowEngine } = await import('../services/workflowEngine');
+    const simulationLogs: any[] = [];
+    let matchedRuleId = null;
+    let mappedData = null;
+    let targetModuleId = null;
+
+    const recordData = { id: 'sim-record-id', ...payload };
+
+    for (const automation of automationsToRun) {
+      const trigger = automation.triggers?.[0] as any;
+      let formFilterMatch = true;
+      if (trigger && trigger.formId && trigger.formId !== 'public_form') {
+        const payloadOriginalModuleId = payload._originalModuleId;
+        if (payloadOriginalModuleId !== trigger.formId) {
+          formFilterMatch = false;
+        }
+      }
+
+      if (!formFilterMatch) {
+        simulationLogs.push({
+          ruleId: automation.id,
+          name: automation.name,
+          matched: false,
+          reason: `Skipped: Trigger form mismatch (expected ${trigger.formId})`
+        });
+        continue;
+      }
+
+      const isMatched = WorkflowEngine.evaluateCondition(
+        recordData,
+        automation.conditions,
+        null
+      );
+
+      simulationLogs.push({
+        ruleId: automation.id,
+        name: automation.name,
+        matched: isMatched,
+        reason: isMatched ? 'Condition matched successfully' : 'Condition did not match'
+      });
+
+      if (isMatched) {
+        matchedRuleId = automation.id;
+        
+        const routeAction = (automation.actions as any[])?.find((a: any) => a.type === 'ROUTE_TO_MODULE');
+        if (routeAction) {
+          targetModuleId = routeAction.config?.targetModuleId;
+          const fieldMapping = routeAction.config?.fieldMapping || {};
+          const simulatedMappedData: Record<string, any> = {};
+
+          for (const [targetKey, sourceExpr] of Object.entries(fieldMapping)) {
+            if (typeof sourceExpr === 'string' && sourceExpr.startsWith('{{') && sourceExpr.endsWith('}}')) {
+              const path = sourceExpr.replace(/[{}]/g, '').trim();
+              const parts = path.split('.');
+              let current: any = recordData;
+              for (const part of parts) {
+                if (part === 'trigger' || part === 'record') continue;
+                if (current === null || current === undefined) break;
+                current = current[part];
+              }
+              simulatedMappedData[targetKey] = current !== undefined ? current : '';
+            } else {
+              simulatedMappedData[targetKey] = sourceExpr;
+            }
+          }
+          mappedData = simulatedMappedData;
+        }
+        break;
+      }
+    }
+
+    res.json({
+      success: true,
+      simulationLogs,
+      matchedRuleId,
+      targetModuleId,
+      mappedData
+    });
+  } catch (err: any) {
+    console.error('[AutomationRoutes] POST /simulate Error:', err);
+    res.status(500).json({ error: err.message || 'Simulation failed' });
+  }
+});
+
+// POST /rules/:id/publish - Promote DRAFT rule to PUBLISHED
+router.post('/rules/:id/publish', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+
+    const draftRule = await db.automation.findUnique({
+      where: { id }
+    });
+
+    if (!draftRule) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+
+    if (draftRule.parentRuleId) {
+      await db.automation.updateMany({
+        where: {
+          parentRuleId: draftRule.parentRuleId,
+          isActive: true
+        },
+        data: {
+          isActive: false,
+          status: 'ARCHIVED'
+        }
+      });
+    }
+
+    const publishedRule = await db.automation.update({
+      where: { id },
+      data: {
+        isActive: true,
+        status: 'PUBLISHED'
+      }
+    });
+
+    res.json({ success: true, rule: publishedRule });
+  } catch (err: any) {
+    console.error('[AutomationRoutes] POST /rules/:id/publish Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /runs/record/:recordId - Fetch runs for a specific record
+router.get('/runs/record/:recordId', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { recordId } = req.params;
+
+    const runs = await db.automationRun.findMany({
+      where: {
+        OR: [
+          { targetRecordId: recordId },
+          {
+            inputData: {
+              path: ['triggerRecordId'],
+              equals: recordId
+            }
+          }
+        ]
+      },
+      orderBy: { startedAt: 'desc' }
+    });
+
+    res.json(runs);
+  } catch (err: any) {
+    console.error('[AutomationRoutes] GET /runs/record/:recordId Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;

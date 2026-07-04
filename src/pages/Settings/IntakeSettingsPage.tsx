@@ -4,10 +4,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { 
   ShieldCheck, Plus, Trash2,
-  Info, Link, Settings, ShieldAlert, GitFork, Loader2
+  Info, Settings, ShieldAlert, GitFork, Loader2, Play
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs } from '../../components/UI/TabsAndModal';
+import { RoutingSandboxModal } from '../../components/Triage/RoutingSandboxModal';
 
 interface VisualCondition {
   fieldId: string;
@@ -162,6 +163,8 @@ export const IntakeSettingsPage = () => {
     { id: 'routing', label: 'Routing & Channels', icon: GitFork },
     { id: 'security', label: 'Security & Quarantine', icon: ShieldCheck }
   ];
+  
+  const [isSandboxOpen, setIsSandboxOpen] = useState(false);
 
   const [quarantineRecords, setQuarantineRecords] = useState<any[]>([]);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
@@ -175,14 +178,104 @@ export const IntakeSettingsPage = () => {
   const [targetModuleId, setTargetModuleId] = useState('');
   const [archiveSource, setArchiveSource] = useState(true);
   const [triggerMode, setTriggerMode] = useState<'IMMEDIATE' | 'GLOBAL_SCHEDULE' | 'CUSTOM_SCHEDULE'>('GLOBAL_SCHEDULE');
-  const [cronExpression, setCronExpression] = useState('GLOBAL');
+  const [customScheduleType, setCustomScheduleType] = useState<'INTERVAL' | 'DAILY' | 'WEEKLY'>('INTERVAL');
+  const [customIntervalValue, setCustomIntervalValue] = useState<number>(15);
+  const [customIntervalUnit, setCustomIntervalUnit] = useState<'minutes' | 'hours'>('minutes');
+  const [customTime, setCustomTime] = useState<string>('09:00');
+  const [customDays, setCustomDays] = useState<string[]>(['1', '2', '3', '4', '5']);
   const [sourceModuleId, setSourceModuleId] = useState('public_form');
+
+  const compileCustomCron = () => {
+    if (customScheduleType === 'INTERVAL') {
+      if (customIntervalUnit === 'minutes') {
+        return `*/${customIntervalValue} * * * *`;
+      } else {
+        return `0 */${customIntervalValue} * * *`;
+      }
+    } else if (customScheduleType === 'DAILY') {
+      const [hour, minute] = customTime.split(':');
+      return `${minute || '0'} ${hour || '9'} * * *`;
+    } else if (customScheduleType === 'WEEKLY') {
+      const [hour, minute] = customTime.split(':');
+      const daysStr = customDays.length > 0 ? customDays.join(',') : '*';
+      return `${minute || '0'} ${hour || '9'} * * ${daysStr}`;
+    }
+    return '*/15 * * * *';
+  };
+
+  const getBusinessModules = (list: any[]) => {
+    if (!list) return [];
+    return list.filter((m: any) => {
+      if (m.enabled === false || m.status === 'INACTIVE') return false;
+      if (m.category?.toLowerCase() === 'platform') return false;
+      if (m.type === 'PLATFORM' || m.type === 'SYSTEM') return false;
+      if (m.isGlobal) return false;
+      if (m.config?.isPlatform || m.config?.isSystem) return false;
+      if (triageModule && m.id === triageModule.id) return false;
+      if (m.isIntakeTriage || m.config?.isIntakeTriage) return false;
+      
+      const lowerName = m.name.toLowerCase();
+      if (lowerName.includes('triage') || lowerName.includes('intake') || lowerName.includes('automation')) return false;
+
+      return true;
+    });
+  };
+
+  const parseCronExpression = (cron: string) => {
+    if (!cron || cron === 'GLOBAL') {
+      setCustomScheduleType('INTERVAL');
+      setCustomIntervalValue(15);
+      setCustomIntervalUnit('minutes');
+      setCustomTime('09:00');
+      setCustomDays(['1', '2', '3', '4', '5']);
+      return;
+    }
+
+    const parts = cron.trim().split(/\s+/);
+    if (parts.length !== 5) return;
+
+    const [minute, hour, , , dayOfWeek] = parts;
+
+    if (minute.startsWith('*/')) {
+      setCustomScheduleType('INTERVAL');
+      setCustomIntervalValue(parseInt(minute.substring(2)) || 15);
+      setCustomIntervalUnit('minutes');
+    } else if (hour.startsWith('*/') && minute === '0') {
+      setCustomScheduleType('INTERVAL');
+      setCustomIntervalValue(parseInt(hour.substring(2)) || 1);
+      setCustomIntervalUnit('hours');
+    } else if (dayOfWeek !== '*' && dayOfWeek !== '?') {
+      setCustomScheduleType('WEEKLY');
+      const cleanHour = hour.padStart(2, '0');
+      const cleanMin = minute.padStart(2, '0');
+      setCustomTime(`${cleanHour}:${cleanMin}`);
+      setCustomDays(dayOfWeek.split(','));
+    } else {
+      setCustomScheduleType('DAILY');
+      const cleanHour = hour.padStart(2, '0');
+      const cleanMin = minute.padStart(2, '0');
+      setCustomTime(`${cleanHour}:${cleanMin}`);
+    }
+  };
   const [conditionsList, setConditionsList] = useState<VisualCondition[]>([]);
   const [fieldMappings, setFieldMappings] = useState<VisualMappings>({});
 
   const getSourceFieldsList = () => {
     if (sourceModuleId && sourceModuleId !== 'public_form') {
-      const sourceModule = modules?.find((m: any) => m.id === sourceModuleId);
+      let sourceModule = modules?.find((m: any) => m.id === sourceModuleId);
+      let activeForm = null;
+
+      if (!sourceModule && modules) {
+        for (const m of modules) {
+          const form = m.forms?.find((f: any) => f.id === sourceModuleId);
+          if (form) {
+            sourceModule = m;
+            activeForm = form;
+            break;
+          }
+        }
+      }
+
       if (sourceModule) {
         const flattenFields = (layoutFields: any[]): any[] => {
           const result: any[] = [];
@@ -196,6 +289,13 @@ export const IntakeSettingsPage = () => {
           });
           return result;
         };
+
+        if (activeForm) {
+          const formFieldIds = new Set(activeForm.fields?.map((ff: any) => ff.id) || []);
+          const allFields = flattenFields(sourceModule.layout);
+          return allFields.filter(f => formFieldIds.has(f.id));
+        }
+
         return flattenFields(sourceModule.layout);
       }
     }
@@ -291,6 +391,58 @@ export const IntakeSettingsPage = () => {
     }
   };
 
+  const handleSaveSlaConfig = async (newSlaConfig: any) => {
+    if (!triageModule) return;
+    try {
+      const {
+        id,
+        name,
+        category,
+        iconName,
+        type,
+        enabled,
+        isGlobal,
+        templateId,
+        status,
+        createdAt,
+        isIntakeTriage,
+        ...restConfig
+      } = triageModule;
+
+      const res = await fetch(`${API_BASE_URL}/api/data/modules/${triageModule.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name,
+          category,
+          iconName,
+          type,
+          enabled,
+          isGlobal,
+          templateId,
+          ...restConfig,
+          config: {
+            ...(triageModule.config || {}),
+            slaConfig: newSlaConfig
+          }
+        })
+      });
+
+      if (res.ok) {
+        toast.success('SLA settings updated');
+        await refreshModules();
+      } else {
+        throw new Error('Failed to update SLA settings');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save SLA settings');
+    }
+  };
+
   const handleSelectRule = (rule: any) => {
     setSelectedRuleId(rule.id);
     setRuleName(rule.name);
@@ -300,15 +452,13 @@ export const IntakeSettingsPage = () => {
     if (trigger?.type === 'CRON') {
       if (trigger.cronExpression === 'GLOBAL') {
         setTriggerMode('GLOBAL_SCHEDULE');
-        setCronExpression('GLOBAL');
       } else {
         setTriggerMode('CUSTOM_SCHEDULE');
-        setCronExpression(trigger.cronExpression || '*/5 * * * *');
+        parseCronExpression(trigger.cronExpression || '*/15 * * * *');
       }
       setSourceModuleId(trigger.formId || 'public_form');
     } else {
       setTriggerMode('IMMEDIATE');
-      setCronExpression('GLOBAL');
       setSourceModuleId(trigger?.formId || 'public_form');
     }
 
@@ -329,14 +479,18 @@ export const IntakeSettingsPage = () => {
     setRuleName('New Routing Rule');
     setConditionsList([]);
     setTriggerMode('GLOBAL_SCHEDULE');
-    setCronExpression('GLOBAL');
     setSourceModuleId('public_form');
     setTargetModuleId('');
     setFieldMappings({});
     setArchiveSource(true);
+    setCustomScheduleType('INTERVAL');
+    setCustomIntervalValue(15);
+    setCustomIntervalUnit('minutes');
+    setCustomTime('09:00');
+    setCustomDays(['1', '2', '3', '4', '5']);
   };
 
-  const handleSaveRule = async () => {
+  const handleSaveRule = async (asDraft: boolean = false) => {
     if (!ruleName) {
       toast.error('Rule name is required');
       return;
@@ -346,6 +500,7 @@ export const IntakeSettingsPage = () => {
       return;
     }
 
+    const isEdit = selectedRuleId !== 'new';
     const compiledCondition = compileConditions(conditionsList);
     const serializedMapping = serializeMappings(fieldMappings);
 
@@ -355,13 +510,16 @@ export const IntakeSettingsPage = () => {
     } else if (triggerMode === 'GLOBAL_SCHEDULE') {
       triggers = [{ type: 'CRON', cronExpression: 'GLOBAL', moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
     } else {
-      triggers = [{ type: 'CRON', cronExpression: cronExpression || '*/5 * * * *', moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
+      const compiledCron = compileCustomCron();
+      triggers = [{ type: 'CRON', cronExpression: compiledCron, moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
     }
 
     const ruleData = {
       name: ruleName,
       moduleId: triageModule.id,
-      isActive: true,
+      isActive: !asDraft,
+      status: asDraft ? 'DRAFT' : 'PUBLISHED',
+      parentRuleId: (isEdit && asDraft) ? selectedRuleId : undefined,
       conditions: compiledCondition || null,
       triggers,
       actions: [
@@ -500,9 +658,7 @@ export const IntakeSettingsPage = () => {
     }
   }, [activeTab, tenant?.id, token]);
 
-  const publicFormLink = triageModule 
-    ? `${window.location.origin}/portal?moduleId=${triageModule.id}`
-    : '';
+
 
   const renderSecurityTab = () => {
     return (
@@ -637,13 +793,22 @@ export const IntakeSettingsPage = () => {
                   <h3 className="text-xs font-black text-zinc-450 uppercase tracking-widest">Routing Rules</h3>
                   <p className="text-[10px] text-zinc-400 mt-0.5">Matched sequentially on intake.</p>
                 </div>
-                <button 
-                  onClick={handleCreateRule}
-                  className="p-2 bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-400 border border-indigo-500/20 rounded-xl transition-all cursor-pointer"
-                  title="Create Routing Rule"
-                >
-                  <Plus size={13} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsSandboxOpen(true)}
+                    className="p-2 bg-teal-500/10 hover:bg-teal-500/25 text-teal-400 border border-teal-500/20 rounded-xl transition-all cursor-pointer"
+                    title="Open Routing Sandbox"
+                  >
+                    <Play size={13} className="fill-current" />
+                  </button>
+                  <button 
+                    onClick={handleCreateRule}
+                    className="p-2 bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-400 border border-indigo-500/20 rounded-xl transition-all cursor-pointer"
+                    title="Create Routing Rule"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
@@ -662,9 +827,18 @@ export const IntakeSettingsPage = () => {
                     >
                       <div>
                         <p className="text-xs font-bold text-zinc-200">{rule.name}</p>
-                        <p className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1.5 font-mono">
-                          Route to {targetMod ? targetMod.name : 'Unknown Module'}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            Route to {targetMod ? targetMod.name : 'Unknown Module'}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                            rule.status === 'DRAFT' || !rule.isActive
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/10'
+                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10'
+                          }`}>
+                            {rule.status || (rule.isActive ? 'Published' : 'Draft')}
+                          </span>
+                        </div>
                       </div>
                       <button 
                         onClick={(e) => {
@@ -685,28 +859,9 @@ export const IntakeSettingsPage = () => {
                 )}
               </div>
 
-              {/* Inbound Channels Info Panel */}
+              {/* Global Queue Schedule Settings */}
               <div className="border-t border-zinc-900 pt-6 space-y-4">
-                <div>
-                  <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Inbound Gateways</h4>
-                  <p className="text-[8px] text-zinc-400">Share these links to connect external client records directly.</p>
-                </div>
-
-                {/* Public Form link */}
-                <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-zinc-300">
-                    <span className="flex items-center gap-1.5 text-zinc-200">
-                      <Link size={10} className="text-indigo-400" /> Public Link
-                    </span>
-                    <a href={publicFormLink} target="_blank" className="text-indigo-400 hover:underline">Open</a>
-                  </div>
-                  <div className="bg-zinc-900 p-2.5 rounded font-mono text-[9px] text-zinc-400 break-all select-all select-none">
-                    {publicFormLink}
-                  </div>
-                </div>
-
-                {/* Global Queue Schedule Settings */}
-                <div className="border-t border-zinc-900/60 pt-4 space-y-3">
+                <div className="space-y-3">
                   <div>
                     <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Global Distribution Schedule</h4>
                     <p className="text-[8px] text-zinc-400">Processing interval for rules set to use the Global Schedule.</p>
@@ -749,6 +904,51 @@ export const IntakeSettingsPage = () => {
                     )}
                   </div>
                 </div>
+
+                {/* SLA Configuration */}
+                <div className="border-t border-zinc-900/60 pt-4 space-y-3">
+                  <div>
+                    <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">SLA Escalation Rules</h4>
+                    <p className="text-[8px] text-zinc-400">Define response thresholds for incoming triage items.</p>
+                  </div>
+                  
+                  <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-3.5">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-zinc-500">Warning Period (Hours)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={triageModule?.config?.slaConfig?.warningHours ?? 0.5}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0.5;
+                            handleSaveSlaConfig({
+                              ...(triageModule?.config?.slaConfig || {}),
+                              warningHours: val
+                            });
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-zinc-500">Breach Period (Hours)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={triageModule?.config?.slaConfig?.breachHours ?? 24}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 24;
+                            handleSaveSlaConfig({
+                              ...(triageModule?.config?.slaConfig || {}),
+                              breachHours: val
+                            });
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
             </div>
@@ -779,7 +979,25 @@ export const IntakeSettingsPage = () => {
                       <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 grid grid-cols-2 gap-4">
                         <div className="space-y-1 col-span-2">
                           <label className="text-[9px] font-bold text-zinc-500">Trigger Mode</label>
-                          <div className="grid grid-cols-2 gap-3 mt-1">
+                          <div className="grid grid-cols-3 gap-3 mt-1">
+                            <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
+                              triggerMode === 'IMMEDIATE' 
+                                ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
+                                : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
+                            }`}>
+                              <input 
+                                type="radio" 
+                                name="triggerMode"
+                                checked={triggerMode === 'IMMEDIATE'}
+                                onChange={() => {
+                                  setTriggerMode('IMMEDIATE');
+                                }}
+                                className="sr-only"
+                              />
+                              <span className="text-xs font-bold text-zinc-200">Run Immediately</span>
+                              <span className="text-[8.5px] text-zinc-500 leading-normal">Execute routing rules instantly upon new form submissions.</span>
+                            </label>
+
                             <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
                               triggerMode === 'GLOBAL_SCHEDULE' 
                                 ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
@@ -791,7 +1009,6 @@ export const IntakeSettingsPage = () => {
                                 checked={triggerMode === 'GLOBAL_SCHEDULE'}
                                 onChange={() => {
                                   setTriggerMode('GLOBAL_SCHEDULE');
-                                  setCronExpression('GLOBAL');
                                 }}
                                 className="sr-only"
                               />
@@ -810,7 +1027,6 @@ export const IntakeSettingsPage = () => {
                                 checked={triggerMode === 'CUSTOM_SCHEDULE'}
                                 onChange={() => {
                                   setTriggerMode('CUSTOM_SCHEDULE');
-                                  setCronExpression('*/5 * * * *');
                                 }}
                                 className="sr-only"
                               />
@@ -821,15 +1037,98 @@ export const IntakeSettingsPage = () => {
                         </div>
 
                         {triggerMode === 'CUSTOM_SCHEDULE' && (
-                          <div className="space-y-1.5 col-span-2 animate-in fade-in duration-200">
-                            <label className="text-[10px] font-bold text-zinc-400">Cron Expression</label>
-                            <input 
-                              type="text"
-                              value={cronExpression}
-                              onChange={(e) => setCronExpression(e.target.value)}
-                              className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-                              placeholder="e.g. */5 * * * *"
-                            />
+                          <div className="col-span-2 space-y-4 p-4 bg-zinc-950/40 border border-zinc-900 rounded-2xl animate-in fade-in duration-200">
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-zinc-500">Pattern</label>
+                                <select 
+                                  value={customScheduleType}
+                                  onChange={(e) => setCustomScheduleType(e.target.value as any)}
+                                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 cursor-pointer"
+                                >
+                                  <option value="INTERVAL">At regular intervals</option>
+                                  <option value="DAILY">Daily</option>
+                                  <option value="WEEKLY">Weekly</option>
+                                </select>
+                              </div>
+
+                              {customScheduleType === 'INTERVAL' && (
+                                <>
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-zinc-500">Run every</label>
+                                    <input 
+                                      type="number"
+                                      min={1}
+                                      value={customIntervalValue}
+                                      onChange={(e) => setCustomIntervalValue(parseInt(e.target.value) || 1)}
+                                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-zinc-500">Unit</label>
+                                    <select 
+                                      value={customIntervalUnit}
+                                      onChange={(e) => setCustomIntervalUnit(e.target.value as any)}
+                                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 cursor-pointer"
+                                    >
+                                      <option value="minutes">Minutes</option>
+                                      <option value="hours">Hours</option>
+                                    </select>
+                                  </div>
+                                </>
+                              )}
+
+                              {(customScheduleType === 'DAILY' || customScheduleType === 'WEEKLY') && (
+                                <div className="space-y-1 col-span-2">
+                                  <label className="text-[9px] font-bold text-zinc-500">Time of Day</label>
+                                  <input 
+                                    type="time"
+                                    value={customTime}
+                                    onChange={(e) => setCustomTime(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none"
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {customScheduleType === 'WEEKLY' && (
+                              <div className="space-y-1.5 animate-in fade-in duration-200">
+                                <label className="text-[9px] font-bold text-zinc-500">Days of the Week</label>
+                                <div className="flex gap-2.5 flex-wrap mt-1">
+                                  {[
+                                    { label: 'Mon', value: '1' },
+                                    { label: 'Tue', value: '2' },
+                                    { label: 'Wed', value: '3' },
+                                    { label: 'Thu', value: '4' },
+                                    { label: 'Fri', value: '5' },
+                                    { label: 'Sat', value: '6' },
+                                    { label: 'Sun', value: '0' }
+                                  ].map((d) => {
+                                    const isSelected = customDays.includes(d.value);
+                                    return (
+                                      <button
+                                        key={d.value}
+                                        type="button"
+                                        onClick={() => {
+                                          if (isSelected) {
+                                            setCustomDays(prev => prev.filter(x => x !== d.value));
+                                          } else {
+                                            setCustomDays(prev => [...prev, d.value]);
+                                          }
+                                        }}
+                                        className={`px-3 py-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
+                                          isSelected 
+                                            ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400' 
+                                            : 'bg-zinc-900 border-zinc-800 text-zinc-450 hover:border-zinc-700'
+                                        }`}
+                                      >
+                                        {d.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -843,9 +1142,13 @@ export const IntakeSettingsPage = () => {
                         className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-zinc-200 cursor-pointer"
                       >
                         <option value="public_form">All Intake Forms</option>
-                        {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
-                          <option key={m.id} value={m.id}>{m.name} Form</option>
-                        ))}
+                        {getBusinessModules(modules).flatMap((m: any) => {
+                          const forms = m.forms || [];
+                          const publicForms = forms.filter((f: any) => f.usage === 'public_link');
+                          return publicForms.map((f: any) => (
+                            <option key={f.id} value={f.id}>{m.name} - {f.name}</option>
+                          ));
+                        })}
                       </select>
                     </div>
 
@@ -860,7 +1163,7 @@ export const IntakeSettingsPage = () => {
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 cursor-pointer"
                           >
                             <option value="">Select Destination Module...</option>
-                            {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                            {getBusinessModules(modules).map((m: any) => (
                               <option key={m.id} value={m.id}>{m.name}</option>
                             ))}
                           </select>
@@ -985,10 +1288,16 @@ export const IntakeSettingsPage = () => {
                       Cancel
                     </button>
                     <button
-                      onClick={handleSaveRule}
+                      onClick={() => handleSaveRule(true)}
+                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-350 hover:text-white border border-zinc-700/80 rounded-xl transition-all cursor-pointer"
+                    >
+                      Save as Draft
+                    </button>
+                    <button
+                      onClick={() => handleSaveRule(false)}
                       className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white rounded-xl transition-all shadow-lg shadow-indigo-600/10 cursor-pointer"
                     >
-                      Save Rule
+                      Save & Publish
                     </button>
                   </div>
                 </div>
@@ -1066,6 +1375,14 @@ export const IntakeSettingsPage = () => {
           </div>
         </div>
       )}
+
+      <RoutingSandboxModal
+        isOpen={isSandboxOpen}
+        onClose={() => setIsSandboxOpen(false)}
+        triageRules={triageRules}
+        token={token}
+        tenantId={tenant?.id || ''}
+      />
     </div>
   );
 };

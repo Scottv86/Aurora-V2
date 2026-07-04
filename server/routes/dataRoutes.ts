@@ -213,6 +213,93 @@ router.get('/stats', async (req: TenantRequest, res) => {
 
 
 
+// GET /records/suggest-associations - Find matching entities across workforce & platform taxonomy
+router.get('/records/suggest-associations', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { email, name, phone } = req.query;
+
+    const matches: any[] = [];
+
+    if (!email && !name && !phone) {
+      return res.json([]);
+    }
+
+    // 1. Search in TenantMember (Workforce)
+    const members = await db.tenantMember.findMany({
+      where: {
+        tenantId,
+        OR: [
+          email ? { workEmail: { contains: email as string, mode: 'insensitive' } } : undefined,
+          email ? { personalEmail: { contains: email as string, mode: 'insensitive' } } : undefined,
+          name ? { firstName: { contains: name as string, mode: 'insensitive' } } : undefined,
+          name ? { familyName: { contains: name as string, mode: 'insensitive' } } : undefined
+        ].filter(Boolean) as any[]
+      },
+      take: 5
+    });
+
+    for (const m of members) {
+      const matchName = `${m.firstName || ''} ${m.familyName || ''}`.trim() || m.personalEmail || m.workEmail;
+      matches.push({
+        id: m.id,
+        type: 'workforce',
+        name: matchName,
+        email: m.workEmail || m.personalEmail,
+        details: `Workforce Member - Role: ${m.roleId}`
+      });
+    }
+
+    // 2. Search in Parties (Persons & Organizations in People & Orgs Platform Module)
+    const organizations = await db.organization.findMany({
+      where: {
+        party: { tenantId },
+        legalName: name ? { contains: name as string, mode: 'insensitive' } : undefined
+      },
+      include: { party: true },
+      take: 5
+    });
+
+    for (const org of organizations) {
+      matches.push({
+        id: org.partyId,
+        type: 'party:organization',
+        name: org.legalName,
+        email: null,
+        details: `Organization - Type: ${org.orgStructureType || 'Standard'}`
+      });
+    }
+
+    const persons = await db.person.findMany({
+      where: {
+        party: { tenantId },
+        OR: [
+          name ? { firstName: { contains: name as string, mode: 'insensitive' } } : undefined,
+          name ? { lastName: { contains: name as string, mode: 'insensitive' } } : undefined
+        ].filter(Boolean) as any[]
+      },
+      include: { party: true },
+      take: 5
+    });
+
+    for (const p of persons) {
+      matches.push({
+        id: p.partyId,
+        type: 'party:person',
+        name: `${p.firstName} ${p.lastName}`,
+        email: null,
+        details: 'Person Contact'
+      });
+    }
+
+    res.json(matches);
+  } catch (err: any) {
+    console.error('[DataAPI] GET /records/suggest-associations Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to search associations' });
+  }
+});
+
 // GET all cases/records
 router.get('/records', async (req: TenantRequest, res) => {
   try {
@@ -458,6 +545,12 @@ router.post('/records', async (req: TenantRequest, res) => {
       };
     }
 
+    // Calculate SLA if configured in module settings
+    let slaDeadline = undefined;
+    if (config?.slaConfig && config.slaConfig.breachHours) {
+      slaDeadline = new Date(Date.now() + parseFloat(config.slaConfig.breachHours) * 60 * 60 * 1000);
+    }
+
     let record = await db.record.create({
       data: {
         tenantId, // still required by schema, but RLS will verify it matches app.current_tenant_id
@@ -467,7 +560,8 @@ router.post('/records', async (req: TenantRequest, res) => {
         path: path || null,
         status: (data as any).status || (workflowState ? getStatusFromState(workflowState, workflow, 'New') : 'New'),
         createdByMemberId: (req as any).user?.memberId,
-        workflowState: workflowState as any
+        workflowState: workflowState as any,
+        slaDeadline
       }
     });
 

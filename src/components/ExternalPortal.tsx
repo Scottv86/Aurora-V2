@@ -60,7 +60,10 @@ export const ExternalPortal = () => {
         }
         const data = await res.json();
         setModuleData(data);
-        const form = data.forms?.find((f: any) => f.usage === 'public_link');
+        const formIdParam = new URLSearchParams(window.location.search).get('formId');
+        const form = formIdParam
+          ? data.forms?.find((f: any) => f.id === formIdParam)
+          : data.forms?.find((f: any) => f.usage === 'public_link');
         if (!form) {
           // Gracefully fall back to standard intake form layout
           setPublicForm(null);
@@ -191,7 +194,12 @@ export const ExternalPortal = () => {
       const res = await fetch(`${API_BASE_URL}/api/public/modules/${urlModuleId}/submissions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: dynamicFormData })
+        body: JSON.stringify({ 
+          data: {
+            ...dynamicFormData,
+            _formId: publicForm.id
+          }
+        })
       });
 
       if (!res.ok) {
