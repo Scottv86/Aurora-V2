@@ -2,7 +2,8 @@ import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, 
-  ArrowLeft
+  ArrowLeft,
+  Inbox
 } from 'lucide-react';
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Button } from '../../../components/UI/Primitives';
@@ -25,6 +26,14 @@ const PLATFORM_MODULES: ModuleItem[] = [
     icon: Users,
     isCore: true,
     description: 'Manage core entity taxonomies and global relationship rules.'
+  },
+  {
+    id: 'work-distribution',
+    name: 'Work Distribution',
+    slug: 'work-distribution',
+    icon: Inbox,
+    isCore: true,
+    description: 'Configure routing rules to automatically intake and distribute work across modules.'
   }
 ];
 

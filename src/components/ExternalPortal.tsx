@@ -62,7 +62,9 @@ export const ExternalPortal = () => {
         setModuleData(data);
         const form = data.forms?.find((f: any) => f.usage === 'public_link');
         if (!form) {
-          throw new Error('No public form configured for this module.');
+          // Gracefully fall back to standard intake form layout
+          setPublicForm(null);
+          return;
         }
         setPublicForm(form);
         
@@ -95,19 +97,38 @@ export const ExternalPortal = () => {
     
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/public/submissions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          tenantSlug: 'acme',
-          type: formData.type,
-          fullName: formData.fullName,
-          email: formData.email,
-          description: formData.description
-        })
-      });
+      let response;
+      if (urlModuleId) {
+        response = await fetch(`${API_BASE_URL}/api/public/modules/${urlModuleId}/submissions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            data: {
+              submitted_by: formData.fullName,
+              email: formData.email,
+              description: formData.description,
+              form_type: formData.type,
+              source: 'External Portal'
+            }
+          })
+        });
+      } else {
+        response = await fetch(`${API_BASE_URL}/api/public/submissions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tenantSlug: 'aurora',
+            type: formData.type,
+            fullName: formData.fullName,
+            email: formData.email,
+            description: formData.description
+          })
+        });
+      }
 
       if (!response.ok) {
         const err = await response.json();

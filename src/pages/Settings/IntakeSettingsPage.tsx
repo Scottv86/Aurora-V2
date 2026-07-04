@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { 
   ShieldCheck, ToggleLeft, ToggleRight, Plus, Trash2,
-  Info, Link, Settings
+  Info, Link, Settings, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -153,6 +153,11 @@ export const IntakeSettingsPage = () => {
   const { session } = useAuth();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
   const [loading, setLoading] = useState(false);
+  const isNested = window.location.pathname.includes('/platform-modules/');
+  const [activeTab, setActiveTab] = useState<'routing' | 'security'>('routing');
+  const [quarantineRecords, setQuarantineRecords] = useState<any[]>([]);
+  const [quarantineLoading, setQuarantineLoading] = useState(false);
+  const [inspectedRecord, setInspectedRecord] = useState<any>(null);
   const [triageModule, setTriageModule] = useState<any>(null);
   const [triageRules, setTriageRules] = useState<any[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
@@ -264,7 +269,7 @@ export const IntakeSettingsPage = () => {
         });
 
         if (res.ok) {
-          toast.success('Central Triage system disabled successfully');
+          toast.success('Work Distribution system disabled successfully');
           setTriageModule(null);
           setTriageRules([]);
           await refreshModules();
@@ -281,7 +286,7 @@ export const IntakeSettingsPage = () => {
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            name: 'Central Intake & Triage',
+            name: 'Work Distribution',
             category: 'Intake & Requests',
             iconName: 'FileText',
             type: 'WORK_ITEM',
@@ -295,7 +300,7 @@ export const IntakeSettingsPage = () => {
         });
 
         if (res.ok) {
-          toast.success('Central Triage system enabled!');
+          toast.success('Work Distribution system enabled!');
           await refreshModules();
         } else {
           throw new Error('Failed to create triage module');
@@ -350,7 +355,7 @@ export const IntakeSettingsPage = () => {
       });
 
       if (res.ok) {
-        toast.success(`Global queue schedule updated`);
+        toast.success(`Global distribution schedule updated`);
         await refreshModules();
       } else {
         throw new Error('Failed to update global schedule');
@@ -395,7 +400,7 @@ export const IntakeSettingsPage = () => {
 
   const handleCreateRule = () => {
     setSelectedRuleId('new');
-    setRuleName('New Triage Route Rule');
+    setRuleName('New Routing Rule');
     setConditionsList([]);
     setTriggerMode('GLOBAL_SCHEDULE');
     setCronExpression('GLOBAL');
@@ -463,7 +468,7 @@ export const IntakeSettingsPage = () => {
       });
 
       if (res.ok) {
-        toast.success('Triage rule saved successfully');
+        toast.success('Routing rule saved successfully');
         setSelectedRuleId(null);
         loadTriageConfig();
       } else {
@@ -486,7 +491,7 @@ export const IntakeSettingsPage = () => {
         }
       });
       if (res.ok) {
-        toast.success('Triage rule deleted');
+        toast.success('Routing rule deleted');
         setSelectedRuleId(null);
         loadTriageConfig();
       }
@@ -495,569 +500,685 @@ export const IntakeSettingsPage = () => {
     }
   };
 
+  const loadQuarantineRecords = async () => {
+    try {
+      setQuarantineLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/automations/quarantine`, {
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      console.log('[Quarantine] Fetch response status:', res.status, res.statusText);
+      if (res.ok) {
+        const data = await res.json();
+        setQuarantineRecords(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned ${res.status}`);
+      }
+    } catch (err: any) {
+      console.error('Failed to load quarantine log:', err);
+      toast.error(`Failed to load quarantine logs: ${err.message}`);
+    } finally {
+      setQuarantineLoading(false);
+    }
+  };
+
+  const handleDeleteQuarantine = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this quarantined record?')) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/automations/quarantine/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        toast.success('Quarantined record permanently deleted');
+        loadQuarantineRecords();
+      } else {
+        throw new Error('Failed to delete quarantined record');
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleReleaseQuarantine = async (id: string) => {
+    if (!confirm('Are you sure you want to release this record to the active Work Distribution queue?')) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/automations/quarantine/${id}/release`, {
+        method: 'POST',
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        toast.success('Record successfully released to queue');
+        loadQuarantineRecords();
+      } else {
+        const errObj = await res.json();
+        throw new Error(errObj.error || 'Failed to release quarantined record');
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'security') {
+      loadQuarantineRecords();
+    }
+  }, [activeTab, tenant?.id, token]);
+
   const publicFormLink = triageModule 
     ? `${window.location.origin}/portal?moduleId=${triageModule.id}`
     : '';
 
+  const renderSecurityTab = () => {
+    return (
+      <div className="flex flex-col gap-6 flex-1 min-h-0">
+        <div className="bg-zinc-900/40 border border-zinc-900 rounded-3xl p-6 space-y-6">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="text-amber-500" size={18} />
+            <div>
+              <h3 className="text-xs font-black text-zinc-450 uppercase tracking-widest">Inbound Security Quarantine</h3>
+              <p className="text-[10px] text-zinc-450 mt-0.5">Isolated records flagged by inbound security screening rules.</p>
+            </div>
+          </div>
 
+          {quarantineLoading ? (
+            <div className="py-12 text-center text-xs text-zinc-550 font-bold animate-pulse">Loading quarantine logs...</div>
+          ) : quarantineRecords.length === 0 ? (
+            <div className="py-12 text-center border border-dashed border-zinc-900 rounded-2xl">
+              <p className="text-[10px] text-zinc-550 italic">No items currently in quarantine.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-900/80 text-[10px] font-black text-zinc-450 uppercase tracking-wider">
+                    <th className="py-3 px-4">Channel</th>
+                    <th className="py-3 px-4">Source Name</th>
+                    <th className="py-3 px-4">Threat Type</th>
+                    <th className="py-3 px-4">Blocked At</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900/40">
+                  {quarantineRecords.map((rec) => (
+                    <tr key={rec.id} className="text-xs text-zinc-300 hover:bg-zinc-900/10">
+                      <td className="py-3 px-4 font-bold">{rec.sourceChannel}</td>
+                      <td className="py-3 px-4 text-zinc-400">{rec.sourceName}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1">
+                          {(rec.reasons || []).map((reason: string, idx: number) => (
+                            <span key={idx} className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-rose-500/10 text-rose-400 border border-rose-500/10" title={reason}>
+                              {reason.split(':')[0]}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-zinc-450 font-mono text-[10px]">
+                        {new Date(rec.createdAt).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-bold uppercase ${
+                          rec.status === 'QUARANTINED' 
+                            ? 'bg-amber-950/30 text-amber-400 border border-amber-500/10' 
+                            : 'bg-emerald-950/30 text-emerald-400 border border-emerald-500/10'
+                        }`}>
+                          {rec.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right space-x-2">
+                        <button
+                          onClick={() => setInspectedRecord(rec)}
+                          className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700/80 border border-zinc-700/50 text-[9px] font-bold text-zinc-200 cursor-pointer"
+                        >
+                          Inspect
+                        </button>
+                        {rec.status === 'QUARANTINED' && (
+                          <button
+                            onClick={() => handleReleaseQuarantine(rec.id)}
+                            className="px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[9px] font-bold text-emerald-400 cursor-pointer"
+                          >
+                            Release
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteQuarantine(rec.id)}
+                          className="px-2.5 py-1 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-[9px] font-bold text-rose-400 cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="flex-1 bg-zinc-950 p-10 overflow-y-auto custom-scrollbar flex flex-col gap-8">
+    <div className={`flex-1 flex flex-col gap-8 ${isNested ? 'p-0 bg-transparent' : 'bg-zinc-950 p-10 overflow-y-auto custom-scrollbar'}`}>
       {/* Header section */}
-      <header className="flex items-center justify-between border-b border-zinc-900 pb-6 shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Triage Settings</span>
-            <span className="h-3 w-px bg-zinc-800"></span>
-            <span className="text-[10px] font-bold text-zinc-400">Platform Settings</span>
+      {!isNested ? (
+        <header className="flex items-center justify-between border-b border-zinc-900 pb-6 shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Work Distribution Settings</span>
+              <span className="h-3 w-px bg-zinc-800"></span>
+              <span className="text-[10px] font-bold text-zinc-450">Platform Settings</span>
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center gap-2">
+              <ShieldCheck className="text-indigo-400" size={24} />
+              Work Distribution
+            </h1>
+            <p className="text-xs text-zinc-400 mt-1">Configure tenancy-wide rules to automatically route, validate, and distribute incoming requests.</p>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center gap-2">
-            <ShieldCheck className="text-indigo-400" size={24} />
-            Central Triage & Intake
-          </h1>
-          <p className="text-xs text-zinc-400 mt-1">Configure tenancy-wide rules to automatically triage, validate, and route incoming requests.</p>
-        </div>
 
-        <button 
-          onClick={handleToggleTriage}
-          disabled={loading}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
-            triageModule 
-              ? 'bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:bg-zinc-700/85 hover:border-zinc-600'
-              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10'
+          <button 
+            onClick={handleToggleTriage}
+            disabled={loading}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
+              triageModule 
+                ? 'bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:bg-zinc-700/85 hover:border-zinc-600'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10'
+            }`}
+          >
+            {triageModule ? <ToggleRight className="text-indigo-400" /> : <ToggleLeft className="text-zinc-400" />}
+            {triageModule ? 'Disable Work Distribution' : 'Enable Work Distribution'}
+          </button>
+        </header>
+      ) : (
+        <div className="flex items-center justify-end pb-4 border-b border-zinc-900/60 shrink-0">
+          <button 
+            onClick={handleToggleTriage}
+            disabled={loading}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg ${
+              triageModule 
+                ? 'bg-zinc-800 border border-zinc-700/80 text-zinc-300 hover:bg-zinc-700/85 hover:border-zinc-600'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10'
+            }`}
+          >
+            {triageModule ? <ToggleRight className="text-indigo-400" /> : <ToggleLeft className="text-zinc-400" />}
+            {triageModule ? 'Disable Work Distribution' : 'Enable Work Distribution'}
+          </button>
+        </div>
+      )}
+
+      {/* Sub-navigation tabs */}
+      <div className="flex border-b border-zinc-900 gap-6 pb-px shrink-0">
+        <button
+          onClick={() => setActiveTab('routing')}
+          className={`pb-3 text-xs font-bold transition-all relative cursor-pointer ${
+            activeTab === 'routing' ? 'text-indigo-400 font-black' : 'text-zinc-450 hover:text-zinc-300 font-medium'
           }`}
         >
-          {triageModule ? <ToggleRight className="text-indigo-400" /> : <ToggleLeft className="text-zinc-400" />}
-          {triageModule ? 'Disable Triage Module' : 'Enable Triage Module'}
+          Routing & Channels
+          {activeTab === 'routing' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full animate-in fade-in duration-200" />
+          )}
         </button>
-      </header>
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`pb-3 text-xs font-bold transition-all relative cursor-pointer ${
+            activeTab === 'security' ? 'text-indigo-400 font-black' : 'text-zinc-450 hover:text-zinc-300 font-medium'
+          }`}
+        >
+          Security & Quarantine
+          {activeTab === 'security' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full animate-in fade-in duration-200" />
+          )}
+        </button>
+      </div>
 
-      {/* Main Workspace split panel */}
-      {triageModule ? (
-        <div className="grid grid-cols-12 gap-8 items-start flex-1 min-h-0">
-          {/* Rules Dashboard section */}
-          <div className="col-span-4 bg-zinc-900/40 border border-zinc-900 rounded-3xl p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-black text-zinc-450 uppercase tracking-widest">Triage Routing Rules</h3>
-                <p className="text-[10px] text-zinc-400 mt-0.5">Matched sequentially on ingestion.</p>
-              </div>
-              <button 
-                onClick={handleCreateRule}
-                className="p-2 bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-400 border border-indigo-500/20 rounded-xl transition-all cursor-pointer"
-                title="Create Triage Rule"
-              >
-                <Plus size={13} />
-              </button>
-            </div>
-
-            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
-              {triageRules.map((rule) => {
-                const routeAction = rule.actions?.find((a: any) => a.type === 'ROUTE_TO_MODULE');
-                const targetMod = modules?.find((m: any) => m.id === routeAction?.config?.targetModuleId);
-                return (
-                  <div 
-                    key={rule.id}
-                    onClick={() => handleSelectRule(rule)}
-                    className={`p-4 border rounded-2xl text-left cursor-pointer transition-all flex items-start justify-between ${
-                      selectedRuleId === rule.id 
-                        ? 'bg-indigo-950/20 border-indigo-500/30' 
-                        : 'bg-zinc-950/30 border-zinc-900 hover:border-zinc-800'
-                    }`}
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-zinc-200">{rule.name}</p>
-                      <p className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1.5 font-mono">
-                        Route to {targetMod ? targetMod.name : 'Unknown Module'}
-                      </p>
-                    </div>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteRule(rule.id);
-                      }}
-                      className="p-1 hover:bg-rose-500/10 text-zinc-500 hover:text-rose-500 rounded transition-colors"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                );
-              })}
-              {triageRules.length === 0 && (
-                <div className="py-8 text-center border border-dashed border-zinc-800 rounded-2xl">
-                  <p className="text-[10px] text-zinc-500 italic">No triage routing rules configured yet.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Ingestion Info Panel */}
-            <div className="border-t border-zinc-900 pt-6 space-y-4">
-              <div>
-                <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Ingestion Gateways</h4>
-                <p className="text-[8px] text-zinc-400">Share these links to ingest external client records directly.</p>
-              </div>
-
-              {/* Public Form link */}
-              <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-2">
-                <div className="flex items-center justify-between text-[10px] font-bold text-zinc-300">
-                  <span className="flex items-center gap-1.5 text-zinc-200">
-                    <Link size={10} className="text-indigo-400" /> Public Link
-                  </span>
-                  <a href={publicFormLink} target="_blank" className="text-indigo-400 hover:underline">Open</a>
-                </div>
-                <div className="bg-zinc-900 p-2.5 rounded font-mono text-[9px] text-zinc-400 break-all select-all select-none">
-                  {publicFormLink}
-                </div>
-              </div>
-
-              {/* Global Queue Schedule Settings */}
-              <div className="border-t border-zinc-900/60 pt-4 space-y-3">
+      {activeTab === 'routing' ? (
+        triageModule ? (
+          <div className="grid grid-cols-12 gap-8 items-start flex-1 min-h-0">
+            {/* Rules Dashboard section */}
+            <div className="col-span-4 bg-zinc-900/40 border border-zinc-900 rounded-3xl p-6 space-y-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Global Queue Schedule</h4>
-                  <p className="text-[8px] text-zinc-400">Processing interval for rules set to use the Global Schedule.</p>
+                  <h3 className="text-xs font-black text-zinc-450 uppercase tracking-widest">Routing Rules</h3>
+                  <p className="text-[10px] text-zinc-400 mt-0.5">Matched sequentially on intake.</p>
                 </div>
-                
-                <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-zinc-500">Distribution Interval</label>
-                    <select
-                      value={
-                        ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triageModule?.config?.globalSchedule || '*/5 * * * *')
-                          ? (triageModule?.config?.globalSchedule || '*/5 * * * *')
-                          : 'CUSTOM'
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const nextCron = val !== 'CUSTOM' ? val : '*/5 9-17 * * 1-5';
-                        handleSaveGlobalSchedule(nextCron);
-                      }}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 cursor-pointer"
-                    >
-                      <option value="*/5 * * * *">Every 5 Minutes</option>
-                      <option value="*/15 * * * *">Every 15 Minutes</option>
-                      <option value="0 * * * *">Hourly</option>
-                      <option value="0 0 * * *">Daily at Midnight</option>
-                      <option value="CUSTOM">Custom Cron Expression</option>
-                    </select>
-                  </div>
-
-                  {(!['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triageModule?.config?.globalSchedule || '*/5 * * * *') || triageModule?.config?.globalSchedule === 'CUSTOM') && (
-                    <div className="space-y-1 animate-in fade-in duration-200">
-                      <label className="text-[9px] font-bold text-zinc-550">Cron Expression</label>
-                      <input
-                        type="text"
-                        value={triageModule?.config?.globalSchedule || '*/5 * * * *'}
-                        onChange={(e) => handleSaveGlobalSchedule(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 font-mono text-xs text-zinc-250 focus:outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                  )}
-                </div>
+                <button 
+                  onClick={handleCreateRule}
+                  className="p-2 bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-400 border border-indigo-500/20 rounded-xl transition-all cursor-pointer"
+                  title="Create Routing Rule"
+                >
+                  <Plus size={13} />
+                </button>
               </div>
-            </div>
 
-          </div>
-
-          {/* Rule Editor detail section */}
-          <div className="col-span-8">
-            {selectedRuleId ? (
-              <div className="bg-zinc-900/20 border border-zinc-900 rounded-3xl p-8 space-y-6">
-                <div>
-                  <h3 className="text-sm font-black text-zinc-300">Triage Rule configuration</h3>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">Specify conditions and target mapping fields.</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="text-[10px] font-bold text-zinc-400">Rule Name</label>
-                    <input 
-                      type="text"
-                      value={ruleName}
-                      onChange={(e) => setRuleName(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-                      placeholder="e.g. Route Employees Requests"
-                    />
-                  </div>
-
-                  <div className="space-y-2 col-span-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Rule Matching Conditions</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const fields = getSourceFieldsList();
-                          const firstField = fields?.[0]?.name || fields?.[0]?.id || 'email';
-                          setConditionsList(prev => [...prev, { fieldId: firstField, operator: 'contains', value: '' }]);
+              <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar">
+                {triageRules.map((rule) => {
+                  const routeAction = rule.actions?.find((a: any) => a.type === 'ROUTE_TO_MODULE');
+                  const targetMod = modules?.find((m: any) => m.id === routeAction?.config?.targetModuleId);
+                  return (
+                    <div 
+                      key={rule.id}
+                      onClick={() => handleSelectRule(rule)}
+                      className={`p-4 border rounded-2xl text-left cursor-pointer transition-all flex items-start justify-between ${
+                        selectedRuleId === rule.id 
+                          ? 'bg-indigo-950/20 border-indigo-500/30' 
+                          : 'bg-zinc-950/30 border-zinc-900 hover:border-zinc-800'
+                      }`}
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-zinc-200">{rule.name}</p>
+                        <p className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1.5 font-mono">
+                          Route to {targetMod ? targetMod.name : 'Unknown Module'}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteRule(rule.id);
                         }}
-                        className="flex items-center gap-1 text-[9px] font-black text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-2 py-1 rounded-lg uppercase tracking-wider transition-all cursor-pointer"
+                        className="p-1 hover:bg-rose-500/10 text-zinc-500 hover:text-rose-500 rounded transition-colors"
                       >
-                        <Plus size={10} />
-                        Add Condition
+                        <Trash2 size={11} />
                       </button>
                     </div>
+                  );
+                })}
+                {triageRules.length === 0 && (
+                  <div className="bg-zinc-950/20 border border-dashed border-zinc-900 rounded-2xl p-6 text-center text-zinc-550 select-none animate-in fade-in duration-200">
+                    <p className="text-[10px] text-zinc-500 italic">No routing rules configured yet.</p>
+                  </div>
+                )}
+              </div>
 
-                    {conditionsList.length === 0 ? (
-                      <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 text-center text-[10px] font-medium text-zinc-500">
-                        Always matches (No conditions set - runs for all incoming queue submissions).
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {conditionsList.map((cond, idx) => (
-                          <div key={idx} className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-900/60 p-2.5 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-150">
-                            <select
-                              value={cond.fieldId}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setConditionsList(prev => prev.map((c, i) => i === idx ? { ...c, fieldId: val } : c));
-                              }}
-                              className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer shrink-0 min-w-[140px]"
-                            >
-                              {getSourceFieldsList().map((f: any) => (
-                                <option key={f.id || f.name} value={getFieldDatabaseKey(f)}>{f.label || f.name}</option>
-                              ))}
-                            </select>
+              {/* Inbound Channels Info Panel */}
+              <div className="border-t border-zinc-900 pt-6 space-y-4">
+                <div>
+                  <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Inbound Gateways</h4>
+                  <p className="text-[8px] text-zinc-400">Share these links to connect external client records directly.</p>
+                </div>
 
-                            <select
-                              value={cond.operator}
-                              onChange={(e) => {
-                                const val = e.target.value as any;
-                                setConditionsList(prev => prev.map((c, i) => i === idx ? { ...c, operator: val } : c));
-                              }}
-                              className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer shrink-0"
-                            >
-                              <option value="equals">Equals</option>
-                              <option value="contains">Contains</option>
-                              <option value="starts_with">Starts With</option>
-                              <option value="ends_with">Ends With</option>
-                              <option value="is_empty">Is Empty</option>
-                              <option value="is_not_empty">Is Not Empty</option>
-                            </select>
+                {/* Public Form link */}
+                <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-zinc-300">
+                    <span className="flex items-center gap-1.5 text-zinc-200">
+                      <Link size={10} className="text-indigo-400" /> Public Link
+                    </span>
+                    <a href={publicFormLink} target="_blank" className="text-indigo-400 hover:underline">Open</a>
+                  </div>
+                  <div className="bg-zinc-900 p-2.5 rounded font-mono text-[9px] text-zinc-400 break-all select-all select-none">
+                    {publicFormLink}
+                  </div>
+                </div>
 
-                            {cond.operator !== 'is_empty' && cond.operator !== 'is_not_empty' ? (
-                              <input
-                                type="text"
-                                value={cond.value}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setConditionsList(prev => prev.map((c, i) => i === idx ? { ...c, value: val } : c));
-                                }}
-                                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/30"
-                                placeholder="Value..."
-                              />
-                            ) : (
-                              <div className="flex-1 text-[10px] text-zinc-650 font-bold uppercase tracking-wider px-2">No value required</div>
-                            )}
+                {/* Global Queue Schedule Settings */}
+                <div className="border-t border-zinc-900/60 pt-4 space-y-3">
+                  <div>
+                    <h4 className="text-[10px] font-black text-zinc-450 uppercase tracking-widest">Global Distribution Schedule</h4>
+                    <p className="text-[8px] text-zinc-400">Processing interval for rules set to use the Global Schedule.</p>
+                  </div>
+                  
+                  <div className="bg-zinc-950/40 border border-zinc-900 rounded-2xl p-4 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-zinc-500">Distribution Interval</label>
+                      <select
+                        value={
+                          ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triageModule?.config?.globalSchedule || '*/5 * * * *')
+                            ? (triageModule?.config?.globalSchedule || '*/5 * * * *')
+                            : 'CUSTOM'
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const nextCron = val !== 'CUSTOM' ? val : '*/5 9-17 * * 1-5';
+                          handleSaveGlobalSchedule(nextCron);
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 cursor-pointer"
+                      >
+                        <option value="*/5 * * * *">Every 5 Minutes</option>
+                        <option value="*/15 * * * *">Every 15 Minutes</option>
+                        <option value="0 * * * *">Hourly</option>
+                        <option value="0 0 * * *">Daily at Midnight</option>
+                        <option value="CUSTOM">Custom Cron Expression</option>
+                      </select>
+                    </div>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConditionsList(prev => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
-                              title="Remove Condition"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        ))}
+                    {(!['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triageModule?.config?.globalSchedule || '*/5 * * * *') || triageModule?.config?.globalSchedule === 'CUSTOM') && (
+                      <div className="space-y-1 animate-in fade-in duration-200">
+                        <label className="text-[9px] font-bold text-zinc-550">Cron Expression</label>
+                        <input
+                          type="text"
+                          value={triageModule?.config?.globalSchedule || '*/5 * * * *'}
+                          onChange={(e) => handleSaveGlobalSchedule(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 font-mono text-xs text-zinc-250 focus:outline-none focus:border-indigo-500/50"
+                        />
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
 
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="text-[10px] font-bold text-zinc-400">Trigger Mode</label>
-                    <div className="grid grid-cols-3 gap-4">
-                      <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
-                        triggerMode === 'IMMEDIATE' 
-                          ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
-                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
-                      }`}>
-                        <input 
-                          type="radio" 
-                          name="triggerMode"
-                          checked={triggerMode === 'IMMEDIATE'}
-                          onChange={() => setTriggerMode('IMMEDIATE')}
-                          className="sr-only"
-                        />
-                        <span className="text-xs font-bold text-zinc-200">Immediately</span>
-                        <span className="text-[8.5px] text-zinc-500 leading-normal">Route records instantly on form ingestion.</span>
-                      </label>
+            </div>
 
-                      <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
-                        triggerMode === 'GLOBAL_SCHEDULE' 
-                          ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
-                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
-                      }`}>
-                        <input 
-                          type="radio" 
-                          name="triggerMode"
-                          checked={triggerMode === 'GLOBAL_SCHEDULE'}
-                          onChange={() => {
-                            setTriggerMode('GLOBAL_SCHEDULE');
-                            setCronExpression('GLOBAL');
-                          }}
-                          className="sr-only"
-                        />
-                        <span className="text-xs font-bold text-zinc-200">Global Schedule</span>
-                        <span className="text-[8.5px] text-zinc-500 leading-normal">Run according to the shared Inbound queue interval.</span>
-                      </label>
-
-                      <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
-                        triggerMode === 'CUSTOM_SCHEDULE' 
-                          ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
-                          : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
-                      }`}>
-                        <input 
-                          type="radio" 
-                          name="triggerMode"
-                          checked={triggerMode === 'CUSTOM_SCHEDULE'}
-                          onChange={() => {
-                            setTriggerMode('CUSTOM_SCHEDULE');
-                            setCronExpression('*/5 * * * *');
-                          }}
-                          className="sr-only"
-                        />
-                        <span className="text-xs font-bold text-zinc-200">Custom Schedule</span>
-                        <span className="text-[8.5px] text-zinc-500 leading-normal">Configure a custom cron frequency for this rule.</span>
-                      </label>
-                    </div>
+            {/* Rule Editor detail section */}
+            <div className="col-span-8">
+              {selectedRuleId ? (
+                <div className="bg-zinc-900/20 border border-zinc-900 rounded-3xl p-8 space-y-6">
+                  <div>
+                    <h3 className="text-sm font-black text-zinc-300">Routing Rule Configuration</h3>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">Specify conditions and target mapping fields.</p>
                   </div>
 
-                  {triggerMode === 'CUSTOM_SCHEDULE' && (
-                    <div className="grid grid-cols-2 gap-6 col-span-2 animate-in fade-in duration-200">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-zinc-400">Distribution Schedule</label>
-                        <select 
-                          value={
-                            ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(cronExpression)
-                              ? cronExpression
-                              : 'CUSTOM'
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val !== 'CUSTOM') {
-                              setCronExpression(val);
-                            } else {
-                              setCronExpression('*/5 9-17 * * 1-5');
-                            }
-                          }}
-                          className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2 text-xs text-zinc-200 cursor-pointer"
-                        >
-                          <option value="*/5 * * * *">Every 5 Minutes</option>
-                          <option value="*/15 * * * *">Every 15 Minutes</option>
-                          <option value="0 * * * *">Hourly</option>
-                          <option value="0 0 * * *">Daily at Midnight</option>
-                          <option value="CUSTOM">Custom Cron Expression</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-zinc-400">Cron Expression</label>
-                        <input 
-                          type="text"
-                          value={cronExpression}
-                          onChange={(e) => setCronExpression(e.target.value)}
-                          className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-                          placeholder="e.g. */5 * * * *"
-                        />
-                      </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[10px] font-bold text-zinc-400">Rule Name</label>
+                      <input 
+                        type="text"
+                        value={ruleName}
+                        onChange={(e) => setRuleName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                        placeholder="e.g. Route Employees Requests"
+                      />
                     </div>
-                  )}
 
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="text-[10px] font-bold text-zinc-400">Ingestion Data Source (Form)</label>
-                    <select 
-                      value={sourceModuleId}
-                      onChange={(e) => setSourceModuleId(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-zinc-200 cursor-pointer"
-                    >
-                      <option value="public_form">All Ingestion Forms</option>
-                      {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
-                        <option key={m.id} value={m.id}>{m.name} Form</option>
-                      ))}
-                    </select>
-                  </div>
+                    <div className="space-y-3 col-span-2">
+                      <label className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider block">Rule Trigger Settings</label>
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 grid grid-cols-2 gap-4">
+                        <div className="space-y-1 col-span-2">
+                          <label className="text-[9px] font-bold text-zinc-500">Trigger Mode</label>
+                          <div className="grid grid-cols-2 gap-3 mt-1">
+                            <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
+                              triggerMode === 'GLOBAL_SCHEDULE' 
+                                ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
+                                : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
+                            }`}>
+                              <input 
+                                type="radio" 
+                                name="triggerMode"
+                                checked={triggerMode === 'GLOBAL_SCHEDULE'}
+                                onChange={() => {
+                                  setTriggerMode('GLOBAL_SCHEDULE');
+                                  setCronExpression('GLOBAL');
+                                }}
+                                className="sr-only"
+                              />
+                              <span className="text-xs font-bold text-zinc-200">Global Schedule</span>
+                              <span className="text-[8.5px] text-zinc-500 leading-normal">Run according to the shared Work Distribution interval.</span>
+                            </label>
 
-                  <div className="space-y-1.5 col-span-2">
-                    <label className="text-[10px] font-bold text-zinc-400 font-mono">Triage Action: Route Record</label>
-                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-zinc-450">Destination Business Module</label>
-                        <select 
-                          value={targetModuleId}
-                          onChange={(e) => setTargetModuleId(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 cursor-pointer"
-                        >
-                          <option value="">Select Destination Module...</option>
-                          {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                            <label className={`p-4 border rounded-2xl cursor-pointer flex flex-col gap-1 transition-all ${
+                              triggerMode === 'CUSTOM_SCHEDULE' 
+                                ? 'bg-indigo-950/20 border-indigo-500/40 ring-1 ring-indigo-500/40' 
+                                : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
+                            }`}>
+                              <input 
+                                type="radio" 
+                                name="triggerMode"
+                                checked={triggerMode === 'CUSTOM_SCHEDULE'}
+                                onChange={() => {
+                                  setTriggerMode('CUSTOM_SCHEDULE');
+                                  setCronExpression('*/5 * * * *');
+                                }}
+                                className="sr-only"
+                              />
+                              <span className="text-xs font-bold text-zinc-200">Custom Schedule</span>
+                              <span className="text-[8.5px] text-zinc-500 leading-normal">Specify a custom cron interval for this specific rule.</span>
+                            </label>
+                          </div>
+                        </div>
 
-                      <div className="space-y-3">
-                        <label className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider block">Fields Mapping Setup</label>
-                        {targetModuleId ? (
-                          (() => {
-                            const targetModule = modules?.find((m: any) => m.id === targetModuleId);
-                            const flattenFields = (layoutFields: any[]): any[] => {
-                              const result: any[] = [];
-                              (layoutFields || []).forEach(f => {
-                                if (f.type !== 'section') {
-                                  result.push(f);
-                                }
-                                if (f.fields && Array.isArray(f.fields)) {
-                                  result.push(...flattenFields(f.fields));
-                                }
-                              });
-                              return result;
-                            };
-                            const customFields = targetModule ? flattenFields(targetModule.layout) : [];
-                            const allTargetFields = [
-                              { id: 'name', label: 'Record Name / Title', type: 'text' },
-                              { id: 'description', label: 'Record Description', type: 'longText' },
-                              ...customFields
-                            ];
-
-                            return (
-                              <div className="border border-zinc-900 rounded-2xl bg-zinc-950/20 overflow-hidden">
-                                <table className="w-full text-left border-collapse">
-                                  <thead>
-                                    <tr className="border-b border-zinc-900 text-[9px] font-bold text-zinc-500 uppercase tracking-wider bg-zinc-950/40">
-                                      <th className="px-4 py-2">Destination Field</th>
-                                      <th className="px-4 py-2">Mapping Type</th>
-                                      <th className="px-4 py-2">Source Value</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {allTargetFields.map((field) => {
-                                      const currentMap = fieldMappings[field.id] || { type: 'ignore', value: '' };
-
-                                      return (
-                                        <tr key={field.id} className="border-b border-zinc-900/60 last:border-0 hover:bg-zinc-900/10 transition-colors">
-                                          <td className="px-4 py-3">
-                                            <div className="flex flex-col">
-                                              <span className="text-xs font-semibold text-zinc-200">{field.label || field.name || field.id}</span>
-                                              <span className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase">
-                                                {field.id === 'name' || field.id === 'description' ? 'Standard' : `Custom (${field.type})`}
-                                              </span>
-                                            </div>
-                                          </td>
-                                          <td className="px-4 py-3">
-                                            <select
-                                              value={currentMap.type}
-                                              onChange={(e) => {
-                                                const val = e.target.value as any;
-                                                const fields = getSourceFieldsList();
-                                                const defaultSourceField = fields?.[0]?.name || fields?.[0]?.id || 'email';
-                                                setFieldMappings(prev => ({
-                                                  ...prev,
-                                                  [field.id]: { type: val, value: val === 'source' ? defaultSourceField : '' }
-                                                }));
-                                              }}
-                                              className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer min-w-[150px]"
-                                            >
-                                              <option value="ignore">Do Not Map</option>
-                                              <option value="source">Map from Ingested Field</option>
-                                              <option value="custom">Custom Static Value</option>
-                                            </select>
-                                          </td>
-                                          <td className="px-4 py-3">
-                                            {currentMap.type === 'source' && (
-                                              <select
-                                                value={currentMap.value}
-                                                onChange={(e) => {
-                                                  const val = e.target.value;
-                                                  setFieldMappings(prev => ({
-                                                    ...prev,
-                                                    [field.id]: { ...prev[field.id], value: val }
-                                                  }));
-                                                }}
-                                                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none cursor-pointer w-full"
-                                              >
-                                                {getSourceFieldsList().map((f: any) => (
-                                                  <option key={f.id || f.name} value={getFieldDatabaseKey(f)}>{f.label || f.name}</option>
-                                                ))}
-                                              </select>
-                                            )}
-
-                                            {currentMap.type === 'custom' && (
-                                              <input
-                                                type="text"
-                                                value={currentMap.value}
-                                                onChange={(e) => {
-                                                  const val = e.target.value;
-                                                  setFieldMappings(prev => ({
-                                                    ...prev,
-                                                    [field.id]: { ...prev[field.id], value: val }
-                                                  }));
-                                                }}
-                                                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/30"
-                                                placeholder="Static text..."
-                                              />
-                                            )}
-
-                                            {currentMap.type === 'ignore' && (
-                                              <span className="text-[10px] text-zinc-650 font-bold tracking-wider uppercase pl-2">Ignored</span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            );
-                          })()
-                        ) : (
-                          <div className="bg-zinc-950/40 border border-zinc-900 border-dashed rounded-2xl p-6 text-center text-[10px] font-medium text-zinc-500">
-                            Select a destination module above to configure fields mapping.
+                        {triggerMode === 'CUSTOM_SCHEDULE' && (
+                          <div className="space-y-1.5 col-span-2 animate-in fade-in duration-200">
+                            <label className="text-[10px] font-bold text-zinc-400">Cron Expression</label>
+                            <input 
+                              type="text"
+                              value={cronExpression}
+                              onChange={(e) => setCronExpression(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. */5 * * * *"
+                            />
                           </div>
                         )}
                       </div>
+                    </div>
 
-                      <label className="flex items-center gap-2.5 cursor-pointer text-[10px] text-zinc-300 font-bold select-none pt-1">
-                        <input 
-                          type="checkbox"
-                          checked={archiveSource}
-                          onChange={(e) => setArchiveSource(e.target.checked)}
-                          className="rounded border-zinc-800 bg-zinc-900 text-indigo-600 focus:ring-indigo-500/50"
-                        />
-                        Archive source Intake record automatically upon routing
-                      </label>
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[10px] font-bold text-zinc-400">Intake Data Source (Form)</label>
+                      <select 
+                        value={sourceModuleId}
+                        onChange={(e) => setSourceModuleId(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2.5 text-xs text-zinc-200 cursor-pointer"
+                      >
+                        <option value="public_form">All Intake Forms</option>
+                        {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                          <option key={m.id} value={m.id}>{m.name} Form</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-[10px] font-bold text-zinc-400 font-mono">Routing Action: Route Record</label>
+                      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-zinc-450">Destination Business Module</label>
+                          <select 
+                            value={targetModuleId}
+                            onChange={(e) => setTargetModuleId(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 cursor-pointer"
+                          >
+                            <option value="">Select Destination Module...</option>
+                            {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-3">
+                          <label className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider block">Fields Mapping Setup</label>
+                          {targetModuleId ? (
+                            (() => {
+                              const targetModule = modules?.find((m: any) => m.id === targetModuleId);
+                              const flattenFields = (layoutFields: any[]): any[] => {
+                                const result: any[] = [];
+                                (layoutFields || []).forEach(f => {
+                                  if (f.type !== 'section') {
+                                    result.push(f);
+                                  }
+                                  if (f.fields && Array.isArray(f.fields)) {
+                                    result.push(...flattenFields(f.fields));
+                                  }
+                                });
+                                return result;
+                              };
+                              const fields = flattenFields(targetModule?.layout || []);
+                              
+                              if (fields.length === 0) {
+                                return <p className="text-[10px] text-zinc-500 italic">No custom fields found on the destination module.</p>;
+                              }
+
+                              return (
+                                <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-1.5">
+                                  {fields.map(f => {
+                                    const mapping = fieldMappings[f.id] || { type: 'ignore', value: '' };
+                                    return (
+                                      <div key={f.id} className="flex items-center justify-between gap-4 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-900">
+                                        <div className="flex flex-col">
+                                          <span className="text-xs font-bold text-zinc-300">{f.label || f.name}</span>
+                                          <span className="text-[8px] text-zinc-500 uppercase font-mono font-black mt-0.5">{f.type}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <select
+                                            value={mapping.type}
+                                            onChange={(e) => {
+                                              const type = e.target.value as any;
+                                              setFieldMappings(prev => ({
+                                                ...prev,
+                                                [f.id]: { type, value: type === 'ignore' ? '' : prev[f.id]?.value || '' }
+                                              }));
+                                            }}
+                                            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-300 cursor-pointer"
+                                          >
+                                            <option value="ignore">Ignore Field</option>
+                                            <option value="source">Source Match</option>
+                                            <option value="custom">Static Value</option>
+                                          </select>
+
+                                          {mapping.type === 'source' && (
+                                            <select
+                                              value={mapping.value}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                setFieldMappings(prev => ({
+                                                  ...prev,
+                                                  [f.id]: { ...prev[f.id], value: val }
+                                                }));
+                                              }}
+                                              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-300 cursor-pointer max-w-[120px]"
+                                            >
+                                              <option value="">Select Field...</option>
+                                              {getSourceFieldsList().map((sf: any) => (
+                                                <option key={sf.id || sf.name} value={getFieldDatabaseKey(sf)}>{sf.label || sf.name}</option>
+                                              ))}
+                                            </select>
+                                          )}
+
+                                          {mapping.type === 'custom' && (
+                                            <input 
+                                              type="text"
+                                              value={mapping.value}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                setFieldMappings(prev => ({
+                                                  ...prev,
+                                                  [f.id]: { ...prev[f.id], value: val }
+                                                }));
+                                              }}
+                                              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-300 focus:outline-none w-[120px]"
+                                              placeholder="Static value..."
+                                            />
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <p className="text-[10px] text-zinc-500 italic">Select a destination module to configure mapping setup.</p>
+                          )}
+                        </div>
+
+                        <div className="border-t border-zinc-900 pt-4 col-span-2 flex items-center justify-between text-xs text-zinc-400">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={archiveSource} 
+                              onChange={(e) => setArchiveSource(e.target.checked)}
+                              className="rounded border-zinc-850 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-zinc-950 cursor-pointer"
+                            />
+                            <span>Archive source Intake record automatically upon routing</span>
+                          </label>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-900/60">
-                  <button 
-                    onClick={() => setSelectedRuleId(null)}
-                    className="px-4 py-2 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-bold text-zinc-400 hover:text-zinc-200 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={handleSaveRule}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Save Rule
-                  </button>
+                  <div className="border-t border-zinc-900/60 pt-6 flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => setSelectedRuleId(null)}
+                      className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-950/20 hover:bg-zinc-900/40 text-xs font-bold text-zinc-300 rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveRule}
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white rounded-xl transition-all shadow-lg shadow-indigo-600/10 cursor-pointer"
+                    >
+                      Save Rule
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="h-full border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-zinc-550">
-                <Settings size={28} className="text-zinc-600 animate-spin-slow mb-3" />
-                <p className="text-xs font-bold text-zinc-400">Triage Rules Editor</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5 max-w-sm">Select a rule in the sequence dashboard or click the plus button to create a new triage pathway.</p>
-              </div>
-            )}
+              ) : (
+                /* Detail Pane Empty State */
+                <div className="h-full border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-zinc-550 bg-zinc-950/10">
+                  <Settings size={28} className="text-zinc-650 animate-spin-slow mb-3" />
+                  <p className="text-xs font-bold text-zinc-450">Routing Rules Editor</p>
+                  <p className="text-[10px] text-zinc-500 mt-0.5 max-w-sm">Select a rule in the sequence dashboard or click the plus button to create a new routing pathway.</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
+            <Info size={36} className="text-zinc-700 mb-4" />
+            <h3 className="text-sm font-black text-zinc-300">Work Distribution is inactive</h3>
+            <p className="text-[10px] text-zinc-500 mt-1 max-w-md">Enable the system to mount the centralized incoming mailbox and sequential routing rules.</p>
+          </div>
+        )
       ) : (
-        <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
-          <Info size={36} className="text-zinc-700 mb-4" />
-          <h3 className="text-sm font-black text-zinc-300">Central Intake/Triage is inactive</h3>
-          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">Enable the triage system to mount the centralized incoming mailbox and sequential routing rules.</p>
+        renderSecurityTab()
+      )}
+
+      {/* Inspect Payload Modal */}
+      {inspectedRecord && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-2xl flex flex-col gap-4 animate-in zoom-in-95 duration-150 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-zinc-850 pb-3">
+              <div>
+                <h4 className="text-sm font-black text-white">Inspecting Inbound Payload</h4>
+                <p className="text-[10px] text-zinc-550">Record ID: {inspectedRecord.id}</p>
+              </div>
+              <button 
+                onClick={() => setInspectedRecord(null)}
+                className="text-zinc-450 hover:text-zinc-300 text-xs font-bold px-2.5 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 bg-zinc-950/20 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto max-h-[350px] bg-zinc-950 p-4 rounded-2xl border border-zinc-900 font-mono text-[10px] text-zinc-400 custom-scrollbar select-text">
+              <pre>{JSON.stringify(inspectedRecord.payload, null, 2)}</pre>
+            </div>
+            
+            <div className="flex justify-between items-center pt-2 text-[10px] text-zinc-500 border-t border-zinc-850">
+              <div>
+                Security Flags: <span className="font-bold text-rose-400">{inspectedRecord.reasons.join(', ')}</span>
+              </div>
+              <div className="space-x-2">
+                {inspectedRecord.status === 'QUARANTINED' && (
+                  <button 
+                    onClick={() => {
+                      const recId = inspectedRecord.id;
+                      setInspectedRecord(null);
+                      handleReleaseQuarantine(recId);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl cursor-pointer text-[10px]"
+                  >
+                    Release to Queue
+                  </button>
+                )}
+                <button 
+                  onClick={() => {
+                    const recId = inspectedRecord.id;
+                    setInspectedRecord(null);
+                    handleDeleteQuarantine(recId);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl cursor-pointer text-[10px]"
+                >
+                  Delete Permanently
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -478,7 +478,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Forms & Templates',
       icon: ClipboardList,
       items: [
-        { label: 'Intake', icon: ClipboardList, to: '/workspace/settings/intake' },
         { label: 'Templates', icon: FileText, to: '/workspace/settings/templates' },
       ]
     },

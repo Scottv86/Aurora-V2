@@ -681,3 +681,18 @@ model AutomationRun {
   @@index([tenantId])
   @@map("automation_runs")
 }
+
+model QuarantineRecord {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  sourceChannel String   @map("source_channel")
+  sourceName    String   @map("source_name")
+  payload       Json
+  reasons       String[]
+  status        String   @default("QUARANTINED")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("quarantine_records")
+}

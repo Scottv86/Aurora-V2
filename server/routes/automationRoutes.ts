@@ -5,6 +5,139 @@ import { WorkflowEngine } from '../services/workflowEngine';
 
 const router = express.Router();
 
+// GET all quarantined records
+router.get('/quarantine', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const records = await db.quarantineRecord.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(records);
+  } catch (err: any) {
+    console.error('[AutomationRoutes] GET /quarantine Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch quarantined records' });
+  }
+});
+
+// DELETE a quarantined record
+router.delete('/quarantine/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+    await db.quarantineRecord.delete({
+      where: { id }
+    });
+    res.json({ success: true, message: 'Quarantined record deleted successfully' });
+  } catch (err: any) {
+    console.error('[AutomationRoutes] DELETE /quarantine/:id Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete quarantined record' });
+  }
+});
+
+// RELEASE a quarantined record to the standard queue
+router.post('/quarantine/:id/release', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    const qRecord = await db.quarantineRecord.findUnique({
+      where: { id }
+    });
+
+    if (!qRecord) {
+      return res.status(404).json({ error: 'Quarantined record not found' });
+    }
+
+    if (qRecord.sourceChannel === 'Webhook') {
+      // Find the automation
+      const automation = await db.automation.findFirst({
+        where: { tenantId, name: qRecord.sourceName, isActive: true }
+      });
+
+      if (!automation) {
+        return res.status(404).json({ error: 'Active target automation not found for webhook release' });
+      }
+
+      // Trigger the pipeline
+      AutomationEngine.runPipeline(automation, null, qRecord.payload, 'INBOUND_WEBHOOK', db).catch(err => {
+        console.error('[AutomationRoutes] Failed to run released pipeline:', err);
+      });
+    } else {
+      // Public Form source channel
+      // 1. Find the triage module for the tenant
+      const triageModule = await db.module.findFirst({
+        where: {
+          tenantId,
+          config: { path: ['isIntakeTriage'], equals: true }
+        }
+      });
+
+      if (!triageModule) {
+        return res.status(400).json({ error: 'Work Distribution module not active for this tenant' });
+      }
+
+      // 2. Format customer ref if configured
+      let customerRef = undefined;
+      const sourceModule = await db.module.findFirst({
+        where: { tenantId, name: qRecord.sourceName }
+      });
+
+      if (sourceModule) {
+        const origConfig = (sourceModule.config || {}) as any;
+        if (origConfig.customerRefPrefix) {
+          const prefix = origConfig.customerRefPrefix;
+          const suffix = origConfig.customerRefSuffix || '';
+          const nextNum = origConfig.customerRefNextNumber !== undefined ? Number(origConfig.customerRefNextNumber) : 10001;
+
+          customerRef = `${prefix}-${nextNum}${suffix}`;
+
+          await db.module.update({
+            where: { id: sourceModule.id },
+            data: {
+              config: {
+                ...origConfig,
+                customerRefNextNumber: nextNum + 1
+              }
+            }
+          });
+        }
+      }
+
+      const submissionData = {
+        ...(qRecord.payload as any || {}),
+        _originalModuleId: sourceModule?.id || triageModule.id,
+        _submissionSource: 'Public Form',
+        _releasedFromQuarantine: true,
+        ...(customerRef ? { _customerRef: customerRef } : {})
+      };
+
+      // 3. Create normal triage queue record
+      await db.record.create({
+        data: {
+          tenantId,
+          moduleId: triageModule.id,
+          status: 'New',
+          data: submissionData
+        }
+      });
+    }
+
+    // Update status of the quarantine record
+    await db.quarantineRecord.update({
+      where: { id },
+      data: { status: 'RELEASED' }
+    });
+
+    res.json({ success: true, message: 'Record successfully released to queue' });
+  } catch (err: any) {
+    console.error('[AutomationRoutes] POST /quarantine/:id/release Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to release quarantined record' });
+  }
+});
+
 // GET all automations for the tenant (and optionally module-specific)
 router.get('/', async (req: TenantRequest, res) => {
   try {
@@ -275,5 +408,8 @@ router.post('/run-triage', async (req: TenantRequest, res) => {
     res.status(500).json({ error: err.message || 'Failed to process triage queue' });
   }
 });
+
+// GET all quarantined records
+
 
 export default router;

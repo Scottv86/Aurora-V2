@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { globalPrisma } from '../lib/prisma';
+import { SecurityScreeningService } from '../services/securityScreening';
 
 const router = Router();
 
@@ -9,10 +10,10 @@ const router = Router();
  * This endpoint does not require authentication but might eventually need rate-limiting.
  */
 router.post('/submissions', async (req, res) => {
-  const { tenantSlug, type, fullName, email, description, ...otherData } = req.body;
+  const { tenantSlug } = req.body;
 
-  if (!tenantSlug || !email) {
-    return res.status(400).json({ error: 'Missing required submission fields (tenantSlug, email)' });
+  if (!tenantSlug) {
+    return res.status(400).json({ error: 'Missing required tenantSlug' });
   }
 
   try {
@@ -23,6 +24,36 @@ router.post('/submissions', async (req, res) => {
 
     if (!tenant) {
       return res.status(404).json({ error: 'Target tenant not found' });
+    }
+
+    // Run security screening
+    const screeningResult = SecurityScreeningService.screenPayload(req.body);
+
+    if (!screeningResult.isClean) {
+      // Quarantine it!
+      await globalPrisma.quarantineRecord.create({
+        data: {
+          tenantId: tenant.id,
+          sourceChannel: 'Public Form',
+          sourceName: 'External Portal',
+          payload: req.body || {},
+          reasons: screeningResult.reasons,
+          status: 'QUARANTINED'
+        }
+      });
+
+      return res.status(201).json({ 
+        success: true, 
+        id: 'quarantined-' + Math.random().toString(36).substr(2, 9),
+        customerRef: 'Q-' + Math.random().toString(36).substr(2, 9),
+        message: 'Submission received successfully'
+      });
+    }
+
+    const { type, fullName, email, description, ...otherData } = screeningResult.sanitizedData;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Missing required email field' });
     }
 
     // 2. Find a suitable module for this type of intake (preferring Intake Triage)
@@ -85,6 +116,7 @@ router.post('/submissions', async (req, res) => {
       form_type: type,
       source: 'External Portal',
       ...(customerRef ? { _customerRef: customerRef } : {}),
+      ...(screeningResult.reasons.length > 0 ? { _sanitizationFlags: screeningResult.reasons } : {}),
       ...otherData
     };
 
@@ -157,6 +189,32 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
       return res.status(404).json({ error: 'Module not found' });
     }
 
+    // Run security screening
+    const screeningResult = SecurityScreeningService.screenPayload(data || {});
+
+    if (!screeningResult.isClean) {
+      // Quarantine it!
+      await globalPrisma.quarantineRecord.create({
+        data: {
+          tenantId: moduleData.tenantId,
+          sourceChannel: 'Public Form',
+          sourceName: moduleData.name,
+          payload: data || {},
+          reasons: screeningResult.reasons,
+          status: 'QUARANTINED'
+        }
+      });
+
+      return res.status(201).json({ 
+        success: true, 
+        id: 'quarantined-' + Math.random().toString(36).substr(2, 9),
+        customerRef: 'Q-' + Math.random().toString(36).substr(2, 9),
+        message: 'Submission received successfully'
+      });
+    }
+
+    const cleanData = screeningResult.sanitizedData;
+
     // Find the Intake Triage module for the tenant if it exists
     const triageModule = await globalPrisma.module.findFirst({
       where: {
@@ -193,10 +251,11 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
     }
 
     const submissionData = {
-      ...(data || {}),
+      ...(cleanData || {}),
       _originalModuleId: originalTargetModuleId,
       _submissionSource: 'Public Form',
-      ...(customerRef ? { _customerRef: customerRef } : {})
+      ...(customerRef ? { _customerRef: customerRef } : {}),
+      ...(screeningResult.reasons.length > 0 ? { _sanitizationFlags: screeningResult.reasons } : {})
     };
 
     const record = await globalPrisma.record.create({
@@ -225,11 +284,13 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
       customerRef: customerRef || record.id,
       message: 'Submission received successfully'
     });
+
   } catch (error) {
     console.error('[PublicAPI] Public submission error:', error);
     res.status(500).json({ error: 'Failed to submit form' });
   }
 });
+
 
 router.post('/webhooks/:automationId', async (req, res) => {
   const { automationId } = req.params;
@@ -251,8 +312,35 @@ router.post('/webhooks/:automationId', async (req, res) => {
       return res.status(400).json({ error: 'Automation is not configured for webhook triggers' });
     }
 
+    // Run security screening
+    const screeningResult = SecurityScreeningService.screenPayload(payload);
+
+    if (!screeningResult.isClean) {
+      // Quarantine it!
+      await globalPrisma.quarantineRecord.create({
+        data: {
+          tenantId: automation.tenantId,
+          sourceChannel: 'Webhook',
+          sourceName: automation.name,
+          payload: payload || {},
+          reasons: screeningResult.reasons,
+          status: 'QUARANTINED'
+        }
+      });
+
+      return res.status(202).json({
+        success: true,
+        message: 'Webhook trigger accepted'
+      });
+    }
+
+    const cleanPayload = screeningResult.sanitizedData || {};
+    if (screeningResult.reasons.length > 0) {
+      cleanPayload._sanitizationFlags = screeningResult.reasons;
+    }
+
     const { AutomationEngine } = await import('../services/automationEngine');
-    AutomationEngine.runPipeline(automation, null, payload, 'INBOUND_WEBHOOK', globalPrisma).catch(err => {
+    AutomationEngine.runPipeline(automation, null, cleanPayload, 'INBOUND_WEBHOOK', globalPrisma).catch(err => {
       console.error('[WebhookAPI] Pipeline failed:', err);
     });
 

@@ -31,7 +31,8 @@ const PATH_MAP: Record<string, string> = {
   records: 'Records',
   'fees-products': 'Fees & Products',
   finance: 'Finance',
-  intake: 'Intake',
+  intake: 'Work Distribution',
+  'work-distribution': 'Work Distribution',
   reset: 'Factory Reset',
   migration: 'Migration Tools',
   connectors: 'Integrations'
@@ -48,7 +49,10 @@ export const Breadcrumbs = () => {
     // 1. Check for context-driven overrides first (e.g. from RecordDetailView)
     if (breadcrumbOverrides[segment]) return breadcrumbOverrides[segment];
 
-    // 2. Check modules if it's a module ID (these are loaded globally)
+    // 2. Check static PATH_MAP mapping next
+    if (PATH_MAP[segment]) return PATH_MAP[segment];
+
+    // 3. Check modules if it's a module ID (these are loaded globally)
     if (
       pathnames[index - 1] === 'modules' || 
       pathnames[index - 1] === 'builder' || 
@@ -58,13 +62,13 @@ export const Breadcrumbs = () => {
       if (mod) return mod.name;
     }
     
-    // 3. Handle technical IDs that haven't been overridden yet
+    // 4. Handle technical IDs that haven't been overridden yet
     // Technical IDs are typically long alphanumeric strings without spaces
     const looksLikeId = segment.length > 15 && /^[a-z0-9-]+$/i.test(segment) && !segment.includes(' ');
     if (looksLikeId) return '...';
 
-    // 4. Default to PATH_MAP or formatted segment
-    return PATH_MAP[segment] || segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    // 5. Default to formatted segment
+    return segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
   const breadcrumbItems = pathnames.map((segment, index) => {

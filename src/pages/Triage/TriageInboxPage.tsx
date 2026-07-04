@@ -7,7 +7,7 @@ import {
   Inbox, Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
   AlertCircle, Zap, Search, GitFork, 
   HelpCircle, XCircle, User, Mail, Phone, FileText, Check, 
-  RotateCcw, Info, ExternalLink, Layers, Copy
+  RotateCcw, Info, ExternalLink, Layers, Copy, Play, Pause, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -131,8 +131,12 @@ export const TriageInboxPage = () => {
   const [triageRules, setTriageRules] = useState<any[]>([]);
   const [countdownText, setCountdownText] = useState<string>('');
   const [isRunningTriage, setIsRunningTriage] = useState(false);
+  const [isTimerPaused, setIsTimerPaused] = useState<boolean>(() => localStorage.getItem('auto_distribution_paused') === 'true');
 
   const autoRunTriggeredRef = useRef<number>(0);
+  const pausedTimeRef = useRef<number>(localStorage.getItem('auto_distribution_paused') === 'true' ? Date.now() : 0);
+  const accumulatedPausedMsRef = useRef<number>(0);
+  const lastNextRunRef = useRef<number>(0);
 
   
   // Collaboration / Tabs / Filter states
@@ -512,21 +516,39 @@ export const TriageInboxPage = () => {
     const updateTimer = () => {
       const now = new Date();
       const nextRun = getNextCronDate(cronExpr, now);
-      const diffMs = nextRun.getTime() - now.getTime();
       
-      if (diffMs <= 0) {
+      // Reset accumulated paused time when crossing into a new cron cycle
+      if (lastNextRunRef.current && nextRun.getTime() !== lastNextRunRef.current) {
+        accumulatedPausedMsRef.current = 0;
+        if (isTimerPaused) {
+          pausedTimeRef.current = Date.now();
+        }
+      }
+      lastNextRunRef.current = nextRun.getTime();
+
+      const baseDiffMs = nextRun.getTime() - now.getTime();
+      
+      // Calculate adjusted diff based on paused duration
+      const currentPausedMs = isTimerPaused && pausedTimeRef.current > 0 
+        ? Date.now() - pausedTimeRef.current 
+        : 0;
+      const adjustedDiffMs = baseDiffMs + accumulatedPausedMsRef.current + currentPausedMs;
+      
+      if (adjustedDiffMs <= 0) {
         setCountdownText('Running...');
         
         // Trigger auto-distribution if we haven't triggered it for this scheduled tick
         const minuteKey = Math.floor(nextRun.getTime() / 60000);
         if (autoRunTriggeredRef.current !== minuteKey) {
           autoRunTriggeredRef.current = minuteKey;
-          handleManualRunTriage();
+          if (!isTimerPaused) {
+            handleManualRunTriage();
+          }
         }
         return;
       }
 
-      const totalSec = Math.floor(diffMs / 1000);
+      const totalSec = Math.floor(adjustedDiffMs / 1000);
       const min = Math.floor(totalSec / 60);
       const sec = totalSec % 60;
       
@@ -541,7 +563,7 @@ export const TriageInboxPage = () => {
     const interval = setInterval(updateTimer, 1000);
 
     return () => clearInterval(interval);
-  }, [triageRules, triageModule]);
+  }, [triageRules, triageModule, isTimerPaused]);
 
   const loadRecordComments = async (recordId: string) => {
     try {
@@ -851,7 +873,7 @@ export const TriageInboxPage = () => {
   // Filter and search computation
   const filteredRecords = records.filter(rec => {
     const fields = getRecordFields(rec);
-    const displayName = String(fields.submitted_by || fields.name || fields.fullName || fields.email || 'Anonymous Ingestion').toLowerCase();
+    const displayName = String(fields.submitted_by || fields.name || fields.fullName || fields.email || 'Anonymous Submission').toLowerCase();
     const displayDesc = String(fields.description || fields.issueDescription || '').toLowerCase();
     const matchesSearch = displayName.includes(searchQuery.toLowerCase()) || displayDesc.includes(searchQuery.toLowerCase());
     
@@ -899,7 +921,7 @@ export const TriageInboxPage = () => {
             <div>
               <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
                 <GitFork size={14} className="text-indigo-400" />
-                Manual Ingestion Work Dispatcher
+                Manual Intake Work Dispatcher
               </h3>
               <p className="text-[10px] text-zinc-550 mt-0.5">
                 Map incoming form data to the target business module's schema.
@@ -1312,13 +1334,13 @@ export const TriageInboxPage = () => {
       <header className="flex items-center justify-between border-b border-zinc-900 pb-5 shrink-0">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Platform Inbound Queue</span>
+            <span className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Platform Work Distribution</span>
             <span className="h-3 w-px bg-zinc-800"></span>
             <span className="text-[10px] font-bold text-zinc-400">Pre-Assessment Staging</span>
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center gap-2">
             <Inbox className="text-indigo-400 animate-pulse" size={24} />
-            Inbound Queue
+            Work Distribution
           </h1>
           <p className="text-xs text-zinc-400 mt-1">Review external client request submissions, run pre-assessment staging, and dispatch work pathways.</p>
         </div>
@@ -1340,15 +1362,46 @@ export const TriageInboxPage = () => {
 
           return (
             <div className="flex items-center gap-3 bg-zinc-900/40 border border-zinc-900 px-4 py-2.5 rounded-2xl animate-in fade-in duration-200 shadow-sm shrink-0">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <div className={`h-2 w-2 rounded-full ${isTimerPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
               <div className="flex flex-col">
                 <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
                   {scheduledRule ? 'Auto-Distribution' : 'Global Queue Check'}
                 </span>
                 <span className="text-xs font-bold text-zinc-200 mt-0.5">
-                  Running in: <span className="font-mono text-indigo-400 font-black">{countdownText}</span>
+                  {isTimerPaused ? (
+                    <span className="text-amber-400 font-bold">
+                      Paused <span className="font-mono text-[10px] text-amber-500/80">({countdownText})</span>
+                    </span>
+                  ) : (
+                    <>Running in: <span className="font-mono text-indigo-400 font-black">{countdownText}</span></>
+                  )}
                 </span>
               </div>
+              <span className="h-6 w-px bg-zinc-800" />
+              <button
+                onClick={() => {
+                  const newVal = !isTimerPaused;
+                  setIsTimerPaused(newVal);
+                  localStorage.setItem('auto_distribution_paused', String(newVal));
+                  if (newVal) {
+                    pausedTimeRef.current = Date.now();
+                  } else {
+                    if (pausedTimeRef.current > 0) {
+                      accumulatedPausedMsRef.current += Date.now() - pausedTimeRef.current;
+                    }
+                    pausedTimeRef.current = 0;
+                  }
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer select-none border ${
+                  isTimerPaused 
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/25' 
+                    : 'bg-zinc-800 text-zinc-355 border-zinc-700/80 hover:bg-zinc-700/90'
+                }`}
+                title={isTimerPaused ? "Resume Auto-Distribution" : "Pause Auto-Distribution"}
+              >
+                {isTimerPaused ? <Play size={10} /> : <Pause size={10} />}
+                {isTimerPaused ? 'Resume' : 'Pause'}
+              </button>
               <span className="h-6 w-px bg-zinc-800" />
               <button
                 onClick={handleManualRunTriage}
@@ -1504,7 +1557,7 @@ export const TriageInboxPage = () => {
                   const fields = getRecordFields(rec);
                   const isSelected = selectedRecord?.id === rec.id;
                   
-                  const displayName = fields.submitted_by || fields.name || fields.fullName || fields.email || 'Anonymous Ingestion';
+                  const displayName = fields.submitted_by || fields.name || fields.fullName || fields.email || 'Anonymous Submission';
                   const displayDesc = fields.description || fields.issueDescription || 'No description provided.';
                   const displaySource = fields._submissionSource || 'API Webhook';
                   const statusStyles = getStatusStyles(rec.status);
@@ -1717,8 +1770,24 @@ export const TriageInboxPage = () => {
 
                   {/* Main display card content */}
                   <div className="flex-1 min-h-[350px]">
+                    {/* Sanitization warnings alert banner */}
+                    {(() => {
+                      const fields = getRecordFields(selectedRecord);
+                      const flags = fields._sanitizationFlags || selectedRecord._sanitizationFlags;
+                      if (!flags || !Array.isArray(flags) || flags.length === 0) return null;
+
+                      return (
+                        <div className="bg-amber-950/20 border border-amber-500/10 text-amber-400 p-3 rounded-2xl flex items-start gap-2.5 text-[10px] leading-relaxed mb-4">
+                          <ShieldAlert size={14} className="shrink-0 text-amber-500 mt-0.5" />
+                          <div>
+                            <span className="font-bold">Inbound Security Action Applied:</span> Harmless HTML tags, event handlers, or scripts were detected and automatically stripped from this record: <span className="font-mono text-[9px] text-amber-500/85">({flags.join(', ')})</span>.
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Main View Tabs (Assessment / Activity / Automation Rules) */}
-                    <div className="flex flex-col h-full gap-4">
+                    <div className="flex flex-col h-full gap-4 font-bold">
                         {/* Tab Headers */}
                         <div className="flex gap-4 border-b border-zinc-900 pb-2">
                           <button
@@ -2068,7 +2137,7 @@ export const TriageInboxPage = () => {
                           })()}
 
                           {activeTab === 'source' && (
-                            /* Visualizes form ingestion source metadata */
+                            /* Visualizes form intake source metadata */
                             <div className="space-y-4">
                               {(() => {
                                 const origMod = getOriginalModule(selectedRecord, modules) || triageModule;
@@ -2088,10 +2157,10 @@ export const TriageInboxPage = () => {
                                       <div className="space-y-1">
                                         <span className="text-[9px] font-bold text-zinc-550 capitalize tracking-wider flex items-center gap-1.5">
                                           <Layers size={9} className="text-zinc-500" />
-                                          Ingestion Channel
+                                          Intake Channel
                                         </span>
                                         <p className="text-xs font-bold text-white mt-1.5">{sourceChannel}</p>
-                                        <p className="text-[9.5px] text-zinc-500 leading-relaxed mt-0.5">Routed through Platform Central Intake routing router.</p>
+                                        <p className="text-[9.5px] text-zinc-500 leading-relaxed mt-0.5">Routed through Platform Work Distribution router.</p>
                                       </div>
                                     </div>
 
@@ -2314,7 +2383,7 @@ export const TriageInboxPage = () => {
                 <div className="h-full border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-zinc-550 bg-zinc-950/10">
                   <AlertCircle size={28} className="text-zinc-750 mb-3" />
                   <p className="text-xs font-bold text-zinc-400 font-sans">No Submission Selected</p>
-                  <p className="text-[9.5px] text-zinc-500 mt-1 max-w-xs leading-normal">Select an incoming ingestion request from the left staging stream to preview form fields, leave collaboration logs, or dispatch tasks across modules.</p>
+                  <p className="text-[9.5px] text-zinc-500 mt-1 max-w-xs leading-normal">Select an incoming intake request from the left staging stream to preview form fields, leave collaboration logs, or dispatch tasks across modules.</p>
                 </div>
               )}
             </div>
@@ -2322,11 +2391,11 @@ export const TriageInboxPage = () => {
           </div>
         </>
       ) : (
-        /* Ingestion Disabled */
+        /* Intake Disabled */
         <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
           <AlertCircle size={36} className="text-zinc-700 mb-4" />
-          <h3 className="text-sm font-black text-zinc-300">Inbound Queue is not configured</h3>
-          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Inbound Queue system is currently disabled. Please contact your system administrator to enable the triage module inside Triage settings.</p>
+          <h3 className="text-sm font-black text-zinc-300">Work Distribution is not configured</h3>
+          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently disabled. Please contact your system administrator to enable the triage module inside Triage settings.</p>
         </div>
       )}
       

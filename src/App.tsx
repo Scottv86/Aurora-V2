@@ -176,6 +176,7 @@ const App = () => {
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />
+                   <Route path="work-distribution" element={<IntakeSettingsPage />} />
                 </Route>
                 <Route path="templates" element={<DocumentAutomation />} />
                 <Route path="automations" element={<AutomationsPage />} />
@@ -191,7 +192,8 @@ const App = () => {
                 <Route path="records" element={<ComingSoon title="Records" description="Manage system records, data entries, and historical logs across all modules." />} />
                 <Route path="fees-products" element={<ComingSoon title="Fees & Products" description="Configure service fees, product catalogs, and pricing structures." />} />
                 <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
-                <Route path="intake" element={<IntakeSettingsPage />} />
+                <Route path="work-distribution" element={<Navigate to="/workspace/settings/platform-modules/work-distribution" replace />} />
+                <Route path="intake" element={<Navigate to="/workspace/settings/platform-modules/work-distribution" replace />} />
                 <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
                 <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
                 <Route path="integrations" element={<ConnectorsPage />} />

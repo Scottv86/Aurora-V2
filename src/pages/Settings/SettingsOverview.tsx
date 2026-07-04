@@ -157,15 +157,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   // Forms & Templates
   {
-    id: 'intake',
-    label: 'Intake',
-    description: 'Data entry and signup forms.',
-    icon: 'ClipboardList',
-    to: '/workspace/settings/intake',
-    category: 'Forms & Templates',
-    tags: ['forms', 'capture', 'leads']
-  },
-  {
     id: 'templates',
     label: 'Templates',
     description: 'Document and email templates.',

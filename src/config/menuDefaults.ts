@@ -20,7 +20,7 @@ export const systemDefaultMenuConfig: MenuConfig = {
       title: 'Platform',
       items: [
         { id: 'people-orgs', label: 'People & Organisations', iconName: 'Users', to: '/workspace/platform/people-organisations', isVisible: true },
-        { id: 'triage-inbox', label: 'Inbound Queue', iconName: 'Inbox', to: '/workspace/platform/intake', isVisible: true }
+        { id: 'triage-inbox', label: 'Work Distribution', iconName: 'Inbox', to: '/workspace/platform/intake', isVisible: true }
       ]
     }
   ]
