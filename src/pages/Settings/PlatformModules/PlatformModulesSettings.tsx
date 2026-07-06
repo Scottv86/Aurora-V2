@@ -1,50 +1,11 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Users, 
-  ArrowLeft,
-  Inbox,
-  BookOpen
-} from 'lucide-react';
+import * as Icons from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Button } from '../../../components/UI/Primitives';
 import { motion } from 'motion/react';
-
-interface ModuleItem {
-  id: string;
-  name: string;
-  slug: string;
-  icon: React.ElementType;
-  isCore: boolean;
-  description: string;
-}
-
-const PLATFORM_MODULES: ModuleItem[] = [
-  {
-    id: 'people-organisations',
-    name: 'People & Organisations',
-    slug: 'people-organisations',
-    icon: Users,
-    isCore: true,
-    description: 'Manage core entity taxonomies and global relationship rules.'
-  },
-  {
-    id: 'work-distribution',
-    name: 'Work Distribution',
-    slug: 'work-distribution',
-    icon: Inbox,
-    isCore: true,
-    description: 'Configure routing rules to automatically intake and distribute work across modules.'
-  },
-  {
-    id: 'knowledge-base',
-    name: 'Knowledge Base',
-    slug: 'knowledge-base',
-    icon: BookOpen,
-    isCore: true,
-    description: 'Central repository for institutional knowledge, documentation, training materials, and AI agent reference context.'
-  }
-];
+import { PLATFORM_MODULES } from '../../../config/platformModules';
 
 export const PlatformModulesSettings = () => {
   const navigate = useNavigate();
@@ -82,7 +43,7 @@ export const PlatformModulesSettings = () => {
                   <div className="relative z-10">
                     <div className="flex items-start justify-between mb-4">
                       <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-                        <mod.icon size={24} />
+                        {React.createElement((Icons as any)[mod.iconName] || Icons.HelpCircle, { size: 24 })}
                       </div>
                       {mod.isCore && (
                         <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold uppercase tracking-wider">

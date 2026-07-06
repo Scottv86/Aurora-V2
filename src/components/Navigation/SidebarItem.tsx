@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { ChevronDown } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { fetchModule, fetchRecords } from '../../services/dataService';
@@ -15,14 +16,30 @@ interface SidebarItemProps {
   collapsed?: boolean;
   onClick?: () => void;
   className?: string;
+  hasChildren?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: (e: React.MouseEvent) => void;
 }
 
-export const SidebarItem = ({ icon: Icon, label, active, to, badge, nested, collapsed, onClick, className }: SidebarItemProps) => {
+export const SidebarItem = ({ 
+  icon: Icon, 
+  label, 
+  active, 
+  to, 
+  badge, 
+  nested, 
+  collapsed, 
+  onClick, 
+  className,
+  hasChildren,
+  isExpanded,
+  onToggleExpand
+}: SidebarItemProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const { tenant, modules } = usePlatform();
-  const isComingSoon = !to && !onClick;
+  const isComingSoon = !to && !onClick && !(hasChildren && onToggleExpand);
 
   const handleMouseEnter = () => {
     // Only prefetch for module links
@@ -61,6 +78,10 @@ export const SidebarItem = ({ icon: Icon, label, active, to, badge, nested, coll
           onClick();
           return;
         }
+        if (hasChildren && onToggleExpand && !to) {
+          onToggleExpand(e);
+          return;
+        }
         if (to) navigate(to);
       }}
       disabled={isComingSoon}
@@ -90,6 +111,18 @@ export const SidebarItem = ({ icon: Icon, label, active, to, badge, nested, coll
             <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-700 uppercase tracking-tighter">
               Soon
             </span>
+          )}
+          {hasChildren && onToggleExpand && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onToggleExpand(e);
+              }}
+              className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+            >
+              <ChevronDown size={14} className={cn("transition-transform duration-200", isExpanded && "rotate-180")} />
+            </div>
           )}
         </>
       )}

@@ -40,6 +40,7 @@ model Tenant {
   usageLogs              UsageLog[]
   workspaces             Workspace[]
   connectorLogs          ConnectorLog[]
+  catalogItems           CatalogItem[]
 
   @@map("tenants")
 }
@@ -702,4 +703,31 @@ model QuarantineRecord {
 
   @@index([tenantId])
   @@map("quarantine_records")
+}
+
+model CatalogItem {
+  id                  String   @id @default(cuid())
+  tenantId            String   @map("tenant_id")
+  name                String
+  code                String   @map("code")
+  type                String   // PRODUCT, SERVICE, FEE, RECURRING, FINE
+  description         String?
+  priceType           String   @default("FLAT") @map("price_type") // FLAT, UNIT, TIME
+  basePrice           Float    @default(0.0) @map("base_price")
+  currency            String   @default("AUD")
+  billingInterval      String?  @map("billing_interval")       // null, day, week, month, year
+  billingIntervalCount Int?     @map("billing_interval_count")  // e.g. 1 for every 1 month, 12 for 12 months
+  billingBlockMinutes Int?     @map("billing_block_minutes")  // e.g. 15 for 15-min blocks
+  trackInventory      Boolean  @default(false) @map("track_inventory")
+  stockLevel          Int      @default(0) @map("stock_level")
+  reorderPoint        Int      @default(0) @map("reorder_point")
+  metadata            Json?
+  status              String   @default("active") // active, draft, archived
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("catalog_items")
 }

@@ -45,8 +45,7 @@ import {
   Code2,
   Wrench,
   ArrowRightLeft,
-  Banknote,
-  Tag
+  Banknote
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -54,6 +53,7 @@ import { cn } from '../../lib/utils';
 import { SidebarItem } from '../Navigation/SidebarItem';
 import { Navbar } from '../Navigation/Navbar';
 import { Login } from '../Auth/Login';
+import { TopMegaMenu } from '../Navigation/TopMegaMenu';
 import {
   DndContext,
   closestCenter,
@@ -82,45 +82,47 @@ import { PageLoader } from '../UI/PageLoader';
 import { TransitionBar } from '../UI/TransitionBar';
 
 
-const SortableSidebarItem = ({ 
+const SidebarItemRenderer = ({ 
   item, 
-  isEditMode, 
   collapsed, 
   active, 
-  onToggleVisibility 
+  expandedItems,
+  onToggleExpand,
+  isActive,
+  depth = 0
 }: { 
   item: MenuItem, 
-  isEditMode: boolean, 
   collapsed: boolean, 
   active: boolean,
-  onToggleVisibility: (id: string) => void
+  expandedItems: Record<string, boolean>,
+  onToggleExpand: (id: string) => void,
+  isActive: (path: string) => boolean,
+  depth?: number
 }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id: item.id, disabled: !isEditMode });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 100 : 'auto',
-  };
-
   const IconComponent = (LucideIcons as any)[item.iconName] || LucideIcons.Box;
 
-  return (
-    <div ref={setNodeRef} style={style} className="relative group/sortable">
-      <div className={cn("flex items-center gap-1", isEditMode && !collapsed && "pr-2")}>
-        {isEditMode && !collapsed && (
-          <div {...attributes} {...listeners} className="cursor-grab p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
-            <GripVertical size={14} />
-          </div>
+  // Subtitle styling in sidebar
+  if ((item as any).isSubtitle) {
+    if (collapsed) {
+      return <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4 mx-2" />;
+    }
+    return (
+      <div 
+        className={cn(
+          "text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-3 pt-4 pb-1 select-none",
+          depth > 0 ? "pl-9" : ""
         )}
+      >
+        {item.label}
+      </div>
+    );
+  }
+
+  const hasChildren = item.children && item.children.length > 0;
+
+  return (
+    <div className="relative space-y-0.5">
+      <div className="flex items-center gap-1">
         <div className="flex-1 min-w-0">
           <SidebarItem 
             icon={IconComponent} 
@@ -129,117 +131,77 @@ const SortableSidebarItem = ({
             active={active} 
             collapsed={collapsed}
             className={cn(!item.isVisible && "opacity-50 grayscale")}
+            nested={depth > 0}
+            hasChildren={hasChildren}
+            isExpanded={expandedItems[item.id]}
+            onToggleExpand={() => onToggleExpand(item.id)}
           />
         </div>
-        {isEditMode && !collapsed && (
-          <button 
-            type="button"
-            onClick={() => onToggleVisibility(item.id)}
-            className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-          >
-            {item.isVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-          </button>
-        )}
       </div>
+
+      {hasChildren && expandedItems[item.id] && !collapsed && (
+        <div className="space-y-0.5 mt-0.5">
+          {item.children!.map((child: MenuItem) => (
+            child.isVisible !== false && (
+              <SidebarItemRenderer
+                key={child.id}
+                item={child}
+                collapsed={collapsed}
+                active={child.to ? isActive(child.to) : false}
+                expandedItems={expandedItems}
+                onToggleExpand={onToggleExpand}
+                isActive={isActive}
+                depth={depth + 1}
+              />
+            )
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-const SortableSection = ({ 
+const SidebarSectionRenderer = ({ 
   section, 
-  isEditMode, 
   collapsed, 
   isActive, 
-  sensors, 
-  onDragEnd, 
-  onToggleVisibility,
-  onRename,
-  onDelete
+  expandedItems,
+  onToggleExpand
 }: { 
   section: MenuSection, 
-  isEditMode: boolean, 
   collapsed: boolean,
   isActive: (path: string) => boolean,
-  sensors: any,
-  onDragEnd: (event: DragEndEvent, sectionId: string) => void,
-  onToggleVisibility: (itemId: string) => void,
-  onRename: (id: string, name: string) => void,
-  onDelete: (id: string) => void
+  expandedItems: Record<string, boolean>,
+  onToggleExpand: (id: string) => void
 }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id: section.id, disabled: !isEditMode });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
   return (
-    <div ref={setNodeRef} style={style} className="space-y-2">
+    <div className="space-y-2">
       <div className="flex items-center group/section">
-        {isEditMode && !collapsed && (
-          <div {...attributes} {...listeners} className="cursor-grab p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 opacity-0 group-hover/section:opacity-100 transition-opacity">
-            <GripVertical size={12} />
-          </div>
-        )}
         {collapsed ? (
           <div className="h-px bg-zinc-200 dark:bg-zinc-800 w-full my-4 mx-2" />
         ) : (
           <div className="flex items-center justify-between w-full px-3">
-            {isEditMode ? (
-              <input 
-                value={section.title}
-                onChange={(e) => onRename(section.id, e.target.value)}
-                className="text-[10px] font-bold text-zinc-500 bg-transparent border-none focus:ring-1 focus:ring-indigo-500 rounded px-1 w-full uppercase tracking-[0.2em]"
-              />
-            ) : (
-              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">{section.title}</p>
-            )}
-            {isEditMode && (
-              <button 
-                type="button"
-                onClick={() => onDelete(section.id)}
-                className="p-1 text-zinc-400 hover:text-red-500 transition-colors opacity-0 group-hover/section:opacity-100"
-              >
-                <Trash2 size={12} />
-              </button>
-            )}
+            <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">{section.title}</p>
           </div>
         )}
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={(e) => onDragEnd(e, section.id)}
-      >
-        <SortableContext
-          items={section.items.map(i => i.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <nav className="space-y-0.5">
-            {section.items.map((item) => (
-              (item.isVisible || isEditMode) && (
-                <SortableSidebarItem 
-                  key={item.id} 
-                  item={item} 
-                  isEditMode={isEditMode} 
-                  collapsed={collapsed} 
-                  active={item.to ? isActive(item.to) : false}
-                  onToggleVisibility={onToggleVisibility}
-                />
-              )
-            ))}
-          </nav>
-        </SortableContext>
-      </DndContext>
+      <nav className="space-y-0.5">
+        {section.items.map((item) => (
+          item.isVisible !== false && (
+            <SidebarItemRenderer 
+              key={item.id} 
+              item={item} 
+              collapsed={collapsed} 
+              active={item.to ? isActive(item.to) : false}
+              expandedItems={expandedItems}
+              onToggleExpand={onToggleExpand}
+              isActive={isActive}
+              depth={0}
+            />
+          )
+        ))}
+      </nav>
     </div>
   );
 };
@@ -314,15 +276,22 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     isAIAssistantOpen,
     isChatOpen,
     isAppLauncherOpen,
-    isNotificationsOpen
+    isNotificationsOpen,
+    tenant
   } = usePlatform();
   
   const location = useLocation();
   const navigate = useNavigate();
   const pathnames = location.pathname.split('/').filter(x => x);
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [isEditMode, setIsEditMode] = useState(false);
   const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+
+  const toggleExpand = (itemId: string) => {
+    setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -363,7 +332,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Banknote,
       items: [
         { label: 'Finance', icon: Banknote, to: '/workspace/settings/finance' },
-        { label: 'Fees & Products', icon: Tag, to: '/workspace/settings/fees-products' },
       ]
     },
     {
@@ -449,6 +417,31 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
   const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
                           location.pathname.includes('/workspace/settings/ai-builder');
+
+  const rawLayoutStyle = tenant?.branding?.layout_style || 'sidebar';
+  const layoutStyle = (isSettingsMode || isAdminPath) ? 'sidebar' : rawLayoutStyle;
+
+  const isSidebarReallyOpen = layoutStyle === 'top' 
+    ? false 
+    : (layoutStyle === 'slim' 
+      ? isSidebarHovered 
+      : isSidebarOpen);
+
+  const collapsed = !isSidebarReallyOpen;
+
+  const asideWidthClass = isModuleBuilder 
+    ? "w-0 opacity-0 pointer-events-none border-none" 
+    : (layoutStyle === 'top' 
+      ? "w-0 opacity-0 pointer-events-none border-none" 
+      : (isSidebarReallyOpen ? "w-64" : "w-16"));
+
+  const mainMarginClass = isModuleBuilder 
+    ? "ml-0" 
+    : (layoutStyle === 'top' 
+      ? "ml-0" 
+      : (layoutStyle === 'slim' 
+        ? "ml-16" 
+        : (isSidebarOpen ? "ml-64" : "ml-16")));
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -624,191 +617,142 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         )}
       </AnimatePresence>
       <Navbar />
+
+      {/* Top Mounted Mega Menu */}
+      {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
+        <div className="sticky top-16 z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
+          <TopMegaMenu menuConfig={resolvedConfig} />
+        </div>
+      )}
+
       <div className="flex">
-        <aside className={cn(
-          "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl transition-all duration-300 z-40 overflow-y-auto overflow-x-hidden",
-          isModuleBuilder ? "w-0 opacity-0 pointer-events-none border-none" : (isSidebarOpen ? "w-64" : "w-16")
-        )}>
-          <div className={cn("flex flex-col h-full", isSidebarOpen ? "p-4" : "p-2")}>
-            <div className="flex-1 space-y-6">
-              {/* System Governance (Admin Mode Only) */}
-              {isAdminPath && (
-                <div>
-                  {isSidebarOpen ? (
-                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
-                      <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" />
-                      System Governance
-                    </div>
-                  ) : (
-                    <div className="h-px bg-zinc-200 dark:border-zinc-800 mb-4 mx-2" />
-                  )}
-                  <nav className="space-y-1">
-                    <SidebarItem icon={ShieldCheck} label="Global Registry" to="/admin" active={isActive('/admin')} collapsed={!isSidebarOpen} />
-                    <SidebarItem icon={Activity} label="Platform Health" to="/admin/health" active={isActive('/admin/health')} collapsed={!isSidebarOpen} />
-                    <SidebarItem icon={Cpu} label="Compute Matrix" to="/admin/compute" active={isActive('/admin/compute')} collapsed={!isSidebarOpen} />
-                    <SidebarItem icon={CloudUpload} label="Fleet Deploy" to="/admin/fleet" active={isActive('/admin/fleet')} collapsed={!isSidebarOpen} />
-                  </nav>
-                </div>
-              )}
-
-              {!isAdminPath && !isSettingsMode && resolvedConfig && (
-                <div className="space-y-8">
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(e) => handleDragEnd(e, 'ROOT_SECTIONS')}
-                  >
-                    <SortableContext
-                      items={resolvedConfig.sections.map(s => s.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="space-y-6">
-                        {resolvedConfig.sections.map((section) => (
-                          <SortableSection 
-                            key={section.id}
-                            section={section}
-                            isEditMode={isEditMode}
-                            collapsed={!isSidebarOpen}
-                            isActive={isActive}
-                            sensors={sensors}
-                            onDragEnd={handleDragEnd}
-                            onToggleVisibility={toggleItemVisibility}
-                            onDelete={deleteSection}
-                            onRename={renameSection}
-                          />
-                        ))}
+        {layoutStyle !== 'top' && (
+          <aside 
+            onMouseEnter={() => {
+              if (layoutStyle === 'slim') setIsSidebarHovered(true);
+            }}
+            onMouseLeave={() => {
+              if (layoutStyle === 'slim') setIsSidebarHovered(false);
+            }}
+            className={cn(
+              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl transition-all duration-300 z-40 overflow-y-auto overflow-x-hidden",
+              asideWidthClass
+            )}
+          >
+            <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "p-4" : "p-2")}>
+              <div className="flex-1 space-y-6">
+                {/* System Governance (Admin Mode Only) */}
+                {isAdminPath && (
+                  <div>
+                    {isSidebarReallyOpen ? (
+                      <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
+                        <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" />
+                        System Governance
                       </div>
-                    </SortableContext>
-                  </DndContext>
-
-                  {isEditMode && isSidebarOpen && (
-                    <button
-                      onClick={addSection}
-                      className="w-full flex items-center justify-center gap-2 p-2 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-400 hover:text-indigo-500 hover:border-indigo-500 transition-all text-xs font-medium"
-                    >
-                      <Plus size={14} />
-                      Add Section
-                    </button>
-                  )}
-                </div>
-              )}
-
-                  {!isAdminPath && isSettingsMode && (
-                    <div className="flex flex-col h-full">
-                      <nav className={cn("mb-6", isSidebarOpen ? "px-2" : "px-0")}>
-                        <button
-                          onClick={() => navigate('/workspace')}
-                          className={cn(
-                            "w-full flex items-center transition-all duration-300 group relative mb-4",
-                            isSidebarOpen 
-                              ? "premium-pill h-9 gap-2 px-4" 
-                              : "justify-center h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400"
-                          )}
-                        >
-                          <ArrowLeft size={16} className={cn("shrink-0", isSidebarOpen ? "text-zinc-400 group-hover:text-white" : "")} />
-                          {isSidebarOpen && (
-                            <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 truncate">
-                              Back to Workspace
-                            </span>
-                          )}
-                        </button>
-
-                        {isSidebarOpen && (
-                          <div className="relative group/search px-2">
-                            <div className="absolute inset-0 bg-indigo-500/5 blur-lg rounded-xl opacity-0 group-hover/search:opacity-100 transition-opacity" />
-                            <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-100/50 dark:bg-white/5 border border-zinc-200/50 dark:border-white/5 focus-within:border-indigo-500/30 transition-all">
-                              <Search size={14} className="text-zinc-400 shrink-0" />
-                              <input 
-                                type="text"
-                                placeholder="Search settings..."
-                                className="w-full bg-transparent border-none outline-none text-[11px] text-zinc-600 dark:text-zinc-300 placeholder:text-zinc-400"
-                                value={settingsSearchQuery}
-                                onChange={(e) => setSettingsSearchQuery(e.target.value)}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </nav>
-                      
-                      <div className={cn("flex-1 space-y-0.5 overflow-y-auto custom-scrollbar", isSidebarOpen ? "px-2" : "px-0")}>
-                        {filteredSettingsItems.map((item) => (
-                          <SidebarItem
-                            key={item.to}
-                            icon={item.icon}
-                            label={item.label}
-                            to={item.to}
-                            active={isActive(item.to)}
-                            collapsed={!isSidebarOpen}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-            </div>
-
-            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1 mt-auto">
-              {isEditMode ? (
-                <div className="flex flex-col gap-1 px-1 mb-2">
-                  <button
-                    onClick={() => handleSave('user')}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/20"
-                  >
-                    <Save size={14} />
-                    {isSidebarOpen && "Save to Profile"}
-                  </button>
-                  {(platformUser?.licenceType === 'Developer' || platformUser?.isSuperAdmin) && (
-                    <button
-                      onClick={() => handleSave('tenant')}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-zinc-800 text-zinc-200 rounded-md hover:bg-zinc-700 transition-colors border border-zinc-700"
-                    >
-                      <Save size={14} />
-                      {isSidebarOpen && "Set as Org Default"}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => {
-                      setIsEditMode(false);
-                      // Ideally we should reload context to discard changes
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
-                  >
-                    <X size={14} />
-                    {isSidebarOpen && "Cancel"}
-                  </button>
-                </div>
-              ) : (
-                !isAdminPath && !isSettingsMode && (
-                  <button
-                    onClick={() => setIsEditMode(true)}
-                    className={cn(
-                      "w-full flex items-center p-2 mb-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors",
-                      isSidebarOpen ? "px-3 gap-2" : "justify-center px-0"
+                    ) : (
+                      <div className="h-px bg-zinc-200 dark:border-zinc-800 mb-4 mx-2" />
                     )}
-                    title="Customize Sidebar"
-                  >
-                    <Edit2 size={16} />
-                    {isSidebarOpen && <span className="text-xs font-medium">Customize</span>}
-                  </button>
-                )
-              )}
-
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className={cn(
-                  "w-full flex items-center p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors",
-                  isSidebarOpen ? "justify-end px-3" : "justify-center px-0"
+                    <nav className="space-y-1">
+                      <SidebarItem icon={ShieldCheck} label="Global Registry" to="/admin" active={isActive('/admin')} collapsed={collapsed} />
+                      <SidebarItem icon={Activity} label="Platform Health" to="/admin/health" active={isActive('/admin/health')} collapsed={collapsed} />
+                      <SidebarItem icon={Cpu} label="Compute Matrix" to="/admin/compute" active={isActive('/admin/compute')} collapsed={collapsed} />
+                      <SidebarItem icon={CloudUpload} label="Fleet Deploy" to="/admin/fleet" active={isActive('/admin/fleet')} collapsed={collapsed} />
+                    </nav>
+                  </div>
                 )}
-                title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-              >
-                {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-              </button>
+
+                {!isAdminPath && !isSettingsMode && resolvedConfig && (
+                  <div className="space-y-6">
+                    {resolvedConfig.sections.map((section) => (
+                      <SidebarSectionRenderer 
+                        key={section.id}
+                        section={section}
+                        collapsed={collapsed}
+                        isActive={isActive}
+                        expandedItems={expandedItems}
+                        onToggleExpand={toggleExpand}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {!isAdminPath && isSettingsMode && (
+                  <div className="flex flex-col h-full">
+                    <nav className={cn("mb-6", isSidebarReallyOpen ? "px-2" : "px-0")}>
+                      <button
+                        onClick={() => navigate('/workspace')}
+                        className={cn(
+                          "w-full flex items-center transition-all duration-300 group relative mb-4",
+                          isSidebarReallyOpen 
+                            ? "premium-pill h-9 gap-2 px-4" 
+                            : "justify-center h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400"
+                        )}
+                      >
+                        <ArrowLeft size={16} className={cn("shrink-0", isSidebarReallyOpen ? "text-zinc-400 group-hover:text-white" : "")} />
+                        {isSidebarReallyOpen && (
+                          <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 truncate">
+                            Back to Workspace
+                          </span>
+                        )}
+                      </button>
+
+                      {isSidebarReallyOpen && (
+                        <div className="relative group/search px-2">
+                          <div className="absolute inset-0 bg-indigo-500/5 blur-lg rounded-xl opacity-0 group-hover/search:opacity-100 transition-opacity" />
+                          <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-100/50 dark:bg-white/5 border border-zinc-200/50 dark:border-white/5 focus-within:border-indigo-500/30 transition-all">
+                            <Search size={14} className="text-zinc-400 shrink-0" />
+                            <input 
+                              type="text"
+                              placeholder="Search settings..."
+                              className="w-full bg-transparent border-none outline-none text-[11px] text-zinc-600 dark:text-zinc-300 placeholder:text-zinc-400"
+                              value={settingsSearchQuery}
+                              onChange={(e) => setSettingsSearchQuery(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </nav>
+                    
+                    <div className={cn("flex-1 space-y-0.5 overflow-y-auto custom-scrollbar", isSidebarReallyOpen ? "px-2" : "px-0")}>
+                      {filteredSettingsItems.map((item) => (
+                        <SidebarItem
+                          key={item.to}
+                          icon={item.icon}
+                          label={item.label}
+                          to={item.to}
+                          active={isActive(item.to)}
+                          collapsed={collapsed}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1 mt-auto shrink-0">
+                {layoutStyle !== 'slim' && (
+                  <button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className={cn(
+                      "w-full flex items-center p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors",
+                      isSidebarReallyOpen ? "justify-end px-3" : "justify-center px-0"
+                    )}
+                    title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+                  >
+                    {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        )}
 
         <main className={cn(
-          "flex-1 h-[calc(100vh-4rem)] flex flex-col overflow-y-auto transition-all duration-300",
-          isModuleBuilder ? "ml-0" : (isSidebarOpen ? "ml-64" : "ml-16"),
+          "flex-1 flex flex-col overflow-y-auto transition-all duration-300",
+          layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
+            ? "h-[calc(100vh-7rem)]" 
+            : "h-[calc(100vh-4rem)]",
+          mainMarginClass,
           (isAIAssistantOpen || isChatOpen || isAppLauncherOpen || isNotificationsOpen) && "mr-96"
         )}>
           <div className={cn(

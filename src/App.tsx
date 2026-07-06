@@ -44,6 +44,8 @@ import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
 import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
 import { PlatformModulesSettings } from './pages/Settings/PlatformModules/PlatformModulesSettings';
 import { KnowledgeBaseSettings } from './pages/Settings/PlatformModules/KnowledgeBaseSettings';
+import { PricingCatalogSettings } from './pages/Settings/PlatformModules/PricingCatalogSettings';
+import { InventoryManagerSettings } from './pages/Settings/PlatformModules/InventoryManagerSettings';
 import { HealthMonitor } from './components/HealthMonitor';
 import { FleetManager } from './components/FleetManager';
 import { ComputeMatrix } from './components/ComputeMatrix';
@@ -68,6 +70,7 @@ import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
 import { AutomationsPage } from './pages/Settings/AutomationsPage';
 import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
 import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
+import { DeveloperAPISettings } from './pages/Settings/DeveloperAPISettings';
 
 const NavigateWithSearch = ({ to, replace }: { to: string; replace?: boolean }) => {
   const location = useLocation();
@@ -151,6 +154,8 @@ const App = () => {
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="platform/intake" element={<TriageInboxPage />} />
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
+                <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
+                <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
               </Route>
               
               {/* Settings & Workforce (Developer Only) */}
@@ -188,6 +193,8 @@ const App = () => {
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />
                    <Route path="work-distribution" element={<IntakeSettingsPage />} />
                    <Route path="knowledge-base" element={<KnowledgeBaseSettings />} />
+                   <Route path="pricing-catalog" element={<PricingCatalogSettings />} />
+                   <Route path="inventory-manager" element={<InventoryManagerSettings />} />
                 </Route>
                 <Route path="templates" element={<DocumentAutomation />} />
                 <Route path="automations" element={<AutomationsPage />} />
@@ -197,11 +204,11 @@ const App = () => {
                 <Route path="logic" element={<LogicBuilder />} />
                 <Route path="testing" element={<ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." />} />
                 <Route path="deploy" element={<ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." />} />
-                <Route path="api" element={<ComingSoon title="API Management" description="Configure API keys, webhooks, and external integration points." />} />
+                <Route path="api" element={<DeveloperAPISettings />} />
                 
                 {/* New Settings Placeholder Routes */}
                 <Route path="records" element={<ComingSoon title="Records" description="Manage system records, data entries, and historical logs across all modules." />} />
-                <Route path="fees-products" element={<ComingSoon title="Fees & Products" description="Configure service fees, product catalogs, and pricing structures." />} />
+                <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
                 <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
                 <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                 <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />

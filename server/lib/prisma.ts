@@ -65,7 +65,8 @@ export const getScopedPrisma = (
             'GlobalListItem',
             'TenantConnector',
             'Automation',
-            'AutomationRun'
+            'AutomationRun',
+            'CatalogItem'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);

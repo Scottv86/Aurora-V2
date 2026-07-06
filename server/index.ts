@@ -19,6 +19,7 @@ import architectRoutes from './routes/architectRoutes';
 import connectorRoutes from './routes/connectorRoutes';
 import nexusProxyRoutes from './routes/nexusProxyRoutes';
 import automationRoutes from './routes/automationRoutes';
+import pricingCatalogRoutes from './routes/pricingCatalogRoutes';
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
 import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
@@ -105,6 +106,7 @@ app.use('/api/architect', authenticate, requireTenantAccess, architectRoutes);
 app.use('/api/connectors', authenticate, requireTenantAccess, connectorRoutes);
 app.use('/api/nexus-proxy', authenticate, requireTenantAccess, nexusProxyRoutes);
 app.use('/api/automations', authenticate, requireTenantAccess, automationRoutes);
+app.use('/api/pricing-catalog', authenticate, requireTenantAccess, pricingCatalogRoutes);
 
 
 // Public API Routes (Portal submissions)

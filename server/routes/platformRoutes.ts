@@ -51,8 +51,30 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     const groupIds = primaryMembership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
     const capabilities = await resolveCapabilities(groupIds, tenant?.id || '');
     
-    // Menu Configuration Resolution: User Customization > Tenant Default
-    const menuConfig = primaryMembership?.menuConfig || tenant?.menuConfig || null;
+    // Menu Configuration Resolution: User Customization > Specific User Override > Team Override > Position Override > Role Override > Tenant Default
+    const memberId = primaryMembership?.id;
+    const teamId = primaryMembership?.teamId;
+    const positionId = primaryMembership?.positionId;
+    const roleId = primaryMembership?.roleId || 'USER';
+
+    let resolvedMenuConfig = primaryMembership?.menuConfig || null;
+
+    if (!resolvedMenuConfig && tenant?.menuConfig) {
+      const tConfig = tenant.menuConfig as any;
+      if (tConfig && typeof tConfig === 'object' && !Array.isArray(tConfig) && (tConfig.default || tConfig.roles || tConfig.teams || tConfig.positions || tConfig.users)) {
+        resolvedMenuConfig = 
+          (memberId && tConfig.users?.[memberId]) ||
+          (teamId && tConfig.teams?.[teamId]) ||
+          (positionId && tConfig.positions?.[positionId]) ||
+          (roleId && tConfig.roles?.[roleId]) ||
+          tConfig.default ||
+          null;
+      } else {
+        resolvedMenuConfig = tenant.menuConfig;
+      }
+    }
+
+    const menuConfig = resolvedMenuConfig;
 
     const contextData = {
       user: {
