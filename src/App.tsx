@@ -51,7 +51,7 @@ import { WorkforcePage } from './pages/Settings/WorkforcePage';
 import { MemberDetailView } from './pages/Settings/MemberDetailView';
 import { TeamDetailView } from './pages/Settings/TeamDetailView';
 import { PositionDetailView } from './pages/Settings/PositionDetailView';
-import { BillingPage } from './pages/Settings/BillingPage';
+import { SubscriptionPage } from './pages/Settings/SubscriptionPage';
 import { OrganizationPage } from './pages/Settings/OrganizationPage';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
 
@@ -61,8 +61,8 @@ import { BuilderChoice } from './pages/Builder/BuilderChoice';
 import { ModuleView } from './pages/Module/ModuleView';
 import { RecordDetailView } from './pages/Record/RecordDetailView';
 import { SitesPage } from './pages/Settings/SitesPage';
-import { UsagePage } from './pages/Settings/UsagePage';
-import { AppearanceSettings } from './pages/Settings/AppearanceSettings';
+import { BrandingSettingsPage } from './pages/Settings/BrandingSettingsPage';
+import { NavigationSettingsPage } from './pages/Settings/NavigationSettingsPage';
 import { SettingsOverview } from './pages/Settings/SettingsOverview';
 import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
 import { AutomationsPage } from './pages/Settings/AutomationsPage';
@@ -164,8 +164,9 @@ const App = () => {
               >
                 <Route index element={<SettingsOverview />} />
                 <Route path="organization" element={<OrganizationPage />} />
-                <Route path="billing" element={<BillingPage />} />
-                <Route path="usage" element={<UsagePage />} />
+                <Route path="subscription" element={<SubscriptionPage />} />
+                <Route path="billing" element={<Navigate to="/workspace/settings/subscription" replace />} />
+                <Route path="usage" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 <Route path="security" element={<ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." />} />
                 <Route path="audit" element={<ComingSoon title="Audit Log" description="Review system activity, security events, and configuration changes across the platform." />} />
                 
@@ -179,7 +180,9 @@ const App = () => {
                 <Route path="messaging" element={<ComingSoon title="Messaging" description="View messaging logs including emails, SMS, Push notifications, and Portal notifications." />} />
                 <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
                 <Route path="lists" element={<GlobalListsSettings />} />
-                <Route path="appearance" element={<AppearanceSettings />} />
+                <Route path="branding" element={<BrandingSettingsPage />} />
+                <Route path="navigation" element={<NavigationSettingsPage />} />
+                <Route path="appearance" element={<Navigate to="/workspace/settings/branding" replace />} />
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />

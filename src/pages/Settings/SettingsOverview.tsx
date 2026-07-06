@@ -42,32 +42,32 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['branding', 'general', 'seo', 'social']
   },
   {
-    id: 'billing',
-    label: 'Billing & Plan',
-    description: 'Subscriptions and payments.',
+    id: 'subscription',
+    label: 'Subscription',
+    description: 'Manage subscriptions, seat licenses, payment methods, and monitor AI model usage.',
     icon: 'CreditCard',
-    to: '/workspace/settings/billing',
+    to: '/workspace/settings/subscription',
     category: 'General',
-    tags: ['subscription', 'payment', 'invoices']
-  },
-  {
-    id: 'usage',
-    label: 'Model Usage',
-    description: 'AI costs and usage limits.',
-    icon: 'BarChart2',
-    to: '/workspace/settings/usage',
-    category: 'General',
-    tags: ['ai', 'tokens', 'cost']
+    tags: ['subscription', 'payment', 'invoices', 'ai', 'tokens', 'cost', 'usage', 'quota']
   },
   // Look & Feel
   {
-    id: 'appearance',
-    label: 'Appearance',
-    description: 'Themes, colors, and layout.',
+    id: 'branding',
+    label: 'Branding',
+    description: 'Logo, brand colors, and themes.',
     icon: 'Palette',
-    to: '/workspace/settings/appearance',
+    to: '/workspace/settings/branding',
     category: 'Look & Feel',
-    tags: ['theme', 'colors', 'dark mode', 'branding']
+    tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
+  },
+  {
+    id: 'navigation',
+    label: 'Navigation',
+    description: 'Layout style and navigation menu architect.',
+    icon: 'Compass',
+    to: '/workspace/settings/navigation',
+    category: 'Look & Feel',
+    tags: ['layout', 'menu', 'sidebar', 'top menu', 'navigation']
   },
   // Apps & Websites
   {

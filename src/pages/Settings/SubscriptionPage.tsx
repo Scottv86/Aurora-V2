@@ -1,0 +1,796 @@
+import { useState, useEffect } from 'react';
+import { usePlatform } from '../../hooks/usePlatform';
+import { 
+  CreditCard, 
+  ChevronRight, 
+  Zap, 
+  Users, 
+  Shield, 
+  Download, 
+  CheckCircle2, 
+  AlertCircle,
+  ArrowUpRight,
+  Receipt,
+  BarChart3,
+  Wallet,
+  ShieldCheck,
+  Search,
+  Bot,
+  RefreshCw,
+  Activity,
+  PieChart,
+  TrendingUp,
+  MessageSquare,
+  Code,
+  FileSearch,
+  BrainCircuit
+} from 'lucide-react';
+import { Button, Badge, cn } from '../../components/UI/Primitives';
+import { API_BASE_URL } from '../../config';
+import { useAuth } from '../../hooks/useAuth';
+import { Invoice } from '../../types/platform';
+import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
+import { Tabs } from '../../components/UI/TabsAndModal';
+import { useUsers, TenantMember } from '../../hooks/useUsers';
+import { Table, Column } from '../../components/UI/Table';
+import { PageHeader } from '../../components/UI/PageHeader';
+
+const SegmentedProgress = ({ value }: { value: number }) => {
+  return (
+    <div className="flex gap-1.5 h-1.5 w-full">
+      {[0, 25, 50, 75].map((threshold) => {
+        const segmentValue = Math.max(0, Math.min(25, value - threshold));
+        const percentage = (segmentValue / 25) * 100;
+        return (
+          <div key={threshold} className="flex-1 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-blue-600 transition-all duration-500 shadow-[0_0_8px_rgba(37,99,235,0.4)]" 
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const Switch = ({ checked, onChange }: { checked: boolean; onChange: (val: boolean) => void }) => {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+        checked ? "bg-blue-600" : "bg-zinc-200 dark:bg-white/5 dark:backdrop-blur-md"
+      )}
+    >
+      <span
+        className={cn(
+          "inline-block h-4 w-4 transform rounded-full transition-transform",
+          checked ? "translate-x-6 bg-white" : "translate-x-1 bg-white dark:bg-zinc-400"
+        )}
+      />
+    </button>
+  );
+};
+
+export const SubscriptionPage = () => {
+  const { tenant, billingUsage, billingLoading, refreshBilling } = usePlatform();
+  const { session } = useAuth();
+  const { members, loading: membersLoading, updateMember } = useUsers();
+  
+  const [activeTab, setActiveTab] = useState('overview');
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Usage states
+  const [overagesEnabled, setOveragesEnabled] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      if (!tenant?.id) return;
+      setInvoicesLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/billing/invoices`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInvoices(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch invoices:', err);
+      } finally {
+        setInvoicesLoading(false);
+      }
+    };
+
+    fetchInvoices();
+  }, [tenant?.id, session?.access_token]);
+
+  if (billingLoading || !billingUsage) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-blue-600" />
+      </div>
+    );
+  }
+
+  const { plan, quota, usage } = billingUsage;
+  const devPercent = Math.min(100, (usage.developer / quota.developerSeats) * 100);
+  const stdPercent = Math.min(100, (usage.standard / quota.standardSeats) * 100);
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'quotas', label: 'Model Quotas', icon: BrainCircuit },
+    { id: 'analytics', label: 'Usage Analytics', icon: PieChart },
+    { id: 'credits', label: 'Credits & Overages', icon: Zap },
+    { id: 'licenses', label: 'Licenses', icon: ShieldCheck },
+    { id: 'invoices', label: 'Invoices', icon: Receipt },
+    { id: 'payment', label: 'Payment Methods', icon: Wallet },
+    { id: 'activity', label: 'Recent Activity', icon: Activity },
+  ];
+
+  const handleLicenseChange = async (memberId: string, newType: string) => {
+    try {
+      await updateMember(memberId, { licenceType: newType });
+      await refreshBilling();
+    } catch (err) {
+      // Error handled in hook
+    }
+  };
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    refreshBilling().finally(() => setIsRefreshing(false));
+  };
+
+  const filteredMembers = members.filter(m => 
+    m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.licenceType?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const licenseColumns: Column<TenantMember>[] = [
+    {
+      header: 'Member',
+      sortable: true,
+      sortKey: 'name',
+      accessor: (member: TenantMember) => (
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-white/5 overflow-hidden border border-zinc-200 dark:border-zinc-700">
+            {member.avatarUrl ? (
+              <img src={member.avatarUrl} alt={member.name} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-zinc-400">
+                {member.isSynthetic ? <Bot size={20} /> : <Users size={18} />}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-black text-zinc-900 dark:text-zinc-50">{member.name}</p>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{member.email}</p>
+          </div>
+        </div>
+      )
+    },
+    {
+      header: 'Type',
+      sortable: true,
+      sortKey: 'isSynthetic',
+      accessor: (member: TenantMember) => (
+        <Badge variant={member.isSynthetic ? 'purple' : 'zinc'} className="text-[8px] font-black tracking-[0.1em] uppercase px-2">
+          {member.isSynthetic ? 'AI Agent' : 'Human'}
+        </Badge>
+      )
+    },
+    {
+      header: 'Current Licence',
+      sortable: true,
+      sortKey: 'licenceType',
+      accessor: (member: TenantMember) => (
+        <Badge 
+          variant={member.licenceType === 'Developer' ? 'blue' : member.licenceType === 'Standard' ? 'purple' : 'zinc'} 
+          className="text-[10px] font-black tracking-widest uppercase py-1 px-3"
+        >
+          {member.licenceType || 'None'}
+        </Badge>
+      )
+    },
+    {
+      header: '',
+      className: 'text-right',
+      accessor: (member: TenantMember) => (
+        <div className="flex items-center justify-end gap-2">
+          <button 
+            onClick={() => handleLicenseChange(member.id, 'Standard')}
+            disabled={member.licenceType === 'Standard'}
+            className={cn(
+              "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              member.licenceType === 'Standard' 
+              ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20 cursor-default"
+              : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-white/10 dark:border-zinc-800"
+            )}
+          >
+            Standard
+          </button>
+          <button 
+            onClick={() => handleLicenseChange(member.id, 'Developer')}
+            disabled={member.licenceType === 'Developer'}
+            className={cn(
+              "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              member.licenceType === 'Developer' 
+              ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 cursor-default"
+              : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-white/10 dark:border-zinc-800"
+            )}
+          >
+            Developer
+          </button>
+        </div>
+      )
+    }
+  ];
+
+  const invoiceColumns = [
+    {
+      header: 'Invoice ID',
+      sortable: true,
+      accessor: (inv: Invoice) => <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{inv.id}</span>
+    },
+    {
+      header: 'Date',
+      sortable: true,
+      accessor: (inv: Invoice) => <span className="text-sm font-medium text-zinc-500">{new Date(inv.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+    },
+    {
+      header: 'Amount',
+      sortable: true,
+      accessor: (inv: Invoice) => <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">${inv.amount.toFixed(2)}</span>
+    },
+    {
+      header: 'Status',
+      sortable: true,
+      accessor: (inv: Invoice) => (
+        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+          <CheckCircle2 size={12} /> {inv.status}
+        </div>
+      )
+    },
+    {
+      header: '',
+      className: 'text-right',
+      accessor: () => (
+        <button className="p-2 text-zinc-400 hover:text-blue-500 transition-colors">
+          <Download size={18} />
+        </button>
+      )
+    }
+  ];
+
+  // Usage static data
+  const models = [
+    { name: 'Gemini 3.1 Pro (High)', usage: 100, refresh: '4 hours, 28 minutes' },
+    { name: 'Gemini 3.1 Pro (Low)', usage: 100, refresh: '4 hours, 28 minutes' },
+    { name: 'Gemini 3 Flash', usage: 85, refresh: '4 hours, 30 minutes' },
+    { name: 'Claude Sonnet 4.6 (Thinking)', usage: 100, refresh: '4 hours, 59 minutes' },
+    { name: 'Claude Opus 4.6 (Thinking)', usage: 100, refresh: '4 hours, 59 minutes' },
+    { name: 'GPT-OSS 120B (Medium)', usage: 100, refresh: '4 hours, 59 minutes' },
+  ];
+
+  const topUsers = [
+    { name: 'Sarah Jenkins', email: 'sarah@aurora.io', tokens: '1.2M', growth: '+12%', color: 'bg-indigo-500' },
+    { name: 'Michael Chen', email: 'm.chen@aurora.io', tokens: '840K', growth: '+5%', color: 'bg-emerald-500' },
+    { name: 'Elena Rodriguez', email: 'elena@aurora.io', tokens: '620K', growth: '-2%', color: 'bg-amber-500' },
+    { name: 'David Smith', email: 'd.smith@aurora.io', tokens: '410K', growth: '+18%', color: 'bg-rose-500' },
+  ];
+
+  const intents = [
+    { label: 'Data Extraction', icon: FileSearch, percentage: 42, color: 'bg-blue-600' },
+    { label: 'Summarization', icon: BrainCircuit, percentage: 28, color: 'bg-purple-600' },
+    { label: 'Code Generation', icon: Code, percentage: 18, color: 'bg-emerald-600' },
+    { label: 'Creative Chat', icon: MessageSquare, percentage: 12, color: 'bg-orange-600' },
+  ];
+
+  const topAgents = [
+    { name: 'Procurement Specialist', usage: '2.4M tokens', active: '18h ago', icon: Bot },
+    { name: 'Legal Analyst', usage: '1.8M tokens', active: '2h ago', icon: Bot },
+    { name: 'Customer Support', usage: '1.1M tokens', active: 'Just now', icon: Bot },
+  ];
+
+  return (
+    <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
+      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
+        <PageHeader 
+          title="Subscription"
+          description="Manage your subscription, seat licenses, payment methods, and invoice history. Monitor real-time model quotas, usage analytics, and AI credit configurations."
+          tabs={
+            <Tabs 
+              tabs={tabs} 
+              activeTab={activeTab} 
+              onChange={setActiveTab} 
+              className="border-none"
+              firstTabPadding={false}
+            />
+          }
+        />
+
+        <div>
+          {activeTab === 'overview' && (
+            <div className="space-y-10">
+              {/* Plan Hero Card */}
+              <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40 dark:backdrop-blur-xl shadow-sm">
+                <div className="relative flex flex-col md:flex-row items-stretch">
+                  {/* Left Side: Current Plan */}
+                  <div className="flex-1 p-8 space-y-8">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
+                        <Zap size={12} className="fill-current" /> Current Subscription
+                      </div>
+                      <h2 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-zinc-50 uppercase">
+                        {plan} <span className="text-zinc-400 font-medium">Plan</span>
+                      </h2>
+                    </div>
+
+                    <div className="flex flex-wrap gap-8">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Renewal Date</p>
+                        <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">May 1, 2026</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Base Rate</p>
+                        <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">${quota.price}/mo</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Status</p>
+                        <div className="flex items-center gap-2 text-emerald-500 text-sm font-bold">
+                          <CheckCircle2 size={14} /> Active
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 pt-2">
+                      <Button variant="primary" className="px-6 font-bold uppercase tracking-widest text-[10px] h-10 gap-2 group">
+                        Upgrade Plan <ArrowUpRight size={14} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                      </Button>
+                      <Button variant="ghost" className="px-6 text-[10px] font-bold uppercase tracking-widest border border-zinc-200 dark:border-zinc-800 h-10">
+                        Manage Add-ons
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Right Side: Quick Stats Summary */}
+                  <div className="md:w-80 bg-zinc-50/50 dark:bg-white/5 p-8 flex flex-col justify-center gap-8 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Total Active Seats</p>
+                      <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50">{usage.developer + usage.standard}</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                        <span>Projected Spend</span>
+                        <span className="text-zinc-900 dark:text-zinc-100">${quota.price}.00</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full" style={{ width: '100%' }} />
+                      </div>
+                      <p className="text-[10px] text-zinc-400 font-medium italic">Fixed monthly cost with no overage fees.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Seat Usage Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Developer Licenses */}
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-500 text-white">
+                        <Shield size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">Developer Licenses</h3>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">System & Workspace Management</p>
+                      </div>
+                    </div>
+                    <Badge variant="blue" className="font-bold text-[8px] px-2">{usage.developer} / {quota.developerSeats} SEATS</Badge>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="h-2 w-full bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-full overflow-hidden">
+                      <div 
+                        className={cn(
+                          "h-full rounded-full transition-all duration-1000 ease-out",
+                          devPercent > 90 ? "bg-red-500" : "bg-blue-500"
+                        )} 
+                        style={{ width: `${devPercent}%` }} 
+                      />
+                    </div>
+                    <div className="flex justify-between items-center px-0.5 font-bold text-[9px] uppercase tracking-widest text-zinc-400">
+                      <span>{100 - devPercent}% Capacity Available</span>
+                      {devPercent > 90 && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10} /> Limited</span>}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                    Developer licenses are assigned to members who need to manage teams, design org structures, and configure security.
+                  </p>
+                </div>
+
+                {/* Standard Licenses */}
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-purple-500 text-white">
+                        <Users size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">Standard Licenses</h3>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight">Humans & AI Agents</p>
+                      </div>
+                    </div>
+                    <Badge variant="purple" className="font-bold text-[8px] px-2">{usage.standard} / {quota.standardSeats} SEATS</Badge>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="h-2 w-full bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-purple-500 rounded-full transition-all duration-1000 ease-out" 
+                        style={{ width: `${stdPercent}%` }} 
+                      />
+                    </div>
+                    <div className="flex justify-between items-center px-0.5 font-bold text-[9px] uppercase tracking-widest text-zinc-400">
+                      <span>{100 - stdPercent}% Capacity Available</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                    Standard licenses apply to all workforce members without administrative needs, including provisioned digital coworkers.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'quotas' && (
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">System Quotas</h2>
+                  <p className="text-sm text-zinc-500 font-medium">Real-time monitoring of your allocated model capacity.</p>
+                </div>
+
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  className="bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-white/10 h-9 px-4 rounded-lg font-bold transition-all shadow-sm"
+                  onClick={handleRefresh}
+                  loading={isRefreshing}
+                >
+                  {!isRefreshing && <RefreshCw size={14} className="mr-2" />}
+                  Refresh
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {models.map((model) => (
+                  <div key={model.name} className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">{model.name}</h3>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Refreshes: {model.refresh}</span>
+                    </div>
+                    <SegmentedProgress value={model.usage} />
+                    <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 uppercase tracking-widest pt-1">
+                      <span>Utilization</span>
+                      <span className="text-blue-600 dark:text-blue-400">{model.usage}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && (
+            <div className="space-y-10">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Intent Distribution */}
+                <div className="lg:col-span-2 bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-8 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Usage by Intent</h3>
+                      <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Last 30 Days Breakdown</p>
+                    </div>
+                    <TrendingUp className="text-blue-600" size={20} />
+                  </div>
+
+                  <div className="space-y-6">
+                    {intents.map((intent) => (
+                      <div key={intent.label} className="space-y-2">
+                        <div className="flex items-center justify-between text-sm font-bold">
+                          <div className="flex items-center gap-3 text-zinc-900 dark:text-zinc-100">
+                            <div className={cn("p-1.5 rounded-lg text-white", intent.color)}>
+                              <intent.icon size={14} />
+                            </div>
+                            {intent.label}
+                          </div>
+                          <span className="text-zinc-500">{intent.percentage}%</span>
+                        </div>
+                        <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={cn("h-full rounded-full transition-all duration-1000", intent.color)} style={{ width: `${intent.percentage}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Stats Column */}
+                <div className="space-y-6">
+                  <div className="bg-blue-600 rounded-3xl p-6 text-white shadow-xl shadow-blue-500/20">
+                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Total Tokens Consumed</p>
+                    <h4 className="text-3xl font-black tracking-tight mb-4">12.4M</h4>
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold bg-white/20 w-fit px-2 py-1 rounded-full">
+                      <ArrowUpRight size={12} /> 14.2% from last month
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
+                        <MessageSquare size={18} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Avg. Response Time</p>
+                        <p className="text-lg font-black text-zinc-900 dark:text-zinc-100">1.24s</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
+                        <Bot size={18} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Active AI Agents</p>
+                        <p className="text-lg font-black text-zinc-900 dark:text-zinc-100">12</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Usage by User */}
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight flex items-center gap-3">
+                      <Users size={20} className="text-blue-600" /> Usage by User
+                    </h3>
+                    <Button variant="ghost" size="sm" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-blue-600">View All</Button>
+                  </div>
+
+                  <div className="space-y-1">
+                    {topUsers.map((user) => (
+                      <div key={user.email} className="group flex items-center justify-between p-3 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 rounded-2xl transition-all border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700">
+                        <div className="flex items-center gap-4">
+                          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center text-white font-black text-xs", user.color)}>
+                            {user.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{user.name}</p>
+                            <p className="text-[10px] font-medium text-zinc-500">{user.email}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">{user.tokens}</p>
+                          <p className={cn("text-[10px] font-bold", user.growth.startsWith('+') ? 'text-emerald-500' : 'text-rose-500')}>{user.growth}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Usage by Agent */}
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight flex items-center gap-3">
+                      <Bot size={20} className="text-purple-600" /> Usage by Agent
+                    </h3>
+                    <Button variant="ghost" size="sm" className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-purple-600">Manage Agents</Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {topAgents.map((agent) => (
+                      <div key={agent.name} className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-2xl border border-zinc-100 dark:border-zinc-800/50">
+                        <div className="flex items-center gap-4">
+                          <div className="h-10 w-10 rounded-xl bg-white dark:bg-white/5 dark:backdrop-blur-md flex items-center justify-center text-purple-600 shadow-sm border border-zinc-100 dark:border-zinc-800">
+                            <agent.icon size={20} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{agent.name}</p>
+                            <p className="text-[10px] font-medium text-zinc-500 italic">Last active {agent.active}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-tight">{agent.usage}</p>
+                          <div className="mt-1 h-1.5 w-24 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-purple-600 rounded-full" style={{ width: '75%' }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'credits' && (
+            <div className="space-y-8">
+              <div className="space-y-1">
+                <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Credits & Overages</h2>
+                <p className="text-sm text-zinc-500 font-medium">Manage supplementary compute credits and overflow policies.</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
+                  <div className="flex items-start justify-between gap-8">
+                    <div className="space-y-3">
+                      <div className="h-12 w-12 rounded-2xl bg-blue-600/10 text-blue-600 flex items-center justify-center">
+                        <Zap size={24} />
+                      </div>
+                      <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Enable AI Credit Overages</h3>
+                      <p className="text-sm leading-relaxed text-zinc-500 font-medium">
+                        When toggled on, Aurora will use your AI credits to fulfill model requests once you're out of model quota. Aurora will always use your model quota first before using AI credits.
+                      </p>
+                    </div>
+                    <div className="pt-2">
+                      <Switch checked={overagesEnabled} onChange={setOveragesEnabled} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl shadow-blue-500/20 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Available AI Credits</p>
+                    <h3 className="text-4xl font-black tracking-tight">$0.00</h3>
+                  </div>
+                  <div className="pt-8">
+                    <Button className="w-full bg-white text-blue-600 hover:bg-zinc-100 font-black uppercase tracking-widest text-[11px] h-12 rounded-2xl">
+                      Top up Credits
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'licenses' && (
+            <div className="space-y-8">
+              {/* Seats Summary Bar */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center justify-between p-6 rounded-3xl bg-blue-50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center text-white">
+                      <Shield size={24} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">Developer Licenses</p>
+                      <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50 uppercase">{usage.developer} / {quota.developerSeats}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Utilization</p>
+                    <p className="text-xl font-bold text-blue-600">{Math.round(devPercent)}%</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between p-6 rounded-3xl bg-purple-50 dark:bg-purple-500/5 border border-purple-100 dark:border-purple-500/20">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-purple-500 flex items-center justify-center text-white">
+                      <Users size={24} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400">Standard Licenses</p>
+                      <p className="text-2xl font-black text-zinc-900 dark:text-zinc-50 uppercase">{usage.standard} / {quota.standardSeats}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Utilization</p>
+                    <p className="text-xl font-bold text-purple-600">{Math.round(stdPercent)}%</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Header / Search */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="relative group flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+                  <input 
+                    type="text" 
+                    placeholder="Search member name, email or licence..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-12 w-full max-w-md rounded-2xl border border-zinc-200 bg-white/80 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              <Table 
+                data={filteredMembers}
+                columns={licenseColumns}
+                loading={membersLoading}
+                pagination={true}
+                pageSize={10}
+              />
+            </div>
+          )}
+
+          {activeTab === 'invoices' && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-white/5">
+                  <Receipt size={16} className="text-zinc-600 dark:text-zinc-400" />
+                </div>
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Invoice History</h3>
+              </div>
+
+              <Table 
+                data={invoices}
+                columns={invoiceColumns}
+                loading={invoicesLoading}
+                pagination={true}
+                pageSize={10}
+              />
+            </div>
+          )}
+
+          {activeTab === 'payment' && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-white/5">
+                  <Wallet size={16} className="text-zinc-600 dark:text-zinc-400" />
+                </div>
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Payment Methods</h3>
+              </div>
+
+              <div className="rounded-3xl border border-zinc-200 bg-white p-10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-8">
+                <div className="flex items-center gap-6">
+                  <div className="h-16 w-16 flex items-center justify-center rounded-2xl bg-zinc-100 dark:bg-white/5 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-800">
+                    <CreditCard size={32} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight mb-1 flex items-center gap-2 uppercase">
+                      Visa ending in 4242 <Badge variant="zinc" className="text-[8px] font-bold tracking-widest uppercase">Primary</Badge>
+                    </h3>
+                    <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest italic">Expires 12 / 2028</p>
+                  </div>
+                </div>
+                <Button variant="ghost" className="h-10 px-8 border border-zinc-200 dark:border-zinc-800 font-bold gap-2 text-[10px] uppercase tracking-widest">
+                  Change Method <ChevronRight size={16} />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'activity' && (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+              <div className="h-16 w-16 rounded-full bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md flex items-center justify-center text-zinc-400">
+                <Activity size={32} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">No recent activity</h3>
+                <p className="text-sm text-zinc-500 max-w-sm">Detailed logs of model calls and token consumption will appear here once you start using AI features.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </LicenseGate>
+  );
+};

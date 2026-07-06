@@ -49,19 +49,7 @@ const INITIAL_SITES: Site[] = [
     metricValue: '1,240',
     lastUpdated: '2 hours ago'
   },
-  {
-    id: 'site-2',
-    name: 'HR & Operations Knowledge Base',
-    description: 'Comprehensive directory of HR resources, employee onboarding procedures, benefits packets, and standard working guidelines.',
-    category: 'internal',
-    type: 'Knowledge Base',
-    domain: 'hr.aurora.internal',
-    status: 'active',
-    access: 'Authenticated',
-    metricLabel: 'Active Members',
-    metricValue: '850',
-    lastUpdated: '1 day ago'
-  },
+
   {
     id: 'site-3',
     name: 'IT Support Wiki & Guides',

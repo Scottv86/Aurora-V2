@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
-  Palette,
   Columns,
   Rows,
   Save
@@ -12,8 +11,6 @@ import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { NavigationArchitect } from '../../components/Settings/NavigationArchitect';
-import { Tabs } from '../../components/UI/TabsAndModal';
-import { BrandingSettings } from '../../components/Settings/Organization/BrandingSettings';
 import { cn } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 
@@ -28,7 +25,7 @@ interface MenuItem {
 
 type LayoutStyle = 'sidebar' | 'top';
 
-export const AppearanceSettings = () => {
+export const NavigationSettingsPage = () => {
   const { tenant, refetchContext } = usePlatform();
   const { session } = useAuth();
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
@@ -46,25 +43,7 @@ export const AppearanceSettings = () => {
     { id: '5', label: 'People', icon: 'Users', path: '/workspace/people' },
   ]);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('menu');
   const [initialized, setInitialized] = useState(false);
-
-  // Unified Branding State
-  const [branding, setBranding] = useState({
-    logoUrl: '',
-    primaryColor: '#2563eb',
-    accentColor: '#4f46e5',
-    faviconUrl: '',
-    aiEnabled: true,
-    forceDarkMode: false,
-    useTenantBranding: false,
-  });
-
-  const tabs = [
-    { id: 'menu', label: 'Menu' },
-    { id: 'branding', label: 'Branding' },
-    { id: 'themes', label: 'Themes' },
-  ];
 
   // Initialize from tenant config if available
   useEffect(() => {
@@ -78,19 +57,8 @@ export const AppearanceSettings = () => {
         }
       }
       
-      if (tenant.branding) {
-        setBranding({
-          logoUrl: tenant.branding.logoUrl || '',
-          primaryColor: tenant.branding.primaryColor || '#2563eb',
-          accentColor: tenant.branding.accentColor || '#4f46e5',
-          faviconUrl: tenant.branding.faviconUrl || '',
-          aiEnabled: tenant.branding.aiEnabled ?? true,
-          forceDarkMode: tenant.branding.forceDarkMode ?? false,
-          useTenantBranding: tenant.branding.useTenantBranding ?? false,
-        });
-        if (tenant.branding.layout_style) {
-          setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
-        }
+      if (tenant.branding && tenant.branding.layout_style) {
+        setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
       }
       setInitialized(true);
     }
@@ -109,7 +77,6 @@ export const AppearanceSettings = () => {
         body: JSON.stringify({
           branding: { 
             ...tenant?.branding, 
-            ...branding,
             layout_style: layoutStyle
           },
           workspaceSettings: { ...tenant?.workspaceSettings, navigation_manifest: menuItems }
@@ -129,10 +96,10 @@ export const AppearanceSettings = () => {
         body: JSON.stringify({ navigation_manifest: menuItems })
       });
 
-      toast.success('Layout Updated Successfully');
+      toast.success('Navigation Settings Updated Successfully');
       refetchContext();
     } catch (error) {
-      toast.error('Failed to update layout');
+      toast.error('Failed to update navigation settings');
     } finally {
       setSaving(false);
     }
@@ -141,17 +108,8 @@ export const AppearanceSettings = () => {
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10">
       <PageHeader 
-        title="Appearance & Navigation" 
+        title="Navigation" 
         description="Configure the platform's visual shell, layout behavior, and global navigation structure."
-        tabs={
-          <Tabs 
-            tabs={tabs} 
-            activeTab={activeTab} 
-            onChange={setActiveTab} 
-            className="border-none" 
-            firstTabPadding={false}
-          />
-        }
         actions={
           <Button onClick={handleSave} loading={saving} className="gap-2">
             <Save size={18} />
@@ -160,91 +118,39 @@ export const AppearanceSettings = () => {
         }
       />
 
-      <div className="grid grid-cols-1 gap-8">
-        {/* Configuration Column */}
+      <div className="grid grid-cols-1 gap-8 mt-6">
         <div className="space-y-10">
-          
-          <AnimatePresence mode="wait">
-            {activeTab === 'menu' && (
-              <motion.div
-                key="menu-tab"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-10"
-              >
-                {/* Layout Picker */}
-                <section className="space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Platform Layout</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <LayoutOption 
-                      selected={layoutStyle === 'sidebar'} 
-                      onClick={() => setLayoutStyle('sidebar')}
-                      title="Sidebar Navigation"
-                      description="Traditional vertical menu with collapsible sub-items."
-                      icon={<Rows size={24} />}
-                      preview={<SidebarPreview />}
-                    />
-                    <LayoutOption 
-                      selected={layoutStyle === 'top'} 
-                      onClick={() => setLayoutStyle('top')}
-                      title="Top Menu"
-                      description="Sleek horizontal navigation bar with dropdown menus."
-                      icon={<Columns size={24} />}
-                      preview={<TopMenuPreview />}
-                    />
-                  </div>
-                </section>
+          {/* Layout Picker */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Platform Layout</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <LayoutOption 
+                selected={layoutStyle === 'sidebar'} 
+                onClick={() => setLayoutStyle('sidebar')}
+                title="Sidebar Navigation"
+                description="Traditional vertical menu with collapsible sub-items."
+                icon={<Rows size={24} />}
+                preview={<SidebarPreview />}
+              />
+              <LayoutOption 
+                selected={layoutStyle === 'top'} 
+                onClick={() => setLayoutStyle('top')}
+                title="Top Menu"
+                description="Sleek horizontal navigation bar with dropdown menus."
+                icon={<Columns size={24} />}
+                preview={<TopMenuPreview />}
+              />
+            </div>
+          </section>
 
-                {/* Navigation Architect */}
-                <NavigationArchitect 
-                  items={menuItems} 
-                  onChange={setMenuItems} 
-                  layout={layoutStyle}
-                />
-              </motion.div>
-            )}
-
-            {activeTab === 'branding' && (
-              <motion.div
-                key="branding-tab"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                <BrandingSettings 
-                  tenant={tenant} 
-                  branding={branding}
-                  setBranding={setBranding}
-                />
-              </motion.div>
-            )}
-
-            {activeTab === 'themes' && (
-              <motion.div
-                key="themes-tab"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-10"
-              >
-                <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
-                   <div className="p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-400">
-                     <Palette size={32} />
-                   </div>
-                   <div className="space-y-1">
-                     <h4 className="font-bold text-zinc-900 dark:text-white">Theme Customization</h4>
-                     <p className="text-sm text-zinc-500 max-w-xs">Advanced typography, component rounding, and layout density settings.</p>
-                   </div>
-                   <Button variant="secondary" className="text-xs">Coming Soon</Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Navigation Architect */}
+          <NavigationArchitect 
+            items={menuItems} 
+            onChange={setMenuItems} 
+            layout={layoutStyle}
+          />
         </div>
       </div>
     </div>
@@ -255,7 +161,7 @@ const LayoutOption = ({ selected, onClick, title, description, icon, preview }: 
   <button 
     onClick={onClick}
     className={cn(
-      "relative p-4 rounded-2xl border-2 text-left transition-all duration-300",
+      "relative p-4 rounded-2xl border-2 text-left transition-all duration-300 w-full",
       selected 
         ? "border-blue-600 bg-blue-50/50 dark:bg-blue-600/5" 
         : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
@@ -313,5 +219,3 @@ const TopMenuPreview = () => (
     </div>
   </div>
 );
-
-

@@ -12,6 +12,7 @@ const PATH_MAP: Record<string, string> = {
   workforce: 'Workforce',
   billing: 'Billing & Plans',
   usage: 'Model Usage',
+  subscription: 'Subscription',
   'platform-modules': 'Platform Modules',
   apps: 'App Catalog',
   messaging: 'Messaging',

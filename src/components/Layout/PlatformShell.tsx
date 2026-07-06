@@ -23,7 +23,6 @@ import {
   Building,
   UserCircle,
   CreditCard,
-  BarChart2,
   Layers,
   Plug,
   Zap,
@@ -40,6 +39,7 @@ import {
   TestTube,
   RotateCcw,
   Palette,
+  Compass,
   Globe,
   LayoutGrid,
   Code2,
@@ -333,15 +333,15 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       items: [
         { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
         { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
-        { label: 'Billing & Plan', icon: CreditCard, to: '/workspace/settings/billing' },
-        { label: 'Model Usage', icon: BarChart2, to: '/workspace/settings/usage' },
+        { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
       ]
     },
     {
       category: 'Look & Feel',
       icon: Palette,
       items: [
-        { label: 'Appearance', icon: Palette, to: '/workspace/settings/appearance' },
+        { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
+        { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
       ]
     },
     {
