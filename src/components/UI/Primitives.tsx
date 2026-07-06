@@ -87,7 +87,7 @@ export const Input = ({ className, label, error, icon, ...props }: InputProps) =
         )}
         <input
           className={cn(
-            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 dark:placeholder:text-zinc-600',
+            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 dark:placeholder:text-zinc-600',
             icon && 'pl-11',
             error && 'border-red-500 focus:border-red-500 focus:ring-red-500/10',
             className
@@ -119,14 +119,20 @@ export const Select = ({ className, label, options, icon, ...props }: SelectProp
         )}
         <select
           className={cn(
-            'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100',
+            'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100',
             icon && 'pl-11',
             className
           )}
           {...props}
         >
           {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option 
+              className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100" 
+              key={opt.value} 
+              value={opt.value}
+            >
+              {opt.label}
+            </option>
           ))}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400">

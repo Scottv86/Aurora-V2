@@ -50,7 +50,8 @@ export const useUsers = (enabled: boolean = true) => {
     name?: string,
     aiHumour?: number,
     agentConfig?: any,
-    licenceType?: string
+    licenceType?: string,
+    avatarUrl?: string
   }) => {
     if (!tenant?.id) return;
     try {

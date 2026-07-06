@@ -249,16 +249,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Reporting',
     tags: ['analytics', 'charts', 'dashboards']
   },
-  // Knowledge
-  {
-    id: 'knowledge',
-    label: 'Knowledge Base',
-    description: 'Help docs and institutional wiki.',
-    icon: 'BookOpen',
-    to: '/workspace/settings/knowledge',
-    category: 'Knowledge',
-    tags: ['docs', 'training', 'wiki']
-  },
   // Development
   {
     id: 'api',
@@ -347,7 +337,6 @@ export const SettingsOverview = () => {
       'Data & Logic', 
       'Security & Activity', 
       'Reporting', 
-      'Knowledge',
       'Development', 
       'Maintenance'
     ];

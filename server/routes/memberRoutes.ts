@@ -180,6 +180,158 @@ router.get('/:id/effective-permissions', async (req: TenantRequest, res) => {
   }
 });
 
+// POST invite human
+router.post('/invite', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { email, role, teamId, firstName, familyName, isContractor, licenceType, workArrangements } = req.body;
+
+    // Check if user exists or create new placeholder
+    let user = await globalPrisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await globalPrisma.user.create({
+        data: {
+          id: `usr_${Math.random().toString(36).substring(2, 11)}`,
+          email
+        }
+      });
+    }
+
+    const member = await db.tenantMember.create({
+      data: {
+        tenantId,
+        userId: user.id,
+        roleId: role || 'Standard',
+        teamId: teamId || null,
+        status: 'Pending',
+        firstName,
+        familyName,
+        isContractor: !!isContractor,
+        licenceType: licenceType || 'Standard',
+        workArrangements,
+        isSynthetic: false
+      },
+      include: { user: true, team: true }
+    });
+
+    res.json(member);
+  } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST provision agent
+router.post('/provision', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { modelType, teamId, role, aiHumour, name, agentConfig, licenceType, avatarUrl } = req.body;
+
+    const agent = await db.agent.create({
+      data: {
+        name: name || `${modelType.split(' ')[0]} Assistant`,
+        modelType,
+        config: { humour: aiHumour || 0.5, ...agentConfig }
+      }
+    });
+
+    const member = await db.tenantMember.create({
+      data: {
+        tenantId,
+        agentId: agent.id,
+        roleId: role || 'Standard',
+        teamId: teamId || null,
+        status: 'Active',
+        isSynthetic: true,
+        aiHumour: aiHumour || 0.5,
+        licenceType: licenceType || 'AI Agent',
+        avatarUrl: avatarUrl || null
+      },
+      include: { agent: true, team: true }
+    });
+
+    res.json(member);
+  } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST clone member
+router.post('/clone/:id', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    const source = await db.tenantMember.findUnique({
+      where: { id },
+      include: { agent: true, skills: true }
+    });
+
+    if (!source) return res.status(404).json({ error: 'Source member not found' });
+
+    let newMember;
+    if (source.isSynthetic) {
+      const newAgent = await db.agent.create({
+        data: {
+          name: source.agent?.name ? `${source.agent.name} (Clone)` : 'Cloned Agent',
+          modelType: source.modelType || undefined,
+          config: source.agent?.config ? { ...(source.agent.config as any) } : undefined
+        }
+      });
+
+      newMember = await db.tenantMember.create({
+        data: {
+          tenantId,
+          agentId: newAgent.id,
+          roleId: source.roleId,
+          teamId: source.teamId,
+          positionId: source.positionId,
+          status: 'Active',
+          isSynthetic: true,
+          aiHumour: source.aiHumour,
+          licenceType: source.licenceType,
+          avatarUrl: source.avatarUrl
+        },
+        include: { agent: true, team: true }
+      });
+    } else {
+      const newUserId = `usr_${Math.random().toString(36).substring(2, 11)}`;
+      await globalPrisma.user.create({
+        data: {
+          id: newUserId,
+          email: `clone_${newUserId}@placeholder.ai`
+        }
+      });
+
+      newMember = await db.tenantMember.create({
+        data: {
+          tenantId,
+          userId: newUserId,
+          roleId: source.roleId,
+          teamId: source.teamId,
+          positionId: source.positionId,
+          status: 'Pending',
+          firstName: source.firstName ? `${source.firstName} (Clone)` : undefined,
+          familyName: source.familyName,
+          isContractor: source.isContractor,
+          licenceType: source.licenceType,
+          workArrangements: source.workArrangements
+        },
+        include: { team: true, skills: true }
+      });
+    }
+
+    res.json(newMember);
+  } catch (err: any) {
+    console.error('[MemberAPI Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH update member
 router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) => {
   try {
@@ -316,163 +468,6 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
     res.status(500).json({ error: err.message });
   }
 });
-
-// POST invite human
-router.post('/invite', authorize('manage:staff'), async (req: TenantRequest, res) => {
-  try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const { email, role, teamId, firstName, familyName, isContractor, licenceType, workArrangements } = req.body;
-
-    // Check if user exists or create new placeholder
-    let user = await globalPrisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await globalPrisma.user.create({
-        data: {
-          id: `usr_${Math.random().toString(36).substring(2, 11)}`,
-          email
-        }
-      });
-    }
-
-    const member = await db.tenantMember.create({
-      data: {
-        tenantId,
-        userId: user.id,
-        roleId: role || 'Standard',
-        teamId: teamId || null,
-        status: 'Pending',
-        firstName,
-        familyName,
-        isContractor: !!isContractor,
-        licenceType: licenceType || 'Standard',
-        workArrangements,
-        isSynthetic: false
-      },
-      include: { user: true, team: true }
-    });
-
-    res.json(member);
-  } catch (err: any) {
-    console.error('[MemberAPI Error]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST provision agent
-router.post('/provision', authorize('manage:staff'), async (req: TenantRequest, res) => {
-  try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const { modelType, teamId, role, aiHumour, name } = req.body;
-
-    const agent = await db.agent.create({
-      data: {
-        name: name || `${modelType.split(' ')[0]} Assistant`,
-        modelType,
-        config: { humour: aiHumour || 0.5 }
-      }
-    });
-
-    const member = await db.tenantMember.create({
-      data: {
-        tenantId,
-        agentId: agent.id,
-        roleId: role || 'Standard',
-        teamId: teamId || null,
-        status: 'Active',
-        isSynthetic: true,
-        aiHumour: aiHumour || 0.5,
-        licenceType: 'Standard'
-      },
-      include: { agent: true, team: true }
-    });
-
-    res.json(member);
-  } catch (err: any) {
-    console.error('[MemberAPI Error]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST clone member
-router.post('/clone/:id', authorize('manage:staff'), async (req: TenantRequest, res) => {
-  try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const { id } = req.params;
-
-    const source = await db.tenantMember.findUnique({
-      where: { id },
-      include: { agent: true, skills: true }
-    });
-
-    if (!source) return res.status(404).json({ error: 'Source member not found' });
-
-    let newMember;
-    if (source.isSynthetic) {
-      const newAgent = await db.agent.create({
-        data: {
-          name: `${source.agent?.name} (Copy)`,
-          modelType: source.agent?.modelType!,
-          config: source.agent?.config as any
-        }
-      });
-
-      newMember = await db.tenantMember.create({
-        data: {
-          tenantId,
-          agentId: newAgent.id,
-          roleId: source.roleId,
-          teamId: source.teamId,
-          status: source.status,
-          isSynthetic: true,
-          aiHumour: source.aiHumour,
-          licenceType: source.licenceType,
-          skills: {
-            create: source.skills.map(s => ({
-              name: s.name,
-              proficiencyLevel: s.proficiencyLevel,
-              tenantId: tenantId
-            }))
-          }
-        },
-        include: { agent: true, team: true, skills: true }
-      });
-    } else {
-      // For humans, we clone the profile metadata but need a new email/user link usually.
-      // In this "Clone" context, we'll create a Pending member with "Copy" suffix on names.
-      newMember = await db.tenantMember.create({
-        data: {
-          tenantId,
-          roleId: source.roleId,
-          teamId: source.teamId,
-          status: 'Pending',
-          firstName: source.firstName,
-          familyName: `${source.familyName} (Copy)`,
-          isContractor: source.isContractor,
-          licenceType: source.licenceType,
-          workArrangements: source.workArrangements,
-          isSynthetic: false,
-          skills: {
-            create: source.skills.map(s => ({
-              name: s.name,
-              proficiencyLevel: s.proficiencyLevel,
-              tenantId: tenantId
-            }))
-          }
-        },
-        include: { team: true, skills: true }
-      });
-    }
-
-    res.json(newMember);
-  } catch (err: any) {
-    console.error('[MemberAPI Error]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 
 // DELETE member
 router.delete('/:id', authorize('decommission:staff'), async (req: TenantRequest, res) => {

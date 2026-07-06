@@ -43,6 +43,7 @@ import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
 import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
 import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
 import { PlatformModulesSettings } from './pages/Settings/PlatformModules/PlatformModulesSettings';
+import { KnowledgeBaseSettings } from './pages/Settings/PlatformModules/KnowledgeBaseSettings';
 import { HealthMonitor } from './components/HealthMonitor';
 import { FleetManager } from './components/FleetManager';
 import { ComputeMatrix } from './components/ComputeMatrix';
@@ -149,6 +150,7 @@ const App = () => {
                 <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="platform/intake" element={<TriageInboxPage />} />
+                <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
               </Route>
               
               {/* Settings & Workforce (Developer Only) */}
@@ -182,11 +184,12 @@ const App = () => {
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />
                    <Route path="work-distribution" element={<IntakeSettingsPage />} />
+                   <Route path="knowledge-base" element={<KnowledgeBaseSettings />} />
                 </Route>
                 <Route path="templates" element={<DocumentAutomation />} />
                 <Route path="automations" element={<AutomationsPage />} />
                 <Route path="reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
-                <Route path="knowledge" element={<ComingSoon title="Knowledge Base" description="Central repository for institutional knowledge, documentation, and training materials." />} />
+                <Route path="knowledge" element={<Navigate to="/workspace/settings/platform-modules/knowledge-base" replace />} />
                 <Route path="sites" element={<SitesPage />} />
                 <Route path="logic" element={<LogicBuilder />} />
                 <Route path="testing" element={<ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." />} />

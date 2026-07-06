@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  ArrowLeft, 
-  ChevronRight, 
   Activity, 
   Trash2, 
   Save
 } from 'lucide-react';
 import { useTeam } from '../../hooks/useTeams';
+import { usePlatform } from '../../hooks/usePlatform';
 import { Button, Input, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
@@ -19,6 +18,7 @@ export const TeamDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { team, loading, updateTeam, deleteTeam } = useTeam(id);
+  const { setBreadcrumbOverride } = usePlatform();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -36,6 +36,12 @@ export const TeamDetailView = () => {
       setAvatarUrl(team.avatar || '');
     }
   }, [team]);
+
+  useEffect(() => {
+    if (id && team?.name) {
+      setBreadcrumbOverride(id, team.name);
+    }
+  }, [id, team?.name, setBreadcrumbOverride]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -86,22 +92,6 @@ export const TeamDetailView = () => {
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      {/* breadcrumbs */}
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/workspace/settings/workforce')}
-          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-        >
-          <ArrowLeft size={20} className="text-zinc-500" />
-        </button>
-        <div className="flex items-center text-sm font-medium">
-          <span className="text-zinc-400">Settings</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">Workforce</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-900 dark:text-zinc-100">{team.name} Team</span>
-        </div>
-      </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">

@@ -83,7 +83,7 @@ export const Breadcrumbs = () => {
       to,
       label: getLabel(segment, index)
     };
-  }).filter(item => item.segment !== 'records' && item.segment !== 'sub');
+  }).filter(item => !['records', 'sub', 'member', 'teams', 'positions'].includes(item.segment));
 
   if (breadcrumbItems.length === 0) return null;
 

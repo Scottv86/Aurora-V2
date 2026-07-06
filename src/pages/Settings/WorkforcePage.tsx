@@ -8,7 +8,7 @@ import { SecurityGroups } from '../../components/Settings/Workforce/SecurityGrou
 import { ActivityLog } from '../../components/Settings/Workforce/ActivityLog';
 import { OnboardingWizard } from '../../components/Settings/Workforce/OnboardingWizard';
 import { CreateTeamModal } from '../../components/Settings/Workforce/CreateTeamModal';
-import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity } from 'lucide-react';
+import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot } from 'lucide-react';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
@@ -17,12 +17,13 @@ import { cn } from '../../lib/utils';
 import { PageHeader } from '../../components/UI/PageHeader';
 
 export const WorkforcePage = () => {
-  const [activeTab, setActiveTab] = useState('directory');
+  const [activeTab, setActiveTab] = useState('people');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [onboardingType, setOnboardingType] = useState<'human' | 'agent' | undefined>(undefined);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isPositionModalOpen, setIsPositionModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -31,7 +32,8 @@ export const WorkforcePage = () => {
   const { hasCapability } = useCapabilities();
   
   const tabs = [
-    { id: 'directory', label: 'People', icon: Users },
+    { id: 'people', label: 'People', icon: Users },
+    { id: 'agents', label: 'Agents', icon: Bot },
     { id: 'teams', label: 'Teams', icon: Network },
     { id: 'positions', label: 'Positions', icon: Shield },
     ...(hasCapability('view:settings') ? [{ id: 'groups', label: 'Security Groups', icon: ShieldCheck }] : []),
@@ -41,11 +43,10 @@ export const WorkforcePage = () => {
 
   const getFilterOptions = () => {
     switch (activeTab) {
-      case 'directory':
+      case 'people':
+      case 'agents':
         return [
           { id: 'all', label: 'All' },
-          { id: 'human', label: 'People' },
-          { id: 'synthetic', label: 'AI Agents' },
           { id: 'status:Active', label: 'Active Only' },
           { id: 'status:Pending', label: 'Open Slots' }
         ];
@@ -68,8 +69,10 @@ export const WorkforcePage = () => {
 
   const getPrimaryAction = () => {
     switch (activeTab) {
-      case 'directory':
-        return { label: 'Add Person', icon: Plus, onClick: () => setIsOnboardingOpen(true) };
+      case 'people':
+        return { label: 'Add Person', icon: Plus, onClick: () => { setOnboardingType('human'); setIsOnboardingOpen(true); } };
+      case 'agents':
+        return { label: 'Add Agent', icon: Plus, onClick: () => { setOnboardingType('agent'); setIsOnboardingOpen(true); } };
       case 'teams':
         return { label: 'Create Team', icon: Plus, onClick: () => setIsTeamModalOpen(true) };
       case 'positions':
@@ -167,11 +170,28 @@ export const WorkforcePage = () => {
 
       {/* Content */}
       <div>
-              {activeTab === 'directory' && (
+              {activeTab === 'people' && (
                 <PeopleCenter 
+                  mode="people"
                   searchQuery={searchQuery} 
                   onSearchChange={setSearchQuery}
                   activeFilter={activeFilter} 
+                  onPrimaryAction={() => {
+                    setOnboardingType('human');
+                    setIsOnboardingOpen(true);
+                  }}
+                />
+              )}
+              {activeTab === 'agents' && (
+                <PeopleCenter 
+                  mode="agents"
+                  searchQuery={searchQuery} 
+                  onSearchChange={setSearchQuery}
+                  activeFilter={activeFilter} 
+                  onPrimaryAction={() => {
+                    setOnboardingType('agent');
+                    setIsOnboardingOpen(true);
+                  }}
                 />
               )}
               {activeTab === 'teams' && (
@@ -189,6 +209,7 @@ export const WorkforcePage = () => {
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}
+                  onAddPosition={() => setIsPositionModalOpen(true)}
                 />
               )}
               {activeTab === 'groups' && (
@@ -198,6 +219,7 @@ export const WorkforcePage = () => {
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   activeFilter={activeFilter}
+                  onAddGroup={() => setIsGroupModalOpen(true)}
                 />
               )}
               {activeTab === 'visualizer' && <OrgVisualizer />}
@@ -213,6 +235,7 @@ export const WorkforcePage = () => {
           <OnboardingWizard 
             isOpen={isOnboardingOpen}
             onClose={() => setIsOnboardingOpen(false)}
+            defaultType={onboardingType}
           />
           
           <CreateTeamModal 

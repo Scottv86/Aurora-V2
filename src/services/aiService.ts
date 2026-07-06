@@ -470,3 +470,125 @@ export const evaluateCalculations = (
   return newData;
 };
 
+/**
+ * Generates interactive training questions based on the agent's role and scope.
+ */
+export const generateTrainingQuestions = async (role: string, scopeDescription: string): Promise<string[]> => {
+  try {
+    const ai = getAI();
+    if (!ai) return [
+      "What primary task should this agent perform?",
+      "What databases or modules does this agent need to read from?",
+      "Who should be notified if a problem is detected?"
+    ];
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: `You are an expert AI architect. A user is provisioning a custom AI Agent on the Aurora Operating Platform.
+      Agent Role: "${role}"
+      Agent Scope/Task Description: "${scopeDescription}"
+
+      Generate a list of 3 to 4 specific, interactive questions that an administrator must answer to configure and "program" this agent's behavior, directives, logic, and operational guardrails.
+      The questions should be practical, focused, and tailored exactly to this agent's role (e.g. if customer service, ask about tone, escalation; if auditor, ask about critical warning thresholds).
+
+      Provide your response in JSON format.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            questions: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["questions"]
+        } as any
+      }
+    });
+
+    const parsed = JSON.parse(response.text);
+    return parsed.questions || [];
+  } catch (error) {
+    console.error("Error generating training questions:", error);
+    return [
+      "What primary task should this agent perform?",
+      "What databases or modules does this agent need to read from?",
+      "Who should be notified if a problem is detected?"
+    ];
+  }
+};
+
+/**
+ * Compiles training answers and knowledge sources into a final system directive prompt.
+ */
+export const compileAgentDirectives = async (
+  role: string,
+  scopeDescription: string,
+  questions: string[],
+  answers: string[],
+  articles: { title: string; content: string }[]
+): Promise<string> => {
+  try {
+    const ai = getAI();
+    if (!ai) return `Role: ${role}\nScope: ${scopeDescription}\nDirectives compiled manually.`;
+
+    const qas = questions.map((q, i) => `Q: ${q}\nA: ${answers[i] || "N/A"}`).join('\n');
+    const articlesContent = articles.map(art => `Document: "${art.title}"\n${art.content}`).join('\n\n');
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: `You are an expert AI architect. Combine this agent's configuration into a cohesive, highly effective system prompt (directives) for this AI Agent operating on the Aurora Platform.
+
+      Agent Role: "${role}"
+      Agent Scope: "${scopeDescription}"
+
+      Knowledge Base References:
+      ${articlesContent || "No specific documents connected."}
+
+      Interactive Interview Answers:
+      ${qas}
+
+      Generate a complete, professional, and detailed system instruction prompt for this agent. It should dictate its role, workflow instructions, how it should consult the connected knowledge bases, response tone, and operational boundaries/guardrails.
+      Write ONLY the generated prompt content.`,
+    });
+
+    return response.text.trim();
+  } catch (error) {
+    console.error("Error compiling agent directives:", error);
+    return `Role: ${role}\nScope: ${scopeDescription}\nConnected Knowledge Bases: ${articles.map(a => a.title).join(', ')}`;
+  }
+};
+
+/**
+ * Generates a profile picture avatar using Gemini Imagen or falls back to RoboHash / DiceBear.
+ */
+export const generateAgentAvatar = async (description: string): Promise<string> => {
+  const ai = getAI();
+  if (!ai) {
+    const seed = encodeURIComponent(description.trim());
+    return `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}`;
+  }
+  
+  try {
+    const response = await (ai.models as any).generateImages({
+      model: 'imagen-3.0-generate-002',
+      prompt: `Profile avatar icon of: ${description}. Flat vector design, circular frame style, clean colors, corporate tech app dashboard asset, high quality.`,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: 'image/png',
+        aspectRatio: '1:1'
+      }
+    });
+    
+    if (response.generatedImages?.[0]?.image?.imageBytes) {
+      return `data:image/png;base64,${response.generatedImages[0].image.imageBytes}`;
+    }
+  } catch (e) {
+    console.warn("Imagen generation failed, falling back to DiceBear", e);
+  }
+  
+  const seed = encodeURIComponent(description.trim());
+  return `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}`;
+};
+

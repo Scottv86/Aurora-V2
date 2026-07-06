@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  ArrowLeft, 
-  ChevronRight, 
   Briefcase, 
   Activity, 
   Trash2, 
@@ -15,6 +13,7 @@ import {
   Shield
 } from 'lucide-react';
 import { usePosition, usePositions } from '../../hooks/usePositions';
+import { usePlatform } from '../../hooks/usePlatform';
 import { useUsers } from '../../hooks/useUsers';
 import { Button, Input, Select, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
@@ -26,6 +25,7 @@ export const PositionDetailView = () => {
   const navigate = useNavigate();
   const { position, loading, updatePosition, deletePosition, updateSuccessors } = usePosition(id);
   const { positions: allPositions } = usePositions();
+  const { setBreadcrumbOverride } = usePlatform();
   const [activeTab, setActiveTab] = useState('overview');
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -46,6 +46,12 @@ export const PositionDetailView = () => {
       setSuccessors(position.successors || []);
     }
   }, [position]);
+
+  useEffect(() => {
+    if (id && position?.title) {
+      setBreadcrumbOverride(id, position.title);
+    }
+  }, [id, position?.title, setBreadcrumbOverride]);
 
   const [successors, setSuccessors] = useState<any[]>([]);
   const { members: allMembers } = useUsers();
@@ -104,22 +110,6 @@ export const PositionDetailView = () => {
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      {/* breadcrumbs */}
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/workspace/settings/workforce')}
-          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-        >
-          <ArrowLeft size={20} className="text-zinc-500" />
-        </button>
-        <div className="flex items-center text-sm font-medium">
-          <span className="text-zinc-400">Settings</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">Workforce</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-900 dark:text-zinc-100">{position.title} ({position.positionNumber})</span>
-        </div>
-      </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">

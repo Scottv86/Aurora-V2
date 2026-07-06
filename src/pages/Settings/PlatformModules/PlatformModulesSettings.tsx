@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, 
   ArrowLeft,
-  Inbox
+  Inbox,
+  BookOpen
 } from 'lucide-react';
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Button } from '../../../components/UI/Primitives';
@@ -34,6 +35,14 @@ const PLATFORM_MODULES: ModuleItem[] = [
     icon: Inbox,
     isCore: true,
     description: 'Configure routing rules to automatically intake and distribute work across modules.'
+  },
+  {
+    id: 'knowledge-base',
+    name: 'Knowledge Base',
+    slug: 'knowledge-base',
+    icon: BookOpen,
+    isCore: true,
+    description: 'Central repository for institutional knowledge, documentation, training materials, and AI agent reference context.'
   }
 ];
 

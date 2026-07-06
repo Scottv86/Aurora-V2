@@ -4,7 +4,7 @@ import { usePositions, Position } from '../../../hooks/usePositions';
 import { Table } from '../../UI/Table';
 import { Badge, Button, Input } from '../../UI/Primitives';
 import { Modal } from '../../UI/TabsAndModal';
-import { Search, Users, ChevronRight } from 'lucide-react';
+import { Search, Users, ChevronRight, Plus, Briefcase } from 'lucide-react';
 
 interface OrgDesignProps {
   isModalOpen: boolean;
@@ -12,9 +12,17 @@ interface OrgDesignProps {
   searchQuery?: string;
   onSearchChange?: (val: string) => void;
   activeFilter?: string;
+  onAddPosition?: () => void;
 }
 
-export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', onSearchChange, activeFilter = 'all' }: OrgDesignProps) => {
+export const OrgDesign = ({ 
+  isModalOpen, 
+  onCloseModal, 
+  searchQuery = '', 
+  onSearchChange, 
+  activeFilter = 'all',
+  onAddPosition 
+}: OrgDesignProps) => {
   const navigate = useNavigate();
   const { positions, loading, createPosition } = usePositions();
   const [newPosition, setNewPosition] = useState({
@@ -105,15 +113,43 @@ export const OrgDesign = ({ isModalOpen, onCloseModal, searchQuery = '', onSearc
           />
         </div>
 
-        <Table 
-          data={filteredPositions} 
-          columns={columns} 
-          loading={loading}
-          pagination={true}
-          onRowClick={(p) => navigate(`/workspace/settings/workforce/positions/${p.id}`)}
-          emptyMessage="No positions found. Add a position to get started."
-          className="bg-transparent dark:bg-transparent border-none shadow-none"
-        />
+        {filteredPositions.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center bg-white/50 dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-dashed border-zinc-200 dark:border-zinc-800 rounded-[3rem] space-y-6 shadow-sm">
+             <div className="h-20 w-20 rounded-[2rem] bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-lg shadow-indigo-500/5">
+                <Briefcase size={40} />
+             </div>
+             <div className="space-y-2 max-w-md">
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">
+                  {searchQuery ? 'No Matching Positions' : 'No Positions Found'}
+                </h3>
+                <p className="text-sm text-zinc-500 font-medium leading-relaxed">
+                  {searchQuery 
+                    ? `No positions matched "${searchQuery}". Try adjusting your keywords or filters.`
+                    : 'Define positions in your organization to assign staff, map hierarchy, and plan headcounts.'
+                  }
+                </p>
+             </div>
+             {onAddPosition && !searchQuery && (
+                <Button variant="primary" size="sm" onClick={onAddPosition} className="gap-2 font-bold px-6">
+                  <Plus size={14} /> Create Position
+                </Button>
+             )}
+             {searchQuery && (
+                <Button variant="secondary" size="sm" onClick={() => onSearchChange?.('')} className="gap-2 font-bold px-6">
+                  Reset Search Query
+                </Button>
+             )}
+          </div>
+        ) : (
+          <Table 
+            data={filteredPositions} 
+            columns={columns} 
+            loading={loading}
+            pagination={true}
+            onRowClick={(p) => navigate(`/workspace/settings/workforce/positions/${p.id}`)}
+            className="bg-transparent dark:bg-transparent border-none shadow-none"
+          />
+        )}
       </div>
 
       <Modal

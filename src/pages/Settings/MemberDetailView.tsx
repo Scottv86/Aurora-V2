@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { 
-  ArrowLeft, 
-  ChevronRight, 
   User, 
   Shield, 
   Settings, 
@@ -30,15 +28,19 @@ import {
   Smile,
   Sparkles,
   UserX,
-  UserCheck
+  UserCheck,
+  BookOpen,
+  Loader2,
+  Check
 } from 'lucide-react';
 import { useMember } from '../../hooks/useMember';
 import { useTeams } from '../../hooks/useTeams';
 import { usePositions } from '../../hooks/usePositions';
 import { useUsers } from '../../hooks/useUsers';
 import { usePlatform } from '../../hooks/usePlatform';
+import { generateTrainingQuestions, compileAgentDirectives, generateAgentAvatar } from '../../services/aiService';
 import { Button, Input, Select, Badge, cn } from '../../components/UI/Primitives';
-import { Tabs } from '../../components/UI/TabsAndModal';
+import { Tabs, Modal } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { PermissionsTab } from '../../components/Settings/Workforce/PermissionsTab';
 import { AvatarUpload } from '../../components/Common/AvatarUpload';
@@ -51,7 +53,7 @@ export const MemberDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { member, loading, updateMember, deleteMember } = useMember(id);
-  const { refreshBilling } = usePlatform();
+  const { refreshBilling, setBreadcrumbOverride } = usePlatform();
   const { teams } = useTeams();
   const { positions } = usePositions();
   const { cloneMember } = useUsers();
@@ -101,9 +103,151 @@ export const MemberDetailView = () => {
   const [education, setEducation] = useState<{ institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[]>([]);
   const [skills, setSkills] = useState<{ name: string; proficiencyLevel: string }[]>([]);
 
+  const { tenant } = usePlatform();
+  const [kbArticles, setKbArticles] = useState<any[]>([]);
+  
+  // Retraining Wizard State
+  const [isRetrainingOpen, setIsRetrainingOpen] = useState(false);
+  const [retrainStep, setRetrainStep] = useState<'knowledge' | 'interview' | 'compile'>('knowledge');
+  const [retrainKbIds, setRetrainKbIds] = useState<string[]>([]);
+  const [retrainQuestions, setRetrainQuestions] = useState<string[]>([]);
+  const [retrainAnswers, setRetrainAnswers] = useState<string[]>([]);
+  const [loadingRetrainQuestions, setLoadingRetrainQuestions] = useState(false);
+  const [loadingRetrainCompile, setLoadingRetrainCompile] = useState(false);
+  const [compiledRetrainPrompt, setCompiledRetrainPrompt] = useState('');
+
+  const [avatarPrompt, setAvatarPrompt] = useState('');
+  const [generatingAvatar, setGeneratingAvatar] = useState(false);
+
+  const handleGenerateAvatar = async () => {
+    if (!avatarPrompt.trim()) return;
+    setGeneratingAvatar(true);
+    try {
+      const url = await generateAgentAvatar(avatarPrompt);
+      setAvatarUrl(url);
+      await updateMember({ avatarUrl: url });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setGeneratingAvatar(false);
+    }
+  };
+
+  // Fetch articles from localStorage
+  React.useEffect(() => {
+    if (member?.isSynthetic && tenant?.id) {
+      const storageKey = `aurora_kb_articles_${tenant.id}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        try {
+          setKbArticles(JSON.parse(stored));
+        } catch (e) {}
+      }
+    }
+  }, [member, tenant?.id]);
+
+  const handleStartRetrain = () => {
+    setRetrainKbIds(member?.agentConfig?.kbSources || []);
+    setRetrainStep('knowledge');
+    setIsRetrainingOpen(true);
+  };
+
+  const handleNextRetrain = async () => {
+    if (retrainStep === 'knowledge') {
+      setRetrainStep('interview');
+      setLoadingRetrainQuestions(true);
+      try {
+        const qs = await generateTrainingQuestions(firstName, member?.agentConfig?.scopeDescription || '');
+        setRetrainQuestions(qs);
+        setRetrainAnswers(qs.map(() => ''));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingRetrainQuestions(false);
+      }
+    } else if (retrainStep === 'interview') {
+      setRetrainStep('compile');
+      setLoadingRetrainCompile(true);
+      try {
+        const selectedArticles = kbArticles.filter(art => retrainKbIds.includes(art.id));
+        const prompt = await compileAgentDirectives(
+          firstName,
+          member?.agentConfig?.scopeDescription || '',
+          retrainQuestions,
+          retrainAnswers,
+          selectedArticles
+        );
+        setCompiledRetrainPrompt(prompt);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingRetrainCompile(false);
+      }
+    }
+  };
+
+  const handleConfirmRetrain = async () => {
+    setIsSaving(true);
+    try {
+      const updatedConfig = {
+        ...member?.agentConfig,
+        kbSources: retrainKbIds,
+        trainingAnswers: retrainQuestions.map((q, idx) => ({
+          question: q,
+          answer: retrainAnswers[idx] || ''
+        })),
+        systemPrompt: compiledRetrainPrompt
+      };
+
+      await updateMember({
+        role,
+        teamId,
+        positionId,
+        status,
+        modelType,
+        agentConfig: updatedConfig,
+        firstName,
+        otherName,
+        familyName,
+        personalEmail,
+        homeAddress,
+        workArrangements,
+        emergencyContact,
+        dateOfBirth,
+        gender,
+        nationality,
+        startDate,
+        endDate,
+        phoneNumbers,
+        certifications,
+        education,
+        skills,
+        avatarUrl,
+        aiHumour,
+        licenceType,
+        isContractor,
+        workEmail,
+        signature
+      });
+
+      setSystemPrompt(compiledRetrainPrompt);
+      setIsRetrainingOpen(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const fullName = !member?.isSynthetic && (firstName || familyName) 
     ? `${firstName} ${familyName}`.trim() 
     : member?.name;
+
+  React.useEffect(() => {
+    if (id && fullName) {
+      setBreadcrumbOverride(id, fullName);
+    }
+  }, [id, fullName, setBreadcrumbOverride]);
 
   // Initialize local state when member is loaded
   React.useEffect(() => {
@@ -131,7 +275,7 @@ export const MemberDetailView = () => {
 
       setAvatarUrl(member.avatarUrl || '');
       setAiHumour(member.aiHumour || 0.5);
-      setLicenceType(member.licenceType || 'Standard');
+      setLicenceType(member.isSynthetic ? (member.licenceType || 'AI Agent') : (member.licenceType || 'Standard'));
       setIsContractor(member.isContractor || false);
       setWorkEmail(member.workEmail || '');
       setSignature(member.signature || '');
@@ -153,6 +297,7 @@ export const MemberDetailView = () => {
         status,
         modelType,
         agentConfig: member?.isSynthetic ? {
+          ...(member.agentConfig || {}),
           systemPrompt,
           temperature
         } : undefined,
@@ -251,22 +396,6 @@ export const MemberDetailView = () => {
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      {/* Breadcrumbs & Navigation */}
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/workspace/settings/workforce')}
-          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-        >
-          <ArrowLeft size={20} className="text-zinc-500" />
-        </button>
-        <div className="flex items-center text-sm font-medium">
-          <span className="text-zinc-400">Settings</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">Workforce</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-900 dark:text-zinc-100">{fullName}</span>
-        </div>
-      </div>
 
       {/* Profile Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
@@ -343,14 +472,18 @@ export const MemberDetailView = () => {
       {/* Tabs Layout */}
       <div className="space-y-6">
         <Tabs 
-          tabs={[
+          tabs={member.isSynthetic ? [
+            { id: 'overview', label: 'Overview', icon: User },
+            { id: 'configuration', label: 'AI Settings', icon: Sparkles },
+            { id: 'permissions', label: 'Permissions', icon: Shield },
+            { id: 'activity', label: 'Activity', icon: Activity } 
+          ] : [
             { id: 'overview', label: 'Overview', icon: User },
             { id: 'personal', label: 'Personal', icon: Shield },
             { id: 'employment', label: 'Job', icon: Briefcase },
             { id: 'professional', label: 'Skills', icon: Sparkles },
             { id: 'contracts', label: 'Contracts', icon: Receipt },
             { id: 'leave', label: 'Time Off', icon: Clock },
-            ...(member.isSynthetic ? [{ id: 'configuration', label: 'AI Settings', icon: Sparkles }] : []),
             { id: 'permissions', label: 'Permissions', icon: Shield },
             { id: 'activity', label: 'Activity', icon: Activity } 
           ]}
@@ -397,11 +530,13 @@ export const MemberDetailView = () => {
                         <p className="text-sm text-zinc-900 dark:text-zinc-100 font-bold">{workArrangements || 'Not Specified'}</p>
                      </div>
                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase font-black tracking-widest text-zinc-400">License Seat</label>
-                        <Badge variant="zinc" className={cn(
-                          "font-black border-none text-[10px]",
-                          licenceType === 'Developer' ? "text-indigo-500 bg-indigo-500/10" : "text-zinc-500 bg-zinc-500/10"
-                        )}>{licenceType}</Badge>
+                         <label className="text-[10px] uppercase font-black tracking-widest text-zinc-400">License Seat</label>
+                         <Badge variant="zinc" className={cn(
+                           "font-black border-none text-[10px]",
+                           licenceType === 'Developer' ? "text-indigo-500 bg-indigo-500/10" : 
+                           licenceType === 'AI Agent' || licenceType === 'AI Agent Seat' ? "text-teal-500 bg-teal-500/10" :
+                           "text-zinc-500 bg-zinc-500/10"
+                         )}>{licenceType}</Badge>
                      </div>
                      <div className="space-y-1">
                         <label className="text-[10px] uppercase font-black tracking-widest text-zinc-400">Status</label>
@@ -1006,69 +1141,140 @@ export const MemberDetailView = () => {
                                <span className="flex items-center gap-3"><Cpu size={16} /> Synthetic Intelligence Configuration</span>
                             </div>
                             
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                               <div className="lg:col-span-1 space-y-8">
-                                  <Select 
-                                    label="AI Model" 
-                                    value={modelType}
-                                    onChange={(e) => setModelType(e.target.value)}
-                                    options={[
-                                      { label: 'OpenClaw Sweeper (Vision)', value: 'OpenClaw Sweeper' },
-                                      { label: 'Gemini 2.0 Flash (Fast)', value: 'Gemini 2.0 Flash' },
-                                      { label: 'Gemini 1.5 Pro (Reasoning)', value: 'Gemini 1.5 Pro' },
-                                      { label: 'Claude 3.5 Sonnet (Logic)', value: 'Claude 3.5 Sonnet' }
-                                    ]}
-                                  />
-                                 <div className="space-y-6 pt-4">
-                                    <div className="space-y-4">
-                                       <div className="flex items-center justify-between">
-                                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Creativity</label>
-                                          <span className="text-xs font-mono font-black text-purple-600">{(temperature * 100).toFixed(0)}%</span>
-                                       </div>
-                                       <input 
-                                         type="range" 
-                                         min="0" 
-                                         max="1" 
-                                         step="0.1" 
-                                         className="w-full h-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                                         value={temperature}
-                                         onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                                       />
+                            {(() => {
+                              const isSystemAgent = member?.isSynthetic && member?.agentConfig?.classification === 'SYSTEM';
+                              return (
+                                <>
+                                  {isSystemAgent ? (
+                                    <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 dark:border-indigo-500/10 dark:bg-indigo-500/5 text-indigo-700 dark:text-indigo-400 text-xs font-medium leading-relaxed">
+                                      <strong>System-Managed Agent:</strong> This AI agent is built-in and managed by the platform. Directives and configuration are locked and cannot be edited.
                                     </div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                                      <div className="p-6 rounded-[2rem] border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-white/[0.02] flex items-center justify-between gap-4">
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+                                            <BookOpen size={14} className="text-zinc-500" /> Connected Knowledge Bases
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                            {member.agentConfig?.kbSources && member.agentConfig.kbSources.length > 0 ? (
+                                              member.agentConfig.kbSources.map((kbId: string) => {
+                                                const art = kbArticles.find(a => a.id === kbId);
+                                                return (
+                                                  <span key={kbId} className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md dark:bg-indigo-500/10 dark:text-indigo-400">
+                                                    {art?.title || 'Knowledge Source'}
+                                                  </span>
+                                                );
+                                              })
+                                            ) : (
+                                              <span className="text-[10px] text-zinc-500">No knowledge sources connected.</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <Button variant="secondary" size="sm" onClick={handleStartRetrain} className="font-bold gap-2 shrink-0">
+                                          <Cpu size={14} /> Retrain Agent
+                                        </Button>
+                                      </div>
 
-                                    <div className="space-y-4">
-                                       <div className="flex items-center justify-between">
-                                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-                                             <Smile size={14} /> Humor
-                                          </label>
-                                          <span className="text-xs font-mono font-black text-indigo-600">{Math.round(aiHumour * 100)}%</span>
-                                       </div>
-                                       <input 
-                                         type="range" 
-                                         min="0" 
-                                         max="1" 
-                                         step="0.1" 
-                                         className="w-full h-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                         value={aiHumour}
-                                         onChange={(e) => setAiHumour(parseFloat(e.target.value))}
-                                       />
+                                      {/* Avatar Generator */}
+                                      <div className="p-6 rounded-[2rem] border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-white/[0.02] flex items-center justify-between gap-4">
+                                        <div className="flex-1 space-y-1">
+                                          <p className="text-xs font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200 flex items-center gap-2">
+                                            <Sparkles size={14} className="text-zinc-500" /> Generate Agent Avatar
+                                          </p>
+                                          <div className="flex gap-2 mt-1.5">
+                                            <Input 
+                                              placeholder="e.g. cute green bot vector icon" 
+                                              value={avatarPrompt}
+                                              onChange={e => setAvatarPrompt(e.target.value)}
+                                              className="h-9 text-xs"
+                                            />
+                                            <Button 
+                                              variant="secondary" 
+                                              size="sm" 
+                                              onClick={handleGenerateAvatar} 
+                                              loading={generatingAvatar} 
+                                              disabled={!avatarPrompt.trim()}
+                                              className="h-9 px-4 text-xs font-bold gap-1 shadow-sm shrink-0"
+                                            >
+                                              <Sparkles size={12} /> Generate
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
-                                 </div>
-                               </div>
+                                  )}
 
-                               <div className="lg:col-span-2 space-y-4">
-                                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center justify-between">
-                                     <span>System Instructions</span>
-                                     <Sparkles size={14} className="text-purple-400 opacity-50" />
-                                  </label>
-                                  <textarea 
-                                    className="w-full h-64 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 text-sm resize-none focus:ring-2 focus:ring-purple-500 outline-none font-medium leading-relaxed shadow-inner"
-                                    placeholder="Give the agent specific instructions on how to behave..."
-                                    value={systemPrompt}
-                                    onChange={(e) => setSystemPrompt(e.target.value)}
-                                  />
-                               </div>
-                            </div>
+                                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                                     <div className="lg:col-span-1 space-y-8">
+                                        <Select 
+                                          label="AI Model" 
+                                          value={modelType}
+                                          onChange={(e) => setModelType(e.target.value)}
+                                          disabled={isSystemAgent}
+                                          options={[
+                                            { label: 'OpenClaw Sweeper (Vision)', value: 'OpenClaw Sweeper' },
+                                            { label: 'Gemini 2.0 Flash (Fast)', value: 'Gemini 2.0 Flash' },
+                                            { label: 'Gemini 1.5 Pro (Reasoning)', value: 'Gemini 1.5 Pro' },
+                                            { label: 'Claude 3.5 Sonnet (Logic)', value: 'Claude 3.5 Sonnet' }
+                                          ]}
+                                        />
+                                       <div className="space-y-6 pt-4">
+                                          <div className="space-y-4">
+                                             <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Creativity</label>
+                                                <span className="text-xs font-mono font-black text-purple-600">{(temperature * 100).toFixed(0)}%</span>
+                                             </div>
+                                             <input 
+                                               type="range" 
+                                               min="0" 
+                                               max="1" 
+                                               step="0.1" 
+                                               disabled={isSystemAgent}
+                                               className="w-full h-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-600 disabled:opacity-50"
+                                               value={temperature}
+                                               onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                                             />
+                                          </div>
+
+                                          <div className="space-y-4">
+                                             <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                                                   <Smile size={14} /> Humor
+                                                </label>
+                                                <span className="text-xs font-mono font-black text-indigo-600">{Math.round(aiHumour * 100)}%</span>
+                                             </div>
+                                             <input 
+                                               type="range" 
+                                               min="0" 
+                                               max="1" 
+                                               step="0.1" 
+                                               disabled={isSystemAgent}
+                                               className="w-full h-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50"
+                                               value={aiHumour}
+                                               onChange={(e) => setAiHumour(parseFloat(e.target.value))}
+                                             />
+                                          </div>
+                                       </div>
+                                     </div>
+
+                                     <div className="lg:col-span-2 space-y-4 text-left">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 flex items-center justify-between">
+                                           <span>System Instructions</span>
+                                           <Sparkles size={14} className="text-purple-400 opacity-50" />
+                                        </label>
+                                        <textarea 
+                                          className="w-full h-64 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 text-sm resize-none focus:ring-2 focus:ring-purple-500 outline-none font-medium leading-relaxed shadow-inner disabled:opacity-75"
+                                          placeholder="Give the agent specific instructions on how to behave..."
+                                          value={systemPrompt}
+                                          disabled={isSystemAgent}
+                                          onChange={(e) => setSystemPrompt(e.target.value)}
+                                        />
+                                     </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
                          </div>
                       )}
                    </div>
@@ -1131,6 +1337,154 @@ export const MemberDetailView = () => {
           // In a real app, refetch data here
         }}
       />
+      {/* Retrain Modal */}
+      <Modal
+        isOpen={isRetrainingOpen}
+        onClose={() => setIsRetrainingOpen(false)}
+        title={`Retrain Agent: ${firstName}`}
+        size="lg"
+      >
+        <div className="space-y-6 py-2">
+          {/* Step indicators */}
+          <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-6">
+              <span className={`text-xs font-bold ${retrainStep === 'knowledge' ? 'text-indigo-600' : 'text-zinc-400'}`}>
+                1. Knowledge Connect
+              </span>
+              <span className={`text-xs font-bold ${retrainStep === 'interview' ? 'text-indigo-600' : 'text-zinc-400'}`}>
+                2. Training Interview
+              </span>
+              <span className={`text-xs font-bold ${retrainStep === 'compile' ? 'text-indigo-600' : 'text-zinc-400'}`}>
+                3. Compilation
+              </span>
+            </div>
+          </div>
+
+          <div className="min-h-[300px]">
+            {retrainStep === 'knowledge' && (
+              <div className="space-y-4">
+                <p className="text-xs text-zinc-500">
+                  Select which Knowledge Base documents this agent should consult to operate.
+                </p>
+                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2">
+                  {kbArticles.length === 0 ? (
+                    <p className="text-xs text-zinc-400 text-center py-8">No articles found. Add some in the Knowledge Base module first.</p>
+                  ) : (
+                    kbArticles.map(art => {
+                      const isSelected = retrainKbIds.includes(art.id);
+                      return (
+                        <button
+                          key={art.id}
+                          onClick={() => {
+                            const newIds = isSelected 
+                              ? retrainKbIds.filter(id => id !== art.id)
+                              : [...retrainKbIds, art.id];
+                            setRetrainKbIds(newIds);
+                          }}
+                          className={cn(
+                            "w-full p-4 rounded-xl border text-left flex items-start justify-between transition-all border-zinc-200 dark:border-zinc-800 hover:border-zinc-300",
+                            isSelected ? "border-indigo-600 bg-indigo-50/20 dark:bg-indigo-500/10" : "border-zinc-200 dark:border-zinc-800"
+                          )}
+                        >
+                          <div className="text-left">
+                            <span className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-500/10 px-1.5 py-0.5 rounded mr-2">
+                              {art.category}
+                            </span>
+                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{art.title}</span>
+                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-1 leading-relaxed">{art.content}</p>
+                          </div>
+                          <div className={cn(
+                            "h-5 w-5 rounded-md border flex items-center justify-center shrink-0 ml-4",
+                            isSelected ? "border-indigo-600 bg-indigo-600 text-white" : "border-zinc-300 dark:border-zinc-700"
+                          )}>
+                            {isSelected && <Check size={12} />}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {retrainStep === 'interview' && (
+              <div className="space-y-4">
+                <p className="text-xs text-zinc-500">
+                  Answer the AI-generated questions to program your agent's behavior.
+                </p>
+                {loadingRetrainQuestions ? (
+                  <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                    <Loader2 className="animate-spin text-indigo-600" size={32} />
+                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">AI is generating questions...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-h-[280px] overflow-y-auto pr-2">
+                    {retrainQuestions.map((q, idx) => (
+                      <div key={idx} className="space-y-1.5 text-left">
+                        <label className="text-xs font-bold text-zinc-700 dark:text-zinc-350">{q}</label>
+                        <textarea
+                          className="w-full h-20 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none font-medium leading-relaxed"
+                          value={retrainAnswers[idx] || ''}
+                          onChange={(e) => {
+                            const newAnswers = [...retrainAnswers];
+                            newAnswers[idx] = e.target.value;
+                            setRetrainAnswers(newAnswers);
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {retrainStep === 'compile' && (
+              <div className="space-y-4">
+                <p className="text-xs text-zinc-500">
+                  Review the system instructions compiled by Gemini.
+                </p>
+                {loadingRetrainCompile ? (
+                  <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                    <Loader2 className="animate-spin text-indigo-600" size={32} />
+                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Compiling directives...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Directives</label>
+                    <textarea
+                      className="w-full h-48 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none font-medium leading-relaxed shadow-inner"
+                      value={compiledRetrainPrompt}
+                      onChange={(e) => setCompiledRetrainPrompt(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (retrainStep === 'interview') setRetrainStep('knowledge');
+                else if (retrainStep === 'compile') setRetrainStep('interview');
+                else setIsRetrainingOpen(false);
+              }}
+              disabled={isSaving}
+            >
+              {retrainStep === 'knowledge' ? 'Cancel' : 'Back'}
+            </Button>
+
+            <Button
+              variant="primary"
+              onClick={retrainStep === 'compile' ? handleConfirmRetrain : handleNextRetrain}
+              loading={isSaving || loadingRetrainQuestions || loadingRetrainCompile}
+            >
+              {retrainStep === 'compile' ? 'Deploy & Save' : 'Continue'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

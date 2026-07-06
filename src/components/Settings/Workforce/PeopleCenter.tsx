@@ -1,19 +1,32 @@
 import { useNavigate } from 'react-router-dom';
 import { useUsers, TenantMember } from '../../../hooks/useUsers';
 import { Table } from '../../UI/Table';
-import { Badge, cn } from '../../UI/Primitives';
-import { User, Bot, Mail, Users, Clock, Zap, Briefcase, FileBadge, Search } from 'lucide-react';
+import { Badge, cn, Button } from '../../UI/Primitives';
+import { User, Bot, Mail, Users, Clock, Zap, Briefcase, FileBadge, Search, Plus } from 'lucide-react';
 
 interface PeopleCenterProps {
   searchQuery?: string;
   onSearchChange?: (val: string) => void;
   activeFilter?: string;
+  mode?: 'people' | 'agents' | 'all';
+  onPrimaryAction?: () => void;
 }
 
-export const PeopleCenter = ({ searchQuery = '', onSearchChange, activeFilter = 'all' }: PeopleCenterProps) => {
+export const PeopleCenter = ({ 
+  searchQuery = '', 
+  onSearchChange, 
+  activeFilter = 'all', 
+  mode = 'all',
+  onPrimaryAction 
+}: PeopleCenterProps) => {
   const navigate = useNavigate();
   const { members, loading } = useUsers();
   const filteredMembers = members.filter(m => {
+    // Phase 0: Mode Filter
+    let matchesMode = true;
+    if (mode === 'people') matchesMode = !m.isSynthetic;
+    else if (mode === 'agents') matchesMode = m.isSynthetic;
+
     // Phase 1: Contextual Filters
     let matchesFilter = true;
     if (activeFilter === 'human') matchesFilter = !m.isSynthetic;
@@ -33,7 +46,7 @@ export const PeopleCenter = ({ searchQuery = '', onSearchChange, activeFilter = 
                           m.team.toLowerCase().includes(query) ||
                           (m.position && m.position.toLowerCase().includes(query));
 
-    return matchesFilter && matchesSearch;
+    return matchesMode && matchesFilter && matchesSearch;
   });
 
   const columns = [
@@ -97,7 +110,7 @@ export const PeopleCenter = ({ searchQuery = '', onSearchChange, activeFilter = 
         </Badge>
       )
     },
-    {
+    ...(mode === 'all' ? [{
       header: 'Type',
       accessor: (m: TenantMember) => (
         <div className="flex items-center gap-2">
@@ -112,7 +125,7 @@ export const PeopleCenter = ({ searchQuery = '', onSearchChange, activeFilter = 
            )}
         </div>
       )
-    },
+    }] : []),
     {
       header: 'Last Active',
       accessor: (m: TenantMember) => (
@@ -130,21 +143,62 @@ export const PeopleCenter = ({ searchQuery = '', onSearchChange, activeFilter = 
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
           <input 
             type="text" 
-            placeholder="Search people, positions or teams..." 
+            placeholder={
+              mode === 'people' 
+                ? "Search people, positions or teams..." 
+                : mode === 'agents'
+                  ? "Search agents, positions or teams..."
+                  : "Search people, agents, positions or teams..."
+            }
             value={searchQuery}
             onChange={(e) => onSearchChange?.(e.target.value)}
             className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
           />
         </div>
 
-        <Table 
-          data={filteredMembers} 
-          columns={columns} 
-          loading={loading}
-          pagination={true}
-          onRowClick={(m) => navigate(`/workspace/settings/workforce/member/${m.id}`)}
-          className="bg-transparent dark:bg-transparent border-none shadow-none"
-        />
+        {filteredMembers.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center bg-white/50 dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-dashed border-zinc-200 dark:border-zinc-800 rounded-[3rem] space-y-6 shadow-sm">
+             <div className="h-20 w-20 rounded-[2rem] bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-lg shadow-blue-500/5">
+                {mode === 'agents' ? <Bot size={40} /> : <User size={40} />}
+             </div>
+             <div className="space-y-2 max-w-md">
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">
+                  {searchQuery 
+                    ? (mode === 'agents' ? 'No Matching Agents' : 'No Matching People') 
+                    : (mode === 'agents' ? 'No AI Agents Provisioned' : 'No People Found')
+                  }
+                </h3>
+                <p className="text-sm text-zinc-500 font-medium leading-relaxed">
+                  {searchQuery 
+                    ? `No digital coworkers or staff members matched "${searchQuery}". Try adjusting your keywords or active filters.`
+                    : (mode === 'agents' 
+                      ? 'Provision a digital coworker to handle repetitive work, conduct deep analysis, or execute automated tasks 24/7.'
+                      : 'Invite team members to collaborate, assign positions, and organize department structures.'
+                    )
+                  }
+                </p>
+             </div>
+             {onPrimaryAction && !searchQuery && (
+                <Button variant="primary" size="sm" onClick={onPrimaryAction} className="gap-2 font-bold px-6">
+                  <Plus size={14} /> {mode === 'agents' ? 'Provision AI Agent' : 'Add Person'}
+                </Button>
+             )}
+             {searchQuery && (
+                <Button variant="secondary" size="sm" onClick={() => onSearchChange?.('')} className="gap-2 font-bold px-6">
+                  Reset Search Query
+                </Button>
+             )}
+          </div>
+        ) : (
+          <Table 
+            data={filteredMembers} 
+            columns={columns} 
+            loading={loading}
+            pagination={true}
+            onRowClick={(m) => navigate(`/workspace/settings/workforce/member/${m.id}`)}
+            className="bg-transparent dark:bg-transparent border-none shadow-none"
+          />
+        )}
       </div>
     </div>
   );

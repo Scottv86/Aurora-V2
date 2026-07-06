@@ -165,6 +165,53 @@ export const IntakeSettingsPage = () => {
   ];
   
   const [isSandboxOpen, setIsSandboxOpen] = useState(false);
+  const [sandboxMode, setSandboxMode] = useState<'global' | 'rule'>('global');
+  const [sandboxRules, setSandboxRules] = useState<any[]>([]);
+  const [sandboxRuleName, setSandboxRuleName] = useState('');
+  const [sandboxSourceFields, setSandboxSourceFields] = useState<any[]>([]);
+
+
+
+  const handleOpenRuleSandbox = () => {
+    const compiledCondition = compileConditions(conditionsList);
+    const serializedMapping = serializeMappings(fieldMappings);
+
+    let triggers = [];
+    if (triggerMode === 'IMMEDIATE') {
+      triggers = [{ type: 'FORM_SUBMITTED', formId: sourceModuleId || 'public_form' }];
+    } else if (triggerMode === 'GLOBAL_SCHEDULE') {
+      triggers = [{ type: 'CRON', cronExpression: 'GLOBAL', moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
+    } else {
+      const compiledCron = compileCustomCron();
+      triggers = [{ type: 'CRON', cronExpression: compiledCron, moduleId: triageModule.id, formId: sourceModuleId || 'public_form' }];
+    }
+
+    const tempRule = {
+      id: selectedRuleId === 'new' ? 'temp-rule' : selectedRuleId,
+      name: ruleName || 'Draft Rule',
+      moduleId: triageModule.id,
+      isActive: true,
+      status: 'DRAFT',
+      conditions: compiledCondition || null,
+      triggers,
+      actions: [
+        {
+          type: 'ROUTE_TO_MODULE',
+          config: {
+            targetModuleId,
+            fieldMapping: serializedMapping,
+            archiveSource
+          }
+        }
+      ]
+    };
+
+    setSandboxMode('rule');
+    setSandboxRules([tempRule]);
+    setSandboxRuleName(ruleName || 'Draft Rule');
+    setSandboxSourceFields(getSourceFieldsList());
+    setIsSandboxOpen(true);
+  };
 
   const [quarantineRecords, setQuarantineRecords] = useState<any[]>([]);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
@@ -795,13 +842,6 @@ export const IntakeSettingsPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => setIsSandboxOpen(true)}
-                    className="p-2 bg-teal-500/10 hover:bg-teal-500/25 text-teal-400 border border-teal-500/20 rounded-xl transition-all cursor-pointer"
-                    title="Open Routing Sandbox"
-                  >
-                    <Play size={13} className="fill-current" />
-                  </button>
-                  <button 
                     onClick={handleCreateRule}
                     className="p-2 bg-indigo-500/10 hover:bg-indigo-500/25 text-indigo-400 border border-indigo-500/20 rounded-xl transition-all cursor-pointer"
                     title="Create Routing Rule"
@@ -1288,6 +1328,13 @@ export const IntakeSettingsPage = () => {
                       Cancel
                     </button>
                     <button
+                      type="button"
+                      onClick={handleOpenRuleSandbox}
+                      className="px-4 py-2 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Play size={11} className="fill-current" /> Test Rule
+                    </button>
+                    <button
                       onClick={() => handleSaveRule(true)}
                       className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-350 hover:text-white border border-zinc-700/80 rounded-xl transition-all cursor-pointer"
                     >
@@ -1379,9 +1426,13 @@ export const IntakeSettingsPage = () => {
       <RoutingSandboxModal
         isOpen={isSandboxOpen}
         onClose={() => setIsSandboxOpen(false)}
-        triageRules={triageRules}
+        triageRules={sandboxRules}
         token={token}
         tenantId={tenant?.id || ''}
+        singleRuleMode={sandboxMode === 'rule'}
+        ruleName={sandboxRuleName}
+        sourceFields={sandboxSourceFields}
+        modules={modules}
       />
     </div>
   );

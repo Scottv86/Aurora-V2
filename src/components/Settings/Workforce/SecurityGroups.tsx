@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Trash2, Edit2, CheckCircle2, Search } from 'lucide-react';
+import { Shield, Trash2, Edit2, CheckCircle2, Search, Plus } from 'lucide-react';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
 import { Table } from '../../UI/Table';
 import { Badge, Button } from '../../UI/Primitives';
@@ -13,9 +13,16 @@ interface SecurityGroupsProps {
   searchQuery?: string;
   onSearchChange?: (val: string) => void;
   activeFilter?: string;
+  onAddGroup?: () => void;
 }
 
-export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '', onSearchChange }: SecurityGroupsProps) => {
+export const SecurityGroups = ({ 
+  isModalOpen, 
+  onCloseModal, 
+  searchQuery = '', 
+  onSearchChange,
+  onAddGroup
+}: SecurityGroupsProps) => {
   const { groups, loading, deleteGroup } = usePermissionGroups();
   const [editingGroup, setEditingGroup] = useState<PermissionGroup | null>(null);
   const [isModalOpenState, setIsModalOpenState] = useState(false); // internal for edit mode
@@ -132,14 +139,43 @@ export const SecurityGroups = ({ isModalOpen, onCloseModal, searchQuery = '', on
           />
         </div>
 
-        <Table 
-          data={filteredGroups} 
-          columns={columns} 
-          loading={loading}
-          pagination={true}
-          onRowClick={handleEdit}
-          className="bg-transparent dark:bg-transparent border-none shadow-none"
-        />
+        {filteredGroups.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center bg-white/50 dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-dashed border-zinc-200 dark:border-zinc-800 rounded-[3rem] space-y-6 shadow-sm">
+             <div className="h-20 w-20 rounded-[2rem] bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-lg shadow-blue-500/5">
+                <Shield size={40} />
+             </div>
+             <div className="space-y-2 max-w-md">
+                <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">
+                  {searchQuery ? 'No Matching Groups' : 'No Security Groups Found'}
+                </h3>
+                <p className="text-sm text-zinc-500 font-medium leading-relaxed">
+                  {searchQuery 
+                    ? `No security groups matched "${searchQuery}". Try adjusting your keywords or filters.`
+                    : 'Create security groups to manage roles and permission scopes for your team members.'
+                  }
+                </p>
+             </div>
+             {onAddGroup && !searchQuery && (
+                <Button variant="primary" size="sm" onClick={onAddGroup} className="gap-2 font-bold px-6">
+                  <Plus size={14} /> Create Group
+                </Button>
+             )}
+             {searchQuery && (
+                <Button variant="secondary" size="sm" onClick={() => onSearchChange?.('')} className="gap-2 font-bold px-6">
+                  Reset Search Query
+                </Button>
+             )}
+          </div>
+        ) : (
+          <Table 
+            data={filteredGroups} 
+            columns={columns} 
+            loading={loading}
+            pagination={true}
+            onRowClick={handleEdit}
+            className="bg-transparent dark:bg-transparent border-none shadow-none"
+          />
+        )}
       </div>
 
       <CreateEditGroupModal 

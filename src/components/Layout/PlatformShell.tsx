@@ -1,4 +1,4 @@
-import { ReactNode, useState, useMemo, useEffect, useRef } from 'react';
+import { ReactNode, useState, useMemo } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -19,7 +19,6 @@ import {
   Trash2,
   Search,
   Settings2,
-  ChevronDown,
   LayoutDashboard,
   Building,
   UserCircle,
@@ -37,7 +36,6 @@ import {
   History,
   MessageSquare,
   BarChart,
-  BookOpen,
   Key,
   TestTube,
   RotateCcw,
@@ -246,85 +244,6 @@ const SortableSection = ({
   );
 };
 
-const SidebarAccordion = ({ 
-  label, 
-  icon: Icon, 
-  items, 
-  isOpen, 
-  onToggle, 
-  collapsed,
-  isActive
-}: { 
-  label: string, 
-  icon: any, 
-  items: any[], 
-  isOpen: boolean, 
-  onToggle: () => void,
-  collapsed: boolean,
-  isActive: (to: string) => boolean
-}) => {
-  return (
-    <div className="mb-1">
-      <button
-        onClick={onToggle}
-        className={cn(
-          "w-full flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 group",
-          collapsed ? "justify-center" : "justify-between",
-          isOpen && !collapsed ? "bg-zinc-100 dark:bg-white/5" : "hover:bg-zinc-50 dark:hover:bg-white/5"
-        )}
-      >
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <Icon size={16} className={cn(
-            "shrink-0 transition-colors",
-            isOpen ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200"
-          )} />
-          {!collapsed && (
-            <span className={cn(
-              "text-sm font-medium transition-colors text-left leading-tight truncate",
-              isOpen ? "text-zinc-900 dark:text-white" : "text-zinc-500 group-hover:text-zinc-700 dark:group-hover:text-zinc-400"
-            )}>
-              {label}
-            </span>
-          )}
-        </div>
-        {!collapsed && (
-          <ChevronDown 
-            size={12} 
-            className={cn(
-              "text-zinc-400 transition-transform duration-300",
-              isOpen ? "rotate-180" : "rotate-0"
-            )} 
-          />
-        )}
-      </button>
-
-      <AnimatePresence initial={false}>
-        {isOpen && !collapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="pt-1 pb-2 pl-4 space-y-0.5 border-l border-zinc-100 dark:border-white/5 ml-5 mt-1">
-              {items.map((item) => (
-                <SidebarItem
-                  key={item.to}
-                  icon={item.icon}
-                  label={item.label}
-                  to={item.to}
-                  active={isActive(item.to)}
-                  collapsed={false}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
 
 const AuroraBackground = () => (
   <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20">
@@ -403,17 +322,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const pathnames = location.pathname.split('/').filter(x => x);
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isEditMode, setIsEditMode] = useState(false);
-  const [openAccordions, setOpenAccordions] = useState<Set<string>>(new Set());
   const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
-
-  const toggleAccordion = (label: string) => {
-    setOpenAccordions(prev => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -509,13 +418,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       ]
     },
     {
-      category: 'Knowledge',
-      icon: BookOpen,
-      items: [
-        { label: 'Knowledge Base', icon: BookOpen, to: '/workspace/settings/knowledge' },
-      ]
-    },
-    {
       category: 'Development',
       icon: Code2,
       items: [
@@ -533,59 +435,20 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     }
   ];
 
-  const filteredSettingsGroups = useMemo(() => {
-    if (!settingsSearchQuery) return SETTINGS_NAV_GROUPS;
+  const filteredSettingsItems = useMemo(() => {
+    const allItems = SETTINGS_NAV_GROUPS.flatMap(group => group.items);
+    if (!settingsSearchQuery) return allItems;
     const query = settingsSearchQuery.toLowerCase();
     
-    return SETTINGS_NAV_GROUPS.map(group => {
-      const filteredItems = group.items.filter(item => 
-        item.label.toLowerCase().includes(query)
-      );
-      if (filteredItems.length > 0) {
-        return { ...group, items: filteredItems };
-      }
-      return null;
-    }).filter(Boolean) as typeof SETTINGS_NAV_GROUPS;
-  }, [settingsSearchQuery, SETTINGS_NAV_GROUPS]);
+    return allItems.filter(item => 
+      item.label.toLowerCase().includes(query)
+    );
+  }, [settingsSearchQuery]);
 
   const isAdminPath = location.pathname.startsWith('/admin');
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
   const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
                           location.pathname.includes('/workspace/settings/ai-builder');
-
-  const lastPathname = useRef(location.pathname);
-
-  useEffect(() => {
-    if (isSettingsMode) {
-      const newOpen = new Set(openAccordions);
-      let changed = false;
-
-      // Expand matches for search - this should always happen while searching
-      if (settingsSearchQuery) {
-        filteredSettingsGroups.forEach(group => {
-          if (!newOpen.has(group.category)) {
-            newOpen.add(group.category);
-            changed = true;
-          }
-        });
-      }
-
-      // Auto-expand on navigation ONLY if the path actually changed
-      if (location.pathname !== lastPathname.current) {
-        SETTINGS_NAV_GROUPS.forEach(group => {
-          if (group.items.some(item => isActive(item.to))) {
-            if (!newOpen.has(group.category)) {
-              newOpen.add(group.category);
-              changed = true;
-            }
-          }
-        });
-        lastPathname.current = location.pathname;
-      }
-
-      if (changed) setOpenAccordions(newOpen);
-    }
-  }, [location.pathname, isSettingsMode, settingsSearchQuery, filteredSettingsGroups]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -867,17 +730,15 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                         )}
                       </nav>
                       
-                      <div className={cn("flex-1 space-y-1 overflow-y-auto custom-scrollbar", isSidebarOpen ? "px-2" : "px-0")}>
-                        {filteredSettingsGroups.map((group) => (
-                          <SidebarAccordion
-                            key={group.category}
-                            label={group.category}
-                            icon={group.icon}
-                            items={group.items}
+                      <div className={cn("flex-1 space-y-0.5 overflow-y-auto custom-scrollbar", isSidebarOpen ? "px-2" : "px-0")}>
+                        {filteredSettingsItems.map((item) => (
+                          <SidebarItem
+                            key={item.to}
+                            icon={item.icon}
+                            label={item.label}
+                            to={item.to}
+                            active={isActive(item.to)}
                             collapsed={!isSidebarOpen}
-                            isActive={isActive}
-                            isOpen={openAccordions.has(group.category)}
-                            onToggle={() => toggleAccordion(group.category)}
                           />
                         ))}
                       </div>
