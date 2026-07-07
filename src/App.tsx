@@ -140,6 +140,8 @@ const App = () => {
                 <Route path="deployments" element={<Navigate to="/workspace/settings/deploy" replace />} />
                 <Route path="reports" element={<Navigate to="/workspace/settings/reports" replace />} />
                 <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
+                <Route path="platform" element={<NavigateWithSearch to="/workspace/platform/people-organisations" replace />} />
+                <Route path="modules" element={<NavigateWithSearch to="/workspace/settings/modules" replace />} />
                 
                 {/* Dynamic Module Routes */}
                 <Route path="modules/:moduleId" element={<ModuleView />} />

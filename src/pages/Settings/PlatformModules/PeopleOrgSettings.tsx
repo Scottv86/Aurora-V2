@@ -194,7 +194,7 @@ export const PeopleOrgSettings = () => {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl">
             <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
               <Info size={18} className="text-indigo-500" />
               Governance Guide
@@ -274,7 +274,7 @@ const TaxonomyList = ({ title, items, loading, onAdd, onEdit, onDelete, addLabel
         <span>{addLabel}</span>
       </button>
     </div>
-    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm min-h-[200px]">
+    <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[200px]">
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
           <Loader2 className="animate-spin mb-2" size={32} />
@@ -339,7 +339,7 @@ const CustomFieldsList = () => (
           <span>Define Field</span>
         </button>
       </div>
-      <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
+      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl">
          <div className="p-12 text-center">
             <div className="w-16 h-16 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md rounded-3xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-200 dark:border-zinc-800 mb-4">
                <Database size={32} />

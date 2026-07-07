@@ -4,14 +4,15 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
 import { API_BASE_URL } from '../../config';
 import { 
-  Inbox, Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
+  Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
   AlertCircle, Zap, Search, GitFork, 
   HelpCircle, XCircle, User, Mail, Phone, FileText, Check, 
   RotateCcw, Info, ExternalLink, Layers, Copy, Play, Pause, ShieldAlert, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FieldInput } from '../../components/FieldInput';
+import { PageHeader } from '../../components/UI/PageHeader';
 
 // Helper: Reconstruct dynamic form fields by filtering standard DB fields
 const getRecordFields = (rec: any) => {
@@ -136,6 +137,80 @@ export const TriageInboxPage = () => {
   const [isRunningTriage, setIsRunningTriage] = useState(false);
   const [isTimerPaused, setIsTimerPaused] = useState<boolean>(() => localStorage.getItem('auto_distribution_paused') === 'true');
   const [quarantineCount, setQuarantineCount] = useState<number>(0);
+
+  // Query for records
+  const { data: recordsData, isFetching: isRecordsFetching } = useQuery({
+    queryKey: ['records', tenant?.id, triageModule?.id, 1, 100],
+    queryFn: async () => {
+      if (!triageModule?.id || !tenant?.id) return { records: [], total: 0 };
+      const res = await fetch(`${API_BASE_URL}/api/data/records?moduleId=${triageModule.id}&page=1&limit=100&_t=${Date.now()}`, {
+        headers: { 
+          'x-tenant-id': tenant.id,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error('Failed to load triage queue');
+      return await res.json();
+    },
+    enabled: !!triageModule?.id && !!tenant?.id && !!token,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Query for triage rules
+  const { data: rulesData } = useQuery({
+    queryKey: ['triage-rules', tenant?.id, triageModule?.id],
+    queryFn: async () => {
+      if (!triageModule?.id || !tenant?.id) return [];
+      const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triageModule.id}&_t=${Date.now()}`, {
+        headers: { 
+          'x-tenant-id': tenant.id,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error('Failed to load rules');
+      return await res.json();
+    },
+    enabled: !!triageModule?.id && !!tenant?.id && !!token,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Query for quarantine count
+  const { data: quarantineData } = useQuery({
+    queryKey: ['triage-quarantine', tenant?.id],
+    queryFn: async () => {
+      if (!tenant?.id) return 0;
+      const res = await fetch(`${API_BASE_URL}/api/automations/quarantine`, {
+        headers: {
+          'x-tenant-id': tenant.id,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error('Failed to load quarantine count');
+      const data = await res.json();
+      const activeQuarantined = (data || []).filter((r: any) => r.status === 'QUARANTINED');
+      return activeQuarantined.length;
+    },
+    enabled: !!tenant?.id && !!token,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  useEffect(() => {
+    if (recordsData?.records) {
+      setRecords(recordsData.records);
+    }
+  }, [recordsData]);
+
+  useEffect(() => {
+    if (rulesData) {
+      setTriageRules(rulesData);
+    }
+  }, [rulesData]);
+
+  useEffect(() => {
+    if (quarantineData !== undefined) {
+      setQuarantineCount(quarantineData);
+    }
+  }, [quarantineData]);
 
   const autoRunTriggeredRef = useRef<number>(0);
   const pausedTimeRef = useRef<number>(localStorage.getItem('auto_distribution_paused') === 'true' ? Date.now() : 0);
@@ -413,71 +488,22 @@ export const TriageInboxPage = () => {
     }
   };
 
-  const loadQuarantineCount = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/automations/quarantine`, {
-        headers: {
-          'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const activeQuarantined = (data || []).filter((r: any) => r.status === 'QUARANTINED');
-        setQuarantineCount(activeQuarantined.length);
-      }
-    } catch (err) {
-      console.error('Failed to load quarantine count:', err);
-    }
-  }, [tenant?.id, token]);
 
   const loadInboxRecords = useCallback(async () => {
-    if (!triageModule) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/data/records?moduleId=${triageModule.id}&page=1&limit=100&_t=${Date.now()}`, {
-        headers: { 
-          'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRecords(data.records || []);
-      }
-      loadQuarantineCount();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, triageModule?.id, 1, 100] }),
+        queryClient.invalidateQueries({ queryKey: ['triage-rules', tenant?.id, triageModule?.id] }),
+        queryClient.invalidateQueries({ queryKey: ['triage-quarantine', tenant?.id] })
+      ]);
     } catch (err) {
-      toast.error('Failed to load triage queue');
+      console.error('Failed to invalidate queries:', err);
     } finally {
       setLoading(false);
     }
-  }, [triageModule, tenant?.id, token, loadQuarantineCount]);
+  }, [tenant?.id, triageModule?.id, queryClient]);
 
-  const loadTriageRules = useCallback(async () => {
-    if (!triageModule) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${triageModule.id}&_t=${Date.now()}`, {
-        headers: { 
-          'x-tenant-id': tenant?.id || '',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const rules = await res.json();
-        setTriageRules(rules);
-      }
-    } catch (err) {
-      console.error('Failed to load rules:', err);
-    }
-  }, [triageModule, tenant?.id, token]);
-
-  useEffect(() => {
-    if (triageModule) {
-      loadInboxRecords();
-      loadTriageRules();
-      loadQuarantineCount();
-    }
-  }, [triageModule, loadInboxRecords, loadTriageRules, loadQuarantineCount]);
 
   useEffect(() => {
     if (!selectedRecord) {
@@ -591,7 +617,7 @@ export const TriageInboxPage = () => {
 
   // Setup Socket.IO for real-time updates
   useEffect(() => {
-    if (!tenant?.id || !token) return;
+    if (!tenant?.id || !token || !triageModule?.id) return;
 
     let socket: any = null;
     let isActive = true;
@@ -610,7 +636,8 @@ export const TriageInboxPage = () => {
         });
 
         const refreshQueue = () => {
-          loadInboxRecords();
+          queryClient.invalidateQueries({ queryKey: ['records', tenant.id, triageModule.id, 1, 100] });
+          queryClient.invalidateQueries({ queryKey: ['triage-quarantine', tenant.id] });
         };
 
         socket.on('record_added', refreshQueue);
@@ -630,7 +657,7 @@ export const TriageInboxPage = () => {
         socket.disconnect();
       }
     };
-  }, [tenant?.id, token, loadInboxRecords]);
+  }, [tenant?.id, token, triageModule?.id, queryClient]);
 
   useEffect(() => {
     const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
@@ -1465,104 +1492,96 @@ export const TriageInboxPage = () => {
   };
 
   return (
-    <div className="flex-1 bg-zinc-950 p-8 overflow-y-auto custom-scrollbar flex flex-col gap-6">
-      {/* Header section */}
-      <header className="flex items-center justify-between border-b border-zinc-900 pb-5 shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Platform Work Distribution</span>
-            <span className="h-3 w-px bg-zinc-800"></span>
-            <span className="text-[10px] font-bold text-zinc-400">Pre-Assessment Staging</span>
-          </div>
-          <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center gap-2">
-            <Inbox className="text-indigo-400 animate-pulse" size={24} />
-            Work Distribution
-          </h1>
-          <p className="text-xs text-zinc-400 mt-1">Review external client request submissions, run pre-assessment staging, and dispatch work pathways.</p>
-        </div>
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative overflow-y-auto custom-scrollbar flex-1 min-h-0">
+      {/* Background Glows */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
 
-        {/* Countdown to Next Job Run */}
-        {(() => {
-          const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
-          let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
+      <div className="relative z-10 flex flex-col w-full flex-1 min-h-0">
+        <PageHeader 
+          title="Work Distribution"
+          description="Review external client request submissions, run pre-assessment staging, and dispatch work pathways."
+          actions={(() => {
+            const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
+            let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
 
-          if (cronExpr === 'GLOBAL') {
-            cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
-          }
+            if (cronExpr === 'GLOBAL') {
+              cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+            }
 
-          if (!cronExpr && triageModule) {
-            cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
-          }
+            if (!cronExpr && triageModule) {
+              cronExpr = triageModule?.config?.globalSchedule || '*/5 * * * *';
+            }
 
-          if (!cronExpr || !countdownText) return null;
+            if (!cronExpr || !countdownText) return null;
 
-          return (
-            <div className="flex items-center gap-3 bg-zinc-900/40 border border-zinc-900 px-4 py-2.5 rounded-2xl animate-in fade-in duration-200 shadow-sm shrink-0">
-              <div className={`h-2 w-2 rounded-full ${isTimerPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
-              <div className="flex flex-col">
-                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
-                  {scheduledRule ? 'Auto-Distribution' : 'Global Queue Check'}
-                </span>
-                <span className="text-xs font-bold text-zinc-200 mt-0.5">
-                  {isTimerPaused ? (
-                    <span className="text-amber-400 font-bold">
-                      Paused <span className="font-mono text-[10px] text-amber-500/80">({countdownText})</span>
-                    </span>
-                  ) : (
-                    <>Running in: <span className="font-mono text-indigo-400 font-black">{countdownText}</span></>
-                  )}
-                </span>
-              </div>
-              <span className="h-6 w-px bg-zinc-800" />
-              <button
-                onClick={() => {
-                  const newVal = !isTimerPaused;
-                  setIsTimerPaused(newVal);
-                  localStorage.setItem('auto_distribution_paused', String(newVal));
-                  if (newVal) {
-                    pausedTimeRef.current = Date.now();
-                  } else {
-                    if (pausedTimeRef.current > 0) {
-                      accumulatedPausedMsRef.current += Date.now() - pausedTimeRef.current;
+            return (
+              <div className="flex items-center gap-3 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 px-4 py-2.5 rounded-2xl animate-in fade-in duration-200 shadow-md shrink-0">
+                <div className={`h-2 w-2 rounded-full ${isTimerPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                    {scheduledRule ? 'Auto-Distribution' : 'Global Queue Check'}
+                  </span>
+                  <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    {isTimerPaused ? (
+                      <span className="text-amber-400 font-bold">
+                        Paused <span className="font-mono text-[10px] text-amber-500/80">({countdownText})</span>
+                      </span>
+                    ) : (
+                      <>Running in: <span className="font-mono text-indigo-400 font-black">{countdownText}</span></>
+                    )}
+                  </span>
+                </div>
+                <span className="h-6 w-px bg-zinc-200 dark:bg-zinc-800" />
+                <button
+                  onClick={() => {
+                    const newVal = !isTimerPaused;
+                    setIsTimerPaused(newVal);
+                    localStorage.setItem('auto_distribution_paused', String(newVal));
+                    if (newVal) {
+                      pausedTimeRef.current = Date.now();
+                    } else {
+                      if (pausedTimeRef.current > 0) {
+                        accumulatedPausedMsRef.current += Date.now() - pausedTimeRef.current;
+                      }
+                      pausedTimeRef.current = 0;
                     }
-                    pausedTimeRef.current = 0;
-                  }
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer select-none border ${
-                  isTimerPaused 
-                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/25' 
-                    : 'bg-zinc-800 text-zinc-355 border-zinc-700/80 hover:bg-zinc-700/90'
-                }`}
-                title={isTimerPaused ? "Resume Auto-Distribution" : "Pause Auto-Distribution"}
-              >
-                {isTimerPaused ? <Play size={10} /> : <Pause size={10} />}
-                {isTimerPaused ? 'Resume' : 'Pause'}
-              </button>
-              <span className="h-6 w-px bg-zinc-800" />
-              <button
-                onClick={handleManualRunTriage}
-                disabled={isRunningTriage}
-                className="flex items-center gap-1.5 bg-indigo-500/10 hover:bg-indigo-500/25 disabled:opacity-50 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer select-none"
-                title="Run Auto-Distribution Now"
-              >
-                <Zap size={10} className={isRunningTriage ? 'animate-pulse' : ''} />
-                {isRunningTriage ? 'Running...' : 'Run Now'}
-              </button>
-              <span className="h-6 w-px bg-zinc-800" />
-              <div className="flex flex-col text-right">
-                <span className="text-[7.5px] font-semibold text-zinc-550">
-                  {scheduledRule ? `Rule: ${scheduledRule.name}` : 'Queue Schedule'}
-                </span>
-                <span className="text-[8px] font-mono text-zinc-450 opacity-80 mt-0.5">
-                  ({scheduledRule && scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression === 'GLOBAL'
-                    ? `Global: ${cronExpr}`
-                    : cronExpr})
-                </span>
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer select-none border ${
+                    isTimerPaused 
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/25' 
+                      : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 border-zinc-200/50 dark:border-white/10 text-zinc-650 dark:text-zinc-350'
+                  }`}
+                  title={isTimerPaused ? "Resume Auto-Distribution" : "Pause Auto-Distribution"}
+                >
+                  {isTimerPaused ? <Play size={10} /> : <Pause size={10} />}
+                  {isTimerPaused ? 'Resume' : 'Pause'}
+                </button>
+                <span className="h-6 w-px bg-zinc-200 dark:bg-zinc-800" />
+                <button
+                  onClick={handleManualRunTriage}
+                  disabled={isRunningTriage}
+                  className="flex items-center gap-1.5 bg-indigo-500/10 hover:bg-indigo-500/25 disabled:opacity-50 text-indigo-650 dark:text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer select-none"
+                  title="Run Auto-Distribution Now"
+                >
+                  <Zap size={10} className={isRunningTriage ? 'animate-pulse' : ''} />
+                  {isRunningTriage ? 'Running...' : 'Run Now'}
+                </button>
+                <span className="h-6 w-px bg-zinc-200 dark:bg-zinc-800" />
+                <div className="flex flex-col text-right">
+                  <span className="text-[7.5px] font-semibold text-zinc-550">
+                    {scheduledRule ? `Rule: ${scheduledRule.name}` : 'Queue Schedule'}
+                  </span>
+                  <span className="text-[8px] font-mono text-zinc-450 dark:text-zinc-550 opacity-80 mt-0.5">
+                    ({scheduledRule && scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression === 'GLOBAL'
+                      ? `Global: ${cronExpr}`
+                      : cronExpr})
+                  </span>
+                </div>
               </div>
-            </div>
-          );
-        })()}
-      </header>
+            );
+          })()}
+        />
 
       {modulesLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
@@ -1570,10 +1589,10 @@ export const TriageInboxPage = () => {
           <p className="text-xs font-bold text-zinc-450 font-sans">Loading Work Distribution...</p>
         </div>
       ) : triageModule ? (
-        <>
+        <div className="flex flex-col gap-6 flex-1 min-h-0">
           {/* Executive KPI Bar */}
           <div className="grid grid-cols-5 gap-4 shrink-0">
-            <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-between">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl p-4 flex items-center justify-between shadow-xl">
               <div>
                 <p className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider">Pending Assessment</p>
                 <h3 className="text-2xl font-black text-zinc-100 mt-1">{kpis.pending}</h3>
@@ -1582,7 +1601,7 @@ export const TriageInboxPage = () => {
                 <Layers size={18} />
               </div>
             </div>
-            <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-between">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl p-4 flex items-center justify-between shadow-xl">
               <div>
                 <p className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider">Awaiting Info</p>
                 <h3 className="text-2xl font-black text-amber-400 mt-1">{kpis.needsInfo}</h3>
@@ -1591,7 +1610,7 @@ export const TriageInboxPage = () => {
                 <HelpCircle size={18} />
               </div>
             </div>
-            <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-between">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl p-4 flex items-center justify-between shadow-xl">
               <div>
                 <p className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider">Routed Workflows</p>
                 <h3 className="text-2xl font-black text-blue-400 mt-1">{kpis.routed}</h3>
@@ -1600,7 +1619,7 @@ export const TriageInboxPage = () => {
                 <CheckCircle size={18} />
               </div>
             </div>
-            <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-4 flex items-center justify-between">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-2xl p-4 flex items-center justify-between shadow-xl">
               <div>
                 <p className="text-[10px] font-bold text-zinc-450 uppercase tracking-wider">Rejected Entries</p>
                 <h3 className="text-2xl font-black text-rose-500 mt-1">{kpis.rejected}</h3>
@@ -1611,7 +1630,7 @@ export const TriageInboxPage = () => {
             </div>
             <a 
               href="/workspace/settings/intake?tab=security"
-              className="bg-zinc-900/30 border border-zinc-900 hover:border-rose-500/30 hover:bg-rose-950/5 hover:scale-[1.01] transition-all rounded-2xl p-4 flex items-center justify-between group cursor-pointer"
+              className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-rose-500/30 hover:bg-rose-500/5 hover:scale-[1.01] transition-all rounded-2xl p-4 flex items-center justify-between group cursor-pointer shadow-xl"
             >
               <div>
                 <p className="text-[10px] font-bold text-rose-400/90 uppercase tracking-wider flex items-center gap-1.5">
@@ -1632,7 +1651,7 @@ export const TriageInboxPage = () => {
           <div className="grid grid-cols-12 gap-6 flex-1 min-h-0 items-stretch">
             
             {/* Sidebar list (col-span-4) */}
-            <div className="col-span-4 bg-zinc-900/20 border border-zinc-900 rounded-3xl p-5 flex flex-col gap-4">
+            <div className="col-span-4 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-5 flex flex-col gap-4 shadow-xl">
               {/* Search Box & Refresh */}
               <div className="flex gap-2 items-center">
                 <div className="relative flex-1">
@@ -1647,11 +1666,11 @@ export const TriageInboxPage = () => {
                 </div>
                 <button 
                   onClick={loadInboxRecords}
-                  disabled={loading}
+                  disabled={loading || isRecordsFetching}
                   className="p-2.5 bg-zinc-950 border border-zinc-900 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-all cursor-pointer shrink-0"
                   title="Refresh Queue"
                 >
-                  <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                  <RefreshCw size={13} className={(loading || isRecordsFetching) ? 'animate-spin' : ''} />
                 </button>
               </div>
 
@@ -1772,7 +1791,7 @@ export const TriageInboxPage = () => {
             {/* Detail Viewer (col-span-8) */}
             <div className="col-span-8">
               {selectedRecord ? (
-                <div className="bg-zinc-900/20 border border-zinc-900 rounded-3xl p-6 flex flex-col h-full gap-5">
+                <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 flex flex-col h-full gap-5 shadow-xl">
                   {/* Action staging header bar */}
                   <div className="flex flex-wrap items-center justify-between border-b border-zinc-900 pb-4 gap-4">
                     <div className="min-w-0">
@@ -2632,7 +2651,7 @@ export const TriageInboxPage = () => {
                 </div>
               ) : (
                 /* Detail Pane Empty State */
-                <div className="h-full border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-zinc-550 bg-zinc-950/10">
+                <div className="h-full border border-dashed border-white/20 dark:border-white/5 rounded-3xl flex flex-col items-center justify-center p-8 text-center text-zinc-550 bg-white/10 dark:bg-white/[0.01] backdrop-blur-md shadow-inner">
                   <AlertCircle size={28} className="text-zinc-750 mb-3" />
                   <p className="text-xs font-bold text-zinc-400 font-sans">No Submission Selected</p>
                   <p className="text-[9.5px] text-zinc-500 mt-1 max-w-xs leading-normal">Select an incoming intake request from the left staging stream to preview form fields, leave collaboration logs, or dispatch tasks across modules.</p>
@@ -2641,10 +2660,10 @@ export const TriageInboxPage = () => {
             </div>
 
           </div>
-        </>
+        </div>
       ) : (
         /* Intake Disabled */
-        <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
+        <div className="flex-1 border border-dashed border-white/20 dark:border-white/5 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550 bg-white/10 dark:bg-white/[0.01] backdrop-blur-md shadow-inner">
           <AlertCircle size={36} className="text-zinc-700 mb-4" />
           <h3 className="text-sm font-black text-zinc-300">Work Distribution is not configured</h3>
           <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
@@ -2653,6 +2672,7 @@ export const TriageInboxPage = () => {
       
       {/* Visual Work Dispatch Modal */}
       {isRouting && renderRoutingModal()}
+      </div>
     </div>
   );
 };

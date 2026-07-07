@@ -28,9 +28,6 @@ import {
   X, 
   ArrowUp, 
   ArrowDown, 
-  MoveRight,
-  Sparkles,
-  Link,
   Heading
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -66,7 +63,7 @@ const COMMON_ICONS = [
   'MessageSquare', 'Calendar', 'Folder', 'Zap', 'Terminal', 'Heart', 'HelpCircle'
 ];
 
-export const NavigationArchitect = ({ sections, onChange, layout }: Props) => {
+export const NavigationArchitect = ({ sections, onChange, layout: _layout }: Props) => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -312,11 +309,11 @@ export const NavigationArchitect = ({ sections, onChange, layout }: Props) => {
                           sectionId={section.id}
                           allSections={sections}
                           onRemove={() => removeItem(section.id, item.id)}
-                          onUpdate={(updates) => updateItem(section.id, item.id, updates)}
+                          onUpdate={(updates: Partial<MenuItem>) => updateItem(section.id, item.id, updates)}
                           onIndent={() => indentItem(section.id, itemIndex)}
-                          onOutdent={(parentItemId, childId) => outdentItem(section.id, parentItemId, childId)}
-                          onChildUpdate={(childId, updates) => updateChildItem(section.id, item.id, childId, updates)}
-                          onMoveToSection={(targetSecId) => moveItemToSection(section.id, targetSecId, item)}
+                          onOutdent={(parentItemId: string, childId: string) => outdentItem(section.id, parentItemId, childId)}
+                          onChildUpdate={(childId: string, updates: Partial<MenuItem>) => updateChildItem(section.id, item.id, childId, updates)}
+                          onMoveToSection={(targetSecId: string) => moveItemToSection(section.id, targetSecId, item)}
                         />
                       ))
                     )}
@@ -382,12 +379,11 @@ const SortableItemWrapper = ({
             <ItemCard 
               key={child.id}
               item={child}
-              parentItemId={item.id}
               sectionId={sectionId}
               allSections={allSections}
               isChild={true}
               onRemove={() => {
-                const filtered = item.children?.filter(c => c.id !== child.id) || [];
+                const filtered = item.children?.filter((c: MenuItem) => c.id !== child.id) || [];
                 onUpdate({ children: filtered });
               }}
               onUpdate={(updates: any) => onChildUpdate(child.id, updates)}
@@ -404,7 +400,6 @@ const SortableItemWrapper = ({
 const ItemCard = ({ 
   item, 
   itemIndex,
-  parentItemId,
   sectionId, 
   allSections,
   isChild,

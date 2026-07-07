@@ -3,8 +3,10 @@ export interface MenuItem {
   label: string;
   iconName: string;
   to?: string;
-  isVisible: boolean;
+  isVisible?: boolean;
+  isSubtitle?: boolean;
   isCustom?: boolean;
+  children?: MenuItem[];
 }
 
 export interface MenuSection {

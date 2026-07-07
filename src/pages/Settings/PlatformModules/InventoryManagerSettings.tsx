@@ -13,6 +13,8 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
 import { toast } from 'sonner';
+import { useLocation } from 'react-router-dom';
+import { PageHeader } from '../../../components/UI/PageHeader';
 
 interface CatalogItem {
   id: string;
@@ -30,6 +32,7 @@ interface CatalogItem {
 }
 
 export const InventoryManagerSettings = () => {
+  const location = useLocation();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { tenant } = usePlatform();
@@ -195,11 +198,13 @@ export const InventoryManagerSettings = () => {
   const lowStockCount = items.filter(i => i.trackInventory && i.stockLevel > 0 && i.stockLevel <= i.reorderPoint).length;
   const outOfStockCount = items.filter(i => i.trackInventory && i.stockLevel === 0).length;
 
-  return (
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
+
+  const content = (
     <div className="space-y-6 text-left">
       {/* KPI stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex items-center gap-4">
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center">
             <Package size={24} />
           </div>
@@ -209,7 +214,7 @@ export const InventoryManagerSettings = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex items-center gap-4">
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
           <div className="w-12 h-12 bg-teal-500/10 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center">
             <Boxes size={24} />
           </div>
@@ -219,7 +224,7 @@ export const InventoryManagerSettings = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex items-center gap-4">
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${lowStockCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500' : 'bg-zinc-100 dark:bg-white/5 text-zinc-400'}`}>
             <AlertTriangle size={24} />
           </div>
@@ -229,7 +234,7 @@ export const InventoryManagerSettings = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex items-center gap-4">
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${outOfStockCount > 0 ? 'bg-red-500/10 text-red-650 dark:text-red-400 animate-pulse' : 'bg-zinc-100 dark:bg-white/5 text-zinc-400'}`}>
             <AlertTriangle size={24} />
           </div>
@@ -241,7 +246,7 @@ export const InventoryManagerSettings = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white/40 dark:bg-zinc-900/20 backdrop-blur-xl p-4 border border-zinc-200 dark:border-zinc-800 rounded-3xl">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl p-4 border border-white/20 dark:border-white/5 rounded-3xl shadow-xl">
         <div className="relative flex-1 w-full sm:w-80">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
           <input
@@ -267,7 +272,7 @@ export const InventoryManagerSettings = () => {
               className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
                 stockFilter === filter.id
                   ? 'bg-indigo-600 text-white shadow-md'
-                  : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200/50 dark:border-white/10 text-zinc-600 dark:text-zinc-300 hover:text-zinc-800 dark:hover:text-white font-semibold'
+                  : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200/50 dark:border-white/10 text-zinc-650 dark:text-zinc-350 hover:text-zinc-800 dark:hover:text-white font-semibold'
               }`}
             >
               {filter.label}
@@ -277,7 +282,7 @@ export const InventoryManagerSettings = () => {
       </div>
 
       {/* Main List */}
-      <div className="bg-white dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm min-h-[300px] relative">
+      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[300px] relative">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-zinc-400">
             <Loader2 className="animate-spin mb-2" size={32} />
@@ -408,6 +413,26 @@ export const InventoryManagerSettings = () => {
             </table>
           </div>
         )}
+      </div>
+    </div>
+  );
+
+  if (isSettingsMode) {
+    return content;
+  }
+
+  return (
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
+      {/* Background Glows */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+
+      <PageHeader 
+        title="Inventory Manager"
+        description="Real-time stock tracking, alert thresholds, and quantity adjustments for catalog products."
+      />
+      <div className="flex-1 relative z-10">
+        {content}
       </div>
     </div>
   );

@@ -4,21 +4,14 @@ import {
   Rows,
   Save,
   Plus,
-  ArrowRight,
-  Sparkles,
-  Link2,
-  Trash2,
   ListPlus,
   RefreshCw,
-  FolderOpen,
   Layout,
   Layers,
   Cpu,
-  Globe,
   LayoutGrid
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';

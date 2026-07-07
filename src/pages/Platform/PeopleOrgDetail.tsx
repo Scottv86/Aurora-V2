@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, 
-  ChevronRight, 
   User, 
   Building2, 
   ShieldCheck, 
@@ -30,7 +28,7 @@ import { AddRelationshipModal } from '../../components/Platform/AddRelationshipM
 export const PeopleOrgDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { tenant } = usePlatform();
+  const { tenant, setBreadcrumbOverride } = usePlatform();
   const { session } = useAuth();
   
   const [loading, setLoading] = useState(true);
@@ -101,7 +99,7 @@ export const PeopleOrgDetail = () => {
       if (!res.ok) {
         toast.error('Failed to fetch record');
         navigate('/workspace/platform/people-organisations');
-      } else {
+            } else {
         setParty(data);
         setFormData({
           status: data.status,
@@ -118,6 +116,15 @@ export const PeopleOrgDetail = () => {
             taxIdentifier: data.organization?.taxIdentifier || ''
           }
         });
+
+        const isPerson = data.partyType === 'PERSON';
+        const displayName = isPerson 
+          ? `${data.person?.firstName || ''} ${data.person?.lastName || ''}`.trim()
+          : data.organization?.legalName || '';
+        
+        if (id) {
+          setBreadcrumbOverride(id, displayName);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch party:', err);
@@ -147,6 +154,15 @@ export const PeopleOrgDetail = () => {
       } else {
         toast.success('Record updated successfully');
         setParty(data);
+
+        const isPerson = data.partyType === 'PERSON';
+        const displayName = isPerson 
+          ? `${data.person?.firstName || ''} ${data.person?.lastName || ''}`.trim()
+          : data.organization?.legalName || '';
+        
+        if (id) {
+          setBreadcrumbOverride(id, displayName);
+        }
       }
     } catch (err) {
       toast.error('Connection error');
@@ -226,23 +242,13 @@ export const PeopleOrgDetail = () => {
     : formData.organization.legalName;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      {/* Breadcrumbs */}
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/workspace/platform/people-organisations')}
-          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-        >
-          <ArrowLeft size={20} className="text-zinc-500" />
-        </button>
-        <div className="flex items-center text-sm font-medium">
-          <span className="text-zinc-400">Platform</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-400">People & Organisations</span>
-          <ChevronRight size={14} className="mx-2 text-zinc-600" />
-          <span className="text-zinc-900 dark:text-zinc-100">{displayName}</span>
-        </div>
-      </div>
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
+      {/* Background Glows */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+
+      <div className="relative z-10 flex flex-col w-full space-y-8">
+
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
@@ -315,7 +321,7 @@ export const PeopleOrgDetail = () => {
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Core Info */}
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
+                <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-8 space-y-6 shadow-xl">
                   <h3 className="text-lg font-bold flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4">
                     {isPerson ? <User size={18} className="text-amber-500" /> : <Building size={18} className="text-indigo-500" />}
                     {isPerson ? 'Personal Information' : 'Organisation Information'}
@@ -418,7 +424,7 @@ export const PeopleOrgDetail = () => {
                 </div>
 
                 {/* Status & Settings */}
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
+                <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-8 space-y-6 shadow-xl">
                   <h3 className="text-lg font-bold flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-4">
                     <ShieldCheck size={18} className="text-emerald-500" /> Lifecycle & Status
                   </h3>
@@ -489,7 +495,7 @@ export const PeopleOrgDetail = () => {
                            : other.organization?.legalName;
                          
                          return (
-                           <div key={rel.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 flex items-center justify-between shadow-sm hover:border-indigo-500/30 transition-all">
+                           <div key={rel.id} className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 flex items-center justify-between shadow-xl hover:border-indigo-500/30 transition-all">
                               <div className="flex items-center gap-4">
                                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
                                    other.partyType === 'PERSON' 
@@ -519,7 +525,7 @@ export const PeopleOrgDetail = () => {
                          );
                       })}
                       {relationships.length === 0 && (
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4">
+                        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-12 text-center space-y-4 shadow-xl">
                            <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400">
                              <GitBranch size={32} />
                            </div>
@@ -543,7 +549,7 @@ export const PeopleOrgDetail = () => {
                         <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white dark:border-zinc-900 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
                           <Clock size={16} />
                         </div>
-                        <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm transition-all hover:shadow-md">
+                        <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-white/20 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl shadow-xl transition-all hover:shadow-2xl">
                           <div className="flex items-center justify-between space-x-2 mb-1">
                             <div className="font-bold text-zinc-900 dark:text-white text-sm capitalize">{log.action.replace(/_/g, ' ').toLowerCase()}</div>
                             <time className="font-mono text-[10px] text-zinc-400">{new Date(log.timestamp).toLocaleString()}</time>
@@ -555,7 +561,7 @@ export const PeopleOrgDetail = () => {
                       </div>
                    ))}
                    {auditLogs.length === 0 && (
-                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-12 text-center space-y-4 ml-10">
+                      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-12 text-center space-y-4 ml-10 shadow-xl">
                         <p className="text-zinc-500">No activity recorded yet.</p>
                      </div>
                    )}
@@ -598,6 +604,7 @@ export const PeopleOrgDetail = () => {
           />
         </div>
       </Modal>
+      </div>
     </div>
   );
 };

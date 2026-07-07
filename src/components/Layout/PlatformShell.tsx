@@ -9,14 +9,6 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  GripVertical,
-  Eye,
-  EyeOff,
-  Save,
-  Edit2,
-  X,
-  Plus,
-  Trash2,
   Search,
   Settings2,
   LayoutDashboard,
@@ -54,23 +46,6 @@ import { SidebarItem } from '../Navigation/SidebarItem';
 import { Navbar } from '../Navigation/Navbar';
 import { Login } from '../Auth/Login';
 import { TopMegaMenu } from '../Navigation/TopMegaMenu';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { MenuSection, MenuItem } from '../../types/menu';
 import { AIAssistant } from '../AI/AIAssistant';
 import { ChatDrawer } from '../AI/ChatDrawer';
@@ -267,12 +242,9 @@ const AuroraBackground = () => (
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading } = useAuth();
   const { 
-    user: platformUser, 
     isLoading: platformLoading, 
     modules, 
     menuConfig, 
-    updateMenuConfig, 
-    setMenuConfig,
     isAIAssistantOpen,
     isChatOpen,
     isAppLauncherOpen,
@@ -286,7 +258,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
-  const [isEditMode, setIsEditMode] = useState(false);
   const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
 
   const toggleExpand = (itemId: string) => {
@@ -443,17 +414,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         ? "ml-16" 
         : (isSidebarOpen ? "ml-64" : "ml-16")));
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-       activationConstraint: {
-         distance: 8,
-       },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-  
   const enabledModules = modules.filter((m: any) => m.status === 'ACTIVE' || m.enabled);
 
   const resolvedConfig = useMemo(() => {
@@ -510,87 +470,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   if (!user) {
     return <Login />;
   }
-
-  const handleDragEnd = (event: DragEndEvent, sectionId: string) => {
-    const { active, over } = event;
-    if (!menuConfig?.sections) return;
-
-    // Handle Item Reordering
-    const sectionIndex = menuConfig.sections.findIndex(s => s.id === sectionId);
-    if (sectionIndex !== -1) {
-      const oldItemIndex = menuConfig.sections[sectionIndex].items.findIndex(i => i.id === active.id);
-      const newItemIndex = menuConfig.sections[sectionIndex].items.findIndex(i => i.id === over.id);
-
-      if (oldItemIndex !== -1 && newItemIndex !== -1) {
-        const newSections = [...menuConfig.sections];
-        newSections[sectionIndex] = {
-          ...newSections[sectionIndex],
-          items: arrayMove(newSections[sectionIndex].items, oldItemIndex, newItemIndex)
-        };
-        setMenuConfig({ ...menuConfig, sections: newSections });
-        return;
-      }
-    }
-
-    // Handle Section Reordering
-    const oldSectionIndex = menuConfig.sections.findIndex(s => s.id === active.id);
-    const newSectionIndex = menuConfig.sections.findIndex(s => s.id === over.id);
-
-    if (oldSectionIndex !== -1 && newSectionIndex !== -1) {
-      setMenuConfig({
-        ...menuConfig,
-        sections: arrayMove(menuConfig.sections, oldSectionIndex, newSectionIndex)
-      });
-    }
-  };
-
-  const toggleItemVisibility = (itemId: string) => {
-    if (!menuConfig) return;
-    const newSections = menuConfig.sections.map(section => ({
-      ...section,
-      items: section.items.map(item => 
-        item.id === itemId ? { ...item, isVisible: !item.isVisible } : item
-      )
-    }));
-    setMenuConfig({ ...menuConfig, sections: newSections });
-  };
-
-  const renameSection = (sectionId: string, newTitle: string) => {
-    if (!menuConfig) return;
-    const newSections = menuConfig.sections.map(section => 
-      section.id === sectionId ? { ...section, title: newTitle } : section
-    );
-    setMenuConfig({ ...menuConfig, sections: newSections });
-  };
-
-  const deleteSection = (sectionId: string) => {
-    if (!menuConfig) return;
-    // Don't delete the last section or critical sections?
-    setMenuConfig({
-      ...menuConfig,
-      sections: menuConfig.sections.filter(s => s.id !== sectionId)
-    });
-  };
-
-  const addSection = () => {
-    if (!menuConfig) return;
-    const newSection: MenuSection = {
-      id: `section-${Date.now()}`,
-      title: 'New Section',
-      items: []
-    };
-    setMenuConfig({
-      ...menuConfig,
-      sections: [...menuConfig.sections, newSection]
-    });
-  };
-
-  const handleSave = async (scope: 'user' | 'tenant') => {
-    if (!resolvedConfig) return;
-    // We save the resolved config so that any new modules are persisted where they were placed
-    await updateMenuConfig(resolvedConfig, scope);
-    setIsEditMode(false);
-  };
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 relative overflow-hidden">

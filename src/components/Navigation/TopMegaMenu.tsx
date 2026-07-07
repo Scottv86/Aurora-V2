@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
 import { ChevronDown, Box } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -60,7 +60,6 @@ export const TopMegaMenu = ({ menuConfig }: TopMegaMenuProps) => {
 
 const MegaMenuItemRenderer = ({ item, depth = 0 }: { item: MenuItem; depth?: number }) => {
   const IconComponent = (LucideIcons as any)[item.iconName] || Box;
-  const navigate = useNavigate();
 
   // If item is a subtitle (section divider/header)
   if ((item as any).isSubtitle) {
