@@ -32,7 +32,7 @@ const DEFAULT_ARTICLES: KBArticle[] = [
     category: 'Engineering',
     content: `Technical documentation for the Aurora Operating Platform:
 1. REST API Base URL: http://localhost:3001/api
-2. Authentication: Calls must contain the "Authorization: Bearer <token>" header. Developers should generate API keys in Settings > Developer API.
+2. Authentication: Calls must contain the "Authorization: Bearer <token>" header. Developers should generate API keys in Settings > API.
 3. Tenant Context: All tenant-specific data operations require the "x-tenant-id" header.
 4. Record Schemas: Modules define data collections. Every record contains a JSON "data" object matching the module fields layout. System triggers automatically execute calculation rules and SLA deadline timers upon record creation or updates.`,
     lastUpdated: new Date().toLocaleDateString()

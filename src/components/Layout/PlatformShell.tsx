@@ -23,19 +23,14 @@ import {
   ListTodo,
   Terminal,
   Database,
-  Lock,
-  History,
-  MessageSquare,
   BarChart,
   Key,
   TestTube,
-  RotateCcw,
   Palette,
   Compass,
   Globe,
   LayoutGrid,
   Code2,
-  Wrench,
   ArrowRightLeft,
   Banknote
 } from 'lucide-react';
@@ -273,6 +268,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       items: [
         { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
         { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
+        { label: 'Workforce', icon: UserCircle, to: '/workspace/settings/workforce' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
       ]
     },
@@ -289,13 +285,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Globe,
       items: [
         { label: 'Sites', icon: Globe, to: '/workspace/settings/sites' },
-      ]
-    },
-    {
-      category: 'People & Teams',
-      icon: LucideIcons.Users,
-      items: [
-        { label: 'Workforce', icon: UserCircle, to: '/workspace/settings/workforce' },
       ]
     },
     {
@@ -327,49 +316,24 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: ClipboardList,
       items: [
         { label: 'Templates', icon: FileText, to: '/workspace/settings/templates' },
+        { label: 'Reports', icon: BarChart, to: '/workspace/settings/reports' },
       ]
     },
     {
       category: 'Data & Logic',
       icon: Terminal,
       items: [
-        { label: 'Logic', icon: Terminal, to: '/workspace/settings/logic' },
-        { label: 'Database', icon: Database, to: '/workspace/settings/database' },
-        { label: 'Records', icon: Database, to: '/workspace/settings/records' },
+        { label: 'Data', icon: Database, to: '/workspace/settings/data' },
         { label: 'Lists', icon: ListTodo, to: '/workspace/settings/lists' },
-        { label: 'Migration Tools', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
-      ]
-    },
-    {
-      category: 'Security & Activity',
-      icon: LucideIcons.Shield,
-      items: [
-        { label: 'Security', icon: Lock, to: '/workspace/settings/security' },
-        { label: 'Audit Log', icon: History, to: '/workspace/settings/audit' },
-        { label: 'Message Logs', icon: MessageSquare, to: '/workspace/settings/messaging' },
-      ]
-    },
-    {
-      category: 'Reporting',
-      icon: BarChart,
-      items: [
-        { label: 'Reports', icon: BarChart, to: '/workspace/settings/reports' },
+        { label: 'Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
       ]
     },
     {
       category: 'Development',
       icon: Code2,
       items: [
-        { label: 'Developer API', icon: Key, to: '/workspace/settings/api' },
+        { label: 'API', icon: Key, to: '/workspace/settings/api' },
         { label: 'Testing', icon: TestTube, to: '/workspace/settings/testing' },
-        { label: 'Releases', icon: CloudUpload, to: '/workspace/settings/deploy' },
-      ]
-    },
-    {
-      category: 'Maintenance',
-      icon: Wrench,
-      items: [
-        { label: 'Factory Reset', icon: RotateCcw, to: '/workspace/settings/reset' },
       ]
     }
   ];

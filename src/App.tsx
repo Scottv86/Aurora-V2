@@ -32,7 +32,6 @@ import { Onboarding } from './components/Onboarding';
 import { WorkQueue } from './components/WorkQueue';
 import { ExternalPortal } from './components/ExternalPortal';
 import { ModuleEditor } from './components/ModuleEditor';
-import { LogicBuilder } from './components/LogicBuilder';
 import { Analytics } from './components/Analytics';
 
 import { DocumentAutomation } from './components/DocumentAutomation';
@@ -70,7 +69,9 @@ import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
 import { AutomationsPage } from './pages/Settings/AutomationsPage';
 import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
 import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
-import { DeveloperAPISettings } from './pages/Settings/DeveloperAPISettings';
+import { APISettings } from './pages/Settings/APISettings';
+import { QueryExplorer } from './pages/Settings/QueryExplorer';
+
 
 const NavigateWithSearch = ({ to, replace }: { to: string; replace?: boolean }) => {
   const location = useLocation();
@@ -136,8 +137,6 @@ const App = () => {
                 <Route path="documents" element={<Navigate to="/workspace/settings/templates" replace />} />
                 <Route path="workflows" element={<Navigate to="/workspace/settings/automations" replace />} />
                 <Route path="automations" element={<Navigate to="/workspace/settings/automations" replace />} />
-                <Route path="logic" element={<Navigate to="/workspace/settings/logic" replace />} />
-                <Route path="deployments" element={<Navigate to="/workspace/settings/deploy" replace />} />
                 <Route path="reports" element={<Navigate to="/workspace/settings/reports" replace />} />
                 <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
                 <Route path="platform" element={<NavigateWithSearch to="/workspace/platform/people-organisations" replace />} />
@@ -174,8 +173,6 @@ const App = () => {
                 <Route path="subscription" element={<SubscriptionPage />} />
                 <Route path="billing" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 <Route path="usage" element={<Navigate to="/workspace/settings/subscription" replace />} />
-                <Route path="security" element={<ComingSoon title="Security Settings" description="Configure authentication policies, SSO, and audit logging." />} />
-                <Route path="audit" element={<ComingSoon title="Audit Log" description="Review system activity, security events, and configuration changes across the platform." />} />
                 
                 {/* Module Builder */}
                 <Route path="builder" element={<BuilderChoice />} />
@@ -184,8 +181,6 @@ const App = () => {
                 
                 <Route path="modules" element={<ModuleCatalog />} />
                 <Route path="apps" element={<AppsSettings />} />
-                <Route path="messaging" element={<ComingSoon title="Messaging" description="View messaging logs including emails, SMS, Push notifications, and Portal notifications." />} />
-                <Route path="database" element={<ComingSoon title="Database Management" description="Direct database access, schema management, and raw data exploration tools." />} />
                 <Route path="lists" element={<GlobalListsSettings />} />
                 <Route path="branding" element={<BrandingSettingsPage />} />
                 <Route path="navigation" element={<NavigationSettingsPage />} />
@@ -203,19 +198,16 @@ const App = () => {
                 <Route path="reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
                 <Route path="knowledge" element={<Navigate to="/workspace/settings/platform-modules/knowledge-base" replace />} />
                 <Route path="sites" element={<SitesPage />} />
-                <Route path="logic" element={<LogicBuilder />} />
                 <Route path="testing" element={<ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." />} />
-                <Route path="deploy" element={<ComingSoon title="Deployment Center" description="Manage environment promotions, version history, and CI/CD pipelines." />} />
-                <Route path="api" element={<DeveloperAPISettings />} />
+                <Route path="api" element={<APISettings />} />
                 
                 {/* New Settings Placeholder Routes */}
-                <Route path="records" element={<ComingSoon title="Records" description="Manage system records, data entries, and historical logs across all modules." />} />
+                <Route path="data" element={<QueryExplorer />} />
                 <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
                 <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
                 <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                 <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
-                <Route path="reset" element={<ComingSoon title="Factory Reset" description="Revert system settings to default, clear temporary data, and reset configuration states." />} />
-                <Route path="migration" element={<ComingSoon title="Migration Tools" description="Data import, export, and migration utilities for moving data between systems." />} />
+                <Route path="migration" element={<ComingSoon title="Migration" description="Data import, export, and migration utilities for moving data between systems." />} />
                 <Route path="integrations" element={<ConnectorsPage />} />
                 <Route path="integrations/:id" element={<ConnectorsPage />} />
                 {/* Legacy redirects */}

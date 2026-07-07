@@ -22,21 +22,19 @@ const PATH_MAP: Record<string, string> = {
   automations: 'Automations',
   logic: 'Logic',
   security: 'Security',
-  audit: 'Audit Logs',
   sites: 'Sites',
   reports: 'Reports',
   knowledge: 'Knowledge Base',
   testing: 'Testing',
   deploy: 'Deployments',
   api: 'API',
-  records: 'Records',
+  data: 'Data',
   'fees-products': 'Fees & Products',
   finance: 'Finance',
   intake: 'Work Distribution',
   'work-distribution': 'Work Distribution',
   'people-organisations': 'People & Organisations',
-  reset: 'Factory Reset',
-  migration: 'Migration Tools',
+  migration: 'Migration',
   connectors: 'Integrations'
 };
 

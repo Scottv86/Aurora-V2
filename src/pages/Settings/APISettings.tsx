@@ -34,7 +34,7 @@ interface APIEndpoint {
   requestBody?: string;
 }
 
-export const DeveloperAPISettings = () => {
+export const APISettings = () => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   
@@ -228,7 +228,7 @@ export const DeveloperAPISettings = () => {
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-white/40 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4">
             <div>
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Developer APIs</h3>
+              <h3 className="text-lg font-bold text-zinc-900 dark:text-white">API</h3>
               <p className="text-xs text-zinc-450 mt-1">Tenant-scoped master data endpoints and programmatic automation triggers.</p>
             </div>
             
@@ -309,7 +309,7 @@ export const DeveloperAPISettings = () => {
                   <div className="flex items-center gap-3">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider ${
                       activeApi.method === 'GET' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' :
-                      activeApi.method === 'POST' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-500'
+                      activeApi.method === 'POST' ? 'bg-emerald-500/10 text-emerald-650 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-500'
                     }`}>
                       {activeApi.method}
                     </span>
@@ -352,13 +352,13 @@ export const DeveloperAPISettings = () => {
                       {activeApi.parameters.map(param => (
                         <tr key={param.name}>
                           <td className="py-2.5 px-4 font-mono font-bold text-zinc-800 dark:text-zinc-200">{param.name}</td>
-                          <td className="py-2.5 px-3 font-mono text-zinc-500">{param.type}</td>
+                          <td className="py-2.5 px-3 font-mono text-zinc-550">{param.type}</td>
                           <td className="py-2.5 px-3">
                             <span className={param.required ? 'text-red-500 font-bold' : 'text-zinc-400'}>
                               {param.required ? 'true' : 'false'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4 text-zinc-500 leading-normal">{param.description}</td>
+                          <td className="py-2.5 px-4 text-zinc-550 leading-normal">{param.description}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -413,7 +413,7 @@ export const DeveloperAPISettings = () => {
                       <button
                         onClick={runSandbox}
                         disabled={sandboxRunning || !sandboxSelectedSku}
-                        className="w-full flex items-center justify-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-2xl font-bold text-xs hover:bg-emerald-500 transition-all shadow-md shadow-emerald-500/10 disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2 px-5 py-2 bg-emerald-650 text-white rounded-2xl font-bold text-xs hover:bg-emerald-550 transition-all shadow-md shadow-emerald-500/10 disabled:opacity-50"
                       >
                         {sandboxRunning ? (
                           <>
@@ -458,7 +458,7 @@ export const DeveloperAPISettings = () => {
                       {sandboxResponse && (
                         <button 
                           onClick={() => setSandboxResponse(null)}
-                          className="text-[10px] font-bold text-zinc-400 hover:text-zinc-600 transition-colors flex items-center gap-1"
+                          className="text-[10px] font-bold text-zinc-400 hover:text-zinc-650 transition-colors flex items-center gap-1"
                         >
                           <RotateCcw size={10} /> Clear
                         </button>

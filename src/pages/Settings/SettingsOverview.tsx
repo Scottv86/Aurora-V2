@@ -12,7 +12,6 @@ import {
   Settings2,
   Terminal,
   Activity,
-  History,
   FilePlus,
   UserPlus
 } from 'lucide-react';
@@ -40,6 +39,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     to: '/workspace/settings/organization',
     category: 'General',
     tags: ['branding', 'general', 'seo', 'social']
+  },
+  {
+    id: 'workforce',
+    label: 'Workforce',
+    description: 'Members, teams, and roles.',
+    icon: 'UserCircle',
+    to: '/workspace/settings/workforce',
+    category: 'General',
+    tags: ['people', 'teams', 'hr', 'access']
   },
   {
     id: 'subscription',
@@ -78,16 +86,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
     to: '/workspace/settings/sites',
     category: 'Apps & Websites',
     tags: ['portals', 'public', 'web']
-  },
-  // People & Teams
-  {
-    id: 'workforce',
-    label: 'Workforce',
-    description: 'Members, teams, and roles.',
-    icon: 'UserCircle',
-    to: '/workspace/settings/workforce',
-    category: 'People & Teams',
-    tags: ['people', 'teams', 'hr', 'access']
   },
   // Billing & Payments
   {
@@ -165,31 +163,22 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Forms & Templates',
     tags: ['docs', 'automation', 'pdf']
   },
+  {
+    id: 'reports',
+    label: 'Reports',
+    description: 'Visual analytics and charts.',
+    icon: 'BarChart2',
+    to: '/workspace/settings/reports',
+    category: 'Forms & Templates',
+    tags: ['analytics', 'charts', 'dashboards']
+  },
   // Data & Logic
   {
-    id: 'logic',
-    label: 'Logic',
-    description: 'Business rules and conditions.',
-    icon: 'Terminal',
-    to: '/workspace/settings/logic',
-    category: 'Data & Logic',
-    tags: ['scripting', 'rules', 'engine']
-  },
-  {
-    id: 'database',
-    label: 'Database',
-    description: 'Direct data management.',
+    id: 'data',
+    label: 'Data',
+    description: 'Manage system data, database tables, and schema definitions.',
     icon: 'Database',
-    to: '/workspace/settings/database',
-    category: 'Data & Logic',
-    tags: ['raw data', 'schema', 'storage']
-  },
-  {
-    id: 'records',
-    label: 'Records',
-    description: 'Historical data and audit logs.',
-    icon: 'Database',
-    to: '/workspace/settings/records',
+    to: '/workspace/settings/data',
     category: 'Data & Logic',
     tags: ['history', 'logs', 'entries']
   },
@@ -204,55 +193,17 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   {
     id: 'migration',
-    label: 'Migration Tools',
+    label: 'Migration',
     description: 'Import and export data.',
     icon: 'ArrowRightLeft',
     to: '/workspace/settings/migration',
     category: 'Data & Logic',
     tags: ['import', 'export', 'transfer']
   },
-  // Security & Activity
-  {
-    id: 'security',
-    label: 'Security',
-    description: 'Logins, passwords, and SSO.',
-    icon: 'Lock',
-    to: '/workspace/settings/security',
-    category: 'Security & Activity',
-    tags: ['auth', 'sso', 'mfa']
-  },
-  {
-    id: 'audit',
-    label: 'Audit Log',
-    description: 'Complete system activity log.',
-    icon: 'History',
-    to: '/workspace/settings/audit',
-    category: 'Security & Activity',
-    tags: ['logs', 'compliance', 'tracking']
-  },
-  {
-    id: 'messaging',
-    label: 'Message Logs',
-    description: 'Email, SMS, and push history.',
-    icon: 'MessageSquare',
-    to: '/workspace/settings/messaging',
-    category: 'Security & Activity',
-    tags: ['communications', 'notifications', 'logs']
-  },
-  // Reporting
-  {
-    id: 'reports',
-    label: 'Reports',
-    description: 'Visual analytics and charts.',
-    icon: 'BarChart2',
-    to: '/workspace/settings/reports',
-    category: 'Reporting',
-    tags: ['analytics', 'charts', 'dashboards']
-  },
   // Development
   {
     id: 'api',
-    label: 'Developer API',
+    label: 'API',
     description: 'Keys and technical integrations.',
     icon: 'Key',
     to: '/workspace/settings/api',
@@ -267,25 +218,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
     to: '/workspace/settings/testing',
     category: 'Development',
     tags: ['qa', 'regression', 'automated']
-  },
-  {
-    id: 'deploy',
-    label: 'Releases',
-    description: 'Manage updates and deployments.',
-    icon: 'CloudUpload',
-    to: '/workspace/settings/deploy',
-    category: 'Development',
-    tags: ['release', 'environments', 'pipelines']
-  },
-  // Maintenance
-  {
-    id: 'reset',
-    label: 'Factory Reset',
-    description: 'Reset settings to defaults.',
-    icon: 'RotateCcw',
-    to: '/workspace/settings/reset',
-    category: 'Maintenance',
-    tags: ['danger', 'clear', 'defaults']
   }
 ];
 
@@ -393,7 +325,7 @@ export const SettingsOverview = () => {
       </div>
 
       {/* Prominent Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
         <QuickActionCard 
           icon={<UserPlus className="w-6 h-6" />}
           title="Add Member"
@@ -407,13 +339,6 @@ export const SettingsOverview = () => {
           description="Build a custom platform module"
           onClick={() => navigate('/workspace/settings/builder')}
           color="teal"
-        />
-        <QuickActionCard 
-          icon={<History className="w-6 h-6" />}
-          title="Audit Logs"
-          description="Review recent system activity"
-          onClick={() => navigate('/workspace/settings/audit')}
-          color="purple"
         />
         <QuickActionCard 
           icon={<Activity className="w-6 h-6" />}
