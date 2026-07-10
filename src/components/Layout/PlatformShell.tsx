@@ -26,6 +26,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { cn } from '../../lib/utils';
 import { SidebarItem } from '../Navigation/SidebarItem';
+import { PLATFORM_MODULES } from '../../config/platformModules';
 import { Navbar } from '../Navigation/Navbar';
 import { Login } from '../Auth/Login';
 import { TopMegaMenu } from '../Navigation/TopMegaMenu';
@@ -327,7 +328,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         ? "ml-16" 
         : (isSidebarOpen ? "ml-64" : "ml-16")));
 
-  const enabledModules = modules.filter((m: any) => m.status === 'ACTIVE' || m.enabled);
+  const enabledModules = modules.filter((m: any) => {
+    const isPlatform = PLATFORM_MODULES.some(pm => pm.id === m.id || pm.id === m.templateId || pm.name === m.name || pm.slug === m.templateId);
+    if (isPlatform) return false;
+    if (m.isGlobal || m.isIntakeTriage || m.config?.isIntakeTriage) return false;
+    return m.status === 'ACTIVE' || m.enabled;
+  });
 
   const resolvedConfig = useMemo(() => {
     if (!menuConfig) return null;
