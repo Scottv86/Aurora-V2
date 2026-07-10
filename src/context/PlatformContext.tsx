@@ -299,7 +299,25 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (res.ok) {
-        setMenuConfig(config);
+        let resolvedConfig = config;
+        // If it's an advanced mapping configuration (tenant scope), resolve it for the active user
+        if (config && typeof config === 'object' && !Array.isArray(config) && ('default' in config || 'roles' in config || 'teams' in config || 'positions' in config || 'users' in config)) {
+          const tConfig = config as any;
+          const userAny = user as any;
+          const memberId = userAny?.memberId || userAny?.cuid;
+          const teamId = userAny?.teamId;
+          const positionId = userAny?.positionId;
+          const roleId = userAny?.roleId || userAny?.role || 'USER';
+
+          resolvedConfig = 
+            (memberId && tConfig.users?.[memberId]) ||
+            (teamId && tConfig.teams?.[teamId]) ||
+            (positionId && tConfig.positions?.[positionId]) ||
+            (roleId && tConfig.roles?.[roleId]) ||
+            tConfig.default ||
+            systemDefaultMenuConfig;
+        }
+        setMenuConfig(resolvedConfig);
         toast.success(`Menu configuration saved to ${scope === 'tenant' ? 'organization' : 'profile'}.`);
       } else {
         const error = await res.json();
