@@ -13,7 +13,6 @@ import {
   Bell, 
   BarChart3,
   Search,
-  AlertCircle,
   Loader2,
   FileType,
   Rss,
@@ -163,10 +162,6 @@ export const AppsSettings = () => {
 
                     <div className="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800">
                       <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Workspace Suite</span>
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
-                        <AlertCircle size={10} />
-                        Active
-                      </div>
                     </div>
                   </div>
                 </motion.div>
