@@ -190,6 +190,7 @@ const App = () => {
                 <Route path="builder/:id" element={<ModuleEditor />} />
                 <Route path="modules" element={<Navigate to="/workspace/settings/platform-modules" replace />} />
                 <Route path="apps" element={<AppsSettings />} />
+                <Route path="documentation" element={<ComingSoon title="Documentation" description="Central repository for platform guides, system documentation, and developer references." />} />
                 <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
                 <Route path="branding" element={<BrandingSettingsPage />} />
                 <Route path="navigation" element={<NavigationSettingsPage />} />
