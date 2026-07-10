@@ -130,10 +130,10 @@ export const AppsSettings = () => {
                           onClick={(e) => handleToggleApp(e, app.id)}
                           disabled={savingAppId !== null}
                           className={cn(
-                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all duration-300 min-w-[95px] justify-center shadow-sm cursor-pointer",
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all duration-300 min-w-[95px] justify-center cursor-pointer border",
                             isEnabled
-                              ? "bg-emerald-500 text-white shadow-emerald-500/10"
-                              : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 border border-zinc-200/50 dark:border-zinc-700/50 hover:text-zinc-600 dark:hover:text-zinc-350",
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20"
+                              : "bg-zinc-100/50 dark:bg-zinc-800/30 text-zinc-450 dark:text-zinc-500 border-zinc-200/50 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 hover:text-zinc-600 dark:hover:text-zinc-400",
                             savingAppId === app.id && "opacity-80 cursor-wait"
                           )}
                         >
