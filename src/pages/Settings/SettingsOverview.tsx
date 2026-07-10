@@ -45,15 +45,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'General',
     tags: ['subscription', 'payment', 'invoices', 'ai', 'tokens', 'cost', 'usage', 'quota']
   },
-  {
-    id: 'documentation',
-    label: 'Documentation',
-    description: 'Access the central platform documentation, guides, and developer resources.',
-    icon: 'BookOpen',
-    to: '/workspace/settings/documentation',
-    category: 'General',
-    tags: ['docs', 'help', 'guides', 'documentation', 'wiki']
-  },
+
   
   // Look & Feel
   {

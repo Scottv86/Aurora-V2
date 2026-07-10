@@ -43,8 +43,7 @@ const PATH_MAP: Record<string, string> = {
   'report-management': 'Report Management',
   'api-management': 'API Management',
   'financial-management': 'Financial Management',
-  'global-lists': 'Global Lists',
-  documentation: 'Documentation'
+  'global-lists': 'Global Lists'
 };
 
 export const Breadcrumbs = () => {

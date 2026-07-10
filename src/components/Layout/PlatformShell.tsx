@@ -14,7 +14,6 @@ import {
   LayoutDashboard,
   Building,
   CreditCard,
-  BookOpen,
   Layers,
   Terminal,
   Database,
@@ -259,7 +258,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
         { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
-        { label: 'Documentation', icon: BookOpen, to: '/workspace/settings/documentation' },
       ]
     },
     {
