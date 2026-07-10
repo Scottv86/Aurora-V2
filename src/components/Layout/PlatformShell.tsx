@@ -419,6 +419,57 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                         onToggleExpand={toggleExpand}
                       />
                     ))}
+
+                    {resolvedConfig.sections.length === 0 && (
+                      <div className={cn("text-center", collapsed ? "px-1 py-4" : "px-4 py-6 space-y-4")}>
+                        {user?.role === 'Admin' || user?.role === 'SUPERADMIN' ? (
+                          collapsed ? (
+                            <button
+                              onClick={() => navigate('/workspace/settings/navigation')}
+                              className="w-10 h-10 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 flex items-center justify-center transition-all mx-auto animate-pulse"
+                              title="Configure Navigation"
+                            >
+                              <Settings2 size={18} />
+                            </button>
+                          ) : (
+                            <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-3">
+                              <div className="mx-auto w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                                <Settings2 size={16} />
+                              </div>
+                              <div className="space-y-1">
+                                <h4 className="text-[11px] font-bold text-zinc-900 dark:text-white">Configure Sidebar</h4>
+                                <p className="text-[9px] text-zinc-500 leading-normal">No menu items configured. Design your layout in settings.</p>
+                              </div>
+                              <button 
+                                onClick={() => navigate('/workspace/settings/navigation')}
+                                className="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition-all shadow-sm"
+                              >
+                                Open Builder
+                              </button>
+                            </div>
+                          )
+                        ) : (
+                          collapsed ? (
+                            <div 
+                              className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-400 flex items-center justify-center mx-auto"
+                              title="No menu items configured"
+                            >
+                              <LayoutDashboard size={18} />
+                            </div>
+                          ) : (
+                            <div className="p-4 rounded-2xl bg-zinc-100/30 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 space-y-2">
+                              <div className="mx-auto w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                                <LayoutDashboard size={16} />
+                              </div>
+                              <div className="space-y-0.5">
+                                <h4 className="text-[11px] font-bold text-zinc-900 dark:text-white">Welcome to Aurora</h4>
+                                <p className="text-[9px] text-zinc-500 leading-normal">No menu items configured yet. Please contact your administrator.</p>
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
