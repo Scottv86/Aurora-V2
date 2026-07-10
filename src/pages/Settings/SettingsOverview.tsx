@@ -144,7 +144,7 @@ export const SettingsOverview = () => {
   }, [filteredItems]);
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 min-h-screen relative overflow-hidden">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
       {/* Background Glows */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
