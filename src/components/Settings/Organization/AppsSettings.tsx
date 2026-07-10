@@ -155,13 +155,9 @@ export const AppsSettings = () => {
                       <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         {app.label}
                       </h3>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed mb-6">
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed mb-0">
                         {app.description}
                       </p>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                      <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Workspace Suite</span>
                     </div>
                   </div>
                 </motion.div>
