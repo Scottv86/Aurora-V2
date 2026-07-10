@@ -185,7 +185,7 @@ export const PlatformModulesSettings = () => {
                               <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
                                 <IconComponent size={24} />
                               </div>
-                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold uppercase tracking-wider">
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold uppercase tracking-wider group-hover:opacity-0 transition-opacity duration-300">
                                 Custom
                               </span>
                             </div>
