@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
@@ -671,6 +672,8 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
 };
 
 export const AutomationsPage: React.FC = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant, modules, members = [], teams = [] } = usePlatform();
   const { positions } = usePositions();
   const { session } = useAuth();
@@ -1129,7 +1132,10 @@ export const AutomationsPage: React.FC = () => {
   }, [automations, searchQuery, filterScope]);
 
   return (
-    <div className="flex h-full w-full bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
+    <div className={cn(
+      "flex w-full overflow-hidden",
+      isSettingsMode ? "h-[calc(100vh-16rem)] rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl" : "h-full bg-zinc-50 dark:bg-zinc-950"
+    )}>
       
       {/* COLUMN 1: Rules Directory Sidebar */}
       <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">

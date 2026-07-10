@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { cn } from '../../lib/utils';
 import { Tabs, Modal } from '../../components/UI/TabsAndModal';
 import { 
   Network, 
@@ -146,6 +148,8 @@ const INITIAL_SITES: Site[] = [
 ];
 
 export const SitesPage = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const [activeTab, setActiveTab] = useState('internal');
   const [sites, setSites] = useState<Site[]>(INITIAL_SITES);
   const [searchQuery, setSearchQuery] = useState('');
@@ -253,10 +257,10 @@ export const SitesPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
+      <div className={cn("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10")}>
         <PageHeader 
-          title="Sites"
-          description="Manage your organization's internal hubs, client-facing submission portals, and public marketing microsites. Configure access control, custom domains, and templates."
+          title={isSettingsMode ? "" : "Sites"}
+          description={isSettingsMode ? "" : "Manage your organization's internal hubs, client-facing submission portals, and public marketing microsites. Configure access control, custom domains, and templates."}
           tabs={
             <Tabs 
               tabs={tabs} 

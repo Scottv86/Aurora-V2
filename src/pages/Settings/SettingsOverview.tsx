@@ -40,15 +40,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'General',
     tags: ['branding', 'general', 'seo', 'social']
   },
-  {
-    id: 'workforce',
-    label: 'Workforce',
-    description: 'Members, teams, and roles.',
-    icon: 'UserCircle',
-    to: '/workspace/settings/workforce',
-    category: 'General',
-    tags: ['people', 'teams', 'hr', 'access']
-  },
+
   {
     id: 'subscription',
     label: 'Subscription',
@@ -77,26 +69,8 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Look & Feel',
     tags: ['layout', 'menu', 'sidebar', 'top menu', 'navigation']
   },
-  // Apps & Websites
-  {
-    id: 'sites',
-    label: 'Sites',
-    description: 'Public websites and portals.',
-    icon: 'Globe',
-    to: '/workspace/settings/sites',
-    category: 'Apps & Websites',
-    tags: ['portals', 'public', 'web']
-  },
-  // Billing & Payments
-  {
-    id: 'finance',
-    label: 'Finance',
-    description: 'Tax and accounting rules.',
-    icon: 'Banknote',
-    to: '/workspace/settings/finance',
-    category: 'Billing & Payments',
-    tags: ['accounting', 'tax', 'money']
-  },
+
+
   {
     id: 'fees-products',
     label: 'Fees & Products',
@@ -108,22 +82,13 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   // Platform Features
   {
-    id: 'modules',
-    label: 'Modules',
-    description: 'Platform features and tools.',
-    icon: 'Layers',
-    to: '/workspace/settings/modules',
-    category: 'Modules & Apps',
-    tags: ['extensions', 'features', 'catalog']
-  },
-  {
     id: 'platform-modules',
-    label: 'Platform Modules',
-    description: 'Core system functionality.',
+    label: 'Modules',
+    description: 'Manage core system features and custom builder modules.',
     icon: 'Cpu',
     to: '/workspace/settings/platform-modules',
     category: 'Modules & Apps',
-    tags: ['system', 'advanced', 'core']
+    tags: ['system', 'custom', 'modules', 'builder']
   },
   {
     id: 'apps',
@@ -134,44 +99,8 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Modules & Apps',
     tags: ['integrations', 'ecosystem', 'tools']
   },
-  // Automations & Sync
-  {
-    id: 'automations',
-    label: 'Automations',
-    description: 'Automated workflow rules.',
-    icon: 'Zap',
-    to: '/workspace/settings/automations',
-    category: 'Automations & Sync',
-    tags: ['workflows', 'triggers', 'automation']
-  },
-  {
-    id: 'connectors',
-    label: 'Integrations',
-    description: 'Syncing data with other systems.',
-    icon: 'Plug',
-    to: '/workspace/settings/integrations',
-    category: 'Automations & Sync',
-    tags: ['api', 'webhooks', 'sync']
-  },
-  // Forms & Templates
-  {
-    id: 'templates',
-    label: 'Templates',
-    description: 'Document and email templates.',
-    icon: 'FileText',
-    to: '/workspace/settings/templates',
-    category: 'Forms & Templates',
-    tags: ['docs', 'automation', 'pdf']
-  },
-  {
-    id: 'reports',
-    label: 'Reports',
-    description: 'Visual analytics and charts.',
-    icon: 'BarChart2',
-    to: '/workspace/settings/reports',
-    category: 'Forms & Templates',
-    tags: ['analytics', 'charts', 'dashboards']
-  },
+
+
   // Data & Logic
   {
     id: 'data',
@@ -182,15 +111,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Data & Logic',
     tags: ['history', 'logs', 'entries']
   },
-  {
-    id: 'lists',
-    label: 'Lists',
-    description: 'System dropdowns and options.',
-    icon: 'ListTodo',
-    to: '/workspace/settings/lists',
-    category: 'Data & Logic',
-    tags: ['data', 'dropdowns', 'choices']
-  },
+
   {
     id: 'migration',
     label: 'Migration',
@@ -200,25 +121,8 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Data & Logic',
     tags: ['import', 'export', 'transfer']
   },
-  // Development
-  {
-    id: 'api',
-    label: 'API',
-    description: 'Keys and technical integrations.',
-    icon: 'Key',
-    to: '/workspace/settings/api',
-    category: 'Development',
-    tags: ['developer', 'access', 'tokens']
-  },
-  {
-    id: 'testing',
-    label: 'Testing',
-    description: 'Automated platform tests.',
-    icon: 'TestTube',
-    to: '/workspace/settings/testing',
-    category: 'Development',
-    tags: ['qa', 'regression', 'automated']
-  }
+
+
 ];
 
 const CategoryIcon = ({ category }: { category: string }) => {

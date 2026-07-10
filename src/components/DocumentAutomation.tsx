@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   FileText, 
   Plus, 
@@ -20,6 +21,8 @@ import { toast } from 'sonner';
 import { PageHeader } from './UI/PageHeader';
 
 export const DocumentAutomation = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,10 +94,10 @@ export const DocumentAutomation = () => {
   }
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+    <div className={cn("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10 space-y-8")}>
       <PageHeader 
-        title="Templates"
-        description="Create and manage reusable document templates for your platform."
+        title={isSettingsMode ? "" : "Templates"}
+        description={isSettingsMode ? "" : "Create and manage reusable document templates for your platform."}
         actions={
           <button
             onClick={handleCreateNew}

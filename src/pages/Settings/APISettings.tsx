@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Code, 
   Search, 
@@ -19,6 +20,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
+import { cn } from '../../lib/utils';
 
 
 interface APIEndpoint {
@@ -35,6 +37,8 @@ interface APIEndpoint {
 }
 
 export const APISettings = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant } = usePlatform();
   const { session } = useAuth();
   
@@ -217,9 +221,13 @@ export const APISettings = () => {
   };
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative text-left">
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+    <div className={cn("flex flex-col w-full text-left", !isSettingsMode && "px-6 lg:px-12 py-10 relative")}>
+      {!isSettingsMode && (
+        <>
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+        </>
+      )}
 
       {/* Main Container */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start relative z-10">

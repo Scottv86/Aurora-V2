@@ -13,26 +13,14 @@ import {
   Settings2,
   LayoutDashboard,
   Building,
-  UserCircle,
   CreditCard,
   Layers,
-  Plug,
-  Zap,
-  ClipboardList,
-  FileText,
-  ListTodo,
   Terminal,
   Database,
-  BarChart,
-  Key,
-  TestTube,
   Palette,
   Compass,
-  Globe,
   LayoutGrid,
-  Code2,
-  ArrowRightLeft,
-  Banknote
+  ArrowRightLeft
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -268,7 +256,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       items: [
         { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
         { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
-        { label: 'Workforce', icon: UserCircle, to: '/workspace/settings/workforce' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
       ]
     },
@@ -280,43 +267,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
       ]
     },
-    {
-      category: 'Apps & Websites',
-      icon: Globe,
-      items: [
-        { label: 'Sites', icon: Globe, to: '/workspace/settings/sites' },
-      ]
-    },
-    {
-      category: 'Billing & Payments',
-      icon: Banknote,
-      items: [
-        { label: 'Finance', icon: Banknote, to: '/workspace/settings/finance' },
-      ]
-    },
+
     {
       category: 'Modules & Apps',
       icon: LucideIcons.Layout,
       items: [
-        { label: 'Modules', icon: Layers, to: '/workspace/settings/modules' },
-        { label: 'Platform Modules', icon: Cpu, to: '/workspace/settings/platform-modules' },
+        { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Apps', icon: LayoutGrid, to: '/workspace/settings/apps' },
-      ]
-    },
-    {
-      category: 'Automations & Sync',
-      icon: Zap,
-      items: [
-        { label: 'Automations', icon: Zap, to: '/workspace/settings/automations' },
-        { label: 'Integrations', icon: Plug, to: '/workspace/settings/integrations' },
-      ]
-    },
-    {
-      category: 'Forms & Templates',
-      icon: ClipboardList,
-      items: [
-        { label: 'Templates', icon: FileText, to: '/workspace/settings/templates' },
-        { label: 'Reports', icon: BarChart, to: '/workspace/settings/reports' },
       ]
     },
     {
@@ -324,18 +281,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Terminal,
       items: [
         { label: 'Data', icon: Database, to: '/workspace/settings/data' },
-        { label: 'Lists', icon: ListTodo, to: '/workspace/settings/lists' },
         { label: 'Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
       ]
     },
-    {
-      category: 'Development',
-      icon: Code2,
-      items: [
-        { label: 'API', icon: Key, to: '/workspace/settings/api' },
-        { label: 'Testing', icon: TestTube, to: '/workspace/settings/testing' },
-      ]
-    }
+
   ];
 
   const filteredSettingsItems = useMemo(() => {

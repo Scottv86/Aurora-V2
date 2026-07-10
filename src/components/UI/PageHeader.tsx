@@ -27,25 +27,29 @@ export const PageHeader = ({
   return (
     <div className={cn("space-y-6 mb-8", className)}>
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="flex items-start gap-4">
-          {Icon && (
-            <div className={cn("p-3 rounded-2xl shadow-lg", iconClassName)}>
-              <Icon size={24} className="text-white" />
-            </div>
-          )}
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-              {title}
-            </h1>
-            {description && (
-              <p className="text-zinc-500 dark:text-zinc-400 max-w-3xl text-sm font-medium leading-relaxed mt-1">
-                {description}
-              </p>
+        {(title || Icon) && (
+          <div className="flex items-start gap-4">
+            {Icon && (
+              <div className={cn("p-3 rounded-2xl shadow-lg", iconClassName)}>
+                <Icon size={24} className="text-white" />
+              </div>
+            )}
+            {title && (
+              <div className="space-y-1">
+                <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+                  {title}
+                </h1>
+                {description && (
+                  <p className="text-zinc-500 dark:text-zinc-400 max-w-3xl text-sm font-medium leading-relaxed mt-1">
+                    {description}
+                  </p>
+                )}
+              </div>
             )}
           </div>
-        </div>
+        )}
         {actions && (
-          <div className="flex items-center gap-3 shrink-0">
+          <div className={cn("flex items-center gap-3 shrink-0", !(title || Icon) && "ml-auto")}>
             {actions}
           </div>
         )}

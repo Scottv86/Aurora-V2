@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Search, 
   Settings2, 
@@ -48,6 +48,8 @@ interface TenantConnector {
 }
 
 export const ConnectorsPage = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant, modules, isLoading: platformLoading } = usePlatform();
   const { session } = useAuth();
   const { id: selectedConnectorId } = useParams();
@@ -228,10 +230,14 @@ export const ConnectorsPage = () => {
 
   return (
     <>
-      <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
+      <div className={clsx("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10 relative")}>
         {/* Background Glows */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+        {!isSettingsMode && (
+          <>
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+          </>
+        )}
 
         {!selectedConnectorId ? (
           <motion.div
@@ -240,8 +246,8 @@ export const ConnectorsPage = () => {
             className="relative z-10"
           >
             <PageHeader 
-              title="Integrations"
-              description="Nexus API Vending Machine. Activate business capabilities and snap them into your modules."
+              title={isSettingsMode ? "" : "Integrations"}
+              description={isSettingsMode ? "" : "Nexus API Vending Machine. Activate business capabilities and snap them into your modules."}
               actions={
                 <div className="flex items-center gap-4">
                   <div className="relative w-64">

@@ -14,7 +14,6 @@ import {
   Search, 
   Loader2,
   Terminal,
-  Activity,
   AlertTriangle,
   CheckCircle2
 } from 'lucide-react';
@@ -332,7 +331,7 @@ export const QueryExplorer = () => {
         <div className="px-3 py-2 bg-zinc-900/50 flex items-center gap-2 text-[11px] border-b border-zinc-800/80">
           <Database size={11} className="text-emerald-400" />
           <span className="font-semibold text-zinc-400 truncate">
-            {tenant?.name || 'Local'} ({tenant?.subdomain || 'dev'})
+            {tenant?.name || 'Local'} ({tenant?.slug || 'dev'})
           </span>
         </div>
 

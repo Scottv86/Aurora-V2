@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { PeopleCenter } from '../../components/Settings/Workforce/PeopleCenter';
 import { TeamHub } from '../../components/Settings/Workforce/TeamHub';
@@ -17,6 +18,8 @@ import { cn } from '../../lib/utils';
 import { PageHeader } from '../../components/UI/PageHeader';
 
 export const WorkforcePage = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const [activeTab, setActiveTab] = useState('people');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -91,10 +94,10 @@ export const WorkforcePage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
+      <div className={cn("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10")}>
         <PageHeader 
-        title="Workforce"
-        description="Manage your team of people and AI agents in one place. Organize teams, define positions, and control access permissions."
+        title={isSettingsMode ? "" : "Workforce"}
+        description={isSettingsMode ? "" : "Manage your team of people and AI agents in one place. Organize teams, define positions, and control access permissions."}
         actions={
           <div className="flex items-center gap-3">
             <div className="relative">

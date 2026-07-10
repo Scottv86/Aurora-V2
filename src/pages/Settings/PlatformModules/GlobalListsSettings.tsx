@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { 
   Search, 
   Plus, 
@@ -48,11 +49,14 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { useGlobalLists, useGlobalList, GlobalListItem, ListColumn } from '../../../hooks/useGlobalList';
-import { PageHeader } from '../../UI/PageHeader';
+import { PageHeader } from '../../../components/UI/PageHeader';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 
 export const GlobalListsSettings = () => {
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
+
   const { lists, loading: listsLoading, createList, deleteList, refetch: refetchLists } = useGlobalLists();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,146 +249,185 @@ export const GlobalListsSettings = () => {
     setContextMenu({ x: e.clientX, y: e.clientY, type: 'cell', itemId, colId, rowIndex, colIndex });
   };
 
+  const content = (
+    <AnimatePresence mode="wait">
+      {!selectedListId ? (
+        <motion.div key="master" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex-1 flex flex-col space-y-8">
+          {!isSettingsMode && <PageHeader title="Global Lists" description="Enterprise-grade lookup tables with full SCD Type 2 versioning." />}
+          <div className="flex flex-col space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="relative w-96">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+                <input type="text" placeholder="Search lists..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-12 pr-4 py-3 text-sm outline-none focus:border-indigo-500 transition-all" />
+              </div>
+              <button onClick={() => setIsCreatingList(true)} className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-lg active:scale-95">
+                <Plus size={18} />
+                <span>Create List</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pb-12">
+              {listsLoading ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-64 bg-zinc-100 dark:bg-zinc-900 animate-pulse rounded-3xl" />) : filteredLists.map((list) => (
+                <motion.div key={list.id} whileHover={{ y: -4 }} onClick={() => setSelectedListId(list.id)} className="group cursor-pointer bg-white dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between min-h-[180px]">
+                  <div className="space-y-4"><div className="p-3 w-fit bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Database size={20} /></div><div className="space-y-1"><h3 className="text-lg font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 transition-colors">{list.name}</h3><p className="text-sm text-zinc-500 line-clamp-2">{list.description || <span className="italic text-zinc-400 opacity-50">No description provided</span>}</p></div></div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      ) : (
+        <motion.div key="detail" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex-1 flex flex-row gap-6 overflow-visible">
+          <div className="flex-1 flex flex-col min-w-0 overflow-visible">
+            <div className="mb-6 flex items-center justify-between bg-white dark:bg-zinc-900/40 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-sm relative z-40 backdrop-blur-md">
+              <div className="flex items-center gap-6">
+                <button onClick={() => { setSelectedListId(null); setInspectedItem(null); setActiveMenuColumnId(null); setActiveEditingCell(null); setIsEditingMetadata(false); }} className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-2xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all shadow-sm"><ArrowLeft size={20} /></button>
+                <div className="space-y-1 group">
+                  {isEditingMetadata ? (
+                    <div className="flex flex-col gap-2">
+                      <input 
+                        autoFocus 
+                        value={metadataForm.name} 
+                        onChange={(e) => setMetadataForm({ ...metadataForm, name: e.target.value })} 
+                        onBlur={handleUpdateMetadata}
+                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateMetadata()}
+                        className="text-2xl font-black bg-indigo-500/10 border-b border-indigo-500 text-indigo-600 dark:text-indigo-400 outline-none px-2" 
+                        placeholder="List Name" 
+                      />
+                      <input 
+                        value={metadataForm.description} 
+                        onChange={(e) => setMetadataForm({ ...metadataForm, description: e.target.value })} 
+                        onBlur={handleUpdateMetadata}
+                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateMetadata()}
+                        className="text-xs font-bold text-zinc-500 bg-transparent border-b border-zinc-800 outline-none px-2" 
+                        placeholder="Description (optional)" 
+                      />
+
+                    </div>
+                  ) : (
+                    <div className="flex flex-col cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 p-2 -m-2 rounded-xl transition-all" onClick={() => setIsEditingMetadata(true)}>
+                      <div className="flex items-center gap-2"><h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight leading-none">{activeList?.name}</h2><Edit2 size={14} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" /></div>
+                      {activeList?.description && <p className="text-xs font-bold text-zinc-500 mt-1">{activeList.description}</p>}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-100/50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl"><span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Density</span><input type="range" min="32" max="80" value={rowHeight} onChange={(e) => setRowHeight(parseInt(e.target.value))} className="w-20 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600" /></div>
+                  <button onClick={() => setConfirmDeleteListId(activeListSummary!.id)} className="p-3 text-zinc-400 hover:text-rose-600 rounded-2xl transition-all"><Trash2 size={20} /></button>
+              </div>
+            </div>
+            <div className="flex-1 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl relative z-30">
+              <div className="p-4 border-b border-white/10 dark:border-zinc-800 flex items-center justify-between bg-white/5 dark:bg-white/5">
+                 <div className="flex items-center gap-3"><div className="p-1.5 bg-white/10 dark:bg-zinc-800 rounded-lg text-zinc-400"><LayoutGrid size={14} /></div><span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{localItems.length} Records Active</span></div>
+                 <button onClick={() => setShowHistory(!showHistory)} className={cn("flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border", showHistory ? "bg-rose-500 border-rose-600 text-white" : "bg-white/10 dark:bg-zinc-800 text-zinc-400 border-transparent")}><History size={12} /><span>{showHistory ? 'Viewing History' : 'View History'}</span></button>
+              </div>
+              <div className="flex-1 overflow-auto custom-scrollbar relative z-30" onClick={(e) => { 
+                if (activeMenuColumnId && !(e.target as HTMLElement).closest('.column-header-container')) setActiveMenuColumnId(null); 
+                if (activeMenuRowId && !(e.target as HTMLElement).closest('.row-menu-container')) setActiveMenuRowId(null);
+              }}>
+                 {activeList && (
+                   <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                     <table className="w-max min-w-full text-left border-collapse table-fixed relative z-30">
+                       <thead className="sticky top-0 bg-white/10 dark:bg-white/5 dark:backdrop-blur-md z-50 shadow-sm border-b border-white/10 dark:border-zinc-800">
+                         <tr>
+                           <th className="p-0 w-16 text-center border-r border-white/10 dark:border-zinc-800 bg-white/5 dark:bg-zinc-900/50">#</th>
+                           {activeList.columns.map((col, idx) => (
+                             <th key={col.id} className="p-0 text-[10px] font-black text-zinc-400 relative group/th border-r border-zinc-100 dark:border-zinc-800 bg-white dark:bg-white/5 dark:backdrop-blur-md column-header-container context-menu-trigger" style={{ width: columnWidths[col.id] || 200 }} onContextMenu={(e) => onHeaderContextMenu(e, col.id, idx)}>
+                               <ColumnHeader column={col} isMenuOpen={activeMenuColumnId === col.id} onToggleMenu={(open: boolean) => setActiveMenuColumnId(open ? col.id : null)} onUpdate={(updates: Partial<ListColumn>) => handleColumnUpdate(col.id, updates)} onDelete={() => setConfirmDeleteColumnId(col.id)} onResize={(width: number) => handleResizeColumn(col.id, width)} onInsertLeft={() => handleAddColumn(idx)} onInsertRight={() => handleAddColumn(idx + 1)} disabled={showHistory} />
+                             </th>
+                           ))}
+
+                           <th className="p-4 w-16 bg-white/5 dark:bg-zinc-900/30"></th>
+                         </tr>
+                       </thead>
+                       <tbody className="divide-y divide-white/5 dark:divide-zinc-800/50 relative z-30">
+                         <SortableContext items={localItems.map(i => i.id)} strategy={verticalListSortingStrategy} disabled={showHistory}>
+                           {localItems.map((item, idx) => (
+                             <SortableRow 
+                               key={item.id} 
+                               index={idx + 1} 
+                               item={item} 
+                               columns={activeList.columns} 
+                               columnWidths={columnWidths} 
+                               rowHeight={rowHeight} 
+                               onInspect={() => { setInspectedItem(item); setActiveMenuColumnId(null); setActiveMenuRowId(null); }} 
+                               isInspected={inspectedItem?.id === item.id} 
+                               onCellChange={(colId: string, val: any) => handleCellChange(item, colId, val)} 
+                               showHistory={showHistory}
+                               activeEditingColId={activeEditingCell?.itemId === item.id ? activeEditingCell.colId : null}
+                               setActiveEditingColId={(colId: string | null) => setActiveEditingCell(colId ? { itemId: item.id, colId } : null)}
+                               onTab={(colId: string, shift: boolean) => handleTab(item.id, colId, shift)}
+                               isMenuOpen={activeMenuRowId === item.id}
+                               onToggleMenu={(open: boolean) => setActiveMenuRowId(open ? item.id : null)}
+                               onInsertAbove={() => handleAddRow(idx)}
+                               onInsertBelow={() => handleAddRow(idx + 1)}
+                               onRetire={() => setConfirmRetireItemId(item.id)}
+                               onContextMenu={(e: React.MouseEvent, colId: string, colIndex: number) => onCellContextMenu(e, item.id, colId, idx, colIndex)}
+                             />
+                           ))}
+                         </SortableContext>
+                       </tbody>
+
+                     </table>
+                   </DndContext>
+                 )}
+              </div>
+            </div>
+          </div>
+          <AnimatePresence>
+            {inspectedItem && (
+              <motion.aside initial={{ x: 100, width: 0, opacity: 0 }} animate={{ x: 0, width: 420, opacity: 1 }} exit={{ x: 100, width: 0, opacity: 0 }} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl z-50 backdrop-blur-xl shrink-0">
+                <div className="p-8 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md"><div><h3 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight uppercase">Record Inspector</h3><p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">VERSION: {inspectedItem.is_active ? 'CURRENT' : 'HISTORICAL'}</p></div><button onClick={() => setInspectedItem(null)} className="p-3 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-2xl transition-all"><X size={20} /></button></div>
+                <div className="flex-1 p-8 space-y-10 overflow-y-auto custom-scrollbar">
+                   <div className="space-y-4"><label className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Metadata</label><div className="grid grid-cols-2 gap-4"><div className="p-4 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md rounded-2xl border border-zinc-100 dark:border-zinc-800 space-y-1"><span className="text-[9px] font-black text-zinc-400 uppercase">Valid From</span><p className="text-xs font-bold truncate">{new Date(inspectedItem.valid_from).toLocaleDateString()}</p></div><div className="p-4 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md rounded-2xl border border-zinc-100 dark:border-zinc-800 space-y-1"><span className="text-[9px] font-black text-zinc-400 uppercase">Status</span><p className={cn("text-xs font-bold", inspectedItem.is_active ? "text-emerald-500" : "text-rose-500")}>{inspectedItem.is_active ? 'Active' : 'Retired'}</p></div></div></div>
+                   <div className="space-y-4"><label className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Full Record Data</label><div className="space-y-3">{activeList?.columns.map(col => <div key={col.id} className="p-4 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-between"><span className="text-xs font-bold text-zinc-500">{col.name}</span><span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{renderCellContent(col, inspectedItem.data[col.id])}</span></div>)}</div></div>
+                   {inspectedItem.is_active && <div className="pt-8 border-t border-zinc-100 dark:border-zinc-800 space-y-4"><label className="text-[10px] font-black uppercase tracking-widest text-rose-500">Danger Zone</label><button onClick={() => { setConfirmRetireItemId(inspectedItem.id); setInspectedItem(null); }} className="w-full flex items-center justify-between p-5 bg-rose-500/5 hover:bg-rose-500 text-rose-500 hover:text-white rounded-2xl border border-rose-500/20 transition-all group"><div className="flex items-center gap-3"><Archive size={18} /> <span className="text-sm font-bold">Retire & Version Record</span></div><ChevronRight size={16} /></button></div>}
+                </div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  if (isSettingsMode) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-16rem)] w-full relative z-30">
+        {content}
+        <AnimatePresence>
+          {contextMenu && (
+            <ContextMenuPortal 
+              {...contextMenu} 
+              onClose={() => setContextMenu(null)}
+              actions={{
+                insertRowAbove: () => handleAddRow(contextMenu.rowIndex),
+                insertRowBelow: () => handleAddRow(contextMenu.rowIndex !== undefined ? contextMenu.rowIndex + 1 : undefined),
+                insertColLeft: () => handleAddColumn(contextMenu.colIndex),
+                insertColRight: () => handleAddColumn(contextMenu.colIndex !== undefined ? contextMenu.colIndex + 1 : undefined),
+                removeRow: () => { if (contextMenu.itemId) setConfirmRetireItemId(contextMenu.itemId); },
+                removeCol: () => { if (contextMenu.colId) setConfirmDeleteColumnId(contextMenu.colId); }
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isCreatingList && <CreateListModal onClose={() => setIsCreatingList(false)} onSubmit={handleCreateList} data={newListData} setData={setNewListData} />}
+          {confirmDeleteListId && <ConfirmationModal title="Delete List?" message="Irreversible action." confirmLabel="Delete" onConfirm={() => { deleteList(confirmDeleteListId); setConfirmDeleteListId(null); setSelectedListId(null); }} onCancel={() => setConfirmDeleteListId(null)} />}
+          {confirmDeleteColumnId && <ConfirmationModal title="Delete Column?" message="Data will be lost." confirmLabel="Delete" onConfirm={() => handleDeleteColumn()} onCancel={() => setConfirmDeleteColumnId(null)} />}
+          {confirmRetireItemId && <ConfirmationModal title="Retire Record?" message="Archive this version." confirmLabel="Retire" onConfirm={() => handleRetireItem()} onCancel={() => setConfirmRetireItemId(null)} />}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-10rem)] w-full px-6 lg:px-12 py-10">
-      <AnimatePresence mode="wait">
-        {!selectedListId ? (
-          <motion.div key="master" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex-1 flex flex-col space-y-8">
-            <PageHeader title="Global Lists" description="Enterprise-grade lookup tables with full SCD Type 2 versioning." />
-            <div className="flex flex-col space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="relative w-96">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
-                  <input type="text" placeholder="Search lists..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-12 pr-4 py-3 text-sm outline-none focus:border-indigo-500 transition-all" />
-                </div>
-                <button onClick={() => setIsCreatingList(true)} className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-lg active:scale-95">
-                  <Plus size={18} />
-                  <span>Create List</span>
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pb-12">
-                {listsLoading ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-64 bg-zinc-100 dark:bg-zinc-900 animate-pulse rounded-3xl" />) : filteredLists.map((list) => (
-                  <motion.div key={list.id} whileHover={{ y: -4 }} onClick={() => setSelectedListId(list.id)} className="group cursor-pointer bg-white dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between min-h-[180px]">
-                    <div className="space-y-4"><div className="p-3 w-fit bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Database size={20} /></div><div className="space-y-1"><h3 className="text-lg font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 transition-colors">{list.name}</h3><p className="text-sm text-zinc-500 line-clamp-2">{list.description || <span className="italic text-zinc-400 opacity-50">No description provided</span>}</p></div></div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div key="detail" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex-1 flex flex-row gap-6 overflow-visible">
-            <div className="flex-1 flex flex-col min-w-0 overflow-visible">
-              <div className="mb-6 flex items-center justify-between bg-white dark:bg-zinc-900/40 p-6 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-sm relative z-40 backdrop-blur-md">
-                <div className="flex items-center gap-6">
-                  <button onClick={() => { setSelectedListId(null); setInspectedItem(null); setActiveMenuColumnId(null); setActiveEditingCell(null); setIsEditingMetadata(false); }} className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-2xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all shadow-sm"><ArrowLeft size={20} /></button>
-                  <div className="space-y-1 group">
-                    {isEditingMetadata ? (
-                      <div className="flex flex-col gap-2">
-                        <input 
-                          autoFocus 
-                          value={metadataForm.name} 
-                          onChange={(e) => setMetadataForm({ ...metadataForm, name: e.target.value })} 
-                          onBlur={handleUpdateMetadata}
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateMetadata()}
-                          className="text-2xl font-black bg-indigo-500/10 border-b border-indigo-500 text-indigo-600 dark:text-indigo-400 outline-none px-2" 
-                          placeholder="List Name" 
-                        />
-                        <input 
-                          value={metadataForm.description} 
-                          onChange={(e) => setMetadataForm({ ...metadataForm, description: e.target.value })} 
-                          onBlur={handleUpdateMetadata}
-                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateMetadata()}
-                          className="text-xs font-bold text-zinc-500 bg-transparent border-b border-zinc-800 outline-none px-2" 
-                          placeholder="Description (optional)" 
-                        />
+    <div className="flex flex-col h-[calc(100vh-10rem)] w-full px-6 lg:px-12 py-10 relative">
+      {/* Background Glows */}
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
 
-                      </div>
-                    ) : (
-                      <div className="flex flex-col cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 p-2 -m-2 rounded-xl transition-all" onClick={() => setIsEditingMetadata(true)}>
-                        <div className="flex items-center gap-2"><h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight leading-none">{activeList?.name}</h2><Edit2 size={14} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" /></div>
-                        {activeList?.description && <p className="text-xs font-bold text-zinc-500 mt-1">{activeList.description}</p>}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-3 px-4 py-2.5 bg-zinc-100/50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl"><span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Density</span><input type="range" min="32" max="80" value={rowHeight} onChange={(e) => setRowHeight(parseInt(e.target.value))} className="w-20 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600" /></div>
-                    <button onClick={() => setConfirmDeleteListId(activeListSummary!.id)} className="p-3 text-zinc-400 hover:text-rose-600 rounded-2xl transition-all"><Trash2 size={20} /></button>
-                </div>
-              </div>
-              <div className="flex-1 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl relative z-30">
-                <div className="p-4 border-b border-white/10 dark:border-zinc-800 flex items-center justify-between bg-white/5 dark:bg-white/5">
-                   <div className="flex items-center gap-3"><div className="p-1.5 bg-white/10 dark:bg-zinc-800 rounded-lg text-zinc-400"><LayoutGrid size={14} /></div><span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{localItems.length} Records Active</span></div>
-                   <button onClick={() => setShowHistory(!showHistory)} className={cn("flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border", showHistory ? "bg-rose-500 border-rose-600 text-white" : "bg-white/10 dark:bg-zinc-800 text-zinc-400 border-transparent")}><History size={12} /><span>{showHistory ? 'Viewing History' : 'View History'}</span></button>
-                </div>
-                <div className="flex-1 overflow-auto custom-scrollbar relative z-30" onClick={(e) => { 
-                  if (activeMenuColumnId && !(e.target as HTMLElement).closest('.column-header-container')) setActiveMenuColumnId(null); 
-                  if (activeMenuRowId && !(e.target as HTMLElement).closest('.row-menu-container')) setActiveMenuRowId(null);
-                }}>
-                   {activeList && (
-                     <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-                       <table className="w-max min-w-full text-left border-collapse table-fixed relative z-30">
-                         <thead className="sticky top-0 bg-white/10 dark:bg-white/5 dark:backdrop-blur-md z-50 shadow-sm border-b border-white/10 dark:border-zinc-800">
-                           <tr>
-                             <th className="p-0 w-16 text-center border-r border-white/10 dark:border-zinc-800 bg-white/5 dark:bg-zinc-900/50">#</th>
-                             {activeList.columns.map((col, idx) => (
-                               <th key={col.id} className="p-0 text-[10px] font-black text-zinc-400 relative group/th border-r border-zinc-100 dark:border-zinc-800 bg-white dark:bg-white/5 dark:backdrop-blur-md column-header-container context-menu-trigger" style={{ width: columnWidths[col.id] || 200 }} onContextMenu={(e) => onHeaderContextMenu(e, col.id, idx)}>
-                                 <ColumnHeader column={col} isMenuOpen={activeMenuColumnId === col.id} onToggleMenu={(open: boolean) => setActiveMenuColumnId(open ? col.id : null)} onUpdate={(updates: Partial<ListColumn>) => handleColumnUpdate(col.id, updates)} onDelete={() => setConfirmDeleteColumnId(col.id)} onResize={(width: number) => handleResizeColumn(col.id, width)} onInsertLeft={() => handleAddColumn(idx)} onInsertRight={() => handleAddColumn(idx + 1)} disabled={showHistory} />
-                               </th>
-                             ))}
-
-                             <th className="p-4 w-16 bg-white/5 dark:bg-zinc-900/30"></th>
-                           </tr>
-                         </thead>
-                         <tbody className="divide-y divide-white/5 dark:divide-zinc-800/50 relative z-30">
-                           <SortableContext items={localItems.map(i => i.id)} strategy={verticalListSortingStrategy} disabled={showHistory}>
-                             {localItems.map((item, idx) => (
-                               <SortableRow 
-                                 key={item.id} 
-                                 index={idx + 1} 
-                                 item={item} 
-                                 columns={activeList.columns} 
-                                 columnWidths={columnWidths} 
-                                 rowHeight={rowHeight} 
-                                 onInspect={() => { setInspectedItem(item); setActiveMenuColumnId(null); setActiveMenuRowId(null); }} 
-                                 isInspected={inspectedItem?.id === item.id} 
-                                 onCellChange={(colId: string, val: any) => handleCellChange(item, colId, val)} 
-                                 showHistory={showHistory}
-                                 activeEditingColId={activeEditingCell?.itemId === item.id ? activeEditingCell.colId : null}
-                                 setActiveEditingColId={(colId: string | null) => setActiveEditingCell(colId ? { itemId: item.id, colId } : null)}
-                                 onTab={(colId: string, shift: boolean) => handleTab(item.id, colId, shift)}
-                                 isMenuOpen={activeMenuRowId === item.id}
-                                 onToggleMenu={(open: boolean) => setActiveMenuRowId(open ? item.id : null)}
-                                 onInsertAbove={() => handleAddRow(idx)}
-                                 onInsertBelow={() => handleAddRow(idx + 1)}
-                                 onRetire={() => setConfirmRetireItemId(item.id)}
-                                 onContextMenu={(e: React.MouseEvent, colId: string, colIndex: number) => onCellContextMenu(e, item.id, colId, idx, colIndex)}
-                               />
-                             ))}
-                           </SortableContext>
-                         </tbody>
-
-                       </table>
-                     </DndContext>
-                   )}
-                </div>
-              </div>
-            </div>
-            <AnimatePresence>
-              {inspectedItem && (
-                <motion.aside initial={{ x: 100, width: 0, opacity: 0 }} animate={{ x: 0, width: 420, opacity: 1 }} exit={{ x: 100, width: 0, opacity: 0 }} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl z-50 backdrop-blur-xl shrink-0">
-                  <div className="p-8 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md"><div><h3 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight uppercase">Record Inspector</h3><p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">VERSION: {inspectedItem.is_active ? 'CURRENT' : 'HISTORICAL'}</p></div><button onClick={() => setInspectedItem(null)} className="p-3 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-2xl transition-all"><X size={20} /></button></div>
-                  <div className="flex-1 p-8 space-y-10 overflow-y-auto custom-scrollbar">
-                     <div className="space-y-4"><label className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Metadata</label><div className="grid grid-cols-2 gap-4"><div className="p-4 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md rounded-2xl border border-zinc-100 dark:border-zinc-800 space-y-1"><span className="text-[9px] font-black text-zinc-400 uppercase">Valid From</span><p className="text-xs font-bold truncate">{new Date(inspectedItem.valid_from).toLocaleDateString()}</p></div><div className="p-4 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md rounded-2xl border border-zinc-100 dark:border-zinc-800 space-y-1"><span className="text-[9px] font-black text-zinc-400 uppercase">Status</span><p className={cn("text-xs font-bold", inspectedItem.is_active ? "text-emerald-500" : "text-rose-500")}>{inspectedItem.is_active ? 'Active' : 'Retired'}</p></div></div></div>
-                     <div className="space-y-4"><label className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Full Record Data</label><div className="space-y-3">{activeList?.columns.map(col => <div key={col.id} className="p-4 bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-between"><span className="text-xs font-bold text-zinc-500">{col.name}</span><span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{renderCellContent(col, inspectedItem.data[col.id])}</span></div>)}</div></div>
-                     {inspectedItem.is_active && <div className="pt-8 border-t border-zinc-100 dark:border-zinc-800 space-y-4"><label className="text-[10px] font-black uppercase tracking-widest text-rose-500">Danger Zone</label><button onClick={() => { setConfirmRetireItemId(inspectedItem.id); setInspectedItem(null); }} className="w-full flex items-center justify-between p-5 bg-rose-500/5 hover:bg-rose-500 text-rose-500 hover:text-white rounded-2xl border border-rose-500/20 transition-all group"><div className="flex items-center gap-3"><Archive size={18} /> <span className="text-sm font-bold">Retire & Version Record</span></div><ChevronRight size={16} /></button></div>}
-                  </div>
-                </motion.aside>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {content}
 
       <AnimatePresence>
         {contextMenu && (
@@ -571,9 +614,9 @@ const CellEditor = ({ column, value, onChange, disabled, isEditing, setIsEditing
     <div ref={containerRef} className="w-full h-full min-h-[48px] relative group/celleditor cursor-text" onClick={() => !disabled && !isEditing && setIsEditing(true)}>
        {!isEditing && (
          <div className={cn("px-4 py-3 text-sm font-bold transition-colors w-full h-full min-h-[48px] flex items-center group/cell relative z-10", disabled ? "cursor-default" : (column.type === 'choice' || column.type === 'date' ? "cursor-pointer" : "cursor-text"), isInvalid ? "bg-rose-500/10" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50")}>
-           <div className="flex-1 truncate relative z-10">{renderCellContent(column, value)}</div>
-           {isInvalid && <AlertTriangle size={14} className="text-rose-400 ml-2 animate-pulse relative z-10" />}
-           {(column.type === 'choice' || column.type === 'date') && !disabled && <div className="text-zinc-400 opacity-0 group-hover/cell:opacity-100 ml-2 shrink-0 transition-opacity relative z-10">{column.type === 'choice' ? <ChevronDown size={12} /> : <Calendar size={12} />}</div>}
+            <div className="flex-1 truncate relative z-10">{renderCellContent(column, value)}</div>
+            {isInvalid && <AlertTriangle size={14} className="text-rose-400 ml-2 animate-pulse relative z-10" />}
+            {(column.type === 'choice' || column.type === 'date') && !disabled && <div className="text-zinc-400 opacity-0 group-hover/cell:opacity-100 ml-2 shrink-0 transition-opacity relative z-10">{column.type === 'choice' ? <ChevronDown size={12} /> : <Calendar size={12} />}</div>}
          </div>
        )}
        {isEditing && !disabled && (

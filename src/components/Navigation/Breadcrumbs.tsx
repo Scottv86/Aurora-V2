@@ -35,7 +35,15 @@ const PATH_MAP: Record<string, string> = {
   'work-distribution': 'Work Distribution',
   'people-organisations': 'People & Organisations',
   migration: 'Migration',
-  connectors: 'Integrations'
+  connectors: 'Integrations',
+  'workforce-management': 'Workforce Management',
+  'integration-management': 'Integration Management',
+  'automation-management': 'Automation Management',
+  'document-generation': 'Document generation',
+  'report-management': 'Report Management',
+  'api-management': 'API Management',
+  'financial-management': 'Financial Management',
+  'global-lists': 'Global Lists'
 };
 
 export const Breadcrumbs = () => {

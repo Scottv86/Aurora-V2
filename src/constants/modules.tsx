@@ -5,7 +5,8 @@ import {
   Database, 
   ShieldCheck, 
   ShoppingCart, 
-  HeartHandshake 
+  HeartHandshake,
+  TestTube
 } from 'lucide-react';
 
 function UserPlus(props: any) {
@@ -146,6 +147,23 @@ export const MODULES = [
       { id: 'f4', name: 'Status', label: 'Status', type: 'select', options: ['Applied', 'Under Review', 'Approved', 'Declined'], required: true, colSpan: 12, startCol: 1, rowIndex: 2 }
     ],
     dependencies: ['people_org']
+  },
+  { 
+    id: 'test-case-management', 
+    name: 'Test Case Management', 
+    type: 'RECORD',
+    category: 'Platform', 
+    icon: TestTube, 
+    description: 'Track and organize manual and automated test cases, step-by-step procedures, and execution priorities.',
+    enabled: true,
+    isTemplate: true,
+    layout: [
+      { id: 'f1', name: 'Test Case Name', label: 'Test Case Name', type: 'text', required: true, colSpan: 12, startCol: 1, rowIndex: 0 },
+      { id: 'f2', name: 'Preconditions & Steps', label: 'Preconditions & Steps', type: 'longText', required: false, colSpan: 12, startCol: 1, rowIndex: 1 },
+      { id: 'f3', name: 'Test Type', label: 'Test Type', type: 'select', options: ['Manual', 'Automated', 'Performance', 'Security'], required: true, colSpan: 4, startCol: 1, rowIndex: 2 },
+      { id: 'f4', name: 'Status', label: 'Status', type: 'select', options: ['Draft', 'Active', 'Deprecated', 'Broken'], required: true, colSpan: 4, startCol: 5, rowIndex: 2 },
+      { id: 'f5', name: 'Priority', label: 'Priority', type: 'select', options: ['P0 - Blocker', 'P1 - High', 'P2 - Medium', 'P3 - Low'], required: true, colSpan: 4, startCol: 9, rowIndex: 2 }
+    ]
   },
 ];
 

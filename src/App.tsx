@@ -25,7 +25,6 @@ import { PlatformShell } from './components/Layout/PlatformShell';
 import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { Login } from './components/Auth/Login';
 import { ComingSoon } from './components/Common/ComingSoon';
-import { ModuleCatalog } from './components/ModuleCatalog';
 import { AIBuilder } from './components/AIBuilder';
 import { SuperAdmin } from './components/SuperAdmin';
 import { Onboarding } from './components/Onboarding';
@@ -37,7 +36,7 @@ import { Analytics } from './components/Analytics';
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
 import { AppsSettings } from './components/Settings/Organization/AppsSettings';
-import { GlobalListsSettings } from './components/Settings/Organization/GlobalListsSettings';
+import { GlobalListsSettings } from './pages/Settings/PlatformModules/GlobalListsSettings';
 import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
 import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
 import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
@@ -157,6 +156,17 @@ const App = () => {
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
                 <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
                 <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
+                <Route path="platform/global-lists" element={<GlobalListsSettings />} />
+                <Route path="platform/workforce" element={<WorkforcePage />} />
+                <Route path="platform/workforce/member/:id" element={<MemberDetailView />} />
+                <Route path="platform/workforce/teams/:id" element={<TeamDetailView />} />
+                <Route path="platform/integrations" element={<ConnectorsPage />} />
+                <Route path="platform/sites" element={<SitesPage />} />
+                <Route path="platform/automations" element={<AutomationsPage />} />
+                <Route path="platform/templates" element={<DocumentAutomation />} />
+                <Route path="platform/reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
+                <Route path="platform/api" element={<APISettings />} />
+                <Route path="platform/finance" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
               </Route>
               
               {/* Settings & Workforce (Developer Only) */}
@@ -178,10 +188,9 @@ const App = () => {
                 <Route path="builder" element={<BuilderChoice />} />
                 <Route path="ai-builder" element={<AIBuilder />} />
                 <Route path="builder/:id" element={<ModuleEditor />} />
-                
-                <Route path="modules" element={<ModuleCatalog />} />
+                <Route path="modules" element={<Navigate to="/workspace/settings/platform-modules" replace />} />
                 <Route path="apps" element={<AppsSettings />} />
-                <Route path="lists" element={<GlobalListsSettings />} />
+                <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
                 <Route path="branding" element={<BrandingSettingsPage />} />
                 <Route path="navigation" element={<NavigationSettingsPage />} />
                 <Route path="appearance" element={<Navigate to="/workspace/settings/branding" replace />} />
@@ -192,33 +201,44 @@ const App = () => {
                    <Route path="knowledge-base" element={<KnowledgeBaseSettings />} />
                    <Route path="pricing-catalog" element={<PricingCatalogSettings />} />
                    <Route path="inventory-manager" element={<InventoryManagerSettings />} />
+                   <Route path="global-lists" element={<GlobalListsSettings />} />
+                   <Route path="workforce-management" element={<WorkforcePage />} />
+                   <Route path="workforce-management/member/:id" element={<MemberDetailView />} />
+                   <Route path="workforce-management/teams/:id" element={<TeamDetailView />} />
+                   <Route path="workforce-management/positions/:id" element={<PositionDetailView />} />
+                   <Route path="integration-management" element={<ConnectorsPage />} />
+                   <Route path="sites" element={<SitesPage />} />
+                   <Route path="automation-management" element={<AutomationsPage />} />
+                   <Route path="document-generation" element={<DocumentAutomation />} />
+                   <Route path="report-management" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
+                   <Route path="api-management" element={<APISettings />} />
+                   <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
                 </Route>
-                <Route path="templates" element={<DocumentAutomation />} />
-                <Route path="automations" element={<AutomationsPage />} />
-                <Route path="reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
-                <Route path="knowledge" element={<Navigate to="/workspace/settings/platform-modules/knowledge-base" replace />} />
-                <Route path="sites" element={<SitesPage />} />
-                <Route path="testing" element={<ComingSoon title="Test Center" description="Automated testing suite, quality assurance dashboard, and regression monitoring." />} />
-                <Route path="api" element={<APISettings />} />
-                
-                {/* New Settings Placeholder Routes */}
-                <Route path="data" element={<QueryExplorer />} />
-                <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
-                <Route path="finance" element={<ComingSoon title="Finance" description="Financial settings, tax configurations, and payment processing rules." />} />
-                <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
-                <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
-                <Route path="migration" element={<ComingSoon title="Migration" description="Data import, export, and migration utilities for moving data between systems." />} />
-                <Route path="integrations" element={<ConnectorsPage />} />
-                <Route path="integrations/:id" element={<ConnectorsPage />} />
-                {/* Legacy redirects */}
-                <Route path="connectors" element={<Navigate to="/workspace/settings/integrations" replace />} />
-                <Route path="connectors/:id" element={<Navigate to="/workspace/settings/integrations" replace />} />
-                
-                {/* Workforce Management (Integrated under Settings) */}
-                <Route path="workforce" element={<WorkforcePage />} />
-                <Route path="workforce/member/:id" element={<MemberDetailView />} />
-                <Route path="workforce/teams/:id" element={<TeamDetailView />} />
-                <Route path="workforce/positions/:id" element={<PositionDetailView />} />
+                 <Route path="templates" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />
+                 <Route path="automations" element={<Navigate to="/workspace/settings/platform-modules/automation-management" replace />} />
+                 <Route path="reports" element={<Navigate to="/workspace/settings/platform-modules/report-management" replace />} />
+                 <Route path="knowledge" element={<Navigate to="/workspace/settings/platform-modules/knowledge-base" replace />} />
+                 <Route path="sites" element={<Navigate to="/workspace/settings/platform-modules/sites" replace />} />
+                 <Route path="api" element={<Navigate to="/workspace/settings/platform-modules/api-management" replace />} />
+                 
+                 {/* New Settings Placeholder Routes */}
+                 <Route path="data" element={<QueryExplorer />} />
+                 <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
+                 <Route path="finance" element={<Navigate to="/workspace/settings/platform-modules/financial-management" replace />} />
+                 <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
+                 <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
+                 <Route path="migration" element={<ComingSoon title="Migration" description="Data import, export, and migration utilities for moving data between systems." />} />
+                 <Route path="integrations" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
+                 <Route path="integrations/:id" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
+                 {/* Legacy redirects */}
+                 <Route path="connectors" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
+                 <Route path="connectors/:id" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
+                 
+                 {/* Workforce Management (Integrated under Settings) */}
+                 <Route path="workforce" element={<Navigate to="/workspace/settings/platform-modules/workforce-management" replace />} />
+                 <Route path="workforce/member/:id" element={<Navigate to="/workspace/settings/platform-modules/workforce-management/member/:id" replace />} />
+                 <Route path="workforce/teams/:id" element={<Navigate to="/workspace/settings/platform-modules/workforce-management/teams/:id" replace />} />
+                 <Route path="workforce/positions/:id" element={<Navigate to="/workspace/settings/platform-modules/workforce-management/positions/:id" replace />} />
               </Route>
               
               {/* External / Public */}
@@ -226,7 +246,7 @@ const App = () => {
               <Route path="/onboarding" element={<Onboarding />} />
 
               {/* Redundant / Legacy Workforce Path support */}
-              <Route path="/dashboard/settings/workforce/*" element={<Navigate to="/workspace/settings/workforce" replace />} />
+               <Route path="/dashboard/settings/workforce/*" element={<Navigate to="/workspace/settings/platform-modules/workforce-management" replace />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/workspace" replace />} />
