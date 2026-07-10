@@ -55,7 +55,7 @@ const COMMON_ICONS = [
 ];
 
 export const NavigationSettingsPage = () => {
-  const { tenant, menuConfig, updateMenuConfig, updateTenant, refetchContext, modules, members, teams } = usePlatform();
+  const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams } = usePlatform();
   const { session } = useAuth();
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
   const [saving, setSaving] = useState(false);
@@ -105,15 +105,16 @@ export const NavigationSettingsPage = () => {
     fetchPositions();
   }, [tenant, session]);
 
-  // Initialize from tenant branding and menuConfig
+  // Initialize from tenant branding and tenant.menuConfig
   useEffect(() => {
-    if (menuConfig && !initialized) {
+    if (tenant && !initialized) {
+      const tConfig = tenant.menuConfig as any;
       const advanced: AdvancedMenuConfig = {
-        default: (menuConfig as any).default || (menuConfig.sections ? menuConfig : { sections: [] }),
-        roles: (menuConfig as any).roles || {},
-        teams: (menuConfig as any).teams || {},
-        positions: (menuConfig as any).positions || {},
-        users: (menuConfig as any).users || {}
+        default: tConfig?.default || (tConfig?.sections ? tConfig : { sections: [] }),
+        roles: tConfig?.roles || {},
+        teams: tConfig?.teams || {},
+        positions: tConfig?.positions || {},
+        users: tConfig?.users || {}
       };
 
       // Ensure default has fallback sections
@@ -128,7 +129,7 @@ export const NavigationSettingsPage = () => {
       }
       setInitialized(true);
     }
-  }, [menuConfig, tenant, initialized]);
+  }, [tenant, initialized]);
 
   // Set default selected section once sections load
   const activeSections = useMemo(() => {

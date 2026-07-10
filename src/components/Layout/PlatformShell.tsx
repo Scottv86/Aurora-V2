@@ -26,7 +26,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { cn } from '../../lib/utils';
 import { SidebarItem } from '../Navigation/SidebarItem';
-import { PLATFORM_MODULES } from '../../config/platformModules';
 import { Navbar } from '../Navigation/Navbar';
 import { Login } from '../Auth/Login';
 import { TopMegaMenu } from '../Navigation/TopMegaMenu';
@@ -227,7 +226,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const { user, loading: authLoading } = useAuth();
   const { 
     isLoading: platformLoading, 
-    modules, 
     menuConfig, 
     isAIAssistantOpen,
     isChatOpen,
@@ -328,59 +326,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         ? "ml-16" 
         : (isSidebarOpen ? "ml-64" : "ml-16")));
 
-  const enabledModules = modules.filter((m: any) => {
-    const isPlatform = PLATFORM_MODULES.some(pm => pm.id === m.id || pm.id === m.templateId || pm.name === m.name || pm.slug === m.templateId);
-    if (isPlatform) return false;
-    if (m.isGlobal || m.isIntakeTriage || m.config?.isIntakeTriage) return false;
-    return m.status === 'ACTIVE' || m.enabled;
-  });
-
   const resolvedConfig = useMemo(() => {
-    if (!menuConfig) return null;
-
-    // Inject active modules that are missing from the configuration
-    const sections = (menuConfig.sections || []).map(section => {
-      if (section.id === 'modules') {
-        // Only include items that are in enabledModules (in case some were deactivated but not yet removed from saved config)
-        const activeModuleIds = new Set(enabledModules.map(m => `module:${m.id}`));
-        const currentItems = (section.items || [])
-          .filter(i => activeModuleIds.has(i.id))
-          .map(item => {
-            const mod = enabledModules.find(m => `module:${m.id}` === item.id);
-            return mod ? { 
-              ...item, 
-              label: mod.name, 
-              iconName: (mod as any).iconName || mod.icon || item.iconName 
-            } : item;
-          });
-        const existingModuleIds = new Set(currentItems.map(i => i.id));
-
-        const newModules = enabledModules
-          .filter(m => !existingModuleIds.has(`module:${m.id}`))
-          .map(m => ({
-            id: `module:${m.id}`,
-            label: m.name,
-            iconName: (m as any).iconName || m.icon || 'Box',
-            to: `/workspace/modules/${m.id}`,
-            isVisible: true
-          }));
-        
-        return {
-          ...section,
-          items: [...currentItems, ...newModules]
-        };
-      }
-      return section;
-    }).filter(section => {
-      if (section.id === 'apps') return false;
-      if (section.id === 'modules') {
-        return section.items.length > 0;
-      }
-      return true;
-    });
-
-    return { ...menuConfig, sections };
-  }, [menuConfig, enabledModules]);
+    return menuConfig;
+  }, [menuConfig]);
 
   if (authLoading || platformLoading) {
     return <PageLoader label="Initializing Aurora" />;

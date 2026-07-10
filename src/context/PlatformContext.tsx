@@ -334,61 +334,10 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         setTenant(data.tenant);
       }
       
-      // Use backend menuConfig if available, otherwise fall back to system default
-      // Merge any new default items that may have been added since the config was saved
+      // Use backend menuConfig if available, otherwise fall back to system default (empty)
       let resolvedConfig: MenuConfig;
       if (data.menuConfig && Array.isArray(data.menuConfig.sections)) {
-        const mergedSections = systemDefaultMenuConfig.sections.map(defaultSection => {
-          // Support legacy ID mapping during transition
-          const savedSection = (data.menuConfig.sections as any[]).find((s: any) => 
-            s.id === defaultSection.id || (defaultSection.id === 'platform' && s.id === 'operations')
-          );
-          
-          if (!savedSection) return defaultSection;
-          
-          // Find items in the default that aren't in the saved config
-          const savedItemIds = new Set((savedSection.items || []).map((i: any) => i.id));
-          const missingItems = defaultSection.items.filter(i => {
-            // Handle item rename transition: if we have 'people' or 'entities' saved but now expect 'people-orgs'
-            if (i.id === 'people-orgs' && (savedItemIds.has('people') || savedItemIds.has('entities'))) return false;
-            return !savedItemIds.has(i.id);
-          });
-          
-          // Filter out saved items that are no longer in defaults, unless they are dynamically generated
-          const currentDefaultItemIds = new Set(defaultSection.items.map(i => i.id));
-          const validSavedItems = (savedSection.items || [])
-            .filter((i: any) => 
-              currentDefaultItemIds.has(i.id) || 
-              (i.id === 'people' && currentDefaultItemIds.has('people-orgs')) ||
-              (i.id === 'entities' && currentDefaultItemIds.has('people-orgs')) ||
-              (i.id && i.id.startsWith('module:'))
-            )
-            .map((savedItem: any) => {
-              if (savedItem.id.startsWith('module:')) return savedItem;
-              
-              // Handle item rename transition
-              const isLegacy = savedItem.id === 'people' || savedItem.id === 'entities';
-              const lookupId = (isLegacy && currentDefaultItemIds.has('people-orgs')) ? 'people-orgs' : savedItem.id;
-              const defaultItem = defaultSection.items.find(i => i.id === lookupId);
-              
-              // Inherit code updates (like 'to', 'label') but preserve user's visibility setting
-              return defaultItem ? { ...defaultItem, isVisible: savedItem.isVisible ?? defaultItem.isVisible } : savedItem;
-            });
-
-          return {
-            ...savedSection,
-            id: defaultSection.id, // Ensure we use the new ID
-            title: defaultSection.title, // Ensure we use the new Title
-            items: [...(validSavedItems || []), ...(missingItems || [])]
-          };
-        });
-        // Legacy Transition: Filter out 'operations' from custom sections if 'platform' is now in defaults
-        const defaultSectionIds = new Set(systemDefaultMenuConfig.sections.map(s => s.id));
-        const customSections = data.menuConfig.sections.filter((s: any) => {
-          if (s.id === 'operations' && defaultSectionIds.has('platform')) return false;
-          return !defaultSectionIds.has(s.id);
-        });
-        resolvedConfig = { sections: [...mergedSections, ...customSections] };
+        resolvedConfig = data.menuConfig;
       } else {
         resolvedConfig = systemDefaultMenuConfig;
       }
