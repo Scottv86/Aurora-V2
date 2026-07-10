@@ -7,6 +7,13 @@ export interface MenuItem {
   isSubtitle?: boolean;
   isCustom?: boolean;
   children?: MenuItem[];
+  moduleId?: string;
+  moduleIds?: string[];
+  isUnifiedQueue?: boolean;
+  queueConfig?: {
+    conditions: any;
+    columns: string[];
+  };
 }
 
 export interface MenuSection {

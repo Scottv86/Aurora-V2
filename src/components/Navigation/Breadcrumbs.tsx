@@ -62,6 +62,8 @@ export const Breadcrumbs = () => {
 
     // 3. Check modules if it's a module ID (these are loaded globally)
     if (
+      pathnames[index - 1] === 'page' ||
+      pathnames[index - 1] === 'pages' ||
       pathnames[index - 1] === 'modules' || 
       pathnames[index - 1] === 'builder' || 
       pathnames[index - 1] === 'sub'
@@ -79,6 +81,8 @@ export const Breadcrumbs = () => {
     return segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
+  const isSettings = pathnames[1] === 'settings';
+
   const breadcrumbItems = pathnames.map((segment, index) => {
     let to = `/${pathnames.slice(0, index + 1).join('/')}`;
     // If it's a nested module segment following 'sub', link to the standalone module view instead
@@ -90,7 +94,10 @@ export const Breadcrumbs = () => {
       to,
       label: getLabel(segment, index)
     };
-  }).filter(item => !['records', 'sub', 'member', 'teams', 'positions'].includes(item.segment));
+  }).filter((item) => {
+    if (isSettings && item.segment === 'workspace') return false;
+    return !['records', 'sub', 'member', 'teams', 'positions', 'pages', 'page'].includes(item.segment);
+  });
 
   if (breadcrumbItems.length === 0) return null;
 

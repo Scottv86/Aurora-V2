@@ -132,6 +132,128 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     setBreadcrumbOverrides(prev => ({ ...prev, [id]: label }));
   }, []);
 
+  const isSeedingRef = useRef(false);
+
+  const seedDefaultPages = useCallback(async (tenantId: string, token: string) => {
+    if (isSeedingRef.current) return;
+    isSeedingRef.current = true;
+
+    try {
+      console.log('[PlatformContext] Seeding default configurable pages...');
+
+      // 1. Create Dashboard page
+      const dashRes = await fetch(`${API_BASE_URL}/api/data/modules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({
+          name: 'Dashboard',
+          category: 'Workspace Pages',
+          iconName: 'LayoutDashboard',
+          type: 'PAGE',
+          enabled: true,
+          status: 'ACTIVE',
+          config: {
+            widgets: [
+              { id: `stats-grid-1`, type: 'stats-grid', title: 'Overview Stats', w: 12 },
+              { id: `active-workflows-1`, type: 'active-workflows', title: 'Active Workflows', w: 12 }
+            ]
+          }
+        })
+      });
+
+      // 2. Create My Work page
+      const workRes = await fetch(`${API_BASE_URL}/api/data/modules`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({
+          name: 'My Work',
+          category: 'Workspace Pages',
+          iconName: 'ClipboardList',
+          type: 'PAGE',
+          enabled: true,
+          status: 'ACTIVE',
+          config: {
+            widgets: [
+              { id: `work-queue-1`, type: 'work-queue', title: 'My Work Inbox', w: 12 }
+            ]
+          }
+        })
+      });
+
+      if (dashRes.ok && workRes.ok) {
+        const dashPage = await dashRes.json();
+        const workPage = await workRes.json();
+
+        // 3. Construct default Workspace menu section
+        const newMenuConfig = {
+          sections: [
+            {
+              id: 'workspace-section',
+              title: 'Workspace',
+              items: [
+                {
+                  id: `module:${dashPage.id}`,
+                  label: 'Dashboard',
+                  iconName: 'LayoutDashboard',
+                  to: `/workspace/pages/${dashPage.id}`,
+                  isVisible: true
+                },
+                {
+                  id: `module:${workPage.id}`,
+                  label: 'My Work',
+                  iconName: 'ClipboardList',
+                  to: `/workspace/pages/${workPage.id}`,
+                  isVisible: true
+                }
+              ]
+            }
+          ]
+        };
+
+        // 4. Update tenant menu configuration
+        const menuConfigRes = await fetch(`${API_BASE_URL}/api/platform/menu-config`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenantId
+          },
+          body: JSON.stringify({ config: newMenuConfig, scope: 'tenant' })
+        });
+
+        if (menuConfigRes.ok) {
+          setMenuConfig(newMenuConfig);
+        }
+
+        // 5. Reload modules list
+        const refreshRes = await fetch(`${API_BASE_URL}/api/data/modules`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenantId
+          }
+        });
+        if (refreshRes.ok) {
+          const freshMods = await refreshRes.json();
+          setModules(freshMods);
+        }
+
+        toast.success('Successfully provisioned configurable Workspace Pages!');
+      }
+    } catch (err) {
+      console.error('[PlatformContext] Error seeding default pages:', err);
+    } finally {
+      isSeedingRef.current = false;
+    }
+  }, []);
+
   const refreshModules = useCallback(async () => {
     if (!supabaseUser || !tenant?.id) return;
     
@@ -147,13 +269,19 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       if (res.ok) {
         const data: Module[] = await res.json();
         setModules(data);
+
+        // Auto-provision default pages if none exist yet
+        const pages = data.filter((m: any) => m.type === 'PAGE');
+        if (pages.length === 0) {
+          seedDefaultPages(tenant.id, token);
+        }
       }
     } catch (err) {
       console.error('[PlatformContext] Failed to fetch modules:', err);
     } finally {
       setModulesLoading(false);
     }
-  }, [supabaseUser, tenant?.id, session?.access_token]);
+  }, [supabaseUser, tenant?.id, session?.access_token, seedDefaultPages]);
 
   const updateMenuConfig = async (config: MenuConfig, scope: 'user' | 'tenant' = 'user') => {
     if (!tenant?.id) return;

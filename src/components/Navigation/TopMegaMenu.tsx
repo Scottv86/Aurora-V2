@@ -7,12 +7,42 @@ import { MenuConfig, MenuItem } from '../../types/menu';
 
 interface TopMegaMenuProps {
   menuConfig: MenuConfig | null;
+  isDeveloper: boolean;
 }
 
-export const TopMegaMenu = ({ menuConfig }: TopMegaMenuProps) => {
+export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
   const [activeSection, setActiveSection] = useState<string | null>(null);
 
-  if (!menuConfig || !menuConfig.sections) return null;
+  const visibleSections = menuConfig?.sections?.filter(section => {
+    const visibleItems = section.items?.filter(i => i.isVisible !== false) || [];
+    return visibleItems.length > 0;
+  }) || [];
+
+  const isEmpty = visibleSections.length === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="flex items-center justify-between w-full text-xs">
+        <div className="flex items-center gap-2 text-zinc-500">
+          <LucideIcons.LayoutDashboard size={14} className="text-zinc-400 shrink-0" />
+          {isDeveloper ? (
+            <span>No top menu items configured. Design your layout in settings.</span>
+          ) : (
+            <span>Welcome to Aurora. No menu items configured. Please contact your administrator.</span>
+          )}
+        </div>
+        {isDeveloper && (
+          <NavLink
+            to="/workspace/settings/navigation"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-650 hover:bg-indigo-700 text-white font-bold transition-all shadow-sm shrink-0"
+          >
+            <LucideIcons.Settings size={12} />
+            <span>Configure Navigation</span>
+          </NavLink>
+        )}
+      </div>
+    );
+  }
 
   return (
     <nav className="flex items-center gap-2 h-full text-sm font-medium">

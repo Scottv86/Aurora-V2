@@ -8,6 +8,8 @@ import { PlatformProvider } from './context/PlatformContext';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { StackedModalManager } from './components/UI/StackedModal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { usePlatform } from './hooks/usePlatform';
+import { PageLoader } from './components/UI/PageLoader';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,7 +61,11 @@ import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/Lic
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
 import { BuilderChoice } from './pages/Builder/BuilderChoice';
 import { ModuleView } from './pages/Module/ModuleView';
+import { QueueView } from './pages/Queue/QueueView';
 import { RecordDetailView } from './pages/Record/RecordDetailView';
+import { WorkspacePageView } from './pages/WorkspacePage/WorkspacePageView';
+import { PageBuilder } from './pages/WorkspacePage/PageBuilder';
+import { PagesManagementPage } from './pages/Settings/PagesManagementPage';
 import { SitesPage } from './pages/Settings/SitesPage';
 import { BrandingSettingsPage } from './pages/Settings/BrandingSettingsPage';
 import { NavigationSettingsPage } from './pages/Settings/NavigationSettingsPage';
@@ -101,6 +107,26 @@ const WorkspaceLayout = () => {
   );
 };
 
+const DashboardRouteWrapper = () => {
+  const { modules, isLoading } = usePlatform();
+  if (isLoading) return <PageLoader label="Loading Workspace..." />;
+  const dashboardPage = modules.find((m: any) => m.type === 'PAGE' && (m.name.toLowerCase() === 'dashboard' || m.config?.widgets?.some((w: any) => w.type === 'stats-grid')));
+  if (dashboardPage) {
+    return <Navigate to={`/workspace/pages/${dashboardPage.id}`} replace />;
+  }
+  return <DashboardPage />;
+};
+
+const MyWorkRouteWrapper = () => {
+  const { modules, isLoading } = usePlatform();
+  if (isLoading) return <PageLoader label="Loading Queue..." />;
+  const myWorkPage = modules.find((m: any) => m.type === 'PAGE' && (m.name.toLowerCase() === 'my work' || m.config?.widgets?.some((w: any) => w.type === 'work-queue')));
+  if (myWorkPage) {
+    return <Navigate to={`/workspace/pages/${myWorkPage.id}`} replace />;
+  }
+  return <WorkQueue />;
+};
+
 const App = () => {
   return (
     <ThemeProvider>
@@ -126,7 +152,8 @@ const App = () => {
 
               {/* Workspace Routes (Authenticated Standard Users) */}
               <Route path="/workspace" element={<ProtectedRoute><WorkspaceLayout /></ProtectedRoute>}>
-                <Route index element={<DashboardPage />} />
+                <Route index element={<DashboardRouteWrapper />} />
+                <Route path="pages/:pageId" element={<WorkspacePageView />} />
                 
                 {/* Legacy Redirects */}
                 <Route path="builder" element={<Navigate to="/workspace/settings/builder" replace />} />
@@ -145,9 +172,10 @@ const App = () => {
                 <Route path="modules/:moduleId" element={<ModuleView />} />
                 <Route path="modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
                 <Route path="modules/:parentModuleId/records/:parentRecordId/sub/:moduleId/:recordId" element={<RecordDetailView />} />
+                <Route path="queues/:queueId" element={<QueueView />} />
                 
                 {/* Platform Operations */}
-                <Route path="my-work" element={<WorkQueue />} />
+                <Route path="my-work" element={<MyWorkRouteWrapper />} />
                 <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
                 <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
                 <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
@@ -188,6 +216,8 @@ const App = () => {
                 <Route path="builder" element={<BuilderChoice />} />
                 <Route path="ai-builder" element={<AIBuilder />} />
                 <Route path="builder/:id" element={<ModuleEditor />} />
+                <Route path="builder/page/:id" element={<PageBuilder />} />
+                <Route path="pages" element={<PagesManagementPage />} />
                 <Route path="modules" element={<Navigate to="/workspace/settings/platform-modules" replace />} />
                 <Route path="apps" element={<AppsSettings />} />
 

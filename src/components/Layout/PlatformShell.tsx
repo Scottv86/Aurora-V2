@@ -12,6 +12,7 @@ import {
   Search,
   Settings2,
   LayoutDashboard,
+  Layout,
   Building,
   CreditCard,
   Layers,
@@ -231,7 +232,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     isChatOpen,
     isAppLauncherOpen,
     isNotificationsOpen,
-    tenant
+    tenant,
+    isDeveloper
   } = usePlatform();
   
   const location = useLocation();
@@ -247,6 +249,42 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   };
 
   const isActive = (path: string) => location.pathname === path;
+
+  const getContextualAction = () => {
+    if (!isDeveloper) return null;
+    
+    // Check if we are viewing a custom workspace page
+    // Path: /workspace/pages/:pageId
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2]) {
+      const pageId = pathnames[2];
+      return (
+        <button
+          onClick={() => navigate(`/workspace/settings/builder/page/${pageId}`)}
+          className="flex items-center gap-1.5 px-3 py-1 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 text-[10px] font-bold text-zinc-655 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm h-7"
+        >
+          <LucideIcons.Edit3 size={11} className="text-zinc-500" />
+          Edit Page Layout
+        </button>
+      );
+    }
+    
+    // Check if we are viewing a module page
+    // Path: /workspace/modules/:moduleId
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2] && pathnames[3] !== 'records') {
+      const moduleId = pathnames[2];
+      return (
+        <button
+          onClick={() => navigate(`/workspace/settings/builder/${moduleId}`)}
+          className="flex items-center gap-1.5 px-3 py-1 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 text-[10px] font-bold text-zinc-655 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm h-7"
+        >
+          <LucideIcons.Edit3 size={11} className="text-zinc-500" />
+          Configure Module
+        </button>
+      );
+    }
+    
+    return null;
+  };
 
   const SETTINGS_NAV_GROUPS = [
     {
@@ -264,6 +302,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       items: [
         { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
         { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
+        { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
       ]
     },
 
@@ -367,7 +406,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       {/* Top Mounted Mega Menu */}
       {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
         <div className="sticky top-16 z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
-          <TopMegaMenu menuConfig={resolvedConfig} />
+          <TopMegaMenu menuConfig={resolvedConfig} isDeveloper={isDeveloper} />
         </div>
       )}
 
@@ -422,7 +461,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
                     {resolvedConfig.sections.length === 0 && (
                       <div className={cn("text-center", collapsed ? "px-1 py-4" : "px-4 py-6 space-y-4")}>
-                        {user?.role === 'Admin' || user?.role === 'SUPERADMIN' ? (
+                        {isDeveloper ? (
                           collapsed ? (
                             <button
                               onClick={() => navigate('/workspace/settings/navigation')}
@@ -556,9 +595,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             "mx-auto flex flex-col min-h-full",
             fullBleed ? "w-full flex-1" : "max-w-7xl w-full"
           )}>
-            {pathnames.length > 0 && (
-              <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center px-6 lg:px-12 shrink-0">
+            {pathnames.length > 0 && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
+              <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">
                 <Breadcrumbs />
+                {getContextualAction()}
               </div>
             )}
             {children}

@@ -9,7 +9,8 @@ import {
   Layout,
   Layers,
   Cpu,
-  LayoutGrid
+  LayoutGrid,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
@@ -17,7 +18,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { NavigationArchitect } from '../../components/Settings/NavigationArchitect';
 import { systemDefaultMenuConfig } from '../../config/menuDefaults';
-import { cn } from '../../lib/utils';
+import { cn, flattenFields } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 
@@ -32,6 +33,13 @@ interface MenuItem {
   isVisible?: boolean;
   isSubtitle?: boolean;
   children?: MenuItem[];
+  moduleId?: string;
+  moduleIds?: string[];
+  isUnifiedQueue?: boolean;
+  queueConfig?: {
+    conditions: any;
+    columns: string[];
+  };
 }
 
 interface MenuSection {
@@ -58,6 +66,7 @@ export const NavigationSettingsPage = () => {
   const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams } = usePlatform();
   const { session } = useAuth();
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
+  const [showBreadcrumbs, setShowBreadcrumbs] = useState(true);
   const [saving, setSaving] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [positions, setPositions] = useState<any[]>([]);
@@ -81,6 +90,19 @@ export const NavigationSettingsPage = () => {
   const [customPath, setCustomPath] = useState('');
   const [customIcon, setCustomIcon] = useState('Link2');
   const [customIconInput, setCustomIconInput] = useState('');
+
+  // Queue form state
+  const [queueItemType, setQueueItemType] = useState<'single' | 'unified'>('single');
+  const [queueLabel, setQueueLabel] = useState('');
+  const [queueIcon, setQueueIcon] = useState('ClipboardList');
+  const [queueModuleId, setQueueModuleId] = useState('');
+  const [queueModuleIds, setQueueModuleIds] = useState<string[]>([]);
+  const [queueRules, setQueueRules] = useState<{ fieldId: string; operator: string; value: string }[]>([
+    { fieldId: '', operator: 'equals', value: '' }
+  ]);
+  const [queueColumns, setQueueColumns] = useState<string[]>([
+    'id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'
+  ]);
 
   // Fetch Positions on Mount
   useEffect(() => {
@@ -124,8 +146,11 @@ export const NavigationSettingsPage = () => {
 
       setMenuConfigState(advanced);
 
-      if (tenant?.branding && tenant.branding.layout_style) {
-        setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
+      if (tenant?.branding) {
+        if (tenant.branding.layout_style) {
+          setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
+        }
+        setShowBreadcrumbs(tenant.branding.show_breadcrumbs !== false);
       }
       setInitialized(true);
     }
@@ -198,12 +223,16 @@ export const NavigationSettingsPage = () => {
     try {
       const promises: Promise<any>[] = [];
 
-      // 1. Only update tenant branding if layout style actually changed
-      if (!isOverrideActive && tenant?.branding?.layout_style !== layoutStyle) {
+      // 1. Only update tenant branding if layout style or breadcrumbs option actually changed
+      const brandingLayoutChanged = tenant?.branding?.layout_style !== layoutStyle;
+      const brandingBreadcrumbsChanged = (tenant?.branding?.show_breadcrumbs !== false) !== showBreadcrumbs;
+
+      if (!isOverrideActive && (brandingLayoutChanged || brandingBreadcrumbsChanged)) {
         promises.push(updateTenant({
           branding: {
             ...tenant?.branding,
-            layout_style: layoutStyle
+            layout_style: layoutStyle,
+            show_breadcrumbs: showBreadcrumbs
           }
         }));
       }
@@ -265,7 +294,146 @@ export const NavigationSettingsPage = () => {
     setCustomIconInput('');
   };
 
-  // Platform modules
+  // Active custom modules helper
+  const activeCustomModules = useMemo(() => {
+    return modules.filter((mod: any) => {
+      if (mod.type === 'PAGE') return false;
+      if (mod.status !== 'ACTIVE' && !mod.enabled) return false;
+      const isPlatform = PLATFORM_MODULES.some(pm => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId);
+      if (isPlatform) return false;
+      if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
+      return true;
+    });
+  }, [modules]);
+
+  // Queue conditions available fields helper
+  const queueAvailableFields = useMemo(() => {
+    const list: { id: string; label: string; origin?: string }[] = [
+      { id: 'currentUser.teamName', label: 'Current User: Team Name' },
+      { id: 'currentUser.teamId', label: 'Current User: Team ID' },
+      { id: 'currentUser.role', label: 'Current User: Role' },
+      { id: 'currentUser.id', label: 'Current User: Member ID' },
+      { id: 'status', label: 'Status' },
+      { id: 'priority', label: 'Priority' },
+      { id: 'assigneeId', label: 'Assignee ID' }
+    ];
+
+    const targetModuleIds = queueItemType === 'single' 
+      ? (queueModuleId ? [queueModuleId] : []) 
+      : queueModuleIds;
+
+    targetModuleIds.forEach(mId => {
+      const mod = modules.find(m => m.id === mId);
+      if (mod?.layout) {
+        const flat = flattenFields(mod.layout);
+        flat.forEach(f => {
+          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
+            if (!list.some(item => item.id === f.id)) {
+              list.push({ id: f.id, label: `${f.label || f.name} (${mod.name})`, origin: mod.name });
+            }
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [queueItemType, queueModuleId, queueModuleIds, modules]);
+
+  // Queue display columns available fields helper
+  const queueColumnOptions = useMemo(() => {
+    const list: { id: string; label: string; group: string }[] = [
+      { id: 'id', label: 'Record ID', group: 'System' },
+      { id: 'moduleId', label: 'Module Name', group: 'System' },
+      { id: 'title', label: 'Title/Key', group: 'System' },
+      { id: 'status', label: 'Status', group: 'System' },
+      { id: 'priority', label: 'Priority', group: 'System' },
+      { id: 'assigneeId', label: 'Assignee', group: 'System' },
+      { id: 'createdAt', label: 'Created At', group: 'System' },
+      { id: 'updatedAt', label: 'Updated At', group: 'System' }
+    ];
+
+    const targetModuleIds = queueItemType === 'single' 
+      ? (queueModuleId ? [queueModuleId] : []) 
+      : queueModuleIds;
+
+    targetModuleIds.forEach(mId => {
+      const mod = modules.find(m => m.id === mId);
+      if (mod?.layout) {
+        const flat = flattenFields(mod.layout);
+        flat.forEach(f => {
+          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
+            if (!list.some(item => item.id === f.id)) {
+              list.push({ id: f.id, label: f.label || f.name, group: mod.name });
+            }
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [queueItemType, queueModuleId, queueModuleIds, modules]);
+
+  // Add Queue Item Handler
+  const handleAddQueueItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!queueLabel.trim()) {
+      toast.error('Please enter a queue label.');
+      return;
+    }
+
+    if (queueItemType === 'single' && !queueModuleId) {
+      toast.error('Please select a target module.');
+      return;
+    }
+
+    if (queueItemType === 'unified' && queueModuleIds.length === 0) {
+      toast.error('Please select at least one module.');
+      return;
+    }
+
+    const validRules = queueRules
+      .filter(r => r.fieldId)
+      .map(r => {
+        const isVar = r.fieldId.startsWith('currentUser.');
+        return {
+          fieldId: r.fieldId,
+          fieldType: isVar ? 'variable' : 'field',
+          operator: r.operator,
+          value: r.value,
+          valueType: 'literal'
+        };
+      });
+
+    const conditions = {
+      type: 'group',
+      logicalOperator: 'AND',
+      rules: validRules
+    };
+
+    const queueId = `queue_${Date.now()}`;
+    const newItem: MenuItem = {
+      id: queueId,
+      label: queueLabel,
+      iconName: queueIcon,
+      isVisible: true,
+      moduleId: queueItemType === 'single' ? queueModuleId : undefined,
+      moduleIds: queueItemType === 'unified' ? queueModuleIds : undefined,
+      isUnifiedQueue: queueItemType === 'unified',
+      to: queueItemType === 'single' 
+        ? `/workspace/modules/${queueModuleId}?queueId=${queueId}`
+        : `/workspace/queues/${queueId}`,
+      queueConfig: {
+        conditions,
+        columns: queueItemType === 'unified' ? queueColumns : []
+      }
+    };
+
+    addItemToActiveSection(newItem);
+    setQueueLabel('');
+    setQueueRules([{ fieldId: '', operator: 'equals', value: '' }]);
+  };
+
+  // System modules
   const PLATFORM_MODULES_LIST = PLATFORM_MODULES.map(mod => ({
     label: mod.name,
     icon: mod.iconName,
@@ -408,6 +576,28 @@ export const NavigationSettingsPage = () => {
                   <span className="text-[10px] font-bold uppercase">Top Menu</span>
                 </button>
               </div>
+
+              <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-850 dark:text-zinc-200">Show Workspace Breadcrumbs</h4>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">Display page navigation hierarchies under the main header.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBreadcrumbs(prev => !prev)}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-0",
+                    showBreadcrumbs ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
+                      showBreadcrumbs ? "translate-x-4" : "translate-x-0"
+                    )}
+                  />
+                </button>
+              </div>
             </div>
           )}
 
@@ -486,10 +676,264 @@ export const NavigationSettingsPage = () => {
               </Button>
             </form>
 
-            {/* Platform Modules list */}
+            {/* Queue Builder Form */}
+            <form onSubmit={handleAddQueueItem} className="border border-zinc-100 dark:border-zinc-800 rounded-xl p-3.5 space-y-3 bg-zinc-50/50 dark:bg-zinc-950/20">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Cpu size={12} /> Queue Builder
+                </span>
+                <div className="flex gap-2 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQueueItemType('single');
+                      setQueueColumns(['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']);
+                    }}
+                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", queueItemType === 'single' ? "bg-indigo-600 text-white" : "text-zinc-400")}
+                  >
+                    Single Module
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQueueItemType('unified');
+                    }}
+                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", queueItemType === 'unified' ? "bg-indigo-600 text-white" : "text-zinc-400")}
+                  >
+                    Unified Multi-Module
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {/* Module Selector */}
+                {queueItemType === 'single' ? (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Target Module</label>
+                    <select
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
+                      value={queueModuleId}
+                      onChange={(e) => setQueueModuleId(e.target.value)}
+                    >
+                      <option value="">Select a Module...</option>
+                      {activeCustomModules.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase block">Select Target Modules</label>
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 max-h-28 overflow-y-auto space-y-1 custom-scrollbar">
+                      {activeCustomModules.map(m => {
+                        const isChecked = queueModuleIds.includes(m.id);
+                        return (
+                          <label key={m.id} className="flex items-center gap-2 text-xs font-medium text-zinc-750 dark:text-zinc-350 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setQueueModuleIds([...queueModuleIds, m.id]);
+                                } else {
+                                  setQueueModuleIds(queueModuleIds.filter(id => id !== m.id));
+                                }
+                              }}
+                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{m.name}</span>
+                          </label>
+                        );
+                      })}
+                      {activeCustomModules.length === 0 && (
+                        <p className="text-[10px] text-zinc-400 italic">No active custom modules.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Queue Label */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Queue Name / Label</label>
+                  <input
+                    type="text"
+                    placeholder="E.g., Undergraduate Admissions"
+                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
+                    value={queueLabel}
+                    onChange={(e) => setQueueLabel(e.target.value)}
+                  />
+                </div>
+
+                {/* Queue Icon */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Queue Icon</label>
+                  <select
+                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
+                    value={queueIcon}
+                    onChange={(e) => setQueueIcon(e.target.value)}
+                  >
+                    {COMMON_ICONS.map(i => (
+                      <option key={i} value={i}>{i}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Condition Builder Section */}
+                <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase block">Filtering Rules (AND)</label>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                    {queueRules.map((rule, idx) => (
+                      <div key={idx} className="flex gap-1.5 items-center">
+                        <select
+                          className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1.5 py-1 text-[10px] outline-none"
+                          value={rule.fieldId}
+                          onChange={(e) => {
+                            const updated = [...queueRules];
+                            updated[idx].fieldId = e.target.value;
+                            setQueueRules(updated);
+                          }}
+                        >
+                          <option value="">Field...</option>
+                          {queueAvailableFields.map(f => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          className="w-18 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1 py-1 text-[10px] outline-none"
+                          value={rule.operator}
+                          onChange={(e) => {
+                            const updated = [...queueRules];
+                            updated[idx].operator = e.target.value;
+                            setQueueRules(updated);
+                          }}
+                        >
+                          <option value="equals">==</option>
+                          <option value="not_equals">!=</option>
+                          <option value="contains">contains</option>
+                          <option value="is_empty">empty</option>
+                          <option value="not_empty">not empty</option>
+                        </select>
+
+                        {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
+                          <input
+                            type="text"
+                            placeholder="Value"
+                            className="w-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1.5 py-1 text-[10px] outline-none"
+                            value={rule.value}
+                            onChange={(e) => {
+                              const updated = [...queueRules];
+                              updated[idx].value = e.target.value;
+                              setQueueRules(updated);
+                            }}
+                          />
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQueueRules(queueRules.filter((_, i) => i !== idx));
+                          }}
+                          disabled={queueRules.length === 1}
+                          className="text-zinc-400 hover:text-red-500 disabled:opacity-30"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setQueueRules([...queueRules, { fieldId: '', operator: 'equals', value: '' }])}
+                    className="flex items-center gap-1 text-[10px] text-indigo-650 dark:text-indigo-400 font-bold uppercase mt-1 hover:underline"
+                  >
+                    <Plus size={10} /> Add Rule
+                  </button>
+                </div>
+
+                {/* Columns Selection Section (Only for Unified Queues) */}
+                {queueItemType === 'unified' && (
+                  <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase block">Display Columns</label>
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
+                      {/* Grouped Columns */}
+                      {Array.from(new Set(queueColumnOptions.map(c => c.group))).map(groupName => (
+                        <div key={groupName} className="space-y-1">
+                          <div className="text-[9px] font-black text-zinc-400 dark:text-zinc-650 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-900 pb-0.5">
+                            {groupName} Fields
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 pl-1">
+                            {queueColumnOptions.filter(c => c.group === groupName).map(col => {
+                              const isChecked = queueColumns.includes(col.id);
+                              return (
+                                <label key={col.id} className="flex items-center gap-1.5 text-[10px] text-zinc-700 dark:text-zinc-350 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setQueueColumns([...queueColumns, col.id]);
+                                      } else {
+                                        setQueueColumns(queueColumns.filter(c => c !== col.id));
+                                      }
+                                    }}
+                                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3 w-3"
+                                  />
+                                  <span className="truncate">{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Button type="submit" variant="secondary" size="sm" className="w-full text-xs gap-1 mt-2">
+                <Plus size={12} /> Create Workspace Queue
+              </Button>
+            </form>
+
+            {/* Workspace Pages list */}
             <div className="space-y-2">
               <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-1">
-                <Cpu size={12} /> Platform Modules
+                <Layout size={12} /> Workspace Pages
+              </h4>
+              {(() => {
+                const activePages = modules.filter((mod: any) => mod.type === 'PAGE' && (mod.status === 'ACTIVE' || mod.enabled));
+                if (activePages.length === 0) {
+                  return <p className="text-[10px] text-zinc-400 italic">No active workspace pages.</p>;
+                }
+                return (
+                  <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto custom-scrollbar">
+                    {activePages.map((page) => (
+                      <button
+                        key={page.id}
+                        onClick={() => addItemToActiveSection({
+                          id: `module:${page.id}`,
+                          label: page.name,
+                          iconName: (page as any).iconName || (page as any).icon || 'Layers',
+                          to: `/workspace/pages/${page.id}`,
+                          isVisible: true
+                        })}
+                        className="flex items-center justify-between p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-left transition-colors"
+                      >
+                        <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">{page.name}</span>
+                        <Plus size={14} className="text-zinc-400 hover:text-indigo-500" />
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* System Modules list */}
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-1">
+                <Cpu size={12} /> System Modules
               </h4>
               <div className="grid grid-cols-1 gap-1">
                 {PLATFORM_MODULES_LIST.map((mod) => (
@@ -517,7 +961,14 @@ export const NavigationSettingsPage = () => {
                 <Layers size={12} /> Custom Modules
               </h4>
               {(() => {
-                const activeCustomModules = modules.filter((mod: any) => mod.status === 'ACTIVE' || mod.enabled);
+                const activeCustomModules = modules.filter((mod: any) => {
+                  if (mod.type === 'PAGE') return false;
+                  if (mod.status !== 'ACTIVE' && !mod.enabled) return false;
+                  const isPlatform = PLATFORM_MODULES.some(pm => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId);
+                  if (isPlatform) return false;
+                  if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
+                  return true;
+                });
                 if (activeCustomModules.length === 0) {
                   return <p className="text-[10px] text-zinc-400 italic">No active custom modules.</p>;
                 }

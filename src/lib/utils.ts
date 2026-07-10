@@ -82,6 +82,14 @@ const resolveVariable = (token: string, context?: any): any => {
     return ids.length > 1 ? ids : finalId;
   }
   if (cleanToken === 'currentUser.role') return context?.user?.role || context?.user?.roleId || '';
+  if (cleanToken === 'currentUser.teamName') {
+    const user = context?.user;
+    return user?.team?.name || user?.tenantMember?.team?.name || '';
+  }
+  if (cleanToken === 'currentUser.teamId') {
+    const user = context?.user;
+    return user?.teamId || user?.team_id || user?.team?.id || '';
+  }
   if (cleanToken === 'currentUser.team') {
     const user = context?.user;
     const ids = [

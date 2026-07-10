@@ -24,6 +24,7 @@ export interface Tenant {
     aiEnabled?: boolean;
     forceDarkMode?: boolean;
     layout_style?: string;
+    show_breadcrumbs?: boolean;
   };
   localization?: {
     timezone?: string;

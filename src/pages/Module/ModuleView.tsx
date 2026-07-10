@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { RecordDetailView } from '../Record/RecordDetailView';
 import { createPortal } from 'react-dom';
 import { Table } from '../../components/UI/Table';
@@ -310,8 +310,32 @@ const InlineAssigneeCell = ({
 export const ModuleView = () => {
   const { moduleId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queueId = searchParams.get('queueId');
   const { session, user } = useAuth();
-  const { tenant, isLoading: platformLoading, modules, members, user: platformUser } = usePlatform();
+  const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig } = usePlatform();
+  
+  const activeQueue = useMemo(() => {
+    if (!menuConfig?.sections || !queueId) return null;
+
+    const findItem = (items: any[]): any => {
+      for (const item of items) {
+        if (item.id === queueId) return item;
+        if (item.children) {
+          const found = findItem(item.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    for (const section of menuConfig.sections) {
+      const found = findItem(section.items || []);
+      if (found) return found;
+    }
+    return null;
+  }, [menuConfig, queueId]);
+
   useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [records, setRecords] = useState<Record<string, any>[]>([]);
@@ -424,11 +448,11 @@ export const ModuleView = () => {
   });
 
   const { data: recordsResult, isLoading: recordsQueryLoading } = useQuery({
-    queryKey: ['records', tenant?.id, moduleId, page, pageSize],
+    queryKey: ['records', tenant?.id, moduleId, queueId ? 'all' : page, queueId ? 2000 : pageSize],
     queryFn: async () => {
       if (!tenant?.id || !moduleId) return null;
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      return fetchRecords(moduleId, tenant.id, token, page, pageSize);
+      return fetchRecords(moduleId, tenant.id, token, queueId ? 1 : page, queueId ? 2000 : pageSize);
     },
     enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
   });
@@ -447,10 +471,12 @@ export const ModuleView = () => {
   useEffect(() => {
     if (recordsResult) {
       setRecords(recordsResult.records);
-      setTotalRecords(recordsResult.total);
-      setTotalPages(recordsResult.totalPages);
+      if (!queueId) {
+        setTotalRecords(recordsResult.total);
+        setTotalPages(recordsResult.totalPages);
+      }
     }
-  }, [recordsResult]);
+  }, [recordsResult, queueId]);
 
   // Combined loading state for progressive rendering
   const isSessionReady = !!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN;
@@ -1029,16 +1055,40 @@ export const ModuleView = () => {
   };
 
   const filteredRecords = useMemo(() => {
-    if (!searchQuery.trim()) return records;
+    let result = records;
+
+    // Apply Queue conditions
+    if (activeQueue?.queueConfig?.conditions) {
+      result = result.filter(record => 
+        checkCondition(activeQueue.queueConfig.conditions, record, visibilityContext)
+      );
+    }
+
+    if (!searchQuery.trim()) return result;
     const query = searchQuery.toLowerCase();
-    return records.filter(record => {
+    return result.filter(record => {
       return Object.entries(record).some(([key, val]) => {
         if (key.startsWith('_') || val === null || val === undefined) return false;
         if (typeof val === 'object') return false;
         return String(val).toLowerCase().includes(query);
       });
     });
-  }, [records, searchQuery]);
+  }, [records, searchQuery, activeQueue, visibilityContext]);
+
+  // Sliced records for table rendering when queue is active
+  const slicedRecords = useMemo(() => {
+    if (!queueId) return filteredRecords;
+    const start = (page - 1) * pageSize;
+    return filteredRecords.slice(start, start + pageSize);
+  }, [filteredRecords, page, pageSize, queueId]);
+
+  // Keep pagination totals in sync dynamically when queue matches change
+  useEffect(() => {
+    if (queueId) {
+      setTotalRecords(filteredRecords.length);
+      setTotalPages(Math.ceil(filteredRecords.length / pageSize) || 1);
+    }
+  }, [filteredRecords, queueId, pageSize]);
 
   const updateMutation = useMutation({
     mutationFn: async ({ recordId, data }: { recordId: string; data: any }) => {
@@ -3574,7 +3624,7 @@ export const ModuleView = () => {
         </div>
         
         <Table 
-          data={filteredRecords as any}
+          data={slicedRecords as any}
           onRowClick={(record) => handleRecordClick(String(record.id))}
           className="bg-transparent dark:bg-transparent border-none shadow-none"
           noContainer={true}
@@ -3695,13 +3745,6 @@ export const ModuleView = () => {
         iconClassName="bg-indigo-600 shadow-indigo-500/20"
         actions={
           <div className="flex gap-4">
-            <Link 
-              to={`/workspace/settings/builder/${moduleId}`}
-              className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors flex items-center gap-2"
-            >
-              <LucideIcons.Settings size={16} />
-              Configure
-            </Link>
             {interfaceSettings.actions?.map((act: any) => {
               const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
               return (
