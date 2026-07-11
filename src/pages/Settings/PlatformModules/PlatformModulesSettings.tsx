@@ -80,6 +80,11 @@ export const PlatformModulesSettings = () => {
           <PageHeader 
             title="Modules"
             description="Manage core platform features, prebuilt system directories, and tenant-specific custom data structures in one place."
+            actions={
+              <Button onClick={() => navigate('/workspace/settings/builder')} className="gap-2 shadow-lg shadow-indigo-500/10">
+                <Plus size={16} /> Create Module
+              </Button>
+            }
           />
 
           {/* Clean Pill Tab Switcher */}
