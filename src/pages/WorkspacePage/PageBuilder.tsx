@@ -130,6 +130,12 @@ export const PageBuilder = () => {
         defaultW = 6;
         properties = { moduleId: '', chartType: 'bar' };
         break;
+      case 'report':
+        title = 'BI Report Dashboard';
+        defaultW = 12;
+        properties = { reportId: '' };
+        break;
+
     }
 
     const newWidget = {
@@ -412,6 +418,20 @@ export const PageBuilder = () => {
                   </div>
                 )}
 
+                {/* Report selection properties */}
+                {editingWidget.type === 'report' && (
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-zinc-500 uppercase tracking-wider block">Select BI Report</label>
+                    <ReportDropdown 
+                      editingWidget={editingWidget} 
+                      setWidgets={setWidgets}
+                      setEditingWidget={setEditingWidget}
+                      tenant={tenant}
+                      session={session}
+                    />
+                  </div>
+                )}
+
                 {/* Chart type properties */}
                 {editingWidget.type === 'chart' && (
                   <div className="space-y-1.5">
@@ -485,6 +505,7 @@ export const PageBuilder = () => {
                 { type: 'module-creator', label: 'Module Submission Form', icon: Icons.FileText, desc: 'Render a form to create entries in a module.' },
                 { type: 'rich-text', label: 'Noticeboard / Rich Text', icon: Layout, desc: 'Provide HTML or instruction text blocks.' },
                 { type: 'chart', label: 'Volume Chart', icon: Icons.BarChart, desc: 'Visualize case volume charts.' },
+                { type: 'report', label: 'BI Report Dashboard', icon: Icons.BarChart3, desc: 'Embed a published visual report.' },
               ].map((item) => {
                 return (
                   <button
@@ -517,3 +538,64 @@ export const PageBuilder = () => {
     </div>
   );
 };
+
+const ReportDropdown = ({ editingWidget, setWidgets, setEditingWidget, tenant, session }: any) => {
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPublishedReports = async () => {
+      if (!tenant?.id) return;
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`http://localhost:3001/api/reports`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setReports(data.filter((r: any) => r.status === 'Published'));
+        }
+      } catch (err) {
+        console.error('Failed to fetch reports list', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPublishedReports();
+  }, [tenant?.id, session?.access_token]);
+
+  return (
+    <select
+      value={editingWidget.properties?.reportId || ''}
+      onChange={(e) => {
+        const rId = e.target.value;
+        setWidgets((prev: any[]) => prev.map(w => {
+          if (w.id === editingWidget.id) {
+            return { ...w, properties: { ...w.properties, reportId: rId } };
+          }
+          return w;
+        }));
+        setEditingWidget((prev: any) => ({ ...prev, properties: { ...prev.properties, reportId: rId } }));
+      }}
+      disabled={loading}
+      className="w-full bg-zinc-50/50 dark:bg-white/[0.01] border border-zinc-200 dark:border-white/5 rounded-lg px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50 text-xs"
+    >
+      {loading ? (
+        <option>Loading reports...</option>
+      ) : reports.length === 0 ? (
+        <option value="">No published reports found</option>
+      ) : (
+        <>
+          <option value="">Select report...</option>
+          {reports.map((r: any) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </>
+      )}
+    </select>
+  );
+};
+

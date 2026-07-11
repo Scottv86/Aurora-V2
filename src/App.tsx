@@ -76,6 +76,10 @@ import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
 import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
 import { APISettings } from './pages/Settings/APISettings';
 import { QueryExplorer } from './pages/Settings/QueryExplorer';
+import { RecordsManagement } from './pages/Platform/RecordsManagement';
+import { RecordsManagementSettings } from './pages/Settings/PlatformModules/RecordsManagementSettings';
+import { ReportManagementSettings } from './pages/Settings/PlatformModules/ReportManagementSettings';
+
 
 
 const NavigateWithSearch = ({ to, replace }: { to: string; replace?: boolean }) => {
@@ -192,9 +196,10 @@ const App = () => {
                 <Route path="platform/sites" element={<SitesPage />} />
                 <Route path="platform/automations" element={<AutomationsPage />} />
                 <Route path="platform/templates" element={<DocumentAutomation />} />
-                <Route path="platform/reports" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
+                <Route path="platform/reports" element={<ReportManagementSettings />} />
                 <Route path="platform/api" element={<APISettings />} />
                 <Route path="platform/finance" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
+                <Route path="platform/records-management" element={<RecordsManagement />} />
               </Route>
               
               {/* Settings & Workforce (Developer Only) */}
@@ -241,9 +246,10 @@ const App = () => {
                    <Route path="sites" element={<SitesPage />} />
                    <Route path="automation-management" element={<AutomationsPage />} />
                    <Route path="document-generation" element={<DocumentAutomation />} />
-                   <Route path="report-management" element={<ComingSoon title="Report Builder" description="Create custom data visualizations, scheduled reports, and export dashboards." />} />
+                   <Route path="report-management" element={<ReportManagementSettings />} />
                    <Route path="api-management" element={<APISettings />} />
                    <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
+                   <Route path="records-management" element={<RecordsManagementSettings />} />
                 </Route>
                  <Route path="templates" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />
                  <Route path="automations" element={<Navigate to="/workspace/settings/platform-modules/automation-management" replace />} />
@@ -256,6 +262,7 @@ const App = () => {
                  <Route path="data" element={<QueryExplorer />} />
                  <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
                  <Route path="finance" element={<Navigate to="/workspace/settings/platform-modules/financial-management" replace />} />
+                 <Route path="records-management" element={<Navigate to="/workspace/settings/platform-modules/records-management" replace />} />
                  <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                  <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                  <Route path="migration" element={<ComingSoon title="Migration" description="Data import, export, and migration utilities for moving data between systems." />} />

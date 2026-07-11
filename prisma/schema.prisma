@@ -731,3 +731,19 @@ model CatalogItem {
   @@index([tenantId])
   @@map("catalog_items")
 }
+
+model Report {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  config      Json     // Widgets (charts, metrics, grids) and dataSource configs
+  status      String   @default("Draft") // Draft | Published
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+
+  @@index([tenantId])
+  @@map("reports")
+}
+

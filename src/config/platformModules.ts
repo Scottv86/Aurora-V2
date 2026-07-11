@@ -134,5 +134,14 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     isCore: true,
     description: 'Financial settings, tax configurations, and payment processing rules.',
     path: '/workspace/platform/finance'
+  },
+  {
+    id: 'records-management',
+    name: 'Records Management',
+    slug: 'records-management',
+    iconName: 'Archive',
+    isCore: true,
+    description: 'Configure compliance retention schedules, legal holds, and auto-disposition policies.',
+    path: '/workspace/platform/records-management'
   }
 ];

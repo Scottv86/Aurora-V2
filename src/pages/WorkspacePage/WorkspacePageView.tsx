@@ -15,7 +15,7 @@ import { fetchModule, fetchRecords } from '../../services/dataService';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 
 export const WorkspacePageView = () => {
   const { pageId } = useParams();
@@ -254,6 +254,10 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
 
     case 'chart':
       return <ChartWidget widget={widget} tenant={tenant} session={session} />;
+
+    case 'report':
+      return <ReportWidgetEmbed widget={widget} tenant={tenant} session={session} />;
+
 
     default:
       return (
@@ -611,3 +615,289 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
     </div>
   );
 };
+
+const COLORS_PALETTE = ['#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+interface ReportEmbedWidget {
+  id: string;
+  type: 'bar' | 'line' | 'area' | 'pie' | 'kpi' | 'table';
+  title: string;
+  w: number;
+  properties: {
+    xAxisKey: string;
+    yAxisKey: string;
+    aggregate: 'count' | 'sum' | 'avg' | 'min' | 'max';
+    color?: string;
+  };
+}
+
+export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {
+  const [report, setReport] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [dataset, setDataset] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+
+  const reportId = widget.properties?.reportId;
+
+  // 1. Fetch report configuration
+  useEffect(() => {
+    const fetchReportConfig = async () => {
+      if (!tenant?.id || !reportId) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`http://localhost:3001/api/reports/${reportId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setReport(data);
+        }
+      } catch (err) {
+        console.error('Failed to load report embed configuration', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReportConfig();
+  }, [reportId, tenant?.id, session?.access_token]);
+
+  // 2. Fetch dataset based on report source
+  useEffect(() => {
+    if (!report || !tenant?.id) return;
+    const loadDataset = async () => {
+      setDataLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
+        const tables = report.config?.dataSource?.tables || [];
+        const t = tables[0];
+
+        if (t === 'records') {
+          const res = await fetch(`http://localhost:3001/api/data/records`, { headers });
+          const json = await res.json();
+          setDataset(json.records || []);
+        } else if (t === 'tenant_members') {
+          const res = await fetch(`http://localhost:3001/api/members`, { headers });
+          const json = await res.json();
+          setDataset(json || []);
+        } else if (t === 'teams') {
+          const res = await fetch(`http://localhost:3001/api/teams`, { headers });
+          const json = await res.json();
+          setDataset(json || []);
+        } else if (t === 'automations') {
+          const res = await fetch(`http://localhost:3001/api/automations`, { headers });
+          const json = await res.json();
+          setDataset(json || []);
+        } else if (t === 'catalog_items') {
+          const res = await fetch(`http://localhost:3001/api/pricing-catalog`, { headers });
+          const json = await res.json();
+          setDataset(json || []);
+        } else {
+          // Mock external source
+          setDataset([
+            { id: '1', status: 'Prospecting', source: 'Webinar', value: 12000 },
+            { id: '2', status: 'Qualification', source: 'Cold Outbound', value: 18000 },
+            { id: '3', status: 'Closed Won', source: 'Webinar', value: 45000 },
+            { id: '4', status: 'Negotiation', source: 'Partner Referral', value: 25000 },
+            { id: '5', status: 'Closed Won', source: 'Google Ads', value: 30000 }
+          ]);
+        }
+      } catch (err) {
+        console.error('Failed to load report dataset', err);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    loadDataset();
+  }, [report, tenant?.id, session?.access_token]);
+
+  // Aggregation helper
+  const getAggregatedData = (w: ReportEmbedWidget): any[] => {
+    if (!dataset || dataset.length === 0) return [];
+    const { xAxisKey, yAxisKey, aggregate } = w.properties;
+    if (!xAxisKey) return [];
+
+    const groupMap: Record<string, any[]> = {};
+    dataset.forEach(item => {
+      let keyVal = item[xAxisKey];
+      if (keyVal === undefined || keyVal === null) keyVal = 'Unspecified';
+      if (typeof keyVal === 'boolean') keyVal = keyVal ? 'True' : 'False';
+      
+      if (!groupMap[keyVal]) groupMap[keyVal] = [];
+      groupMap[keyVal].push(item);
+    });
+
+    return Object.entries(groupMap).map(([key, items]) => {
+      let metricValue = 0;
+      if (aggregate === 'count') {
+        metricValue = items.length;
+      } else {
+        const numericValues = items
+          .map(item => {
+            const val = parseFloat(item[yAxisKey]);
+            return isNaN(val) ? 0 : val;
+          });
+
+        if (aggregate === 'sum') {
+          metricValue = numericValues.reduce((acc, v) => acc + v, 0);
+        } else if (aggregate === 'avg') {
+          metricValue = numericValues.length > 0 
+            ? numericValues.reduce((acc, v) => acc + v, 0) / numericValues.length 
+            : 0;
+        } else if (aggregate === 'min') {
+          metricValue = numericValues.length > 0 ? Math.min(...numericValues) : 0;
+        } else if (aggregate === 'max') {
+          metricValue = numericValues.length > 0 ? Math.max(...numericValues) : 0;
+        }
+      }
+      return { name: key, value: metricValue };
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="p-12 border border-zinc-200 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] rounded-3xl flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+        <span className="text-zinc-500 text-[10px] uppercase font-black tracking-wider">Syncing BI Visuals...</span>
+      </div>
+    );
+  }
+
+  if (!reportId || !report) {
+    return (
+      <div className="p-8 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-3xl text-center space-y-2 bg-white/20 dark:bg-white/[0.005]">
+        <Icons.TrendingUp size={24} className="text-zinc-400 mx-auto" />
+        <p className="text-xs font-bold text-zinc-650 dark:text-zinc-300">BI Report Widget</p>
+        <p className="text-[10px] text-zinc-500">No report configured or target report was deleted.</p>
+      </div>
+    );
+  }
+
+  const widgetsList = report.config?.widgets || [];
+
+  return (
+    <div className="col-span-12 space-y-6">
+      <div className="border-b border-zinc-200/50 dark:border-zinc-800/50 pb-2">
+        <h2 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">{report.name}</h2>
+        {report.description && <p className="text-[10px] text-zinc-550 dark:text-zinc-500 mt-0.5">{report.description}</p>}
+      </div>
+
+      {widgetsList.length === 0 ? (
+        <p className="text-xs text-zinc-500 italic py-6 text-center">This published report has no configured visuals.</p>
+      ) : (
+        <div className="grid grid-cols-12 gap-6">
+          {widgetsList.map((w: ReportEmbedWidget) => {
+            const widthClass = w.w === 4 ? 'col-span-12 md:col-span-4' :
+                               w.w === 6 ? 'col-span-12 md:col-span-6' :
+                               w.w === 8 ? 'col-span-12 md:col-span-8' :
+                               'col-span-12';
+            const aggData = getAggregatedData(w);
+
+            return (
+              <div 
+                key={w.id} 
+                className={cn(
+                  "p-5 rounded-3xl border border-zinc-200 dark:border-zinc-850 h-80 flex flex-col justify-between bg-white/50 dark:bg-white/[0.02]", 
+                  widthClass
+                )}
+              >
+                <div className="border-b border-zinc-100 dark:border-zinc-850 pb-2 flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{w.title}</span>
+                </div>
+
+                <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4 text-xs">
+                  {dataLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                  ) : aggData.length === 0 ? (
+                    <span className="text-[10px] text-zinc-400 italic">No dataset rows found.</span>
+                  ) : w.type === 'kpi' ? (
+                    <div className="text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Count</p>
+                      <p className="text-4xl font-black text-zinc-950 dark:text-white mt-1">
+                        {aggData.reduce((acc, d) => acc + d.value, 0).toLocaleString()}
+                      </p>
+                    </div>
+                  ) : w.type === 'table' ? (
+                    <div className="w-full h-full overflow-y-auto text-[10px]">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-100 dark:border-zinc-850 text-zinc-450 uppercase font-black">
+                            <th className="py-1 pl-1">Dimension</th>
+                            <th className="py-1 text-right pr-1">Aggregated Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aggData.map(d => (
+                            <tr key={d.name} className="border-b border-zinc-100/50 dark:border-zinc-850/50 text-zinc-700 dark:text-zinc-300">
+                              <td className="py-2 pl-1 font-bold">{d.name}</td>
+                              <td className="py-2 text-right pr-1 font-mono">{d.value.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {w.type === 'bar' ? (
+                          <BarChart data={aggData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
+                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <Bar dataKey="value" fill={w.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        ) : w.type === 'line' ? (
+                          <LineChart data={aggData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
+                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <Line type="monotone" dataKey="value" stroke={w.properties.color || '#6366f1'} strokeWidth={2} />
+                          </LineChart>
+                        ) : w.type === 'area' ? (
+                          <AreaChart data={aggData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
+                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <Area type="monotone" dataKey="value" fill={w.properties.color || '#6366f1'} stroke={w.properties.color || '#6366f1'} fillOpacity={0.15} />
+                          </AreaChart>
+                        ) : (
+                          <PieChart>
+                            <Pie
+                              data={aggData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={45}
+                              outerRadius={65}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {aggData.map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS_PALETTE[index % COLORS_PALETTE.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                          </PieChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+

@@ -23,9 +23,11 @@ export const PlatformModulesSettings = () => {
   const isIndex = location.pathname === '/workspace/settings/platform-modules' || location.pathname === '/workspace/settings/platform-modules/';
 
   const activeModule = !isIndex ? PLATFORM_MODULES.find(m => location.pathname.includes(m.slug)) : null;
+  const isBuilderActive = location.pathname.includes('report-management') && location.search.includes('mode=builder');
 
   // Filter out any custom database modules that represent system-level services (like Work Distribution or People & Organisations)
   const displayCustomModules = modules.filter((mod: any) => {
+    if (mod.type === 'PAGE') return false;
     const isPlatform = PLATFORM_MODULES.some(pm => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId);
     if (isPlatform) return false;
     if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
@@ -65,7 +67,10 @@ export const PlatformModulesSettings = () => {
   };
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
+    <div className={cn(
+      "flex flex-col w-full relative min-h-0",
+      isBuilderActive ? "h-[calc(100vh-4rem)] p-0 overflow-hidden" : "px-6 lg:px-12 py-10"
+    )}>
       {/* Background Glows */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
@@ -222,21 +227,23 @@ export const PlatformModulesSettings = () => {
         </>
       ) : (
         <>
-          <PageHeader 
-            title={activeModule?.name || 'Module Settings'}
-            description={activeModule?.description || 'Configure module settings.'}
-            actions={
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={() => navigate('/workspace/settings/platform-modules')}
-                className="gap-2 font-bold"
-              >
-                <ArrowLeft size={16} /> Back to Modules
-              </Button>
-            }
-          />
-          <div className="flex-1">
+          {!isBuilderActive && (
+            <PageHeader 
+              title={activeModule?.name || 'Module Settings'}
+              description={activeModule?.description || 'Configure module settings.'}
+              actions={
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  onClick={() => navigate('/workspace/settings/platform-modules')}
+                  className="gap-2 font-bold"
+                >
+                  <ArrowLeft size={16} /> Back to Modules
+                </Button>
+              }
+            />
+          )}
+          <div className="flex-1 min-h-0">
             <Outlet />
           </div>
         </>
