@@ -2,13 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart2, Plus, ArrowLeft, Trash2, Edit2, Eye, Share2, 
   Sparkles, Save, Check, RefreshCw, FileText, BarChart, LineChart, 
-  PieChart, Layers, Table, Activity, TrendingUp, Info, User, AlertTriangle, Printer
+  PieChart, Layers, Table, Activity, TrendingUp, Info, User, AlertTriangle, Printer,
+  GripVertical
 } from 'lucide-react';
 import { 
   ResponsiveContainer, BarChart as ReBarChart, Bar, 
   LineChart as ReLineChart, Line, AreaChart as ReAreaChart, Area,
-  PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip 
+  PieChart as RePieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend 
 } from 'recharts';
+import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/UI/Primitives';
@@ -16,6 +18,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, flattenFields } from '../../../lib/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { createFormulaContext } from '../../../lib/formulaEngine';
 
 // Types
 export interface ReportWidget {
@@ -23,12 +26,32 @@ export interface ReportWidget {
   type: 'bar' | 'line' | 'area' | 'pie' | 'kpi' | 'table';
   title: string;
   w: number; // 4 (1/3), 6 (1/2), 8 (2/3), 12 (full)
+  h?: number;
+  x?: number;
+  y?: number;
   properties: {
     xAxisKey: string;
     yAxisKey: string;
     aggregate: 'count' | 'sum' | 'avg' | 'min' | 'max';
     color?: string;
+    showGridlines?: boolean;
+    showLegend?: boolean;
+    showTooltip?: boolean;
   };
+}
+
+export interface TableRelationship {
+  id: string;
+  joinTable: string; // e.g. "tenant_members"
+  primaryKey: string; // e.g. "member_id" or "id"
+  foreignKey: string; // e.g. "id" or "role_id"
+  type: 'left' | 'inner';
+}
+
+export interface CalculatedField {
+  id: string;
+  name: string; // e.g. "age_days"
+  formula: string; // e.g. "TIMESPAN(\"days\", {created_at}, TODAY())"
 }
 
 export interface ReportConfig {
@@ -36,8 +59,11 @@ export interface ReportConfig {
     type: 'local' | 'external';
     connectorId?: string;
     tables: string[];
+    relationships?: TableRelationship[];
   };
   widgets: ReportWidget[];
+  slicers?: string[];
+  calculatedFields?: CalculatedField[];
 }
 
 export interface Report {
@@ -161,6 +187,271 @@ const REPORT_TEMPLATES = [
 
 const COLORS = ['#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
 
+interface ReportBuilderCanvasProps {
+  currentReport: any;
+  isPreview: boolean;
+  selectedWidgetId: string | null;
+  setSelectedWidgetId: (id: string | null) => void;
+  layout: any[];
+  handleLayoutChange: (newLayout: any[]) => void;
+  getAggregatedData: (widget: any) => any[];
+  handleDeleteWidget: (widgetId: string) => void;
+  COLORS: string[];
+  handleChartElementClick: (field: string, value: any) => void;
+  activeFilters: Record<string, any>;
+  handleSlicerChange: (field: string, value: any) => void;
+  getUniqueValuesForField: (field: string) => any[];
+  handleClearFilters: () => void;
+}
+
+const ReportBuilderCanvas = ({
+  currentReport,
+  isPreview,
+  selectedWidgetId,
+  setSelectedWidgetId,
+  layout,
+  handleLayoutChange,
+  getAggregatedData,
+  handleDeleteWidget,
+  COLORS,
+  handleChartElementClick,
+  activeFilters,
+  handleSlicerChange,
+  getUniqueValuesForField,
+  handleClearFilters
+}: ReportBuilderCanvasProps) => {
+  const { width, containerRef, mounted } = useContainerWidth({ measureBeforeMount: true });
+  const activeSlicers = currentReport.config.slicers || [];
+
+  return (
+    <div ref={containerRef} className="w-full space-y-6">
+      {/* Global Slicers Filter Bar */}
+      {activeSlicers.length > 0 && (
+        <div className="p-4 bg-white/50 dark:bg-zinc-950/20 border border-zinc-200/30 dark:border-white/5 rounded-3xl flex flex-wrap gap-4 items-center justify-between shadow-sm">
+          <div className="flex flex-wrap gap-4 items-center">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Filters:</span>
+            {activeSlicers.map((field: string) => {
+              const uniqueValues = getUniqueValuesForField(field);
+              const activeVal = activeFilters[field];
+
+              return (
+                <div key={field} className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-zinc-550 dark:text-zinc-450 capitalize">
+                    {field.split('.').pop()?.replace('_', ' ')}:
+                  </span>
+                  <select
+                    value={activeVal || ''}
+                    onChange={(e) => handleSlicerChange(field, e.target.value)}
+                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
+                  >
+                    <option value="">All</option>
+                    {uniqueValues.map(val => (
+                      <option key={val} value={val}>{String(val)}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          {Object.keys(activeFilters).length > 0 && (
+            <button
+              onClick={() => handleClearFilters()}
+              className="text-[10px] text-red-550 hover:text-red-450 dark:text-red-400 dark:hover:text-red-300 font-bold px-3 py-1 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-xl cursor-pointer transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      )}
+
+      {mounted && (
+        <ReactGridLayout
+          className="layout"
+          layout={layout}
+          width={width}
+          onLayoutChange={handleLayoutChange}
+          gridConfig={{
+            cols: 12,
+            rowHeight: 50,
+            margin: [24, 24]
+          }}
+          dragConfig={{
+            enabled: !isPreview,
+            handle: ".drag-handle"
+          }}
+          resizeConfig={{
+            enabled: !isPreview
+          }}
+        >
+          {currentReport.config.widgets.map((widget: any) => {
+            const isSelected = selectedWidgetId === widget.id;
+            const aggData = getAggregatedData(widget);
+
+            return (
+              <div
+                key={widget.id}
+                onClick={() => {
+                  if (!isPreview) setSelectedWidgetId(widget.id);
+                }}
+                className={cn(
+                  "p-5 rounded-3xl border flex flex-col justify-between relative group shadow-sm bg-white/40 dark:bg-white/[0.02] overflow-hidden select-none",
+                  !isPreview && isSelected ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-zinc-200/50 dark:border-white/5",
+                  !isPreview && "cursor-pointer hover:border-indigo-500/40"
+                )}
+              >
+                {/* Widget Header Controls */}
+                <div className="flex justify-between items-center pb-2 border-b border-zinc-100/50 dark:border-white/5 shrink-0 select-none">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {!isPreview && (
+                      <div className="drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-550 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0">
+                        <GripVertical size={11} />
+                      </div>
+                    )}
+                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{widget.title}</span>
+                  </div>
+                  {!isPreview && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteWidget(widget.id);
+                      }}
+                      className="print-hide p-1 rounded bg-zinc-100 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shrink-0"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Widget Chart Content */}
+                <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4">
+                  {aggData.length === 0 ? (
+                    <div className="text-[10px] text-zinc-400 italic flex items-center gap-1.5">
+                      <Info size={12} /> Map visual properties to generate charts.
+                    </div>
+                  ) : widget.type === 'kpi' ? (
+                    <div className="text-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                        {widget.properties.aggregate === 'count' ? 'Total Count' :
+                         widget.properties.aggregate === 'sum' ? `Total Sum (${widget.properties.yAxisKey})` :
+                         widget.properties.aggregate === 'avg' ? `Average (${widget.properties.yAxisKey})` :
+                         widget.properties.aggregate === 'min' ? `Min (${widget.properties.yAxisKey})` :
+                         `Max (${widget.properties.yAxisKey})`}
+                      </p>
+                      <p className="text-4xl font-black text-zinc-950 dark:text-white mt-1">
+                        {aggData.reduce((acc, d) => acc + d.value, 0).toLocaleString()}
+                      </p>
+                    </div>
+                  ) : widget.type === 'table' ? (
+                    <div className="w-full h-full overflow-y-auto text-[10px]">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-200/50 dark:border-white/5 text-zinc-400 uppercase font-black">
+                            <th className="py-1.5 pl-1">Dimension</th>
+                            <th className="py-1.5 text-right pr-1">Aggregated Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aggData.map((d: any) => (
+                            <tr key={d.name} className="border-b border-zinc-200/20 dark:border-white/5 text-zinc-700 dark:text-zinc-300">
+                              <td className="py-2 pl-1 font-bold">{d.name}</td>
+                              <td className="py-2 text-right pr-1 font-mono">{d.value.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {widget.type === 'bar' ? (
+                          <ReBarChart 
+                            data={aggData}
+                            className="cursor-pointer"
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                handleChartElementClick(widget.properties.xAxisKey, state.activeLabel);
+                              }
+                            }}
+                          >
+                            {(widget.properties.showGridlines ?? true) && <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />}
+                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                            <Bar dataKey="value" fill={widget.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} />
+                          </ReBarChart>
+                        ) : widget.type === 'line' ? (
+                          <ReLineChart 
+                            data={aggData}
+                            className="cursor-pointer"
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                handleChartElementClick(widget.properties.xAxisKey, state.activeLabel);
+                              }
+                            }}
+                          >
+                            {(widget.properties.showGridlines ?? true) && <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />}
+                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                            <Line type="monotone" dataKey="value" stroke={widget.properties.color || '#6366f1'} strokeWidth={2} />
+                          </ReLineChart>
+                        ) : widget.type === 'area' ? (
+                          <ReAreaChart 
+                            data={aggData}
+                            className="cursor-pointer"
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                handleChartElementClick(widget.properties.xAxisKey, state.activeLabel);
+                              }
+                            }}
+                          >
+                            {(widget.properties.showGridlines ?? true) && <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />}
+                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                            <Area type="monotone" dataKey="value" fill={widget.properties.color || '#6366f1'} stroke={widget.properties.color || '#6366f1'} fillOpacity={0.15} />
+                          </ReAreaChart>
+                        ) : (
+                          <RePieChart>
+                            <Pie
+                              data={aggData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={45}
+                              outerRadius={65}
+                              paddingAngle={3}
+                              dataKey="value"
+                              onClick={(data) => {
+                                if (data && data.name) {
+                                  handleChartElementClick(widget.properties.xAxisKey, data.name);
+                                }
+                              }}
+                              className="cursor-pointer"
+                            >
+                              {aggData.map((_: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                          </RePieChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </ReactGridLayout>
+      )}
+    </div>
+  );
+};
+
 export const ReportManagementSettings = () => {
   const { tenant, modules } = usePlatform();
   const { session, user } = useAuth();
@@ -195,6 +486,23 @@ export const ReportManagementSettings = () => {
   const [isPreview, setIsPreview] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
   const [deletingReport, setDeletingReport] = useState<Report | null>(null);
+
+  // Slicers & Filtering States
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+  const [isAddingSlicer, setIsAddingSlicer] = useState(false);
+  const [newSlicerField, setNewSlicerField] = useState('');
+
+  // Formula / Calculated Fields States
+  const [isAddingFormula, setIsAddingFormula] = useState(false);
+  const [newFormulaName, setNewFormulaName] = useState('');
+  const [newFormulaBody, setNewFormulaBody] = useState('');
+
+  // Relationship Creator States
+  const [isAddingRel, setIsAddingRel] = useState(false);
+  const [newRelJoinTable, setNewRelJoinTable] = useState('');
+  const [newRelPrimaryKey, setNewRelPrimaryKey] = useState('');
+  const [newRelForeignKey, setNewRelForeignKey] = useState('');
+  const [newRelType, setNewRelType] = useState<'left' | 'inner'>('left');
 
   // Live Database Datasets (Local Cache)
   const [records, setRecords] = useState<any[]>([]);
@@ -469,105 +777,259 @@ export const ReportManagementSettings = () => {
     toast.success('Widget embed code copied to clipboard!');
   };
 
-  // Retrieve raw data array based on active table config
+  // Evaluate user formulas against active row database fields
+  const evaluateFormulaOnRow = (formula: string, row: any): any => {
+    try {
+      // Replace {field_id} references in the formula with values from the row
+      const expression = formula.replace(/\{([\w\.\:-]+)\}/g, (_, fieldId) => {
+        const val = row[fieldId];
+        if (val === undefined || val === null) return '""';
+        if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+        return `"${String(val).replace(/"/g, '\\"')}"`;
+      });
+
+      const formulaContext = createFormulaContext();
+      const func = new Function(...Object.keys(formulaContext), `return ${expression}`);
+      const result = func(...Object.values(formulaContext));
+      
+      if (typeof result === 'number') {
+        return Number.isInteger(result) ? result : Number(result.toFixed(2));
+      }
+      return result ?? '';
+    } catch (err) {
+      console.error("Formula eval error:", err);
+      return '#ERROR!';
+    }
+  };
+
+  // Retrieve raw data array based on active table config (including relationships)
   const getRawDataset = (tables: string[]): any[] => {
     if (!tables || tables.length === 0) return [];
     const t = tables[0];
-    if (t === 'records') return records;
-    if (t.startsWith('module:')) {
-      const moduleId = t.split(':')[1];
-      return records.filter(r => r.moduleId === moduleId).map(r => {
+    
+    // Get primary table dataset
+    const rawData = (() => {
+      if (t === 'records') return records;
+      if (t.startsWith('module:')) {
+        const moduleId = t.split(':')[1];
+        return records.filter(r => r.moduleId === moduleId).map(r => {
+          return {
+            id: r.id,
+            status: r.status,
+            created_at: r.createdAt || r.created_at,
+            ...(r.data || {})
+          };
+        });
+      }
+      if (t === 'tenant_members') return members;
+      if (t === 'teams') return teams;
+      if (t === 'automations') return automations;
+      if (t === 'catalog_items') return catalogItems;
+      
+      // Fallback: Mock external source pipeline if external
+      if (currentReport?.config.dataSource.type === 'external') {
+        return [
+          { id: '1', status: 'Prospecting', source: 'Webinar', value: 12000, date: 'Jul 1' },
+          { id: '2', status: 'Qualification', source: 'Cold Outbound', value: 18000, date: 'Jul 3' },
+          { id: '3', status: 'Closed Won', source: 'Webinar', value: 45000, date: 'Jul 5' },
+          { id: '4', status: 'Negotiation', source: 'Partner Referral', value: 25000, date: 'Jul 8' },
+          { id: '5', status: 'Closed Won', source: 'Google Ads', value: 30000, date: 'Jul 10' }
+        ];
+      }
+      return [];
+    })();
+
+    const relationships = currentReport?.config.dataSource.relationships || [];
+    if (relationships.length === 0 || rawData.length === 0) {
+      return rawData;
+    }
+
+    // Helper to get dataset of a joined table
+    const getJoinDataset = (joinTable: string): any[] => {
+      if (joinTable === 'records') return records;
+      if (joinTable.startsWith('module:')) {
+        const moduleId = joinTable.split(':')[1];
+        return records.filter(r => r.moduleId === moduleId).map(r => {
+          return {
+            id: r.id,
+            status: r.status,
+            created_at: r.createdAt || r.created_at,
+            ...(r.data || {})
+          };
+        });
+      }
+      if (joinTable === 'tenant_members') return members;
+      if (joinTable === 'teams') return teams;
+      if (joinTable === 'automations') return automations;
+      if (joinTable === 'catalog_items') return catalogItems;
+      return [];
+    };
+
+    // Perform joins
+    let joinedData = [...rawData];
+
+    relationships.forEach(rel => {
+      const joinDataset = getJoinDataset(rel.joinTable);
+      
+      let tableKey = rel.joinTable;
+      if (tableKey.startsWith('module:')) {
+        const moduleId = tableKey.split(':')[1];
+        const m = modules.find((mod: any) => mod.id === moduleId);
+        tableKey = m ? m.name.toLowerCase().replace(/\s+/g, '_') : moduleId;
+      }
+
+      joinedData = joinedData.map(primaryRow => {
+        // Find matching record in joinDataset
+        const primaryVal = primaryRow[rel.primaryKey];
+        const matchingRecord = joinDataset.find(joinRow => {
+          const joinVal = joinRow[rel.foreignKey];
+          if (primaryVal === undefined || primaryVal === null || joinVal === undefined || joinVal === null) return false;
+          return String(primaryVal).trim() === String(joinVal).trim();
+        });
+
+        // Merge fields with prefix, e.g. tenant_members.first_name
+        const mergedFields: Record<string, any> = {};
+        if (matchingRecord) {
+          Object.entries(matchingRecord).forEach(([k, v]) => {
+            mergedFields[`${tableKey}.${k}`] = v;
+          });
+        } else {
+          // LEFT join initialization with null values
+          const joinFields = getAvailableFields([rel.joinTable]);
+          joinFields.forEach(f => {
+            mergedFields[`${tableKey}.${f.name}`] = null;
+          });
+        }
+
         return {
-          id: r.id,
-          status: r.status,
-          created_at: r.createdAt || r.created_at,
-          ...(r.data || {})
+          ...primaryRow,
+          ...mergedFields,
+          __hadMatch: !!matchingRecord
         };
       });
+
+      if (rel.type === 'inner') {
+        joinedData = joinedData.filter(row => (row as any).__hadMatch);
+      }
+    });
+
+    // Evaluate calculated fields
+    const calculatedFields = currentReport?.config.calculatedFields || [];
+    if (calculatedFields.length > 0) {
+      joinedData = joinedData.map(row => {
+        const evaluatedRow = { ...row };
+        calculatedFields.forEach(cf => {
+          evaluatedRow[cf.name] = evaluateFormulaOnRow(cf.formula, row);
+        });
+        return evaluatedRow;
+      });
     }
-    if (t === 'tenant_members') return members;
-    if (t === 'teams') return teams;
-    if (t === 'automations') return automations;
-    if (t === 'catalog_items') return catalogItems;
-    
-    // Fallback: Mock external source pipeline if external
-    if (currentReport?.config.dataSource.type === 'external') {
-      return [
-        { id: '1', status: 'Prospecting', source: 'Webinar', value: 12000, date: 'Jul 1' },
-        { id: '2', status: 'Qualification', source: 'Cold Outbound', value: 18000, date: 'Jul 3' },
-        { id: '3', status: 'Closed Won', source: 'Webinar', value: 45000, date: 'Jul 5' },
-        { id: '4', status: 'Negotiation', source: 'Partner Referral', value: 25000, date: 'Jul 8' },
-        { id: '5', status: 'Closed Won', source: 'Google Ads', value: 30000, date: 'Jul 10' }
-      ];
-    }
-    return [];
+
+    return joinedData;
   };
 
-  // Returns matching fields list for selected database tables
-  const getAvailableFields = (tables: string[]): Array<{ name: string; type: string }> => {
+  // Returns matching fields list for selected database tables (including relationships)
+  const getAvailableFields = (tables: string[], relationships: TableRelationship[] = []): Array<{ name: string; type: string }> => {
     if (!tables || tables.length === 0) return [];
-    const t = tables[0];
-    if (t.startsWith('module:')) {
-      const moduleId = t.split(':')[1];
-      const targetModule = modules.find((m: any) => m.id === moduleId);
-      if (targetModule) {
-        const flat = flattenFields(targetModule.layout || []);
+    
+    const getFieldsForTable = (t: string): Array<{ name: string; type: string }> => {
+      if (t.startsWith('module:')) {
+        const moduleId = t.split(':')[1];
+        const targetModule = modules.find((m: any) => m.id === moduleId);
+        if (targetModule) {
+          const flat = flattenFields(targetModule.layout || []);
+          return [
+            { name: 'id', type: 'text' },
+            { name: 'status', type: 'text' },
+            { name: 'created_at', type: 'date' },
+            ...flat.map((f: any) => ({ name: f.name || f.id || '', type: f.type || 'text' }))
+          ];
+        }
+      }
+      if (t === 'records') {
         return [
           { name: 'id', type: 'text' },
           { name: 'status', type: 'text' },
-          { name: 'created_at', type: 'date' },
-          ...flat.map((f: any) => ({ name: f.name || f.id || '', type: f.type || 'text' }))
+          { name: 'module_id', type: 'text' },
+          { name: 'created_at', type: 'date' }
         ];
       }
-    }
-    if (t === 'records') {
+      if (t === 'tenant_members') {
+        return [
+          { name: 'id', type: 'text' },
+          { name: 'first_name', type: 'text' },
+          { name: 'family_name', type: 'text' },
+          { name: 'role_id', type: 'text' },
+          { name: 'status', type: 'text' }
+        ];
+      }
+      if (t === 'teams') {
+        return [
+          { name: 'id', type: 'text' },
+          { name: 'name', type: 'text' },
+          { name: 'description', type: 'text' }
+        ];
+      }
+      if (t === 'automations') {
+        return [
+          { name: 'id', type: 'text' },
+          { name: 'name', type: 'text' },
+          { name: 'trigger_type', type: 'text' },
+          { name: 'enabled', type: 'boolean' }
+        ];
+      }
+      if (t === 'catalog_items') {
+        return [
+          { name: 'id', type: 'text' },
+          { name: 'name', type: 'text' },
+          { name: 'type', type: 'text' },
+          { name: 'base_price', type: 'number' }
+        ];
+      }
+      // External source mock fields
       return [
         { name: 'id', type: 'text' },
         { name: 'status', type: 'text' },
-        { name: 'module_id', type: 'text' },
-        { name: 'created_at', type: 'date' }
+        { name: 'source', type: 'text' },
+        { name: 'value', type: 'number' },
+        { name: 'date', type: 'date' }
       ];
-    }
-    if (t === 'tenant_members') {
-      return [
-        { name: 'id', type: 'text' },
-        { name: 'first_name', type: 'text' },
-        { name: 'family_name', type: 'text' },
-        { name: 'role_id', type: 'text' },
-        { name: 'status', type: 'text' }
-      ];
-    }
-    if (t === 'teams') {
-      return [
-        { name: 'id', type: 'text' },
-        { name: 'name', type: 'text' },
-        { name: 'description', type: 'text' }
-      ];
-    }
-    if (t === 'automations') {
-      return [
-        { name: 'id', type: 'text' },
-        { name: 'name', type: 'text' },
-        { name: 'trigger_type', type: 'text' },
-        { name: 'enabled', type: 'boolean' }
-      ];
-    }
-    if (t === 'catalog_items') {
-      return [
-        { name: 'id', type: 'text' },
-        { name: 'name', type: 'text' },
-        { name: 'type', type: 'text' },
-        { name: 'base_price', type: 'number' }
-      ];
-    }
-    // External source mock fields
-    return [
-      { name: 'id', type: 'text' },
-      { name: 'status', type: 'text' },
-      { name: 'source', type: 'text' },
-      { name: 'value', type: 'number' },
-      { name: 'date', type: 'date' }
-    ];
+    };
+
+    const primaryFields = getFieldsForTable(tables[0]);
+    const joinedFields: Array<{ name: string; type: string }> = [];
+
+    relationships.forEach(rel => {
+      const relFields = getFieldsForTable(rel.joinTable);
+      relFields.forEach(f => {
+        let tableKey = rel.joinTable;
+        if (tableKey.startsWith('module:')) {
+          const moduleId = tableKey.split(':')[1];
+          const m = modules.find((mod: any) => mod.id === moduleId);
+          tableKey = m ? m.name.toLowerCase().replace(/\s+/g, '_') : moduleId;
+        }
+        joinedFields.push({
+          name: `${tableKey}.${f.name}`,
+          type: f.type
+        });
+      });
+    });
+
+    const calculatedFields = currentReport?.config.calculatedFields || [];
+    const calculatedSchemaFields = calculatedFields.map(cf => ({
+      name: cf.name,
+      type: 'number (calculated)'
+    }));
+
+    return [...primaryFields, ...joinedFields, ...calculatedSchemaFields];
+  };
+
+  // Retrieve distinct values for a database field (slicer values)
+  const getUniqueValuesForField = (field: string): any[] => {
+    if (!currentReport) return [];
+    const rawData = getRawDataset(currentReport.config.dataSource.tables);
+    const values = rawData.map(row => row[field]).filter(val => val !== undefined && val !== null && val !== '');
+    return Array.from(new Set(values));
   };
 
   // Compute aggregation data array for Recharts
@@ -575,11 +1037,19 @@ export const ReportManagementSettings = () => {
     const rawData = getRawDataset(currentReport?.config.dataSource.tables || []);
     if (!rawData || rawData.length === 0) return [];
 
-    const { xAxisKey, yAxisKey, aggregate } = widget.properties;
-    if (!xAxisKey) return [];
+    // Apply active global filters
+    const filteredData = rawData.filter(row => {
+      return Object.entries(activeFilters).every(([field, selectedValue]) => {
+        if (selectedValue === undefined || selectedValue === null || selectedValue === '') return true;
+        return String(row[field]) === String(selectedValue);
+      });
+    });
+
+    const xAxisKey = widget.properties.xAxisKey || 'id';
+    const { yAxisKey, aggregate } = widget.properties;
 
     const groupMap: Record<string, any[]> = {};
-    rawData.forEach(item => {
+    filteredData.forEach(item => {
       // Resolve value safely
       let keyVal = item[xAxisKey];
       if (keyVal === undefined || keyVal === null) keyVal = 'Unspecified';
@@ -625,7 +1095,10 @@ export const ReportManagementSettings = () => {
   // Widget management in Builder
   const handleAddWidget = (type: ReportWidget['type']) => {
     if (!currentReport) return;
-    const fields = getAvailableFields(currentReport.config.dataSource.tables);
+    const fields = getAvailableFields(
+      currentReport.config.dataSource.tables,
+      currentReport.config.dataSource.relationships || []
+    );
     const defaultX = fields[0]?.name || 'id';
     const defaultY = fields[1]?.name || 'id';
 
@@ -634,11 +1107,17 @@ export const ReportManagementSettings = () => {
       type,
       title: `New ${type.toUpperCase()} Visual`,
       w: type === 'table' || type === 'area' ? 12 : 6,
+      h: type === 'kpi' ? 3 : type === 'table' ? 6 : 5,
+      x: 0,
+      y: Infinity,
       properties: {
         xAxisKey: defaultX,
         yAxisKey: defaultY,
         aggregate: 'count',
-        color: COLORS[currentReport.config.widgets.length % COLORS.length]
+        color: COLORS[currentReport.config.widgets.length % COLORS.length],
+        showGridlines: true,
+        showLegend: false,
+        showTooltip: true
       }
     };
 
@@ -689,8 +1168,257 @@ export const ReportManagementSettings = () => {
     toast.success('Widget removed from layout.');
   };
 
+  const handleAddRelationship = (joinTable: string, primaryKey: string, foreignKey: string, type: 'left' | 'inner') => {
+    if (!currentReport) return;
+    const newRel: TableRelationship = {
+      id: `rel-${Date.now()}`,
+      joinTable,
+      primaryKey,
+      foreignKey,
+      type
+    };
+
+    setCurrentReport(prev => {
+      if (!prev) return null;
+      const relationships = prev.config.dataSource.relationships || [];
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          dataSource: {
+            ...prev.config.dataSource,
+            relationships: [...relationships, newRel]
+          }
+        }
+      };
+    });
+    toast.success('Join relationship added.');
+  };
+
+  const handleDeleteRelationship = (relId: string) => {
+    if (!currentReport) return;
+    setCurrentReport(prev => {
+      if (!prev) return null;
+      const relationships = prev.config.dataSource.relationships || [];
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          dataSource: {
+            ...prev.config.dataSource,
+            relationships: relationships.filter(r => r.id !== relId)
+          }
+        }
+      };
+    });
+    toast.success('Join relationship removed.');
+  };
+  const handleAddSlicer = (field: string) => {
+    if (!currentReport || !field) return;
+    const slicers = currentReport.config.slicers || [];
+    if (slicers.includes(field)) {
+      toast.error('This field is already added as a slicer.');
+      return;
+    }
+    setCurrentReport(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          slicers: [...slicers, field]
+        }
+      };
+    });
+    setIsAddingSlicer(false);
+    toast.success('Slicer added to dashboard.');
+  };
+
+  const handleDeleteSlicer = (field: string) => {
+    if (!currentReport) return;
+    const slicers = currentReport.config.slicers || [];
+    
+    // Clear its active filter if it exists
+    if (activeFilters[field]) {
+      setActiveFilters(prev => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+
+    setCurrentReport(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          slicers: slicers.filter(s => s !== field)
+        }
+      };
+    });
+    toast.success('Slicer removed from dashboard.');
+  };
+
+  const handleSlicerChange = (field: string, value: any) => {
+    setActiveFilters(prev => {
+      if (!value) {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return {
+        ...prev,
+        [field]: value
+      };
+    });
+  };
+
+  const handleChartElementClick = (field: string, value: any) => {
+    setActiveFilters(prev => {
+      if (prev[field] === value) {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return {
+        ...prev,
+        [field]: value
+      };
+    });
+    toast.success(`Filtered dashboard by ${field.split('.').pop()}: ${value}`);
+  };
+  const handleAddCalculatedField = (name: string, formula: string) => {
+    if (!currentReport || !name || !formula) return;
+    const sanitizedName = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+    if (!sanitizedName) {
+      toast.error('Invalid calculated field name.');
+      return;
+    }
+
+    const calculatedFields = currentReport.config.calculatedFields || [];
+    if (calculatedFields.some(cf => cf.name === sanitizedName)) {
+      toast.error('A calculated field with this name already exists.');
+      return;
+    }
+
+    // Basic dry-run validation on mock row
+    try {
+      const formulaContext = createFormulaContext();
+      // Replace {fieldId} with mock value 0/empty to verify syntax compiles
+      const testExpression = formula.replace(/\{([\w\.\:-]+)\}/g, '0');
+      const func = new Function(...Object.keys(formulaContext), `return ${testExpression}`);
+      func(...Object.values(formulaContext));
+    } catch (err: any) {
+      toast.error(`Formula validation failed: ${err.message}`);
+      return;
+    }
+
+    const newCF: CalculatedField = {
+      id: `cf-${Date.now()}`,
+      name: sanitizedName,
+      formula
+    };
+
+    setCurrentReport(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          calculatedFields: [...calculatedFields, newCF]
+        }
+      };
+    });
+    setIsAddingFormula(false);
+    setNewFormulaName('');
+    setNewFormulaBody('');
+    toast.success(`Calculated field ${sanitizedName} created.`);
+  };
+
+  const handleDeleteCalculatedField = (cfId: string) => {
+    if (!currentReport) return;
+    const calculatedFields = currentReport.config.calculatedFields || [];
+    const fieldToDelete = calculatedFields.find(cf => cf.id === cfId);
+
+    setCurrentReport(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          calculatedFields: calculatedFields.filter(cf => cf.id !== cfId)
+        }
+      };
+    });
+    
+    // Clear selectedWidgetId if it depends on this calculated field
+    if (selectedWidget && (selectedWidget.properties.xAxisKey === fieldToDelete?.name || selectedWidget.properties.yAxisKey === fieldToDelete?.name)) {
+      setSelectedWidgetId(null);
+    }
+
+    toast.success('Calculated field removed.');
+  };
+
   const selectedWidget = currentReport?.config.widgets.find(w => w.id === selectedWidgetId);
-  const availableFields = getAvailableFields(currentReport?.config.dataSource.tables || []);
+  const availableFields = getAvailableFields(
+    currentReport?.config.dataSource.tables || [],
+    currentReport?.config.dataSource.relationships || []
+  );
+
+  const layout = useMemo(() => {
+    return (currentReport?.config.widgets || []).map((w, index) => {
+      const defaultH = w.type === 'kpi' ? 3 : w.type === 'table' ? 6 : 5;
+      const x = w.x !== undefined ? w.x : (index % 2 === 0 ? 0 : 6);
+      const y = w.y !== undefined ? w.y : Math.floor(index / 2) * 5;
+      const h = w.h !== undefined ? w.h : defaultH;
+
+      return {
+        i: w.id,
+        x,
+        y,
+        w: w.w || 6,
+        h,
+        minW: w.type === 'kpi' ? 2 : 4,
+        minH: w.type === 'kpi' ? 2 : 3
+      };
+    });
+  }, [currentReport?.config.widgets]);
+
+  const handleLayoutChange = (newLayout: any[]) => {
+    if (!currentReport) return;
+    
+    let hasChanged = false;
+    const updatedWidgets = currentReport.config.widgets.map(w => {
+      const match = newLayout.find(l => l.i === w.id);
+      if (match) {
+        if (w.x !== match.x || w.y !== match.y || w.w !== match.w || w.h !== match.h) {
+          hasChanged = true;
+          return {
+            ...w,
+            x: match.x,
+            y: match.y,
+            w: match.w,
+            h: match.h
+          };
+        }
+      }
+      return w;
+    });
+
+    if (hasChanged) {
+      setCurrentReport(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          config: {
+            ...prev.config,
+            widgets: updatedWidgets
+          }
+        };
+      });
+    }
+  };
 
   return (
     <div className="w-full h-full relative z-10 flex flex-col min-h-0">
@@ -1107,110 +1835,451 @@ export const ReportManagementSettings = () => {
             <div className="flex flex-1 overflow-hidden min-h-0">
               
               {/* Left Sidebar (Data Schema Selection) */}
-              {!isPreview && (
-                <div className="w-64 border-r border-zinc-200/50 dark:border-white/10 p-4 bg-white/20 dark:bg-zinc-900/10 flex flex-col gap-4 overflow-y-auto shrink-0">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Dataset Origin</label>
-                    <select
-                      value={currentReport.config.dataSource.type}
-                      onChange={(e) => {
-                        const typeVal = e.target.value as 'local' | 'external';
-                        const defaultTable = typeVal === 'local' ? ['records'] : ['leads'];
-                        setCurrentReport(prev => {
-                          if (!prev) return null;
-                          return {
-                            ...prev,
-                            config: {
-                              ...prev.config,
-                              dataSource: { type: typeVal, tables: defaultTable }
-                            }
-                          };
-                        });
-                        setSelectedWidgetId(null);
-                        toast.success(`Data source changed to ${typeVal}`);
-                      }}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
-                    >
-                      <option value="local">Local Tenant Tables</option>
-                      <option value="external">External Connector API</option>
-                    </select>
-                  </div>
+              {!isPreview && (() => {
+                const primaryTable = currentReport.config.dataSource.tables[0] || 'records';
+                const activeRelationships = currentReport.config.dataSource.relationships || [];
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Source Database Table</label>
-                    {currentReport.config.dataSource.type === 'local' ? (
+                const ALL_LOCAL_TABLES = [
+                  { value: 'records', label: 'records (Module items)' },
+                  { value: 'tenant_members', label: 'tenant_members (Workforce)' },
+                  { value: 'teams', label: 'teams (Tenant Teams)' },
+                  { value: 'automations', label: 'automations (Workflows)' },
+                  { value: 'catalog_items', label: 'catalog_items (Pricing Catalog)' },
+                  ...modules
+                    .filter((m: any) => m.type !== 'PAGE' && !m.isGlobal && !m.isIntakeTriage && !m.config?.isIntakeTriage)
+                    .map((m: any) => ({ value: `module:${m.id}`, label: `${m.name} (Custom Module)` }))
+                ];
+
+                const availableTablesToJoin = ALL_LOCAL_TABLES.filter(t => t.value !== primaryTable && !activeRelationships.some(r => r.joinTable === t.value));
+                const primaryKeyFields = getAvailableFields([primaryTable]);
+                const joinKeyFields = newRelJoinTable ? getAvailableFields([newRelJoinTable]) : [];
+
+                return (
+                  <div className="w-64 border-r border-zinc-200/50 dark:border-white/10 p-4 bg-white/20 dark:bg-zinc-900/10 flex flex-col gap-4 overflow-y-auto shrink-0">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Dataset Origin</label>
                       <select
-                        value={currentReport.config.dataSource.tables[0] || 'records'}
+                        value={currentReport.config.dataSource.type}
                         onChange={(e) => {
+                          const typeVal = e.target.value as 'local' | 'external';
+                          const defaultTable = typeVal === 'local' ? ['records'] : ['leads'];
                           setCurrentReport(prev => {
                             if (!prev) return null;
                             return {
                               ...prev,
                               config: {
                                 ...prev.config,
-                                dataSource: { ...prev.config.dataSource, tables: [e.target.value] }
+                                dataSource: { type: typeVal, tables: defaultTable, relationships: [] }
                               }
                             };
                           });
                           setSelectedWidgetId(null);
+                          toast.success(`Data source changed to ${typeVal}`);
                         }}
                         className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
                       >
-                        <optgroup label="Standard System Tables">
-                          <option value="records">records (Module items)</option>
-                          <option value="tenant_members">tenant_members (Workforce)</option>
-                          <option value="teams">teams (Tenant Teams)</option>
-                          <option value="automations">automations (Workflows)</option>
-                          <option value="catalog_items">catalog_items (Pricing Catalog)</option>
-                        </optgroup>
-                        <optgroup label="Database Modules">
-                          {modules
-                            .filter((m: any) => m.type !== 'PAGE' && !m.isGlobal && !m.isIntakeTriage && !m.config?.isIntakeTriage)
-                            .map((m: any) => (
-                              <option key={m.id} value={`module:${m.id}`}>
-                                {m.name} (Custom Module)
-                              </option>
-                            ))}
-                        </optgroup>
+                        <option value="local">Local Tenant Tables</option>
+                        <option value="external">External Connector API</option>
                       </select>
-                    ) : (
-                      <select
-                        value={currentReport.config.dataSource.connectorId || 'salesforce'}
-                        onChange={(e) => {
-                          setCurrentReport(prev => {
-                            if (!prev) return null;
-                            return {
-                              ...prev,
-                              config: {
-                                ...prev.config,
-                                dataSource: { ...prev.config.dataSource, connectorId: e.target.value, tables: ['leads'] }
-                              }
-                            };
-                          });
-                          setSelectedWidgetId(null);
-                        }}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
-                      >
-                        <option value="salesforce">Salesforce Leads Pipeline</option>
-                        <option value="postgres">PostgreSQL (MySQL Database)</option>
-                        <option value="sheets">Google Sheets Sync</option>
-                      </select>
-                    )}
-                  </div>
+                    </div>
 
-                  <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Available Schema Fields</span>
-                    <div className="space-y-1.5">
-                      {availableFields.map(f => (
-                        <div key={f.name} className="flex items-center justify-between p-2 bg-white/40 dark:bg-zinc-900/30 border border-zinc-200/30 dark:border-white/5 rounded-xl text-[11px] text-zinc-650 dark:text-zinc-350">
-                          <span className="font-mono text-zinc-700 dark:text-zinc-300">{f.name}</span>
-                          <span className="text-[9px] text-zinc-400 uppercase font-black">{f.type}</span>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Source Database Table</label>
+                      {currentReport.config.dataSource.type === 'local' ? (
+                        <select
+                          value={currentReport.config.dataSource.tables[0] || 'records'}
+                          onChange={(e) => {
+                            setCurrentReport(prev => {
+                              if (!prev) return null;
+                              return {
+                                ...prev,
+                                config: {
+                                  ...prev.config,
+                                  dataSource: { ...prev.config.dataSource, tables: [e.target.value], relationships: [] }
+                                }
+                              };
+                            });
+                            setSelectedWidgetId(null);
+                          }}
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                        >
+                          <optgroup label="Standard System Tables">
+                            <option value="records">records (Module items)</option>
+                            <option value="tenant_members">tenant_members (Workforce)</option>
+                            <option value="teams">teams (Tenant Teams)</option>
+                            <option value="automations">automations (Workflows)</option>
+                            <option value="catalog_items">catalog_items (Pricing Catalog)</option>
+                          </optgroup>
+                          <optgroup label="Database Modules">
+                            {modules
+                              .filter((m: any) => m.type !== 'PAGE' && !m.isGlobal && !m.isIntakeTriage && !m.config?.isIntakeTriage)
+                              .map((m: any) => (
+                                <option key={m.id} value={`module:${m.id}`}>
+                                  {m.name} (Custom Module)
+                                </option>
+                              ))}
+                          </optgroup>
+                        </select>
+                      ) : (
+                        <select
+                          value={currentReport.config.dataSource.connectorId || 'salesforce'}
+                          onChange={(e) => {
+                            setCurrentReport(prev => {
+                              if (!prev) return null;
+                              return {
+                                ...prev,
+                                config: {
+                                  ...prev.config,
+                                  dataSource: { ...prev.config.dataSource, connectorId: e.target.value, tables: ['leads'], relationships: [] }
+                                }
+                              };
+                            });
+                            setSelectedWidgetId(null);
+                          }}
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                        >
+                          <option value="salesforce">Salesforce Leads Pipeline</option>
+                          <option value="postgres">PostgreSQL (MySQL Database)</option>
+                          <option value="sheets">Google Sheets Sync</option>
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Relational Joins & Data Modeling Panel */}
+                    {currentReport.config.dataSource.type === 'local' && (
+                      <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Data Relationships</span>
+                          {!isAddingRel && availableTablesToJoin.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const nextJoinTable = availableTablesToJoin[0]?.value || '';
+                                setNewRelJoinTable(nextJoinTable);
+                                const pFields = getAvailableFields([primaryTable]);
+                                const jFields = nextJoinTable ? getAvailableFields([nextJoinTable]) : [];
+                                setNewRelPrimaryKey(pFields[0]?.name || 'id');
+                                setNewRelForeignKey(jFields[0]?.name || 'id');
+                                setNewRelType('left');
+                                setIsAddingRel(true);
+                              }}
+                              className="text-[10px] text-indigo-500 hover:text-indigo-400 font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus size={10} /> Add Join
+                            </button>
+                          )}
                         </div>
-                      ))}
+
+                        {/* Active Joins List */}
+                        {activeRelationships.length > 0 && (
+                          <div className="space-y-1.5">
+                            {activeRelationships.map(rel => {
+                              let tableLabel = rel.joinTable;
+                              if (tableLabel.startsWith('module:')) {
+                                const moduleId = tableLabel.split(':')[1];
+                                const m = modules.find((mod: any) => mod.id === moduleId);
+                                tableLabel = m ? m.name : moduleId;
+                              } else {
+                                tableLabel = tableLabel.replace('tenant_members', 'workforce');
+                              }
+                              return (
+                                <div key={rel.id} className="p-2 bg-white/40 dark:bg-zinc-955/20 border border-zinc-200/20 dark:border-white/5 rounded-xl text-[10px] flex justify-between items-center group/join">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1 font-bold text-zinc-700 dark:text-zinc-300">
+                                      <span className="capitalize text-zinc-450 dark:text-zinc-550 text-[9px] font-black">{rel.type} Join</span>
+                                      <span>➔</span>
+                                      <span className="text-indigo-500">{tableLabel}</span>
+                                    </div>
+                                    <div className="text-[9px] text-zinc-450 dark:text-zinc-550 font-mono">
+                                      {rel.primaryKey} = {tableLabel.toLowerCase().replace(/\s+/g, '_')}.{rel.foreignKey}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDeleteRelationship(rel.id)}
+                                    className="text-zinc-400 hover:text-red-500 opacity-0 group-hover/join:opacity-100 transition-opacity p-1 cursor-pointer"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Add Join Form */}
+                        {isAddingRel && (
+                          <div className="p-3 bg-zinc-50/50 dark:bg-zinc-950/30 border border-zinc-200/50 dark:border-zinc-800/80 rounded-2xl space-y-3">
+                            <span className="text-[9px] font-black uppercase text-zinc-400 block">Configure Join</span>
+                            
+                            <div className="space-y-1">
+                              <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Target Table</label>
+                              <select
+                                value={newRelJoinTable}
+                                onChange={(e) => {
+                                  setNewRelJoinTable(e.target.value);
+                                  const jFields = getAvailableFields([e.target.value]);
+                                  setNewRelForeignKey(jFields[0]?.name || 'id');
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                              >
+                                {availableTablesToJoin.map(t => (
+                                  <option key={t.value} value={t.value}>{t.label}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Primary Key</label>
+                                <select
+                                  value={newRelPrimaryKey}
+                                  onChange={(e) => setNewRelPrimaryKey(e.target.value)}
+                                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                                >
+                                  {primaryKeyFields.map(f => (
+                                    <option key={f.name} value={f.name}>{f.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Foreign Key</label>
+                                <select
+                                  value={newRelForeignKey}
+                                  onChange={(e) => setNewRelForeignKey(e.target.value)}
+                                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                                >
+                                  {joinKeyFields.map(f => (
+                                    <option key={f.name} value={f.name}>{f.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Join Type</label>
+                              <select
+                                value={newRelType}
+                                onChange={(e) => setNewRelType(e.target.value as 'left' | 'inner')}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                              >
+                                <option value="left">Left Join (Keep all primary rows)</option>
+                                <option value="inner">Inner Join (Only matching rows)</option>
+                              </select>
+                            </div>
+
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onClick={() => {
+                                  handleAddRelationship(newRelJoinTable, newRelPrimaryKey, newRelForeignKey, newRelType);
+                                  setIsAddingRel(false);
+                                }}
+                                className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg py-1 text-[10px] font-bold text-center cursor-pointer"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setIsAddingRel(false)}
+                                className="flex-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg py-1 text-[10px] font-bold text-center cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Dashboard Slicers Config Panel */}
+                    <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Dashboard Slicers</span>
+                        {!isAddingSlicer && availableFields.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setNewSlicerField(availableFields[0]?.name || '');
+                              setIsAddingSlicer(true);
+                            }}
+                            className="text-[10px] text-indigo-500 hover:text-indigo-400 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus size={10} /> Add Slicer
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Active Slicers List */}
+                      {(currentReport.config.slicers || []).length > 0 && (
+                        <div className="space-y-1.5">
+                          {(currentReport.config.slicers || []).map(field => {
+                            return (
+                              <div key={field} className="p-2 bg-white/40 dark:bg-zinc-955/20 border border-zinc-200/20 dark:border-white/5 rounded-xl text-[10px] flex justify-between items-center group/slicer">
+                                <div className="space-y-0.5">
+                                  <div className="font-bold text-zinc-700 dark:text-zinc-300">
+                                    <span className="text-indigo-500 capitalize">{field.split('.').pop()}</span>
+                                  </div>
+                                  <div className="text-[9px] text-zinc-450 dark:text-zinc-550 font-mono">
+                                    {field}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteSlicer(field)}
+                                  className="text-zinc-400 hover:text-red-500 opacity-0 group-hover/slicer:opacity-100 transition-opacity p-1 cursor-pointer"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Add Slicer Form */}
+                      {isAddingSlicer && (
+                        <div className="p-3 bg-zinc-50/50 dark:bg-zinc-950/30 border border-zinc-200/50 dark:border-zinc-800/80 rounded-2xl space-y-3">
+                          <span className="text-[9px] font-black uppercase text-zinc-400 block">Configure Slicer</span>
+                          
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Filter Field</label>
+                            <select
+                              value={newSlicerField}
+                              onChange={(e) => setNewSlicerField(e.target.value)}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                            >
+                              {availableFields.map(f => (
+                                <option key={f.name} value={f.name}>{f.name} ({f.type})</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => handleAddSlicer(newSlicerField)}
+                              className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg py-1 text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setIsAddingSlicer(false)}
+                              className="flex-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg py-1 text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Calculated Fields / Formulas Panel */}
+                    <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Calculated Fields</span>
+                        {!isAddingFormula && (
+                          <button
+                            onClick={() => {
+                              setNewFormulaName('');
+                              setNewFormulaBody('');
+                              setIsAddingFormula(true);
+                            }}
+                            className="text-[10px] text-indigo-500 hover:text-indigo-400 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus size={10} /> Add Formula
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Active Calculated Fields List */}
+                      {(currentReport.config.calculatedFields || []).length > 0 && (
+                        <div className="space-y-1.5">
+                          {(currentReport.config.calculatedFields || []).map(cf => {
+                            return (
+                              <div key={cf.id} className="p-2 bg-white/40 dark:bg-zinc-955/20 border border-zinc-200/20 dark:border-white/5 rounded-xl text-[10px] flex justify-between items-center group/cf">
+                                <div className="space-y-0.5">
+                                  <div className="font-bold text-zinc-700 dark:text-zinc-300">
+                                    <span className="text-indigo-500 font-mono">{cf.name}</span>
+                                  </div>
+                                  <div className="text-[9px] text-zinc-450 dark:text-zinc-550 font-mono truncate max-w-[180px]" title={cf.formula}>
+                                    {cf.formula}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteCalculatedField(cf.id)}
+                                  className="text-zinc-400 hover:text-red-500 opacity-0 group-hover/cf:opacity-100 transition-opacity p-1 cursor-pointer"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Add Calculated Field Form */}
+                      {isAddingFormula && (
+                        <div className="p-3 bg-zinc-50/50 dark:bg-zinc-950/30 border border-zinc-200/50 dark:border-zinc-800/80 rounded-2xl space-y-3">
+                          <span className="text-[9px] font-black uppercase text-zinc-400 block">Create Formula</span>
+                          
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Field Name</label>
+                            <input
+                              type="text"
+                              value={newFormulaName}
+                              onChange={(e) => setNewFormulaName(e.target.value)}
+                              placeholder="e.g. backlog_days"
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-zinc-450 dark:text-zinc-550 uppercase font-black">Formula Expression</label>
+                            <textarea
+                              value={newFormulaBody}
+                              onChange={(e) => setNewFormulaBody(e.target.value)}
+                              placeholder="e.g. TIMESPAN('days', {created_at}, TODAY())"
+                              rows={3}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none font-mono focus:ring-2 focus:ring-indigo-500/20"
+                            />
+                          </div>
+
+                          {/* Quick syntax reference guide */}
+                          <div className="p-2 bg-indigo-500/5 border border-indigo-500/10 rounded-xl text-[9px] text-zinc-500 space-y-1">
+                            <span className="font-bold text-indigo-500 block">Syntax Cheat Sheet:</span>
+                            <div className="font-mono space-y-0.5">
+                              <div>• {`{field}`} = Field reference</div>
+                              <div>• IF(cond, t, e) = Ternary logic</div>
+                              <div>• TIMESPAN('days', t1, t2) = Diff</div>
+                              <div>• CONCAT(a, b, ...) = Concatenate</div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => handleAddCalculatedField(newFormulaName, newFormulaBody)}
+                              className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg py-1 text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setIsAddingFormula(false)}
+                              className="flex-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg py-1 text-[10px] font-bold text-center cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Available Schema Fields</span>
+                      <div className="space-y-1.5">
+                        {availableFields.map(f => (
+                          <div key={f.name} className="flex items-center justify-between p-2 bg-white/40 dark:bg-zinc-900/30 border border-zinc-200/30 dark:border-white/5 rounded-xl text-[11px] text-zinc-650 dark:text-zinc-350">
+                            <span className="font-mono text-zinc-700 dark:text-zinc-300">{f.name}</span>
+                            <span className="text-[9px] text-zinc-400 uppercase font-black">{f.type}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Center Canvas (Dashboard Rendering Layout) */}
               <div id="report-print-area" className="flex-1 p-6 overflow-y-auto bg-zinc-50/10 dark:bg-white/[0.005]">
@@ -1267,130 +2336,22 @@ export const ReportManagementSettings = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-12 gap-6">
-                    {currentReport.config.widgets.map((widget) => {
-                      const widthClass = widget.w === 4 ? 'col-span-12 md:col-span-4' :
-                                         widget.w === 6 ? 'col-span-12 md:col-span-6' :
-                                         widget.w === 8 ? 'col-span-12 md:col-span-8' :
-                                         'col-span-12';
-                      
-                      const isSelected = selectedWidgetId === widget.id;
-                      const aggData = getAggregatedData(widget);
-
-                      return (
-                        <div
-                          key={widget.id}
-                          onClick={() => {
-                            if (!isPreview) setSelectedWidgetId(widget.id);
-                          }}
-                          className={cn(
-                            "p-5 rounded-3xl border transition-all flex flex-col justify-between h-80 relative group shadow-sm bg-white/40 dark:bg-white/[0.02]",
-                            widthClass,
-                            !isPreview && isSelected ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-zinc-200/50 dark:border-white/5",
-                            !isPreview && "cursor-pointer hover:border-indigo-500/40"
-                          )}
-                        >
-                          {/* Widget Header Controls */}
-                          <div className="flex justify-between items-center pb-2 border-b border-zinc-100/50 dark:border-white/5 shrink-0">
-                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{widget.title}</span>
-                            {!isPreview && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteWidget(widget.id);
-                                }}
-                                className="print-hide p-1 rounded bg-zinc-100 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Widget Chart Content */}
-                          <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4">
-                            {aggData.length === 0 ? (
-                              <div className="text-[10px] text-zinc-400 italic flex items-center gap-1.5">
-                                <Info size={12} /> Map visual properties to generate charts.
-                              </div>
-                            ) : widget.type === 'kpi' ? (
-                              <div className="text-center">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Count</p>
-                                <p className="text-4xl font-black text-zinc-950 dark:text-white mt-1">
-                                  {aggData.reduce((acc, d) => acc + d.value, 0).toLocaleString()}
-                                </p>
-                              </div>
-                            ) : widget.type === 'table' ? (
-                              <div className="w-full h-full overflow-y-auto text-[10px]">
-                                <table className="w-full text-left border-collapse">
-                                  <thead>
-                                    <tr className="border-b border-zinc-200/50 dark:border-white/5 text-zinc-400 uppercase font-black">
-                                      <th className="py-1.5 pl-1">Dimension</th>
-                                      <th className="py-1.5 text-right pr-1">Aggregated Value</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {aggData.map(d => (
-                                      <tr key={d.name} className="border-b border-zinc-200/20 dark:border-white/5 text-zinc-700 dark:text-zinc-300">
-                                        <td className="py-2 pl-1 font-bold">{d.name}</td>
-                                        <td className="py-2 text-right pr-1 font-mono">{d.value.toLocaleString()}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ) : (
-                              <div className="w-full h-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  {widget.type === 'bar' ? (
-                                    <ReBarChart data={aggData}>
-                                      <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                                      <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
-                                      <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                                      <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                                      <Bar dataKey="value" fill={widget.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} />
-                                    </ReBarChart>
-                                  ) : widget.type === 'line' ? (
-                                    <ReLineChart data={aggData}>
-                                      <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                                      <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
-                                      <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                                      <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                                      <Line type="monotone" dataKey="value" stroke={widget.properties.color || '#6366f1'} strokeWidth={2} />
-                                    </ReLineChart>
-                                  ) : widget.type === 'area' ? (
-                                    <ReAreaChart data={aggData}>
-                                      <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                                      <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
-                                      <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                                      <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                                      <Area type="monotone" dataKey="value" fill={widget.properties.color || '#6366f1'} stroke={widget.properties.color || '#6366f1'} fillOpacity={0.15} />
-                                    </ReAreaChart>
-                                  ) : (
-                                    <RePieChart>
-                                      <Pie
-                                        data={aggData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={45}
-                                        outerRadius={65}
-                                        paddingAngle={3}
-                                        dataKey="value"
-                                      >
-                                        {aggData.map((_, index) => (
-                                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                      </Pie>
-                                      <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                                    </RePieChart>
-                                  )}
-                                </ResponsiveContainer>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <ReportBuilderCanvas
+                    currentReport={currentReport}
+                    isPreview={isPreview}
+                    selectedWidgetId={selectedWidgetId}
+                    setSelectedWidgetId={setSelectedWidgetId}
+                    layout={layout}
+                    handleLayoutChange={handleLayoutChange}
+                    getAggregatedData={getAggregatedData}
+                    handleDeleteWidget={handleDeleteWidget}
+                    COLORS={COLORS}
+                    handleChartElementClick={handleChartElementClick}
+                    activeFilters={activeFilters}
+                    handleSlicerChange={handleSlicerChange}
+                    getUniqueValuesForField={getUniqueValuesForField}
+                    handleClearFilters={() => setActiveFilters({})}
+                  />
                 )}
               </div>
 
@@ -1426,78 +2387,145 @@ export const ReportManagementSettings = () => {
                     </select>
                   </div>
 
-                  <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Dimension (X-Axis)</label>
-                      <select
-                        value={selectedWidget.properties.xAxisKey}
-                        onChange={(e) => handleUpdateWidget(selectedWidget.id, {
-                          properties: { ...selectedWidget.properties, xAxisKey: e.target.value }
-                        })}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
-                      >
-                        {availableFields.map(f => (
-                          <option key={f.name} value={f.name}>{f.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                  {(() => {
+                    const xLabel = selectedWidget.type === 'bar' || selectedWidget.type === 'line' || selectedWidget.type === 'area' ? 'Dimension (X-Axis)' :
+                                   selectedWidget.type === 'pie' ? 'Slice Dimension (Category)' :
+                                   selectedWidget.type === 'table' ? 'Row Grouping (Dimension)' :
+                                   null;
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Aggregation Metric</label>
-                      <select
-                        value={selectedWidget.properties.aggregate}
-                        onChange={(e) => handleUpdateWidget(selectedWidget.id, {
-                          properties: { ...selectedWidget.properties, aggregate: e.target.value as any }
-                        })}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
-                      >
-                        <option value="count">Count (Number of items)</option>
-                        <option value="sum">Sum (Add values)</option>
-                        <option value="avg">Average value</option>
-                        <option value="min">Minimum value</option>
-                        <option value="max">Maximum value</option>
-                      </select>
-                    </div>
+                    const yLabel = selectedWidget.type === 'bar' || selectedWidget.type === 'line' || selectedWidget.type === 'area' ? 'Metric Value Field (Y-Axis)' :
+                                   selectedWidget.type === 'pie' ? 'Slice Value Field' :
+                                   selectedWidget.type === 'table' ? 'Column Value Field' :
+                                   selectedWidget.type === 'kpi' ? 'Target Value Field' :
+                                   'Metric Value Field';
+                    
+                    return (
+                      <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-4">
+                        {xLabel && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">{xLabel}</label>
+                            <select
+                              value={selectedWidget.properties.xAxisKey}
+                              onChange={(e) => handleUpdateWidget(selectedWidget.id, {
+                                properties: { ...selectedWidget.properties, xAxisKey: e.target.value }
+                              })}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
+                            >
+                              {availableFields.map(f => (
+                                <option key={f.name} value={f.name}>{f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
 
-                    {selectedWidget.properties.aggregate !== 'count' && (
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Metric Value Field (Y-Axis)</label>
-                        <select
-                          value={selectedWidget.properties.yAxisKey}
-                          onChange={(e) => handleUpdateWidget(selectedWidget.id, {
-                            properties: { ...selectedWidget.properties, yAxisKey: e.target.value }
-                          })}
-                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
-                        >
-                          {availableFields.filter(f => f.type === 'number').map(f => (
-                            <option key={f.name} value={f.name}>{f.name}</option>
-                          ))}
-                          {availableFields.filter(f => f.type !== 'number').map(f => (
-                            <option key={f.name} value={f.name}>{f.name} (Non-numeric)</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Chart Color</label>
-                      <div className="flex gap-2">
-                        {COLORS.map(color => (
-                          <button
-                            key={color}
-                            onClick={() => handleUpdateWidget(selectedWidget.id, {
-                              properties: { ...selectedWidget.properties, color }
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Aggregation Metric</label>
+                          <select
+                            value={selectedWidget.properties.aggregate}
+                            onChange={(e) => handleUpdateWidget(selectedWidget.id, {
+                              properties: { ...selectedWidget.properties, aggregate: e.target.value as any }
                             })}
-                            style={{ backgroundColor: color }}
-                            className={cn(
-                              "w-6 h-6 rounded-full border-2",
-                              selectedWidget.properties.color === color ? "border-zinc-950 dark:border-white scale-110" : "border-transparent"
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
+                          >
+                            <option value="count">Count (Number of items)</option>
+                            <option value="sum">Sum (Add values)</option>
+                            <option value="avg">Average value</option>
+                            <option value="min">Minimum value</option>
+                            <option value="max">Maximum value</option>
+                          </select>
+                        </div>
+
+                        {yLabel && (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">{yLabel}</label>
+                            {selectedWidget.properties.aggregate === 'count' ? (
+                              <div className="w-full bg-zinc-100/50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800/80 rounded-xl px-3 py-2 text-xs text-zinc-400 dark:text-zinc-500 cursor-not-allowed select-none">
+                                Record Count (Calculated)
+                              </div>
+                            ) : (
+                              <select
+                                value={selectedWidget.properties.yAxisKey}
+                                onChange={(e) => handleUpdateWidget(selectedWidget.id, {
+                                  properties: { ...selectedWidget.properties, yAxisKey: e.target.value }
+                                })}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
+                              >
+                                {availableFields.filter(f => f.type === 'number').map(f => (
+                                  <option key={f.name} value={f.name}>{f.name}</option>
+                                ))}
+                                {availableFields.filter(f => f.type !== 'number').map(f => (
+                                  <option key={f.name} value={f.name}>{f.name} (Non-numeric)</option>
+                                ))}
+                              </select>
                             )}
-                          />
-                        ))}
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Chart Color</label>
+                          <div className="flex gap-2">
+                            {COLORS.map(color => (
+                              <button
+                                key={color}
+                                onClick={() => handleUpdateWidget(selectedWidget.id, {
+                                  properties: { ...selectedWidget.properties, color }
+                                })}
+                                style={{ backgroundColor: color }}
+                                className={cn(
+                                  "w-6 h-6 rounded-full border-2",
+                                  selectedWidget.properties.color === color ? "border-zinc-950 dark:border-white scale-110" : "border-transparent"
+                                )}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Display toggles for chart types */}
+                        {['bar', 'line', 'area', 'pie'].includes(selectedWidget.type) && (
+                          <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Display Options</label>
+                            <div className="space-y-2">
+                              {['bar', 'line', 'area'].includes(selectedWidget.type) && (
+                                <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedWidget.properties.showGridlines ?? true}
+                                    onChange={(e) => handleUpdateWidget(selectedWidget.id, {
+                                      properties: { ...selectedWidget.properties, showGridlines: e.target.checked }
+                                    })}
+                                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 bg-transparent"
+                                  />
+                                  <span>Show Gridlines</span>
+                                </label>
+                              )}
+                              <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedWidget.properties.showLegend ?? false}
+                                  onChange={(e) => handleUpdateWidget(selectedWidget.id, {
+                                    properties: { ...selectedWidget.properties, showLegend: e.target.checked }
+                                  })}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 bg-transparent"
+                                />
+                                <span>Show Legend</span>
+                              </label>
+                              <label className="flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedWidget.properties.showTooltip ?? true}
+                                  onChange={(e) => handleUpdateWidget(selectedWidget.id, {
+                                    properties: { ...selectedWidget.properties, showTooltip: e.target.checked }
+                                  })}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 bg-transparent"
+                                />
+                                <span>Show Hover Tooltips</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

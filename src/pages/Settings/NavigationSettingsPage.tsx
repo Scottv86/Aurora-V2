@@ -1060,6 +1060,7 @@ export const NavigationSettingsPage = () => {
               sections={activeSections} 
               onChange={handleSectionsChange}
               layout={layoutStyle}
+              modules={modules}
             />
           </div>
         </div>

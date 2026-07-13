@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   DndContext, 
   closestCenter,
@@ -32,7 +32,9 @@ import {
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '../UI/Primitives';
-import { cn } from '../../lib/utils';
+import { cn, flattenFields } from '../../lib/utils';
+import { PLATFORM_MODULES } from '../../config/platformModules';
+import { toast } from 'sonner';
 
 // Types matching NavigationSettingsPage
 interface MenuItem {
@@ -43,6 +45,13 @@ interface MenuItem {
   isVisible?: boolean;
   isSubtitle?: boolean;
   children?: MenuItem[];
+  moduleId?: string;
+  moduleIds?: string[];
+  isUnifiedQueue?: boolean;
+  queueConfig?: {
+    conditions: any;
+    columns: string[];
+  };
 }
 
 interface MenuSection {
@@ -55,6 +64,7 @@ interface Props {
   sections: MenuSection[];
   onChange: (sections: MenuSection[]) => void;
   layout: 'sidebar' | 'slim' | 'top';
+  modules?: any[];
 }
 
 const COMMON_ICONS = [
@@ -63,7 +73,7 @@ const COMMON_ICONS = [
   'MessageSquare', 'Calendar', 'Folder', 'Zap', 'Terminal', 'Heart', 'HelpCircle'
 ];
 
-export const NavigationArchitect = ({ sections, onChange, layout: _layout }: Props) => {
+export const NavigationArchitect = ({ sections, onChange, layout: _layout, modules }: Props) => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -314,6 +324,7 @@ export const NavigationArchitect = ({ sections, onChange, layout: _layout }: Pro
                           onOutdent={(parentItemId: string, childId: string) => outdentItem(section.id, parentItemId, childId)}
                           onChildUpdate={(childId: string, updates: Partial<MenuItem>) => updateChildItem(section.id, item.id, childId, updates)}
                           onMoveToSection={(targetSecId: string) => moveItemToSection(section.id, targetSecId, item)}
+                          modules={modules}
                         />
                       ))
                     )}
@@ -340,7 +351,8 @@ const SortableItemWrapper = ({
   onIndent,
   onOutdent,
   onChildUpdate,
-  onMoveToSection
+  onMoveToSection,
+  modules
 }: any) => {
   const {
     attributes,
@@ -370,6 +382,7 @@ const SortableItemWrapper = ({
         onIndent={onIndent}
         onMoveToSection={onMoveToSection}
         dragProps={{ ...attributes, ...listeners }} 
+        modules={modules}
       />
 
       {/* Render children sub-items */}
@@ -388,6 +401,7 @@ const SortableItemWrapper = ({
               }}
               onUpdate={(updates: any) => onChildUpdate(child.id, updates)}
               onOutdent={() => onOutdent(item.id, child.id)}
+              modules={modules}
             />
           ))}
         </div>
@@ -408,7 +422,8 @@ const ItemCard = ({
   onIndent,
   onOutdent,
   onMoveToSection,
-  dragProps 
+  dragProps,
+  modules = []
 }: any) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(item.label);
@@ -417,22 +432,179 @@ const ItemCard = ({
   const [editIconInput, setEditIconInput] = useState('');
   const [isSubtitle, setIsSubtitle] = useState(!!item.isSubtitle);
 
+  // Queue edit states:
+  const [editQueueItemType, setEditQueueItemType] = useState<'single' | 'unified'>('single');
+  const [editQueueModuleId, setEditQueueModuleId] = useState('');
+  const [editQueueModuleIds, setEditQueueModuleIds] = useState<string[]>([]);
+  const [editQueueRules, setEditQueueRules] = useState<{ fieldId: string; operator: string; value: string }[]>([]);
+  const [editQueueColumns, setEditQueueColumns] = useState<string[]>([]);
+
+  const activeCustomModules = useMemo(() => {
+    return modules.filter((mod: any) => {
+      if (mod.type === 'PAGE') return false;
+      if (mod.status !== 'ACTIVE' && !mod.enabled) return false;
+      const isPlatform = PLATFORM_MODULES.some((pm: any) => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId);
+      if (isPlatform) return false;
+      if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
+      return true;
+    });
+  }, [modules]);
+
+  const queueAvailableFields = useMemo(() => {
+    const list: { id: string; label: string; origin?: string }[] = [
+      { id: 'currentUser.teamName', label: 'Current User: Team Name' },
+      { id: 'currentUser.teamId', label: 'Current User: Team ID' },
+      { id: 'currentUser.role', label: 'Current User: Role' },
+      { id: 'currentUser.id', label: 'Current User: Member ID' },
+      { id: 'status', label: 'Status' },
+      { id: 'priority', label: 'Priority' },
+      { id: 'assigneeId', label: 'Assignee ID' }
+    ];
+
+    const targetModuleIds = editQueueItemType === 'single' 
+      ? (editQueueModuleId ? [editQueueModuleId] : []) 
+      : editQueueModuleIds;
+
+    targetModuleIds.forEach(mId => {
+      const mod = modules.find((m: any) => m.id === mId);
+      if (mod?.layout) {
+        const flat = flattenFields(mod.layout);
+        flat.forEach(f => {
+          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
+            if (!list.some(item => item.id === f.id)) {
+              list.push({ id: f.id, label: `${f.label || f.name} (${mod.name})`, origin: mod.name });
+            }
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [editQueueItemType, editQueueModuleId, editQueueModuleIds, modules]);
+
+  const queueColumnOptions = useMemo(() => {
+    const list: { id: string; label: string; group: string }[] = [
+      { id: 'id', label: 'Record ID', group: 'System' },
+      { id: 'moduleId', label: 'Module Name', group: 'System' },
+      { id: 'title', label: 'Title/Key', group: 'System' },
+      { id: 'status', label: 'Status', group: 'System' },
+      { id: 'priority', label: 'Priority', group: 'System' },
+      { id: 'assigneeId', label: 'Assignee', group: 'System' },
+      { id: 'createdAt', label: 'Created At', group: 'System' },
+      { id: 'updatedAt', label: 'Updated At', group: 'System' }
+    ];
+
+    const targetModuleIds = editQueueItemType === 'single' 
+      ? (editQueueModuleId ? [editQueueModuleId] : []) 
+      : editQueueModuleIds;
+
+    targetModuleIds.forEach(mId => {
+      const mod = modules.find((m: any) => m.id === mId);
+      if (mod?.layout) {
+        const flat = flattenFields(mod.layout);
+        flat.forEach(f => {
+          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
+            if (!list.some(item => item.id === f.id)) {
+              list.push({ id: f.id, label: f.label || f.name, group: mod.name });
+            }
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [editQueueItemType, editQueueModuleId, editQueueModuleIds, modules]);
+
   const startEdit = () => {
     setEditLabel(item.label);
     setEditPath(item.to || '');
     setEditIcon(item.iconName);
     setIsSubtitle(!!item.isSubtitle);
+
+    // Initialize queue states
+    const isUnified = !!item.isUnifiedQueue;
+    setEditQueueItemType(isUnified ? 'unified' : 'single');
+    setEditQueueModuleId(item.moduleId || '');
+    setEditQueueModuleIds(item.moduleIds || []);
+    
+    const initialRules = item.queueConfig?.conditions?.rules?.map((r: any) => ({
+      fieldId: r.fieldId,
+      operator: r.operator,
+      value: r.value || ''
+    })) || [{ fieldId: '', operator: 'equals', value: '' }];
+    setEditQueueRules(initialRules);
+    
+    setEditQueueColumns(item.queueConfig?.columns || [
+      'id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'
+    ]);
+
     setIsEditing(true);
   };
 
   const saveEdit = () => {
     const icon = editIconInput.trim() || editIcon;
-    onUpdate({
-      label: editLabel,
-      iconName: icon,
-      isSubtitle: isSubtitle,
-      to: isSubtitle ? undefined : editPath
-    });
+
+    if (item.queueConfig) {
+      // It is a queue item! We must validate and update queue specific fields
+      if (!editLabel.trim()) {
+        toast.error('Please enter a queue label.');
+        return;
+      }
+      if (editQueueItemType === 'single' && !editQueueModuleId) {
+        toast.error('Please select a target module.');
+        return;
+      }
+      if (editQueueItemType === 'unified' && editQueueModuleIds.length === 0) {
+        toast.error('Please select at least one module.');
+        return;
+      }
+
+      const validRules = editQueueRules
+        .filter(r => r.fieldId)
+        .map(r => {
+          const isVar = r.fieldId.startsWith('currentUser.');
+          return {
+            fieldId: r.fieldId,
+            fieldType: isVar ? 'variable' : 'field',
+            operator: r.operator,
+            value: r.value,
+            valueType: 'literal'
+          };
+        });
+
+      const conditions = {
+        type: 'group',
+        logicalOperator: 'AND',
+        rules: validRules
+      };
+
+      const queueId = item.id;
+      const updatedTo = editQueueItemType === 'single'
+        ? `/workspace/modules/${editQueueModuleId}?queueId=${queueId}`
+        : `/workspace/queues/${queueId}`;
+
+      onUpdate({
+        label: editLabel,
+        iconName: icon,
+        moduleId: editQueueItemType === 'single' ? editQueueModuleId : undefined,
+        moduleIds: editQueueItemType === 'unified' ? editQueueModuleIds : undefined,
+        isUnifiedQueue: editQueueItemType === 'unified',
+        to: updatedTo,
+        queueConfig: {
+          conditions,
+          columns: editQueueItemType === 'unified' ? editQueueColumns : []
+        }
+      });
+    } else {
+      // Normal item edit
+      onUpdate({
+        label: editLabel,
+        iconName: icon,
+        isSubtitle: isSubtitle,
+        to: isSubtitle ? undefined : editPath
+      });
+    }
+
     setIsEditing(false);
   };
 
@@ -563,19 +735,21 @@ const ItemCard = ({
         <div className="p-3.5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Edit Menu Item</span>
-            <div className="flex gap-2 text-[10px]">
-              <label className="flex items-center gap-1 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={isSubtitle} 
-                  onChange={(e) => {
-                    setIsSubtitle(e.target.checked);
-                  }}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 h-3 w-3"
-                />
-                <span className="font-bold text-zinc-500 uppercase">Is Subtitle</span>
-              </label>
-            </div>
+            {!item.queueConfig && (
+              <div className="flex gap-2 text-[10px]">
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={isSubtitle} 
+                    onChange={(e) => {
+                      setIsSubtitle(e.target.checked);
+                    }}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-3 w-3"
+                  />
+                  <span className="font-bold text-zinc-500 uppercase">Is Subtitle</span>
+                </label>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -589,7 +763,7 @@ const ItemCard = ({
               />
             </div>
 
-            {!isSubtitle && (
+            {!isSubtitle && !item.queueConfig && (
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Route Path</label>
                 <input
@@ -627,6 +801,198 @@ const ItemCard = ({
               />
             </div>
           </div>
+
+          {/* Queue builder configurations if queueConfig is present */}
+          {item.queueConfig && (
+            <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-900 space-y-3">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+                  Queue Config
+                </span>
+                <div className="flex gap-2 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditQueueItemType('single');
+                      setEditQueueColumns(['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']);
+                    }}
+                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", editQueueItemType === 'single' ? "bg-indigo-600 text-white" : "text-zinc-450")}
+                  >
+                    Single Module
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditQueueItemType('unified');
+                    }}
+                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", editQueueItemType === 'unified' ? "bg-indigo-600 text-white" : "text-zinc-450")}
+                  >
+                    Unified
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {/* Module Selector */}
+                {editQueueItemType === 'single' ? (
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-zinc-500 uppercase">Target Module</label>
+                    <select
+                      className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-2.5 py-1 text-xs outline-none focus:border-indigo-500/50"
+                      value={editQueueModuleId}
+                      onChange={(e) => setEditQueueModuleId(e.target.value)}
+                    >
+                      <option value="">Select a Module...</option>
+                      {activeCustomModules.map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-zinc-500 uppercase block">Select Target Modules</label>
+                    <div className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded p-2 max-h-28 overflow-y-auto space-y-1 custom-scrollbar">
+                      {activeCustomModules.map((m: any) => {
+                        const isChecked = editQueueModuleIds.includes(m.id);
+                        return (
+                          <label key={m.id} className="flex items-center gap-2 text-xs font-medium text-zinc-750 dark:text-zinc-350 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEditQueueModuleIds([...editQueueModuleIds, m.id]);
+                                } else {
+                                  setEditQueueModuleIds(editQueueModuleIds.filter(id => id !== m.id));
+                                }
+                              }}
+                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{m.name}</span>
+                          </label>
+                        );
+                      })}
+                      {activeCustomModules.length === 0 && (
+                        <p className="text-[10px] text-zinc-400 italic">No active custom modules.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Condition Builder Section */}
+                <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
+                  <label className="text-[9px] font-bold text-zinc-500 uppercase block">Filtering Rules (AND)</label>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                    {editQueueRules.map((rule, idx) => (
+                      <div key={idx} className="flex gap-1.5 items-center">
+                        <select
+                          className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-1 text-[10px] outline-none"
+                          value={rule.fieldId}
+                          onChange={(e) => {
+                            const updated = [...editQueueRules];
+                            updated[idx].fieldId = e.target.value;
+                            setEditQueueRules(updated);
+                          }}
+                        >
+                          <option value="">Field...</option>
+                          {queueAvailableFields.map(f => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          className="w-18 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1 py-1 text-[10px] outline-none"
+                          value={rule.operator}
+                          onChange={(e) => {
+                            const updated = [...editQueueRules];
+                            updated[idx].operator = e.target.value;
+                            setEditQueueRules(updated);
+                          }}
+                        >
+                          <option value="equals">==</option>
+                          <option value="not_equals">!=</option>
+                          <option value="contains">contains</option>
+                          <option value="is_empty">empty</option>
+                          <option value="not_empty">not empty</option>
+                        </select>
+
+                        {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
+                          <input
+                            type="text"
+                            placeholder="Value"
+                            className="w-20 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-1 text-[10px] outline-none"
+                            value={rule.value}
+                            onChange={(e) => {
+                              const updated = [...editQueueRules];
+                              updated[idx].value = e.target.value;
+                              setEditQueueRules(updated);
+                            }}
+                          />
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditQueueRules(editQueueRules.filter((_, i) => i !== idx));
+                          }}
+                          disabled={editQueueRules.length === 1}
+                          className="text-zinc-400 hover:text-red-500 disabled:opacity-30"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditQueueRules([...editQueueRules, { fieldId: '', operator: 'equals', value: '' }])}
+                    className="flex items-center gap-1 text-[9px] text-indigo-650 dark:text-indigo-400 font-bold uppercase mt-1 hover:underline"
+                  >
+                    <Plus size={10} /> Add Rule
+                  </button>
+                </div>
+
+                {/* Columns Selection Section (Only for Unified Queues) */}
+                {editQueueItemType === 'unified' && (
+                  <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
+                    <label className="text-[9px] font-bold text-zinc-500 uppercase block">Display Columns</label>
+                    <div className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded p-2 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
+                      {Array.from(new Set(queueColumnOptions.map(c => c.group))).map(groupName => (
+                        <div key={groupName} className="space-y-1">
+                          <div className="text-[9px] font-black text-zinc-450 dark:text-zinc-650 uppercase tracking-widest border-b border-zinc-200/60 dark:border-zinc-900 pb-0.5">
+                            {groupName} Fields
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 pl-1">
+                            {queueColumnOptions.filter(c => c.group === groupName).map(col => {
+                              const isChecked = editQueueColumns.includes(col.id);
+                              return (
+                                <label key={col.id} className="flex items-center gap-1.5 text-[10px] text-zinc-700 dark:text-zinc-350 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setEditQueueColumns([...editQueueColumns, col.id]);
+                                      } else {
+                                        setEditQueueColumns(editQueueColumns.filter(c => c !== col.id));
+                                      }
+                                    }}
+                                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3 w-3"
+                                  />
+                                  <span className="truncate">{col.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-1.5 pt-1.5">
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsEditing(false)}>

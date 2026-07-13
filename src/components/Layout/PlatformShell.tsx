@@ -248,7 +248,37 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   };
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => {
+    try {
+      const targetUrl = new URL(path, window.location.origin);
+      const currentUrl = new URL(location.pathname + location.search, window.location.origin);
+      
+      if (currentUrl.pathname !== targetUrl.pathname) {
+        return false;
+      }
+      
+      const targetQueueId = targetUrl.searchParams.get('queueId') || targetUrl.searchParams.get('queue');
+      const currentQueueId = currentUrl.searchParams.get('queueId') || currentUrl.searchParams.get('queue');
+      
+      if (targetQueueId) {
+        return currentQueueId === targetQueueId;
+      }
+      
+      if (currentQueueId) {
+        return false;
+      }
+      
+      for (const [key, value] of targetUrl.searchParams.entries()) {
+        if (currentUrl.searchParams.get(key) !== value) {
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      return location.pathname === path;
+    }
+  };
 
   const getContextualAction = () => {
     if (!isDeveloper) return null;

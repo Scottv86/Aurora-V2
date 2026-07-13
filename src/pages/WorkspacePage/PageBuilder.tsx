@@ -13,6 +13,7 @@ import { fetchModule } from '../../services/dataService';
 import { PageAIBuilderModal } from './PageAIBuilderModal';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 import { cn } from '../../lib/utils';
+import { ReportWidgetEmbed } from './WorkspacePageView';
 
 export const PageBuilder = () => {
   const { id } = useParams();
@@ -334,7 +335,7 @@ export const PageBuilder = () => {
                           </button>
 
                           {/* Edit Properties settings */}
-                          {['module-table', 'module-creator', 'rich-text', 'chart'].includes(widget.type) && (
+                          {['module-table', 'module-creator', 'rich-text', 'chart', 'report'].includes(widget.type) && (
                             <button 
                               onClick={() => setEditingWidget(widget)}
                               className="p-1 rounded text-zinc-400 hover:text-indigo-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -353,9 +354,23 @@ export const PageBuilder = () => {
                         </div>
                       </div>
 
-                      {/* Preview Layout Placeholder */}
-                      <div className="h-16 flex items-center justify-center border border-dashed border-zinc-200/50 dark:border-white/5 rounded-xl bg-white/30 dark:bg-white/[0.01] text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">
-                        Widget Preview
+                      {/* Preview Layout Placeholder / Live Preview */}
+                      <div className="w-full">
+                        {widget.type === 'report' ? (
+                          widget.properties?.reportId ? (
+                            <div className="w-full pointer-events-none scale-[0.95] origin-top bg-zinc-50/50 dark:bg-white/[0.01] rounded-2xl p-4 border border-zinc-200/30 dark:border-white/5 overflow-hidden">
+                              <ReportWidgetEmbed widget={widget} tenant={tenant} session={session} />
+                            </div>
+                          ) : (
+                            <div className="h-16 flex items-center justify-center border border-dashed border-zinc-200/50 dark:border-white/5 rounded-xl bg-white/30 dark:bg-white/[0.01] text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">
+                              Configure Embedded BI Report...
+                            </div>
+                          )
+                        ) : (
+                          <div className="h-16 flex items-center justify-center border border-dashed border-zinc-200/50 dark:border-white/5 rounded-xl bg-white/30 dark:bg-white/[0.01] text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">
+                            Widget Preview
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -581,17 +596,19 @@ const ReportDropdown = ({ editingWidget, setWidgets, setEditingWidget, tenant, s
         setEditingWidget((prev: any) => ({ ...prev, properties: { ...prev.properties, reportId: rId } }));
       }}
       disabled={loading}
-      className="w-full bg-zinc-50/50 dark:bg-white/[0.01] border border-zinc-200 dark:border-white/5 rounded-lg px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50 text-xs"
+      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20"
     >
       {loading ? (
-        <option>Loading reports...</option>
+        <option className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">Loading reports...</option>
       ) : reports.length === 0 ? (
-        <option value="">No published reports found</option>
+        <option value="" className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">No published reports found</option>
       ) : (
         <>
-          <option value="">Select report...</option>
+          <option value="" className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">Select report...</option>
           {reports.map((r: any) => (
-            <option key={r.id} value={r.id}>{r.name}</option>
+            <option key={r.id} value={r.id} className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">
+              {r.name}
+            </option>
           ))}
         </>
       )}

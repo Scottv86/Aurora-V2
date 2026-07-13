@@ -15,6 +15,7 @@ import { fetchModule, fetchRecords } from '../../services/dataService';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { createFormulaContext } from '../../lib/formulaEngine';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 
 export const WorkspacePageView = () => {
@@ -310,7 +311,7 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
           <input
             type="text"
             placeholder="Search records..."
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-indigo-500/50"
+            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-indigo-500/50"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -618,7 +619,7 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
 
 const COLORS_PALETTE = ['#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
 
-interface ReportEmbedWidget {
+export interface ReportEmbedWidget {
   id: string;
   type: 'bar' | 'line' | 'area' | 'pie' | 'kpi' | 'table';
   title: string;
@@ -632,10 +633,19 @@ interface ReportEmbedWidget {
 }
 
 export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {
+  const { modules } = usePlatform();
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [dataset, setDataset] = useState<any[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
+  
+  // Database datasets cache
+  const [records, setRecords] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [automations, setAutomations] = useState<any[]>([]);
+  const [catalogItems, setCatalogItems] = useState<any[]>([]);
+
+  // Filtering states
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
 
   const reportId = widget.properties?.reportId;
 
@@ -668,64 +678,205 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
     fetchReportConfig();
   }, [reportId, tenant?.id, session?.access_token]);
 
-  // 2. Fetch dataset based on report source
+  // 2. Fetch cache database source datasets
   useEffect(() => {
-    if (!report || !tenant?.id) return;
-    const loadDataset = async () => {
-      setDataLoading(true);
+    if (!tenant?.id || !report) return;
+    const fetchSources = async () => {
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
-        const tables = report.config?.dataSource?.tables || [];
-        const t = tables[0];
 
-        if (t === 'records') {
-          const res = await fetch(`http://localhost:3001/api/data/records`, { headers });
-          const json = await res.json();
-          setDataset(json.records || []);
-        } else if (t === 'tenant_members') {
-          const res = await fetch(`http://localhost:3001/api/members`, { headers });
-          const json = await res.json();
-          setDataset(json || []);
-        } else if (t === 'teams') {
-          const res = await fetch(`http://localhost:3001/api/teams`, { headers });
-          const json = await res.json();
-          setDataset(json || []);
-        } else if (t === 'automations') {
-          const res = await fetch(`http://localhost:3001/api/automations`, { headers });
-          const json = await res.json();
-          setDataset(json || []);
-        } else if (t === 'catalog_items') {
-          const res = await fetch(`http://localhost:3001/api/pricing-catalog`, { headers });
-          const json = await res.json();
-          setDataset(json || []);
-        } else {
-          // Mock external source
-          setDataset([
-            { id: '1', status: 'Prospecting', source: 'Webinar', value: 12000 },
-            { id: '2', status: 'Qualification', source: 'Cold Outbound', value: 18000 },
-            { id: '3', status: 'Closed Won', source: 'Webinar', value: 45000 },
-            { id: '4', status: 'Negotiation', source: 'Partner Referral', value: 25000 },
-            { id: '5', status: 'Closed Won', source: 'Google Ads', value: 30000 }
-          ]);
-        }
+        fetch(`http://localhost:3001/api/data/records`, { headers })
+          .then(res => res.json())
+          .then(data => setRecords(data.records || []))
+          .catch(() => {});
+
+        fetch(`http://localhost:3001/api/members`, { headers })
+          .then(res => res.json())
+          .then(data => setMembers(data || []))
+          .catch(() => {});
+
+        fetch(`http://localhost:3001/api/teams`, { headers })
+          .then(res => res.json())
+          .then(data => setTeams(data || []))
+          .catch(() => {});
+
+        fetch(`http://localhost:3001/api/automations`, { headers })
+          .then(res => res.json())
+          .then(data => setAutomations(data || []))
+          .catch(() => {});
+
+        fetch(`http://localhost:3001/api/pricing-catalog`, { headers })
+          .then(res => res.json())
+          .then(data => setCatalogItems(data || []))
+          .catch(() => {});
       } catch (err) {
-        console.error('Failed to load report dataset', err);
-      } finally {
-        setDataLoading(false);
+        console.error("Failed to load source datasets for report embed", err);
       }
     };
-    loadDataset();
+    fetchSources();
   }, [report, tenant?.id, session?.access_token]);
 
-  // Aggregation helper
-  const getAggregatedData = (w: ReportEmbedWidget): any[] => {
-    if (!dataset || dataset.length === 0) return [];
-    const { xAxisKey, yAxisKey, aggregate } = w.properties;
-    if (!xAxisKey) return [];
+  // Formula evaluation engine
+  const evaluateFormulaOnRow = (formula: string, row: any): any => {
+    try {
+      const expression = formula.replace(/\{([\w\.\:-]+)\}/g, (_, fieldId) => {
+        const val = row[fieldId];
+        if (val === undefined || val === null) return '""';
+        if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+        return `"${String(val).replace(/"/g, '\\"')}"`;
+      });
+
+      const formulaContext = createFormulaContext();
+      const func = new Function(...Object.keys(formulaContext), `return ${expression}`);
+      const result = func(...Object.values(formulaContext));
+      
+      if (typeof result === 'number') {
+        return Number.isInteger(result) ? result : Number(result.toFixed(2));
+      }
+      return result ?? '';
+    } catch (err) {
+      return '#ERROR!';
+    }
+  };
+
+  // 3. Compile full relational dataset
+  const getRawDataset = (tables: string[]): any[] => {
+    if (!tables || tables.length === 0) return [];
+    const t = tables[0];
+    
+    const rawData = (() => {
+      if (t === 'records') return records;
+      if (t.startsWith('module:')) {
+        const moduleId = t.split(':')[1];
+        return records.filter(r => r.moduleId === moduleId).map(r => {
+          return {
+            id: r.id,
+            status: r.status,
+            created_at: r.createdAt || r.created_at,
+            ...(r.data || {})
+          };
+        });
+      }
+      if (t === 'tenant_members') return members;
+      if (t === 'teams') return teams;
+      if (t === 'automations') return automations;
+      if (t === 'catalog_items') return catalogItems;
+      
+      if (report?.config?.dataSource?.type === 'external') {
+        return [
+          { id: '1', status: 'Prospecting', source: 'Webinar', value: 12000, date: 'Jul 1' },
+          { id: '2', status: 'Qualification', source: 'Cold Outbound', value: 18000, date: 'Jul 3' },
+          { id: '3', status: 'Closed Won', source: 'Webinar', value: 45000, date: 'Jul 5' },
+          { id: '4', status: 'Negotiation', source: 'Partner Referral', value: 25000, date: 'Jul 8' },
+          { id: '5', status: 'Closed Won', source: 'Google Ads', value: 30000, date: 'Jul 10' }
+        ];
+      }
+      return [];
+    })();
+
+    const relationships = report?.config?.dataSource?.relationships || [];
+    if (relationships.length === 0 || rawData.length === 0) {
+      return rawData;
+    }
+
+    const getJoinDataset = (joinTable: string): any[] => {
+      if (joinTable === 'records') return records;
+      if (joinTable.startsWith('module:')) {
+        const moduleId = joinTable.split(':')[1];
+        return records.filter(r => r.moduleId === moduleId).map(r => {
+          return {
+            id: r.id,
+            status: r.status,
+            created_at: r.createdAt || r.created_at,
+            ...(r.data || {})
+          };
+        });
+      }
+      if (joinTable === 'tenant_members') return members;
+      if (joinTable === 'teams') return teams;
+      if (joinTable === 'automations') return automations;
+      if (joinTable === 'catalog_items') return catalogItems;
+      return [];
+    };
+
+    let joinedData = [...rawData];
+
+    relationships.forEach((rel: any) => {
+      const joinDataset = getJoinDataset(rel.joinTable);
+      let tableKey = rel.joinTable;
+      if (tableKey.startsWith('module:')) {
+        const moduleId = tableKey.split(':')[1];
+        const m = modules.find((mod: any) => mod.id === moduleId);
+        tableKey = m ? m.name.toLowerCase().replace(/\s+/g, '_') : moduleId;
+      }
+
+      joinedData = joinedData.map(primaryRow => {
+        const primaryVal = primaryRow[rel.primaryKey];
+        const matchingRecord = joinDataset.find(joinRow => {
+          const joinVal = joinRow[rel.foreignKey];
+          if (primaryVal === undefined || primaryVal === null || joinVal === undefined || joinVal === null) return false;
+          return String(primaryVal).trim() === String(joinVal).trim();
+        });
+
+        const mergedFields: Record<string, any> = {};
+        if (matchingRecord) {
+          Object.entries(matchingRecord).forEach(([k, v]) => {
+            mergedFields[`${tableKey}.${k}`] = v;
+          });
+        }
+        return {
+          ...primaryRow,
+          ...mergedFields,
+          __hadMatch: !!matchingRecord
+        };
+      });
+
+      if (rel.type === 'inner') {
+        joinedData = joinedData.filter(row => (row as any).__hadMatch);
+      }
+    });
+
+    // Evaluate calculated fields
+    const calculatedFields = report?.config?.calculatedFields || [];
+    if (calculatedFields.length > 0) {
+      joinedData = joinedData.map(row => {
+        const evaluatedRow = { ...row };
+        calculatedFields.forEach((cf: any) => {
+          evaluatedRow[cf.name] = evaluateFormulaOnRow(cf.formula, row);
+        });
+        return evaluatedRow;
+      });
+    }
+
+    return joinedData;
+  };
+
+  const getUniqueValuesForField = (field: string): any[] => {
+    if (!report) return [];
+    const rawData = getRawDataset(report.config.dataSource.tables);
+    const values = rawData.map(row => row[field]).filter(val => val !== undefined && val !== null && val !== '');
+    return Array.from(new Set(values));
+  };
+
+  // Compile visual metric aggregates (including filters)
+  const getAggregatedData = (widget: any): any[] => {
+    const rawData = getRawDataset(report?.config?.dataSource?.tables || []);
+    if (!rawData || rawData.length === 0) return [];
+
+    // Apply active global filters
+    const filteredData = rawData.filter(row => {
+      return Object.entries(activeFilters).every(([field, selectedValue]) => {
+        if (selectedValue === undefined || selectedValue === null || selectedValue === '') return true;
+        return String(row[field]) === String(selectedValue);
+      });
+    });
+
+    const xAxisKey = widget.properties.xAxisKey || 'id';
+    const { yAxisKey, aggregate } = widget.properties;
 
     const groupMap: Record<string, any[]> = {};
-    dataset.forEach(item => {
+    filteredData.forEach(item => {
       let keyVal = item[xAxisKey];
       if (keyVal === undefined || keyVal === null) keyVal = 'Unspecified';
       if (typeof keyVal === 'boolean') keyVal = keyVal ? 'True' : 'False';
@@ -757,7 +908,19 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
           metricValue = numericValues.length > 0 ? Math.max(...numericValues) : 0;
         }
       }
+
       return { name: key, value: metricValue };
+    });
+  };
+
+  const handleChartElementClick = (field: string, value: any) => {
+    setActiveFilters(prev => {
+      if (prev[field] === value) {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return { ...prev, [field]: value };
     });
   };
 
@@ -775,12 +938,13 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
       <div className="p-8 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-3xl text-center space-y-2 bg-white/20 dark:bg-white/[0.005]">
         <Icons.TrendingUp size={24} className="text-zinc-400 mx-auto" />
         <p className="text-xs font-bold text-zinc-650 dark:text-zinc-300">BI Report Widget</p>
-        <p className="text-[10px] text-zinc-500">No report configured or target report was deleted.</p>
+        <p className="text-[10px] text-zinc-550">No report configured or target report was deleted.</p>
       </div>
     );
   }
 
   const widgetsList = report.config?.widgets || [];
+  const activeSlicers = report.config?.slicers || [];
 
   return (
     <div className="col-span-12 space-y-6">
@@ -789,11 +953,58 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
         {report.description && <p className="text-[10px] text-zinc-550 dark:text-zinc-500 mt-0.5">{report.description}</p>}
       </div>
 
+      {/* Global Slicers Toolbar inside Embed */}
+      {activeSlicers.length > 0 && (
+        <div className="p-4 bg-white/50 dark:bg-zinc-955/20 border border-zinc-200/30 dark:border-white/5 rounded-3xl flex flex-wrap gap-4 items-center justify-between shadow-sm">
+          <div className="flex flex-wrap gap-4 items-center">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Filters:</span>
+            {activeSlicers.map((field: string) => {
+              const uniqueValues = getUniqueValuesForField(field);
+              const activeVal = activeFilters[field];
+
+              return (
+                <div key={field} className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-zinc-550 dark:text-zinc-450 capitalize">
+                    {field.split('.').pop()?.replace('_', ' ')}:
+                  </span>
+                  <select
+                    value={activeVal || ''}
+                    onChange={(e) => setActiveFilters(prev => {
+                      const next = { ...prev };
+                      if (!e.target.value) {
+                        delete next[field];
+                      } else {
+                        next[field] = e.target.value;
+                      }
+                      return next;
+                    })}
+                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
+                  >
+                    <option value="">All</option>
+                    {uniqueValues.map(val => (
+                      <option key={val} value={val}>{String(val)}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          {Object.keys(activeFilters).length > 0 && (
+            <button
+              onClick={() => setActiveFilters({})}
+              className="text-[10px] text-red-550 hover:text-red-450 dark:text-red-400 dark:hover:text-red-300 font-bold px-3 py-1 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 rounded-xl cursor-pointer transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      )}
+
       {widgetsList.length === 0 ? (
         <p className="text-xs text-zinc-500 italic py-6 text-center">This published report has no configured visuals.</p>
       ) : (
         <div className="grid grid-cols-12 gap-6">
-          {widgetsList.map((w: ReportEmbedWidget) => {
+          {widgetsList.map((w: any) => {
             const widthClass = w.w === 4 ? 'col-span-12 md:col-span-4' :
                                w.w === 6 ? 'col-span-12 md:col-span-6' :
                                w.w === 8 ? 'col-span-12 md:col-span-8' :
@@ -804,18 +1015,16 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
               <div 
                 key={w.id} 
                 className={cn(
-                  "p-5 rounded-3xl border border-zinc-200 dark:border-zinc-850 h-80 flex flex-col justify-between bg-white/50 dark:bg-white/[0.02]", 
+                  "p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800 h-80 flex flex-col justify-between bg-white/50 dark:bg-white/[0.02]", 
                   widthClass
                 )}
               >
-                <div className="border-b border-zinc-100 dark:border-zinc-850 pb-2 flex items-center justify-between">
+                <div className="border-b border-zinc-100 dark:border-zinc-800 pb-2 flex items-center justify-between">
                   <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{w.title}</span>
                 </div>
 
                 <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4 text-xs">
-                  {dataLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
-                  ) : aggData.length === 0 ? (
+                  {aggData.length === 0 ? (
                     <span className="text-[10px] text-zinc-400 italic">No dataset rows found.</span>
                   ) : w.type === 'kpi' ? (
                     <div className="text-center">
@@ -828,14 +1037,14 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                     <div className="w-full h-full overflow-y-auto text-[10px]">
                       <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-850 text-zinc-450 uppercase font-black">
+                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-450 uppercase font-black">
                             <th className="py-1 pl-1">Dimension</th>
                             <th className="py-1 text-right pr-1">Aggregated Value</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aggData.map(d => (
-                            <tr key={d.name} className="border-b border-zinc-100/50 dark:border-zinc-850/50 text-zinc-700 dark:text-zinc-300">
+                            <tr key={d.name} className="border-b border-zinc-100/50 dark:border-zinc-800/50 text-zinc-700 dark:text-zinc-300">
                               <td className="py-2 pl-1 font-bold">{d.name}</td>
                               <td className="py-2 text-right pr-1 font-mono">{d.value.toLocaleString()}</td>
                             </tr>
@@ -847,7 +1056,15 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                     <div className="w-full h-full">
                       <ResponsiveContainer width="100%" height="100%">
                         {w.type === 'bar' ? (
-                          <BarChart data={aggData}>
+                          <BarChart 
+                            data={aggData}
+                            className="cursor-pointer"
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                handleChartElementClick(w.properties.xAxisKey, state.activeLabel);
+                              }
+                            }}
+                          >
                             <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
@@ -855,7 +1072,15 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <Bar dataKey="value" fill={w.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} />
                           </BarChart>
                         ) : w.type === 'line' ? (
-                          <LineChart data={aggData}>
+                          <LineChart 
+                            data={aggData}
+                            className="cursor-pointer"
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                handleChartElementClick(w.properties.xAxisKey, state.activeLabel);
+                              }
+                            }}
+                          >
                             <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
@@ -863,7 +1088,15 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <Line type="monotone" dataKey="value" stroke={w.properties.color || '#6366f1'} strokeWidth={2} />
                           </LineChart>
                         ) : w.type === 'area' ? (
-                          <AreaChart data={aggData}>
+                          <AreaChart 
+                            data={aggData}
+                            className="cursor-pointer"
+                            onClick={(state) => {
+                              if (state && state.activeLabel) {
+                                handleChartElementClick(w.properties.xAxisKey, state.activeLabel);
+                              }
+                            }}
+                          >
                             <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
@@ -880,6 +1113,12 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                               outerRadius={65}
                               paddingAngle={3}
                               dataKey="value"
+                              className="cursor-pointer"
+                              onClick={(data) => {
+                                if (data && data.name) {
+                                  handleChartElementClick(w.properties.xAxisKey, data.name);
+                                }
+                              }}
                             >
                               {aggData.map((_, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS_PALETTE[index % COLORS_PALETTE.length]} />

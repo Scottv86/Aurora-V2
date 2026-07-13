@@ -167,6 +167,10 @@ router.post('/ai-builder', async (req: TenantRequest, res: Response) => {
       Design a report that contains 2 to 4 charts/widgets matching the user's request.
       Select one or more matching tables as data sources.
       Determine proper mapping parameters: xAxisKey, yAxisKey, and aggregate (count, sum, avg).
+      
+      If the user prompt implies filtering (e.g. "by team status" or "recent items"), you can configure global filter dropdown fields in 'slicers' (array of database field paths).
+      If the user wants custom calculations (e.g. "case age in days"), you can configure calculated fields in 'calculatedFields'. Formula expressions should use standard Excel-like syntax, e.g. TIMESPAN("days", {created_at}, TODAY()).
+      
       Provide a suitable title, description, and config schema.
       Return the output as a valid structured JSON object matching the report schema.`,
       config: {
@@ -211,6 +215,22 @@ router.post('/ai-builder', async (req: TenantRequest, res: Response) => {
                       }
                     },
                     required: ['id', 'type', 'title', 'w', 'properties']
+                  }
+                },
+                slicers: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING }
+                },
+                calculatedFields: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      name: { type: Type.STRING },
+                      formula: { type: Type.STRING }
+                    },
+                    required: ['id', 'name', 'formula']
                   }
                 }
               },

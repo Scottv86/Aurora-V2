@@ -44,12 +44,13 @@ const PATH_MAP: Record<string, string> = {
   'api-management': 'API Management',
   'financial-management': 'Financial Management',
   'global-lists': 'Global Lists',
-  'records-management': 'Records Management'
+  'records-management': 'Records Management',
+  queues: 'Queues'
 };
 
 export const Breadcrumbs = () => {
   const location = useLocation();
-  const { modules, breadcrumbOverrides } = usePlatform();
+  const { modules, breadcrumbOverrides, menuConfig } = usePlatform();
   
   const pathnames = location.pathname.split('/').filter(x => x);
   
@@ -61,14 +62,40 @@ export const Breadcrumbs = () => {
     // 2. Check static PATH_MAP mapping next
     if (PATH_MAP[segment]) return PATH_MAP[segment];
 
-    // 3. Check modules if it's a module ID (these are loaded globally)
+    // 3. Check modules or queues
     if (
       pathnames[index - 1] === 'page' ||
       pathnames[index - 1] === 'pages' ||
       pathnames[index - 1] === 'modules' || 
       pathnames[index - 1] === 'builder' || 
-      pathnames[index - 1] === 'sub'
+      pathnames[index - 1] === 'sub' ||
+      pathnames[index - 1] === 'queues'
     ) {
+      // Check if it's a queue view (via query parameter or path segment)
+      const searchParams = new URLSearchParams(location.search);
+      const queueId = segment.startsWith('queue_') 
+        ? segment 
+        : (searchParams.get('queueId') || searchParams.get('queue'));
+
+      if (queueId && menuConfig) {
+        let foundQueueLabel = '';
+        const searchQueue = (items: any[]) => {
+          for (const item of items) {
+            if (item.id === queueId) {
+              foundQueueLabel = item.label;
+              return;
+            }
+            if (item.children) {
+              searchQueue(item.children);
+            }
+          }
+        };
+        for (const sec of menuConfig.sections || []) {
+          searchQueue(sec.items || []);
+        }
+        if (foundQueueLabel) return foundQueueLabel;
+      }
+
       const mod = modules.find(m => m.id === segment);
       if (mod) return mod.name;
     }

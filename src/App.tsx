@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 // Contexts
@@ -85,6 +85,18 @@ import { ReportManagementSettings } from './pages/Settings/PlatformModules/Repor
 const NavigateWithSearch = ({ to, replace }: { to: string; replace?: boolean }) => {
   const location = useLocation();
   return <Navigate to={{ pathname: to, search: location.search }} replace={replace} />;
+};
+
+const NavigateWithParams = ({ to, replace }: { to: string; replace?: boolean }) => {
+  const params = useParams();
+  const location = useLocation();
+  let targetPath = to;
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      targetPath = targetPath.replace(`:${key}`, value);
+    }
+  });
+  return <Navigate to={{ pathname: targetPath, search: location.search }} replace={replace} />;
 };
 
 const SettingsLayout = () => {
@@ -243,6 +255,7 @@ const App = () => {
                    <Route path="workforce-management/teams/:id" element={<TeamDetailView />} />
                    <Route path="workforce-management/positions/:id" element={<PositionDetailView />} />
                    <Route path="integration-management" element={<ConnectorsPage />} />
+                   <Route path="integration-management/:id" element={<ConnectorsPage />} />
                    <Route path="sites" element={<SitesPage />} />
                    <Route path="automation-management" element={<AutomationsPage />} />
                    <Route path="document-generation" element={<DocumentAutomation />} />
@@ -267,16 +280,16 @@ const App = () => {
                  <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                  <Route path="migration" element={<ComingSoon title="Migration" description="Data import, export, and migration utilities for moving data between systems." />} />
                  <Route path="integrations" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
-                 <Route path="integrations/:id" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
+                 <Route path="integrations/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/integration-management/:id" replace />} />
                  {/* Legacy redirects */}
                  <Route path="connectors" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
-                 <Route path="connectors/:id" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
+                 <Route path="connectors/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/integration-management/:id" replace />} />
                  
                  {/* Workforce Management (Integrated under Settings) */}
                  <Route path="workforce" element={<Navigate to="/workspace/settings/platform-modules/workforce-management" replace />} />
-                 <Route path="workforce/member/:id" element={<Navigate to="/workspace/settings/platform-modules/workforce-management/member/:id" replace />} />
-                 <Route path="workforce/teams/:id" element={<Navigate to="/workspace/settings/platform-modules/workforce-management/teams/:id" replace />} />
-                 <Route path="workforce/positions/:id" element={<Navigate to="/workspace/settings/platform-modules/workforce-management/positions/:id" replace />} />
+                 <Route path="workforce/member/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/workforce-management/member/:id" replace />} />
+                 <Route path="workforce/teams/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/workforce-management/teams/:id" replace />} />
+                 <Route path="workforce/positions/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/workforce-management/positions/:id" replace />} />
               </Route>
               
               {/* External / Public */}

@@ -279,7 +279,7 @@ export const ConnectorsPage = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    onClick={() => navigate(`/workspace/settings/integrations/${connector.id}`)}
+                    onClick={() => navigate(`/workspace/settings/platform-modules/integration-management/${connector.id}`)}
                     className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -353,7 +353,7 @@ export const ConnectorsPage = () => {
                   <Button 
                     variant="secondary" 
                     size="sm"
-                    onClick={() => navigate('/workspace/settings/integrations')}
+                    onClick={() => navigate('/workspace/settings/platform-modules/integration-management')}
                     className="gap-2 font-bold"
                   >
                     <ArrowLeft size={16} /> Back to Integrations
@@ -419,7 +419,7 @@ export const ConnectorsPage = () => {
         activeConnectors={activeConnectors}
         registry={registry}
         onSelect={(conn) => {
-          navigate(`/workspace/settings/integrations/${conn.connectorId}`);
+          navigate(`/workspace/settings/platform-modules/integration-management/${conn.connectorId}`);
           setIsModalOpen(false);
         }}
         onActivate={handleActivateConnector}
