@@ -92,14 +92,184 @@ export const WorkforcePage = () => {
   const action = getPrimaryAction();
   const filterOptions = getFilterOptions();
 
+  if (isSettingsMode) {
+    return (
+      <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
+        <div className="flex flex-col w-full">
+          <PageHeader 
+            title=""
+            description=""
+            actions={
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                    className={cn(
+                      "flex h-9 items-center gap-2 px-4 rounded-xl border transition-all active:scale-95 shadow-sm text-[10px] font-bold uppercase tracking-widest",
+                      activeFilter !== 'all' 
+                        ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10" 
+                        : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md"
+                    )}
+                  >
+                    <Filter size={14} /> 
+                    {activeFilter === 'all' ? 'Filter' : filterOptions.find(o => o.id === activeFilter)?.label || 'Filtered'}
+                  </button>
+
+                  {isFilterMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsFilterMenuOpen(false)} 
+                      />
+                      <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:backdrop-blur-xl">
+                        <div className="mb-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+                          Filter by Status & Type
+                        </div>
+                        {filterOptions.map(option => (
+                          <button
+                            key={option.id}
+                            onClick={() => {
+                              setActiveFilter(option.id);
+                              setIsFilterMenuOpen(false);
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-bold transition-colors",
+                              activeFilter === option.id
+                                ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10"
+                                : "text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            {option.label}
+                            {activeFilter === option.id && <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {action && (
+                  <Button 
+                    variant="primary" 
+                    size="sm"
+                    className="gap-2 shadow-lg shadow-blue-500/20 px-6 font-bold h-9"
+                    onClick={action.onClick}
+                  >
+                    <action.icon size={16} /> {action.label}
+                  </Button>
+                )}
+              </div>
+            }
+            tabs={
+              <Tabs 
+                tabs={tabs} 
+                activeTab={activeTab} 
+                onChange={(id) => { setActiveTab(id); setActiveFilter('all'); }} 
+                className="border-none"
+                firstTabPadding={false}
+              />
+            }
+          />
+
+          <div>
+            {activeTab === 'people' && (
+              <PeopleCenter 
+                mode="people"
+                searchQuery={searchQuery} 
+                onSearchChange={setSearchQuery}
+                activeFilter={activeFilter} 
+                onPrimaryAction={() => {
+                  setOnboardingType('human');
+                  setIsOnboardingOpen(true);
+                }}
+              />
+            )}
+            {activeTab === 'agents' && (
+              <PeopleCenter 
+                mode="agents"
+                searchQuery={searchQuery} 
+                onSearchChange={setSearchQuery}
+                activeFilter={activeFilter} 
+                onPrimaryAction={() => {
+                  setOnboardingType('agent');
+                  setIsOnboardingOpen(true);
+                }}
+              />
+            )}
+            {activeTab === 'teams' && (
+              <TeamHub 
+                onCreateTeam={() => setIsTeamModalOpen(true)} 
+                searchQuery={searchQuery} 
+                onSearchChange={setSearchQuery}
+                activeFilter={activeFilter}
+              />
+            )}
+            {activeTab === 'positions' && (
+              <OrgDesign 
+                isModalOpen={isPositionModalOpen} 
+                onCloseModal={() => setIsPositionModalOpen(false)} 
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                activeFilter={activeFilter}
+                onAddPosition={() => setIsPositionModalOpen(true)}
+              />
+            )}
+            {activeTab === 'groups' && (
+              <SecurityGroups 
+                isModalOpen={isGroupModalOpen} 
+                onCloseModal={() => setIsGroupModalOpen(false)} 
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                activeFilter={activeFilter}
+                onAddGroup={() => setIsGroupModalOpen(true)}
+              />
+            )}
+            {activeTab === 'visualizer' && <OrgVisualizer />}
+            {activeTab === 'audit' && (
+              <ActivityLog 
+                refreshTrigger={refreshTrigger} 
+                searchQuery={searchQuery} 
+                onSearchChange={setSearchQuery}
+                activeFilter={activeFilter}
+              />
+            )}
+          </div>
+          
+          <OnboardingWizard 
+            isOpen={isOnboardingOpen}
+            onClose={() => setIsOnboardingOpen(false)}
+            defaultType={onboardingType}
+          />
+          
+          <CreateTeamModal 
+            isOpen={isTeamModalOpen}
+            onClose={() => setIsTeamModalOpen(false)}
+          />
+        </div>
+      </LicenseGate>
+    );
+  }
+
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className={cn("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10")}>
-        <PageHeader 
-        title={isSettingsMode ? "" : "Workforce"}
-        description={isSettingsMode ? "" : "Manage your team of people and AI agents in one place. Organize teams, define positions, and control access permissions."}
-        actions={
+      <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
+        
+        {/* Header Panel */}
+        <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
           <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Users size={24} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-zinc-950 dark:text-white">Workforce</h1>
+              <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
+                Manage your team of people and AI agents in one place. Organize teams, define positions, and control access permissions.
+              </p>
+            </div>
+          </div>
+
+          {/* Toolbar Controls */}
+          <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
             <div className="relative">
               <button 
                 onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
@@ -107,7 +277,7 @@ export const WorkforcePage = () => {
                   "flex h-9 items-center gap-2 px-4 rounded-xl border transition-all active:scale-95 shadow-sm text-[10px] font-bold uppercase tracking-widest",
                   activeFilter !== 'all' 
                     ? "border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10" 
-                    : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md"
+                    : "border-zinc-200 bg-white/50 dark:bg-zinc-900/30 text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800/50 dark:backdrop-blur-md"
                 )}
               >
                 <Filter size={14} /> 
@@ -151,15 +321,17 @@ export const WorkforcePage = () => {
               <Button 
                 variant="primary" 
                 size="sm"
-                className="gap-2 shadow-lg shadow-blue-500/20 px-6 font-bold h-9"
+                className="gap-2 shadow-lg shadow-blue-500/20 px-6 font-bold h-9 shrink-0"
                 onClick={action.onClick}
               >
                 <action.icon size={16} /> {action.label}
               </Button>
             )}
           </div>
-        }
-        tabs={
+        </div>
+
+        {/* Tabs Sub-Header */}
+        <div className="px-6 lg:px-12 py-2 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 z-20">
           <Tabs 
             tabs={tabs} 
             activeTab={activeTab} 
@@ -167,84 +339,83 @@ export const WorkforcePage = () => {
             className="border-none"
             firstTabPadding={false}
           />
-        }
-      />
+        </div>
 
+        {/* Content */}
+        <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
+          {activeTab === 'people' && (
+            <PeopleCenter 
+              mode="people"
+              searchQuery={searchQuery} 
+              onSearchChange={setSearchQuery}
+              activeFilter={activeFilter} 
+              onPrimaryAction={() => {
+                setOnboardingType('human');
+                setIsOnboardingOpen(true);
+              }}
+            />
+          )}
+          {activeTab === 'agents' && (
+            <PeopleCenter 
+              mode="agents"
+              searchQuery={searchQuery} 
+              onSearchChange={setSearchQuery}
+              activeFilter={activeFilter} 
+              onPrimaryAction={() => {
+                setOnboardingType('agent');
+                setIsOnboardingOpen(true);
+              }}
+            />
+          )}
+          {activeTab === 'teams' && (
+            <TeamHub 
+              onCreateTeam={() => setIsTeamModalOpen(true)} 
+              searchQuery={searchQuery} 
+              onSearchChange={setSearchQuery}
+              activeFilter={activeFilter}
+            />
+          )}
+          {activeTab === 'positions' && (
+            <OrgDesign 
+              isModalOpen={isPositionModalOpen} 
+              onCloseModal={() => setIsPositionModalOpen(false)} 
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              activeFilter={activeFilter}
+              onAddPosition={() => setIsPositionModalOpen(true)}
+            />
+          )}
+          {activeTab === 'groups' && (
+            <SecurityGroups 
+              isModalOpen={isGroupModalOpen} 
+              onCloseModal={() => setIsGroupModalOpen(false)} 
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              activeFilter={activeFilter}
+              onAddGroup={() => setIsGroupModalOpen(true)}
+            />
+          )}
+          {activeTab === 'visualizer' && <OrgVisualizer />}
+          {activeTab === 'audit' && (
+            <ActivityLog 
+              refreshTrigger={refreshTrigger} 
+              searchQuery={searchQuery} 
+              onSearchChange={setSearchQuery}
+              activeFilter={activeFilter}
+            />
+          )}
+        </div>
 
-      {/* Content */}
-      <div>
-              {activeTab === 'people' && (
-                <PeopleCenter 
-                  mode="people"
-                  searchQuery={searchQuery} 
-                  onSearchChange={setSearchQuery}
-                  activeFilter={activeFilter} 
-                  onPrimaryAction={() => {
-                    setOnboardingType('human');
-                    setIsOnboardingOpen(true);
-                  }}
-                />
-              )}
-              {activeTab === 'agents' && (
-                <PeopleCenter 
-                  mode="agents"
-                  searchQuery={searchQuery} 
-                  onSearchChange={setSearchQuery}
-                  activeFilter={activeFilter} 
-                  onPrimaryAction={() => {
-                    setOnboardingType('agent');
-                    setIsOnboardingOpen(true);
-                  }}
-                />
-              )}
-              {activeTab === 'teams' && (
-                <TeamHub 
-                  onCreateTeam={() => setIsTeamModalOpen(true)} 
-                  searchQuery={searchQuery} 
-                  onSearchChange={setSearchQuery}
-                  activeFilter={activeFilter}
-                />
-              )}
-              {activeTab === 'positions' && (
-                <OrgDesign 
-                  isModalOpen={isPositionModalOpen} 
-                  onCloseModal={() => setIsPositionModalOpen(false)} 
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  activeFilter={activeFilter}
-                  onAddPosition={() => setIsPositionModalOpen(true)}
-                />
-              )}
-              {activeTab === 'groups' && (
-                <SecurityGroups 
-                  isModalOpen={isGroupModalOpen} 
-                  onCloseModal={() => setIsGroupModalOpen(false)} 
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  activeFilter={activeFilter}
-                  onAddGroup={() => setIsGroupModalOpen(true)}
-                />
-              )}
-              {activeTab === 'visualizer' && <OrgVisualizer />}
-              {activeTab === 'audit' && (
-                <ActivityLog 
-                  refreshTrigger={refreshTrigger} 
-                  searchQuery={searchQuery} 
-                  onSearchChange={setSearchQuery}
-                  activeFilter={activeFilter}
-                />
-              )}
-            </div>
-          <OnboardingWizard 
-            isOpen={isOnboardingOpen}
-            onClose={() => setIsOnboardingOpen(false)}
-            defaultType={onboardingType}
-          />
-          
-          <CreateTeamModal 
-            isOpen={isTeamModalOpen}
-            onClose={() => setIsTeamModalOpen(false)}
-          />
+        <OnboardingWizard 
+          isOpen={isOnboardingOpen}
+          onClose={() => setIsOnboardingOpen(false)}
+          defaultType={onboardingType}
+        />
+        
+        <CreateTeamModal 
+          isOpen={isTeamModalOpen}
+          onClose={() => setIsTeamModalOpen(false)}
+        />
       </div>
     </LicenseGate>
   );

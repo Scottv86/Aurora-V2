@@ -16,7 +16,8 @@ import {
   Plus, 
   ArrowLeft, 
   ArrowRightLeft,
-  FileText
+  FileText,
+  Plug
 } from 'lucide-react';
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -37,6 +38,7 @@ interface Connector {
   category: string;
   edgeFunctionUrl: string;
   ioSchema: any;
+  description?: string;
 }
 
 interface TenantConnector {
@@ -228,17 +230,13 @@ export const ConnectorsPage = () => {
     );
   }
 
-  return (
-    <>
-      <div className={clsx("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10 relative")}>
-        {/* Background Glows */}
-        {!isSettingsMode && (
-          <>
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-          </>
-        )}
+  const basePath = isSettingsMode 
+    ? '/workspace/settings/platform-modules/integration-management'
+    : '/workspace/platform/integration-management';
 
+  if (isSettingsMode) {
+    return (
+      <div className="flex flex-col w-full">
         {!selectedConnectorId ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -246,8 +244,8 @@ export const ConnectorsPage = () => {
             className="relative z-10"
           >
             <PageHeader 
-              title={isSettingsMode ? "" : "Integrations"}
-              description={isSettingsMode ? "" : "Nexus API Vending Machine. Activate business capabilities and snap them into your modules."}
+              title=""
+              description=""
               actions={
                 <div className="flex items-center gap-4">
                   <div className="relative w-64">
@@ -260,58 +258,41 @@ export const ConnectorsPage = () => {
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
-                  <Button 
+                  <button 
                     onClick={() => setIsModalOpen(true)}
-                    className="gap-2 font-bold shadow-indigo-500/20"
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-xl shadow-indigo-500/10"
                   >
-                    <Plus size={16} /> Generate Integration
-                  </Button>
+                    <Plus className="w-4 h-4" /> Add Integration
+                  </button>
                 </div>
               }
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {filteredRegistry.map((connector, i) => {
-                const isActive = activeConnectors.find(ac => ac.connectorId === connector.id)?.isActive;
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredRegistry.map(conn => {
+                const isActive = activeConnectors.some(ac => ac.connectorId === conn.id);
+                const activeIconName = conn.icon || 'Plug';
+
                 return (
                   <motion.div
-                    key={connector.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    onClick={() => navigate(`/workspace/settings/platform-modules/integration-management/${connector.id}`)}
-                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
+                    key={conn.id}
+                    whileHover={{ y: -4 }}
+                    onClick={() => navigate(`${basePath}/${conn.id}`)}
+                    className="group border border-zinc-200 dark:border-white/5 bg-white dark:bg-white/[0.02] backdrop-blur-xl rounded-[2rem] p-6 hover:shadow-2xl hover:border-indigo-500/20 transition-all cursor-pointer flex flex-col justify-between h-48"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    
-                    <div className="relative z-10">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className={clsx(
-                          "p-3 rounded-xl transition-transform group-hover:scale-110",
-                          isActive ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
-                        )}>
-                          <DynamicIcon name={connector.icon} size={24} />
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-white/5 text-zinc-700 dark:text-zinc-300 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-500/10 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all shadow-sm">
+                          <DynamicIcon name={activeIconName} size={24} />
                         </div>
                         {isActive && (
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase tracking-wider border border-emerald-500/20">
-                            <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-wider rounded-xl border border-emerald-500/20">
                             Active
-                          </div>
+                          </span>
                         )}
                       </div>
-                      
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                          {connector.name}
-                        </h3>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest">
-                          {connector.category}
-                        </p>
-                      </div>
-
-                      <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center text-sm font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-4 group-hover:translate-x-0 transform duration-300">
-                        Configure Integration <ArrowRight size={16} className="ml-2" />
-                      </div>
+                      <h3 className="text-sm font-black text-zinc-800 dark:text-white group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">{conn.name}</h3>
+                      <p className="text-zinc-400 dark:text-zinc-500 text-[10.5px] mt-1.5 line-clamp-2 leading-relaxed">{conn.description}</p>
                     </div>
                   </motion.div>
                 );
@@ -353,7 +334,7 @@ export const ConnectorsPage = () => {
                   <Button 
                     variant="secondary" 
                     size="sm"
-                    onClick={() => navigate('/workspace/settings/platform-modules/integration-management')}
+                    onClick={() => navigate(basePath)}
                     className="gap-2 font-bold"
                   >
                     <ArrowLeft size={16} /> Back to Integrations
@@ -412,6 +393,183 @@ export const ConnectorsPage = () => {
           </motion.div>
         )}
       </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+
+        <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Plug size={24} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-zinc-950 dark:text-white">
+                {!selectedConnectorId ? "Integrations" : (selectedConnector?.name || 'Integration Details')}
+              </h1>
+              <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
+                {!selectedConnectorId 
+                  ? "Nexus API Vending Machine. Activate business capabilities and snap them into your modules."
+                  : (selectedConnector?.category ? `${selectedConnector.category} • Enterprise Vaulted` : 'Configure your Nexus integration settings.')}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+            {!selectedConnectorId ? (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+                  <input 
+                    type="text"
+                    placeholder="Search Nexus Registry..."
+                    className="bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:border-indigo-500 transition-all text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 w-60 shadow-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={() => setIsModalOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/10 shrink-0"
+                >
+                  <Plus className="w-4 h-4" /> Add Integration
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={toggleActivation}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md shrink-0",
+                    selectedTenantConnector?.isActive
+                      ? "bg-white/50 dark:bg-zinc-900/30 text-zinc-650 dark:text-zinc-300 hover:bg-red-500/10 hover:text-red-400 border border-zinc-200/50 dark:border-zinc-800/50"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/10"
+                  )}
+                >
+                  {selectedTenantConnector?.isActive ? (
+                    <>
+                      <AlertCircle className="w-4 h-4" />
+                      Deactivate
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      Activate Integration
+                    </>
+                  )}
+                </button>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={() => navigate(basePath)}
+                  className="gap-1.5 font-bold text-xs h-9 shrink-0"
+                >
+                  <ArrowLeft size={14} /> Back to Integrations
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
+          {!selectedConnectorId ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredRegistry.map(conn => {
+                  const isActive = activeConnectors.some(ac => ac.connectorId === conn.id);
+                  const activeIconName = conn.icon || 'Plug';
+
+                  return (
+                    <motion.div
+                      key={conn.id}
+                      whileHover={{ y: -4 }}
+                      onClick={() => navigate(`${basePath}/${conn.id}`)}
+                      className="group border border-zinc-200/50 dark:border-white/5 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl rounded-[2rem] p-6 hover:shadow-xl hover:border-indigo-500/20 transition-all cursor-pointer flex flex-col justify-between h-48"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-white/5 text-zinc-700 dark:text-zinc-300 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-500/10 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all shadow-sm">
+                            <DynamicIcon name={activeIconName} size={24} />
+                          </div>
+                          {isActive && (
+                            <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-wider rounded-xl border border-emerald-500/20">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-black text-zinc-800 dark:text-white group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors">{conn.name}</h3>
+                        <p className="text-zinc-400 dark:text-zinc-500 text-[10.5px] mt-1.5 line-clamp-2 leading-relaxed">{conn.description}</p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex-1 flex flex-col animate-in fade-in duration-200"
+            >
+              <div className="flex-1 flex flex-col bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-sm">
+                <div className="px-8 border-b border-zinc-200/40 dark:border-zinc-800/40 flex gap-8 shrink-0 bg-zinc-50/10 dark:bg-zinc-900/5">
+                  {[
+                    { id: 'setup', label: 'Setup', icon: Settings2 },
+                    { id: 'mapping', label: 'Data Mapping', icon: ArrowRightLeft },
+                    { id: 'usage', label: 'Usage & Placements', icon: Layout },
+                    { id: 'test', label: 'Test Plug', icon: Play },
+                    { id: 'logs', label: 'Logs', icon: FileText },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={clsx(
+                        "flex items-center gap-2 py-4 text-xs font-black uppercase tracking-widest border-b-2 transition-all",
+                        activeTab === tab.id 
+                          ? "border-indigo-500 text-indigo-600 dark:text-indigo-400" 
+                          : "border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300"
+                      )}
+                    >
+                      <tab.icon className="w-3 h-3" />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-8">
+                  {activeTab === 'setup' && selectedConnector && (
+                    <ConnectorSetup 
+                      connector={selectedConnector} 
+                      activeConnector={selectedTenantConnector}
+                      onRefresh={fetchData}
+                    />
+                  )}
+                  {activeTab === 'usage' && (
+                    <ConnectorUsage usage={usage} />
+                  )}
+                  {activeTab === 'test' && selectedConnector && (
+                    <ConnectorTest connector={selectedConnector} />
+                  )}
+                  {activeTab === 'mapping' && selectedConnector && (
+                    <ConnectorMapping connector={selectedConnector} />
+                  )}
+                  {activeTab === 'logs' && selectedConnector && (
+                    <ConnectorLogs connector={selectedConnector} />
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </div>
 
       <NexusSelectionModal 
         isOpen={isModalOpen}
@@ -419,7 +577,7 @@ export const ConnectorsPage = () => {
         activeConnectors={activeConnectors}
         registry={registry}
         onSelect={(conn) => {
-          navigate(`/workspace/settings/platform-modules/integration-management/${conn.connectorId}`);
+          navigate(`${basePath}/${conn.connectorId}`);
           setIsModalOpen(false);
         }}
         onActivate={handleActivateConnector}

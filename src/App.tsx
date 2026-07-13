@@ -79,6 +79,7 @@ import { QueryExplorer } from './pages/Settings/QueryExplorer';
 import { RecordsManagement } from './pages/Platform/RecordsManagement';
 import { RecordsManagementSettings } from './pages/Settings/PlatformModules/RecordsManagementSettings';
 import { ReportManagementSettings } from './pages/Settings/PlatformModules/ReportManagementSettings';
+import { slugify } from './lib/utils';
 
 
 
@@ -124,12 +125,30 @@ const WorkspaceLayout = () => {
 };
 
 const DashboardRouteWrapper = () => {
-  const { modules, isLoading } = usePlatform();
+  const { modules, isLoading, tenant } = usePlatform();
   if (isLoading) return <PageLoader label="Loading Workspace..." />;
+  
+  // 1. Check if a default home page is explicitly configured in tenant workspaceSettings
+  const homePageId = tenant?.workspaceSettings?.homePageId;
+  if (homePageId) {
+    const homePage = modules.find((m: any) => m.id === homePageId && m.type === 'PAGE');
+    if (homePage) {
+      return <Navigate to={`/workspace/pages/${slugify(homePage.name)}`} replace />;
+    }
+  }
+
+  // 2. Fall back to existing dashboard lookup logic
   const dashboardPage = modules.find((m: any) => m.type === 'PAGE' && (m.name.toLowerCase() === 'dashboard' || m.config?.widgets?.some((w: any) => w.type === 'stats-grid')));
   if (dashboardPage) {
-    return <Navigate to={`/workspace/pages/${dashboardPage.id}`} replace />;
+    return <Navigate to={`/workspace/pages/${slugify(dashboardPage.name)}`} replace />;
   }
+
+  // 3. Fall back to the first available PAGE module if dashboard doesn't exist but other pages do
+  const firstPage = modules.find((m: any) => m.type === 'PAGE');
+  if (firstPage) {
+    return <Navigate to={`/workspace/pages/${slugify(firstPage.name)}`} replace />;
+  }
+
   return <DashboardPage />;
 };
 
@@ -138,7 +157,7 @@ const MyWorkRouteWrapper = () => {
   if (isLoading) return <PageLoader label="Loading Queue..." />;
   const myWorkPage = modules.find((m: any) => m.type === 'PAGE' && (m.name.toLowerCase() === 'my work' || m.config?.widgets?.some((w: any) => w.type === 'work-queue')));
   if (myWorkPage) {
-    return <Navigate to={`/workspace/pages/${myWorkPage.id}`} replace />;
+    return <Navigate to={`/workspace/pages/${slugify(myWorkPage.name)}`} replace />;
   }
   return <WorkQueue />;
 };
@@ -196,7 +215,8 @@ const App = () => {
                 <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
                 <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
                 <Route path="analytics" element={<Analytics />} />
-                <Route path="platform/intake" element={<TriageInboxPage />} />
+                <Route path="platform/work-distribution" element={<TriageInboxPage />} />
+                <Route path="platform/intake" element={<Navigate to="/workspace/platform/work-distribution" replace />} />
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
                 <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
                 <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />

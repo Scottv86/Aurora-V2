@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
-import { cn } from '../../lib/utils';
+import { cn, slugify } from '../../lib/utils';
 import { SidebarItem } from '../Navigation/SidebarItem';
 import { Navbar } from '../Navigation/Navbar';
 import { Login } from '../Auth/Login';
@@ -233,7 +233,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     isAppLauncherOpen,
     isNotificationsOpen,
     tenant,
-    isDeveloper
+    isDeveloper,
+    modules
   } = usePlatform();
   
   const location = useLocation();
@@ -313,6 +314,20 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       );
     }
     
+    // Check if we are viewing the work-distribution page
+    // Path: /workspace/platform/work-distribution
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'platform' && pathnames[2] === 'work-distribution') {
+      return (
+        <button
+          onClick={() => navigate('/workspace/settings/platform-modules/work-distribution')}
+          className="flex items-center gap-1.5 px-3 py-1 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm h-7"
+        >
+          <LucideIcons.Edit3 size={11} className="text-zinc-500" />
+          Configure Module
+        </button>
+      );
+    }
+    
     return null;
   };
 
@@ -367,8 +382,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const isAdminPath = location.pathname.startsWith('/admin');
   const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
+  const searchParams = new URLSearchParams(location.search);
+  const isReportBuilder = (location.pathname.includes('/report-management') || location.pathname.includes('/reports')) && 
+                          searchParams.get('mode') === 'builder';
+
   const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
-                          location.pathname.includes('/workspace/settings/ai-builder');
+                          location.pathname.includes('/workspace/settings/ai-builder') ||
+                          isReportBuilder;
 
   const rawLayoutStyle = tenant?.branding?.layout_style || 'sidebar';
   const layoutStyle = (isSettingsMode || isAdminPath) ? 'sidebar' : rawLayoutStyle;
@@ -396,8 +416,74 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         : (isSidebarOpen ? "ml-64" : "ml-16")));
 
   const resolvedConfig = useMemo(() => {
-    return menuConfig;
-  }, [menuConfig]);
+    if (!menuConfig || !modules) return menuConfig;
+
+    const processItems = (items: MenuItem[]): MenuItem[] => {
+      return items.map(item => {
+        let updatedItem = { ...item };
+        
+        // 1. Rewrite page URLs to use slugs
+        if (item.to?.startsWith('/workspace/pages/')) {
+          const pathParts = item.to.split('/');
+          const pageId = pathParts[pathParts.length - 1];
+          const matchedPage = modules.find(
+            (m: any) => m.type === 'PAGE' && (m.id === pageId || slugify(m.name) === pageId || m.name.toLowerCase() === pageId.toLowerCase())
+          );
+          if (matchedPage) {
+            updatedItem.to = `/workspace/pages/${slugify(matchedPage.name)}`;
+          }
+        }
+        
+        // 2. Rewrite module URLs to use slugs
+        if (item.to?.startsWith('/workspace/modules/')) {
+          try {
+            const dummyBase = 'http://localhost';
+            const urlObj = new URL(item.to, dummyBase);
+            const pathParts = urlObj.pathname.split('/');
+            const moduleId = pathParts[pathParts.length - 1];
+            const matchedMod = modules.find(
+              (m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name.toLowerCase() === moduleId.toLowerCase())
+            );
+            if (matchedMod) {
+              const moduleSlug = slugify(matchedMod.name);
+              const queueParam = urlObj.searchParams.get('queueId');
+              if (queueParam) {
+                updatedItem.to = `/workspace/modules/${moduleSlug}?queueId=${slugify(item.label)}`;
+              } else {
+                updatedItem.to = `/workspace/modules/${moduleSlug}`;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse menu item URL", e);
+          }
+        }
+
+        // 3. Rewrite queue URLs to use slugs
+        if (item.to?.startsWith('/workspace/queues/')) {
+          updatedItem.to = `/workspace/queues/${slugify(item.label)}`;
+        }
+
+        // 4. Rewrite legacy platform/intake to work-distribution
+        if (item.to === '/workspace/platform/intake') {
+          updatedItem.to = '/workspace/platform/work-distribution';
+        }
+
+        if (item.children) {
+          updatedItem.children = processItems(item.children);
+        }
+        
+        return updatedItem;
+      });
+    };
+
+    return {
+      ...menuConfig,
+      sections: menuConfig.sections.map(section => ({
+        ...section,
+        items: processItems(section.items || [])
+      }))
+    };
+  }, [menuConfig, modules]);
 
   if (authLoading || platformLoading) {
     return <PageLoader label="Initializing Aurora" />;

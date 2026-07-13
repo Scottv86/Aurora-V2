@@ -30,8 +30,8 @@ export const PageHeader = ({
         {(title || Icon) && (
           <div className="flex items-start gap-4">
             {Icon && (
-              <div className={cn("p-3 rounded-2xl shadow-lg", iconClassName)}>
-                <Icon size={24} className="text-white" />
+              <div className={cn("p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0", iconClassName)}>
+                <Icon size={24} />
               </div>
             )}
             {title && (

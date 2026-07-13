@@ -7,12 +7,11 @@ import {
   Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
   AlertCircle, Zap, Search, GitFork, 
   HelpCircle, XCircle, User, Mail, Phone, FileText, Check, 
-  RotateCcw, Info, ExternalLink, Layers, Copy, Play, Pause, ShieldAlert, Loader2
+  RotateCcw, Info, ExternalLink, Layers, Copy, Play, Pause, ShieldAlert, Loader2, Inbox
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FieldInput } from '../../components/FieldInput';
-import { PageHeader } from '../../components/UI/PageHeader';
 
 // Helper: Reconstruct dynamic form fields by filtering standard DB fields
 const getRecordFields = (rec: any) => {
@@ -1492,16 +1491,28 @@ export const TriageInboxPage = () => {
   };
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative overflow-y-auto custom-scrollbar flex-1 min-h-0">
+    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
       {/* Background Glows */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
 
-      <div className="relative z-10 flex flex-col w-full flex-1 min-h-0">
-        <PageHeader 
-          title="Work Distribution"
-          description="Review external client request submissions, run pre-assessment staging, and dispatch work pathways."
-          actions={(() => {
+      {/* Header Panel */}
+      <div className="px-6 lg:px-12 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <Inbox size={24} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">Work Distribution</h1>
+            <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
+              Review external client request submissions, run pre-assessment staging, and dispatch work pathways.
+            </p>
+          </div>
+        </div>
+
+        {/* Toolbar Controls / Actions / Search */}
+        <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+          {(() => {
             const scheduledRule = triageRules.find(r => r.isActive && r.triggers?.some((t: any) => t.type === 'CRON'));
             let cronExpr = scheduledRule?.triggers?.find((t: any) => t.type === 'CRON')?.cronExpression;
 
@@ -1581,7 +1592,12 @@ export const TriageInboxPage = () => {
               </div>
             );
           })()}
-        />
+        </div>
+      </div>
+
+      {/* Main Grid View */}
+      <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
+        <div className="relative z-10 flex flex-col w-full flex-1 min-h-0">
 
       {modulesLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
@@ -2672,6 +2688,7 @@ export const TriageInboxPage = () => {
       
       {/* Visual Work Dispatch Modal */}
       {isRouting && renderRoutingModal()}
+      </div>
       </div>
     </div>
   );

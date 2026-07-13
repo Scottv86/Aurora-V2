@@ -18,7 +18,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { NavigationArchitect } from '../../components/Settings/NavigationArchitect';
 import { systemDefaultMenuConfig } from '../../config/menuDefaults';
-import { cn, flattenFields } from '../../lib/utils';
+import { cn, flattenFields, slugify } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 
@@ -410,6 +410,29 @@ export const NavigationSettingsPage = () => {
       rules: validRules
     };
 
+    if (!tenant?.id) return;
+
+    // Enforce label uniqueness (prevent duplicate slugs for queues)
+    const newSlug = slugify(queueLabel);
+    const getAllQueues = (items: any[]): any[] => {
+      const q: any[] = [];
+      items.forEach(it => {
+        if (it.isUnifiedQueue || it.to?.startsWith('/workspace/queues/')) {
+          q.push(it);
+        }
+        if (it.children) {
+          q.push(...getAllQueues(it.children));
+        }
+      });
+      return q;
+    };
+    const existingQueues = getAllQueues(activeSections.flatMap(s => s.items || []));
+    const isDuplicate = existingQueues.some(q => slugify(q.label) === newSlug);
+    if (isDuplicate) {
+      toast.error(`A queue with the label "${queueLabel}" (slug: "${newSlug}") already exists. Please choose a unique label.`);
+      return;
+    }
+
     const queueId = `queue_${Date.now()}`;
     const newItem: MenuItem = {
       id: queueId,
@@ -420,8 +443,11 @@ export const NavigationSettingsPage = () => {
       moduleIds: queueItemType === 'unified' ? queueModuleIds : undefined,
       isUnifiedQueue: queueItemType === 'unified',
       to: queueItemType === 'single' 
-        ? `/workspace/modules/${queueModuleId}?queueId=${queueId}`
-        : `/workspace/queues/${queueId}`,
+        ? `/workspace/modules/${(() => {
+            const mod = modules.find((m: any) => m.id === queueModuleId);
+            return mod ? slugify(mod.name) : queueModuleId;
+          })()}?queueId=${slugify(queueLabel)}`
+        : `/workspace/queues/${slugify(queueLabel)}`,
       queueConfig: {
         conditions,
         columns: queueItemType === 'unified' ? queueColumns : []
@@ -916,7 +942,7 @@ export const NavigationSettingsPage = () => {
                           id: `module:${page.id}`,
                           label: page.name,
                           iconName: (page as any).iconName || (page as any).icon || 'Layers',
-                          to: `/workspace/pages/${page.id}`,
+                          to: `/workspace/pages/${slugify(page.name)}`,
                           isVisible: true
                         })}
                         className="flex items-center justify-between p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-left transition-colors"

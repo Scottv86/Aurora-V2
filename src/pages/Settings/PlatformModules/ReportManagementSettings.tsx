@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn, flattenFields } from '../../../lib/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createFormulaContext } from '../../../lib/formulaEngine';
+import { VisualSkeleton } from '../../WorkspacePage/WorkspacePageView';
 
 // Types
 export interface ReportWidget {
@@ -202,6 +203,7 @@ interface ReportBuilderCanvasProps {
   handleSlicerChange: (field: string, value: any) => void;
   getUniqueValuesForField: (field: string) => any[];
   handleClearFilters: () => void;
+  sourcesLoading: boolean;
 }
 
 const ReportBuilderCanvas = ({
@@ -218,7 +220,8 @@ const ReportBuilderCanvas = ({
   activeFilters,
   handleSlicerChange,
   getUniqueValuesForField,
-  handleClearFilters
+  handleClearFilters,
+  sourcesLoading
 }: ReportBuilderCanvasProps) => {
   const { width, containerRef, mounted } = useContainerWidth({ measureBeforeMount: true });
   const activeSlicers = currentReport.config.slicers || [];
@@ -324,7 +327,9 @@ const ReportBuilderCanvas = ({
 
                 {/* Widget Chart Content */}
                 <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4">
-                  {aggData.length === 0 ? (
+                  {sourcesLoading ? (
+                    <VisualSkeleton type={widget.type} />
+                  ) : aggData.length === 0 ? (
                     <div className="text-[10px] text-zinc-400 italic flex items-center gap-1.5">
                       <Info size={12} /> Map visual properties to generate charts.
                     </div>
@@ -378,7 +383,7 @@ const ReportBuilderCanvas = ({
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
                             {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
                             {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
-                            <Bar dataKey="value" fill={widget.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="value" fill={widget.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} animationDuration={300} />
                           </ReBarChart>
                         ) : widget.type === 'line' ? (
                           <ReLineChart 
@@ -395,7 +400,7 @@ const ReportBuilderCanvas = ({
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
                             {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
                             {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
-                            <Line type="monotone" dataKey="value" stroke={widget.properties.color || '#6366f1'} strokeWidth={2} />
+                            <Line type="monotone" dataKey="value" stroke={widget.properties.color || '#6366f1'} strokeWidth={2} animationDuration={300} />
                           </ReLineChart>
                         ) : widget.type === 'area' ? (
                           <ReAreaChart 
@@ -412,7 +417,7 @@ const ReportBuilderCanvas = ({
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
                             {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
                             {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
-                            <Area type="monotone" dataKey="value" fill={widget.properties.color || '#6366f1'} stroke={widget.properties.color || '#6366f1'} fillOpacity={0.15} />
+                            <Area type="monotone" dataKey="value" fill={widget.properties.color || '#6366f1'} stroke={widget.properties.color || '#6366f1'} fillOpacity={0.15} animationDuration={300} />
                           </ReAreaChart>
                         ) : (
                           <RePieChart>
@@ -430,6 +435,7 @@ const ReportBuilderCanvas = ({
                                 }
                               }}
                               className="cursor-pointer"
+                              animationDuration={300}
                             >
                               {aggData.map((_: any, index: number) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -453,7 +459,7 @@ const ReportBuilderCanvas = ({
 };
 
 export const ReportManagementSettings = () => {
-  const { tenant, modules } = usePlatform();
+  const { tenant, modules, setBreadcrumbOverride } = usePlatform();
   const { session, user } = useAuth();
 
   const navigate = useNavigate();
@@ -470,6 +476,7 @@ export const ReportManagementSettings = () => {
       setView('LIST');
     }
   }, [location.search]);
+
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'ALL' | 'PUBLISHED' | 'DRAFTS'>('ALL');
@@ -486,6 +493,13 @@ export const ReportManagementSettings = () => {
   const [isPreview, setIsPreview] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
   const [deletingReport, setDeletingReport] = useState<Report | null>(null);
+
+  // Update breadcrumb override when currentReport changes
+  useEffect(() => {
+    if (currentReport) {
+      setBreadcrumbOverride('active-report', currentReport.name);
+    }
+  }, [currentReport, setBreadcrumbOverride]);
 
   // Slicers & Filtering States
   const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
@@ -510,6 +524,7 @@ export const ReportManagementSettings = () => {
   const [teams, setTeams] = useState<any[]>([]);
   const [automations, setAutomations] = useState<any[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
 
 
   // Fetch all reports
@@ -537,43 +552,28 @@ export const ReportManagementSettings = () => {
   // Fetch helper datasets for charting preview
   const fetchDataSources = async () => {
     if (!tenant?.id) return;
+    setSourcesLoading(true);
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
 
-      // 1. Fetch records
-      fetch(`http://localhost:3001/api/data/records`, { headers })
-        .then(res => res.json())
-        .then(data => setRecords(data.records || []))
-        .catch(() => {});
+      const [recsRes, memsRes, teamsRes, autosRes, catalogRes] = await Promise.all([
+        fetch(`http://localhost:3001/api/data/records`, { headers }).then(res => res.json()).catch(() => ({ records: [] as any[] })),
+        fetch(`http://localhost:3001/api/members`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`http://localhost:3001/api/teams`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`http://localhost:3001/api/automations`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`http://localhost:3001/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[])
+      ]);
 
-      // 2. Fetch workforce members
-      fetch(`http://localhost:3001/api/members`, { headers })
-        .then(res => res.json())
-        .then(data => setMembers(data || []))
-        .catch(() => {});
-
-      // 3. Fetch teams
-      fetch(`http://localhost:3001/api/teams`, { headers })
-        .then(res => res.json())
-        .then(data => setTeams(data || []))
-        .catch(() => {});
-
-      // 4. Fetch automations
-      fetch(`http://localhost:3001/api/automations`, { headers })
-        .then(res => res.json())
-        .then(data => setAutomations(data || []))
-        .catch(() => {});
-
-      // 5. Fetch catalog items
-      fetch(`http://localhost:3001/api/pricing-catalog`, { headers })
-        .then(res => res.json())
-        .then(data => setCatalogItems(data || []))
-        .catch(() => {});
-
-
-
-    } catch (err) {}
+      setRecords(recsRes.records || []);
+      setMembers(memsRes || []);
+      setTeams(teamsRes || []);
+      setAutomations(autosRes || []);
+      setCatalogItems(catalogRes || []);
+    } catch (err) {
+    } finally {
+      setSourcesLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -1499,9 +1499,24 @@ export const ReportManagementSettings = () => {
                   </div>
 
                   <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs relative z-20">
-                    <span className="text-[10px] text-zinc-450 dark:text-zinc-500 flex items-center gap-1 font-mono">
-                      <User size={10} /> {report.createdBy}
-                    </span>
+                    {(() => {
+                      const creatorMember = members.find(m => m.email?.toLowerCase() === report.createdBy?.toLowerCase());
+                      const displayName = creatorMember ? creatorMember.name : report.createdBy;
+                      const avatarUrl = creatorMember?.avatarUrl;
+                      
+                      return (
+                        <span className="text-[10px] text-zinc-450 dark:text-zinc-500 flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-zinc-150 dark:bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                            ) : (
+                              <User size={10} className="text-zinc-500" />
+                            )}
+                          </div>
+                          <span className="font-semibold">{displayName}</span>
+                        </span>
+                      );
+                    })()}
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       {report.status === 'Published' && (
                         <button 
@@ -2351,6 +2366,7 @@ export const ReportManagementSettings = () => {
                     handleSlicerChange={handleSlicerChange}
                     getUniqueValuesForField={getUniqueValuesForField}
                     handleClearFilters={() => setActiveFilters({})}
+                    sourcesLoading={sourcesLoading}
                   />
                 )}
               </div>

@@ -4,7 +4,6 @@ import { RecordDetailView } from '../Record/RecordDetailView';
 import { createPortal } from 'react-dom';
 import { Table } from '../../components/UI/Table';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PageHeader } from '../../components/UI/PageHeader';
 import { 
   motion, 
   AnimatePresence 
@@ -13,7 +12,6 @@ import {
   Plus, 
   Trash2,
   Search,
-  Filter,
   X,
   ChevronLeft,
   ChevronRight
@@ -33,7 +31,7 @@ import { FieldInput } from '../../components/FieldInput';
 import { Skeleton } from '../../components/UI/Skeleton';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
-import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify } from '../../lib/utils';
 import { validateRecordRules } from '../../lib/validationEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
@@ -308,19 +306,27 @@ const InlineAssigneeCell = ({
 };
 
 export const ModuleView = () => {
-  const { moduleId } = useParams();
+  const { moduleId: moduleIdRaw } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const queueId = searchParams.get('queueId');
+  const queueIdRaw = searchParams.get('queueId');
   const { session, user } = useAuth();
   const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig } = usePlatform();
+
+  const moduleId = useMemo(() => {
+    if (!moduleIdRaw || !modules) return moduleIdRaw || '';
+    const matchedMod = modules.find(
+      (m: any) => m.type !== 'PAGE' && (slugify(m.name) === moduleIdRaw || m.name.toLowerCase() === moduleIdRaw.toLowerCase())
+    );
+    return matchedMod ? matchedMod.id : moduleIdRaw;
+  }, [moduleIdRaw, modules]);
   
   const activeQueue = useMemo(() => {
-    if (!menuConfig?.sections || !queueId) return null;
+    if (!menuConfig?.sections || !queueIdRaw) return null;
 
     const findItem = (items: any[]): any => {
       for (const item of items) {
-        if (item.id === queueId) return item;
+        if (item.id === queueIdRaw || slugify(item.label) === queueIdRaw || item.label.toLowerCase() === queueIdRaw.toLowerCase()) return item;
         if (item.children) {
           const found = findItem(item.children);
           if (found) return found;
@@ -334,7 +340,11 @@ export const ModuleView = () => {
       if (found) return found;
     }
     return null;
-  }, [menuConfig, queueId]);
+  }, [menuConfig, queueIdRaw]);
+
+  const queueId = useMemo(() => {
+    return activeQueue ? activeQueue.id : queueIdRaw;
+  }, [activeQueue, queueIdRaw]);
 
   useModalStack();
   const [moduleData, setModuleData] = useState<Module | null>(null);
@@ -1050,7 +1060,7 @@ export const ModuleView = () => {
     if (detailViewMode === 'modal') {
       setActiveDetailRecordId(recordId);
     } else {
-      navigate(`/workspace/modules/${moduleId}/records/${recordId}`);
+      navigate(`/workspace/modules/${moduleIdRaw}/records/${recordId}`);
     }
   };
 
@@ -3604,24 +3614,7 @@ export const ModuleView = () => {
     ];
 
     return (
-      <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-4 flex-1 max-w-md">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search records..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
-            <button className="p-2 bg-transparent border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors rounded-xl">
-              <Filter size={18} />
-            </button>
-          </div>
-        </div>
+      <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col">
         
         <Table 
           data={slicedRecords as any}
@@ -3737,14 +3730,51 @@ export const ModuleView = () => {
   }
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      <PageHeader 
-        title={moduleData?.name || 'Loading...'}
-        description={moduleData?.description || ''}
-        icon={Icon}
-        iconClassName="bg-indigo-600 shadow-indigo-500/20"
-        actions={
-          <div className="flex gap-4">
+    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden">
+      
+      {/* Header Panel */}
+      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
+        <div className="flex items-center gap-3">
+          {Icon && (
+            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Icon size={24} />
+            </div>
+          )}
+          <div>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{moduleData?.name || 'Loading...'}</h1>
+            {moduleData?.description && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
+                {moduleData.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Toolbar Controls / Actions / Search */}
+        <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+          {interfaceSettings.master.layoutType !== 'pipeline' && 
+           interfaceSettings.master.layoutType !== 'kanban' && 
+           interfaceSettings.master.layoutType !== 'calendar' && 
+           interfaceSettings.master.layoutType !== 'map' && 
+           interfaceSettings.master.layoutType !== 'cards' && 
+           interfaceSettings.master.layoutType !== 'portfolio' && 
+           interfaceSettings.master.layoutType !== 'timeline' && 
+           interfaceSettings.master.layoutType !== 'gantt' && 
+           interfaceSettings.master.layoutType !== 'analytics' && (
+            <div className="relative">
+              <LucideIcons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search records..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500 w-60 transition-all shadow-sm"
+              />
+            </div>
+          )}
+
+          {/* Quick Actions & Create Buttons */}
+          <div className="flex items-center gap-2">
             {interfaceSettings.actions?.map((act: any) => {
               const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
               return (
@@ -3775,13 +3805,14 @@ export const ModuleView = () => {
                     setActionFormErrors({});
                     setShowQuickActionModal(true);
                   }}
-                  className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white border border-indigo-200 dark:border-indigo-500/20 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-sm"
+                  className="px-3.5 py-2 bg-white/50 dark:bg-zinc-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
                 >
-                  <ActionIcon size={16} />
+                  <ActionIcon size={14} />
                   {act.label}
                 </button>
               );
             })}
+            
             <button 
               onClick={() => {
                 const initialDefaults: any = {};
@@ -3800,7 +3831,6 @@ export const ModuleView = () => {
                   setActiveTabId(null);
                 }
                 
-                // Initialize custom create form step if applicable
                 if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
                   const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
                   setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
@@ -3810,14 +3840,17 @@ export const ModuleView = () => {
                 
                 setShowNewEntryModal(true);
               }}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center gap-2"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-md shadow-indigo-500/10 flex items-center gap-1.5"
             >
-              <Plus size={18} />
+              <Plus size={14} />
               {createForm?.settings?.workspaceButtonLabel || 'New Entry'}
             </button>
           </div>
-        }
-      />
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 p-6 lg:p-8 overflow-hidden min-h-0 flex flex-col">
 
 
 
@@ -4593,6 +4626,7 @@ export const ModuleView = () => {
           </div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 };

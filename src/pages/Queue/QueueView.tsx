@@ -7,7 +7,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL } from '../../config';
 import { fetchRecords } from '../../services/dataService';
-import { checkCondition, getFieldValue, cn, flattenFields } from '../../lib/utils';
+import { checkCondition, getFieldValue, cn, flattenFields, slugify } from '../../lib/utils';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { Skeleton } from '../../components/UI/Skeleton';
 
@@ -21,6 +21,15 @@ export const QueueView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const pageSize = 15;
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  const handleSort = (colId: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === colId && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key: colId, direction });
+  };
 
   // Find the active Queue MenuItem in the menu tree configuration
   const activeQueue = useMemo(() => {
@@ -28,7 +37,7 @@ export const QueueView = () => {
 
     const findItem = (items: any[]): any => {
       for (const item of items) {
-        if (item.id === queueId) return item;
+        if (item.id === queueId || slugify(item.label) === queueId || item.label.toLowerCase() === queueId.toLowerCase()) return item;
         if (item.children) {
           const found = findItem(item.children);
           if (found) return found;
@@ -101,8 +110,50 @@ export const QueueView = () => {
       );
     }
 
+    // Apply Sorting if configured
+    if (sortConfig) {
+      const { key, direction } = sortConfig;
+      result = [...result].sort((a, b) => {
+        let valA = a[key];
+        let valB = b[key];
+
+        // Custom getters for special columns
+        if (key === 'moduleId') {
+          valA = a._moduleName;
+          valB = b._moduleName;
+        } else if (key === 'assigneeId') {
+          const userA = members.find((m: any) => m.cuid === a.assigneeId || m.memberId === a.assigneeId);
+          const userB = members.find((m: any) => m.cuid === b.assigneeId || m.memberId === b.assigneeId);
+          valA = userA ? userA.name : '';
+          valB = userB ? userB.name : '';
+        } else if (key === 'title') {
+          valA = a.data?.title || a.data?.name || a.id;
+          valB = b.data?.title || b.data?.name || b.id;
+        } else if (key === 'createdAt' || key === 'updatedAt') {
+          valA = new Date(valA || 0).getTime();
+          valB = new Date(valB || 0).getTime();
+        } else if (valA === undefined || valA === null) {
+          valA = a.data?.[key];
+          valB = b.data?.[key];
+        }
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          return direction === 'asc' 
+            ? valA.localeCompare(valB) 
+            : valB.localeCompare(valA);
+        }
+
+        if (valA < valB) return direction === 'asc' ? -1 : 1;
+        if (valA > valB) return direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
     return result;
-  }, [rawRecords, activeQueue, searchQuery, visibilityContext]);
+  }, [rawRecords, activeQueue, searchQuery, visibilityContext, sortConfig, members]);
 
   // Paginated Slicing
   const totalRecords = filteredRecords.length;
@@ -200,11 +251,11 @@ export const QueueView = () => {
             <div className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-indigo-500">
               <DynamicIcon name={record._moduleIcon} size={11} />
             </div>
-            <span className="text-xs font-bold text-zinc-950 dark:text-zinc-205">{record._moduleName}</span>
+            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{record._moduleName}</span>
           </div>
         );
       case 'title':
-        return <span className="text-xs font-extrabold text-zinc-905 dark:text-white line-clamp-1">{String(value)}</span>;
+        return <span className="text-xs font-extrabold text-zinc-900 dark:text-white line-clamp-1">{String(value)}</span>;
       case 'status':
         return (
           <span className={cn(
@@ -243,7 +294,7 @@ export const QueueView = () => {
                   {userObj.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
                 </div>
               )}
-              <span className="text-xs font-semibold text-zinc-850 dark:text-zinc-202 truncate max-w-[90px]">{userObj.name}</span>
+              <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate max-w-[90px]">{userObj.name}</span>
               {isMe && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleRelease(record); }}
@@ -307,13 +358,13 @@ export const QueueView = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
+    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden">
       
       {/* Header Panel */}
-      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-indigo-500">
-            <DynamicIcon name={activeQueue.iconName || 'ClipboardList'} size={20} />
+          <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <DynamicIcon name={activeQueue.iconName || 'ClipboardList'} size={24} />
           </div>
           <div>
             <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{activeQueue.label}</h1>
@@ -332,7 +383,7 @@ export const QueueView = () => {
               placeholder="Search in queue..." 
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-zinc-350 focus:outline-none focus:border-indigo-500 w-60 transition-all shadow-sm"
+              className="bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500 w-60 transition-all shadow-sm"
             />
           </div>
         </div>
@@ -340,20 +391,38 @@ export const QueueView = () => {
 
       {/* Main Grid View */}
       <div className="flex-1 p-6 lg:p-8 overflow-hidden min-h-0 flex flex-col">
-        <div className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm overflow-hidden flex flex-col">
+        <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col">
           <div className="flex-1 overflow-auto custom-scrollbar">
             {paginatedRecords.length > 0 ? (
               <table className="w-full border-collapse text-left">
                 <thead>
-                  <tr className="border-b border-zinc-150 dark:border-zinc-850 bg-zinc-50/50 dark:bg-zinc-900/50 sticky top-0 z-10">
-                    {columnsToRender.map((colId: string) => (
-                      <th key={colId} className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                        {columnLabel(colId)}
-                      </th>
-                    ))}
+                  <tr className="border-b border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50/20 dark:bg-zinc-900/10 sticky top-0 z-10">
+                    {columnsToRender.map((colId: string) => {
+                      const isSorted = sortConfig?.key === colId;
+                      return (
+                        <th 
+                          key={colId} 
+                          onClick={() => handleSort(colId)}
+                          className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 cursor-pointer hover:bg-zinc-100/10 dark:hover:bg-white/[0.02] select-none transition-colors group"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>{columnLabel(colId)}</span>
+                            {isSorted ? (
+                              sortConfig.direction === 'asc' ? (
+                                <LucideIcons.ChevronUp size={11} className="text-indigo-500 shrink-0" />
+                              ) : (
+                                <LucideIcons.ChevronDown size={11} className="text-indigo-500 shrink-0" />
+                              )
+                            ) : (
+                              <LucideIcons.ArrowUpDown size={10} className="text-zinc-400 dark:text-zinc-650 opacity-0 group-hover:opacity-100 transition-all shrink-0" />
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-850">
+                <tbody className="divide-y divide-zinc-200/30 dark:divide-zinc-800/40">
                   {paginatedRecords.map(record => (
                     <tr
                       key={record.id}
@@ -382,7 +451,7 @@ export const QueueView = () => {
 
           {/* Table Footer / Pagination */}
           {totalPages > 1 && (
-            <div className="px-5 py-3 border-t border-zinc-100 dark:border-zinc-850 shrink-0 flex items-center justify-between bg-zinc-50/30 dark:bg-zinc-900/10">
+            <div className="px-5 py-3 border-t border-zinc-200/40 dark:border-zinc-800/40 shrink-0 flex items-center justify-between bg-zinc-50/10 dark:bg-zinc-900/5">
               <span className="text-[10px] text-zinc-400 font-bold uppercase">
                 Page {page} of {totalPages} ({totalRecords} records)
               </span>

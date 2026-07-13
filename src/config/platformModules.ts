@@ -25,7 +25,7 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     iconName: 'Inbox',
     isCore: true,
     description: 'Configure routing rules to automatically intake and distribute work across modules.',
-    path: '/workspace/platform/intake'
+    path: '/workspace/platform/work-distribution'
   },
   {
     id: 'knowledge-base',

@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
-import { cn } from '../../lib/utils';
+import { cn, slugify } from '../../lib/utils';
 
 const COMMON_ICONS = [
   'LayoutDashboard', 'ClipboardList', 'Layers', 'Database', 'Globe', 'Cpu', 'ShieldCheck', 'Inbox', 'BookOpen', 'BarChart'
@@ -16,7 +16,7 @@ const COMMON_ICONS = [
 
 export const PagesManagementPage = () => {
   const navigate = useNavigate();
-  const { tenant, modules, refreshModules } = usePlatform();
+  const { tenant, modules, refreshModules, updateTenant } = usePlatform();
   const { session } = useAuth();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -29,6 +29,22 @@ export const PagesManagementPage = () => {
 
   // Filter modules to only show workspace pages (type === 'PAGE')
   const pages = modules.filter((mod: any) => mod.type === 'PAGE');
+
+  const handleSetHomePage = async (pageId: string) => {
+    try {
+      const currentWorkspaceSettings = tenant?.workspaceSettings || {};
+      await updateTenant({
+        workspaceSettings: {
+          ...currentWorkspaceSettings,
+          homePageId: pageId || null
+        }
+      });
+      toast.success(pageId ? 'Home page nominated successfully!' : 'Workspace home page reset to default.');
+    } catch (err: any) {
+      console.error('[PagesManagement] Failed to set home page:', err);
+      toast.error('Failed to set home page: ' + err.message);
+    }
+  };
 
   const confirmDeletePage = async () => {
     if (!pageToDelete || !tenant?.id) return;
@@ -65,6 +81,14 @@ export const PagesManagementPage = () => {
       return;
     }
     if (!tenant?.id) return;
+
+    // Enforce name uniqueness (prevent duplicate slugs)
+    const newSlug = slugify(newPageName);
+    const isDuplicate = pages.some((page: any) => slugify(page.name) === newSlug);
+    if (isDuplicate) {
+      toast.error(`A workspace page with the name "${newPageName}" (slug: "${newSlug}") already exists. Please choose a unique name.`);
+      return;
+    }
 
     setCreating(true);
     try {
@@ -136,10 +160,38 @@ export const PagesManagementPage = () => {
         }
       />
 
+      {/* Home Page Selector Section */}
+      <div className="mb-8 p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <Icons.Home size={16} className="text-indigo-500" />
+            Default Workspace Home Page
+          </h4>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+            Nominate which page serves as the root/landing experience when users access the workspace.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={tenant?.workspaceSettings?.homePageId || ''}
+            onChange={(e) => handleSetHomePage(e.target.value)}
+            className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-1 focus:ring-indigo-500 outline-none min-w-[240px] text-zinc-800 dark:text-zinc-200"
+          >
+            <option value="">Default (Auto-detect Dashboard)</option>
+            {pages.map((p: any) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
         {pages.map((page: any, i: number) => {
           const IconComponent = (Icons as any)[page.iconName] || (Icons as any)[page.icon] || Layout;
           const widgetsCount = page.config?.widgets?.length || 0;
+          const isHomePage = tenant?.workspaceSettings?.homePageId === page.id;
 
           return (
             <motion.div
@@ -148,18 +200,47 @@ export const PagesManagementPage = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03 }}
               onClick={() => navigate(`/workspace/settings/builder/page/${page.id}`)}
-              className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
+              className={cn(
+                "group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none cursor-pointer flex flex-col h-full relative overflow-hidden",
+                isHomePage 
+                  ? "border-teal-500/50 shadow-teal-550/5 dark:border-teal-500/30" 
+                  : "border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10"
+              )}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               
+              {/* Home Page Nomination Button */}
+              {!isHomePage && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSetHomePage(page.id);
+                  }}
+                  className="absolute top-4 right-14 p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-505 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                  title="Set as Workspace Home Page"
+                >
+                  <Icons.Home size={14} />
+                </button>
+              )}
+
               {/* Delete page */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (isHomePage) {
+                    toast.error("Cannot delete the nominated home page. Please nominate another page as home first.");
+                    return;
+                  }
                   setPageToDelete(page);
                 }}
                 disabled={deletingId === page.id}
-                className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                className={cn(
+                  "absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 text-zinc-500 transition-all opacity-0 group-hover:opacity-100 z-20",
+                  isHomePage
+                    ? "hover:bg-zinc-200/50 text-zinc-400 dark:bg-zinc-805/80 dark:text-zinc-600 cursor-not-allowed"
+                    : "hover:bg-red-500/10 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20"
+                )}
+                title={isHomePage ? "Nominated Home Page (Cannot Delete)" : "Delete Page"}
               >
                 {deletingId === page.id ? <Loader2 size={14} className="animate-spin text-red-500" /> : <Trash2 size={14} />}
               </button>
@@ -167,18 +248,30 @@ export const PagesManagementPage = () => {
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div>
                   <div className="flex items-start justify-between mb-4">
-                    <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+                    <div className={cn(
+                      "p-3 rounded-xl transition-transform group-hover:scale-110",
+                      isHomePage 
+                        ? "bg-teal-50 dark:bg-teal-500/10 text-teal-600 dark:text-teal-400" 
+                        : "bg-indigo-55 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                    )}>
                       <IconComponent size={24} />
                     </div>
-                    <span className="text-[9px] px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-500 font-extrabold uppercase tracking-wider group-hover:opacity-0 transition-opacity duration-300">
-                      {widgetsCount} {widgetsCount === 1 ? 'Widget' : 'Widgets'}
-                    </span>
+                    {isHomePage ? (
+                      <span className="text-[9px] px-2.5 py-1 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                        <Icons.Home size={10} />
+                        Home Page
+                      </span>
+                    ) : (
+                      <span className="text-[9px] px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-500 font-extrabold uppercase tracking-wider group-hover:opacity-0 transition-opacity duration-300">
+                        {widgetsCount} {widgetsCount === 1 ? 'Widget' : 'Widgets'}
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                     {page.name}
                   </h3>
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Custom workspace page. Accessible at <code className="text-xs text-indigo-500 dark:text-indigo-400">/workspace/pages/{page.id}</code>.
+                    Custom workspace page. Accessible at <code className="text-xs text-indigo-500 dark:text-indigo-400">/workspace/pages/{slugify(page.name)}</code>.
                   </p>
                 </div>
                 <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center text-xs font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0 transform duration-300">

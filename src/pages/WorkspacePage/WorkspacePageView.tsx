@@ -5,6 +5,7 @@ import {
   Layout, Database, Cpu, ShieldCheck, Globe, Workflow, 
   ChevronRight, Loader2
 } from 'lucide-react';
+import ReactGridLayout from 'react-grid-layout';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/UI/Primitives';
@@ -13,10 +14,128 @@ import { Skeleton } from '../../components/UI/Skeleton';
 import { WorkQueue } from '../../components/WorkQueue';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
-import { cn } from '../../lib/utils';
+import { cn, slugify } from '../../lib/utils';
 import { toast } from 'sonner';
 import { createFormulaContext } from '../../lib/formulaEngine';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
+import { getWidgetDefaultDimensions } from './PageBuilder';
+
+const useMyContainerWidth = (loading: boolean) => {
+  const [width, setWidth] = useState(1280);
+  const [mounted, setMounted] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (loading) return;
+    
+    const timer = setTimeout(() => {
+      const node = containerRef.current;
+      if (node) {
+        setWidth(node.offsetWidth || 1280);
+        setMounted(true);
+      }
+    }, 0);
+
+    const node = containerRef.current;
+    if (!node) {
+      return () => clearTimeout(timer);
+    }
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (entry && entry.contentRect.width) {
+          setWidth(entry.contentRect.width);
+        }
+      });
+      observer.observe(node);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [loading]);
+
+  return { width, containerRef, mounted };
+};
+
+export const VisualSkeleton: React.FC<{ type: string }> = ({ type }) => {
+  switch (type) {
+    case 'kpi':
+      return (
+        <div className="w-full flex flex-col items-center justify-center space-y-3 animate-pulse">
+          <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-10 w-28 bg-zinc-300 dark:bg-zinc-700 rounded-2xl" />
+        </div>
+      );
+    case 'table':
+      return (
+        <div className="w-full h-full flex flex-col space-y-3.5 p-1 animate-pulse">
+          <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
+            <div className="h-3 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          </div>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex justify-between items-center">
+              <div className="h-3.5 w-24 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
+              <div className="h-3 w-10 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            </div>
+          ))}
+        </div>
+      );
+    case 'bar':
+    case 'line':
+    case 'area':
+      return (
+        <div className="w-full h-full flex flex-col justify-end space-y-4 p-2 animate-pulse">
+          <div className="flex-1 flex items-end gap-5 px-4">
+            <div className="w-full h-[60%] bg-zinc-200 dark:bg-zinc-800 rounded-t-lg" />
+            <div className="w-full h-[35%] bg-zinc-300 dark:bg-zinc-700 rounded-t-lg" />
+            <div className="w-full h-[80%] bg-zinc-200 dark:bg-zinc-800 rounded-t-lg" />
+            <div className="w-full h-[50%] bg-zinc-300 dark:bg-zinc-700 rounded-t-lg" />
+            <div className="w-full h-[95%] bg-zinc-200 dark:bg-zinc-800 rounded-t-lg" />
+          </div>
+          <div className="border-t border-zinc-200 dark:border-zinc-800 pt-2 flex justify-between">
+            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          </div>
+        </div>
+      );
+    case 'pie':
+      return (
+        <div className="w-full h-full flex items-center justify-center gap-6 p-2 animate-pulse">
+          <div className="relative w-28 h-28 rounded-full border-8 border-zinc-200 dark:border-zinc-800 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-t-8 border-r-8 border-zinc-300 dark:border-zinc-750 rotate-45" />
+          </div>
+          <div className="flex flex-col space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+              <div className="h-2.5 w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+              <div className="h-2.5 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            </div>
+          </div>
+        </div>
+      );
+    default:
+      return (
+        <div className="w-full h-full flex flex-col space-y-4 p-4 animate-pulse">
+          <div className="h-4 w-1/3 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+          <div className="h-8 w-full bg-zinc-300 dark:bg-zinc-750 rounded-2xl" />
+          <div className="h-24 w-full bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+        </div>
+      );
+  }
+};
 
 export const WorkspacePageView = () => {
   const { pageId } = useParams();
@@ -34,7 +153,17 @@ export const WorkspacePageView = () => {
       setLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const pageMod = await fetchModule(pageId, tenant.id, token, modules);
+        
+        // Resolve slugified pageName to actual page ID
+        let targetId = pageId;
+        const matchedPage = modules.find(
+          (m: any) => m.type === 'PAGE' && (slugify(m.name) === pageId || m.name.toLowerCase() === pageId.toLowerCase())
+        );
+        if (matchedPage) {
+          targetId = matchedPage.id;
+        }
+
+        const pageMod = await fetchModule(targetId, tenant.id, token, modules);
         setPageData(pageMod);
       } catch (err) {
         console.error('Failed to load page config', err);
@@ -46,9 +175,30 @@ export const WorkspacePageView = () => {
     getPageConfig();
   }, [pageId, tenant?.id, session?.access_token, modules]);
 
-  const widgets = pageData?.config?.widgets || [];
+  const widgets = useMemo(() => {
+    return (pageData?.config?.widgets || pageData?.widgets || []).map((w: any, index: number) => {
+      const dims = getWidgetDefaultDimensions(w.type);
+      return {
+        ...w,
+        x: (w.x !== undefined && w.x !== null) ? w.x : (index % 2 === 0 ? 0 : 6),
+        y: (w.y !== undefined && w.y !== null) ? w.y : Math.floor(index / 2) * dims.h,
+        w: (w.w !== undefined && w.w !== null) ? w.w : dims.w,
+        h: (w.h !== undefined && w.h !== null) ? w.h : dims.h
+      };
+    });
+  }, [pageData?.config?.widgets, pageData?.widgets]);
 
+  const { width, containerRef, mounted } = useMyContainerWidth(loading);
 
+  const layout = useMemo(() => {
+    return widgets.map((w: any) => ({
+      i: w.id,
+      x: w.x,
+      y: w.y,
+      w: w.w,
+      h: w.h
+    }));
+  }, [widgets]);
 
   if (loading) {
     return (
@@ -77,28 +227,29 @@ export const WorkspacePageView = () => {
   const PageIcon = (Icons as any)[pageData.iconName] || (Icons as any)[pageData.icon] || Layout;
 
   return (
-    <PageWrapper className="flex flex-col w-full flex-1 min-h-full px-6 lg:px-12 pt-6 pb-10 space-y-8 relative">
+    <PageWrapper className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
       {/* Dynamic backgrounds */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
 
       {/* Page Header */}
-      <div className="flex items-center justify-between border-b border-zinc-200/50 dark:border-zinc-800/50 pb-4 relative z-10">
+      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex items-center justify-between gap-4 z-20">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+          <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
             <PageIcon size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">{pageData.name}</h1>
-            <p className="text-xs text-zinc-500">Workspace Page</p>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{pageData.name}</h1>
+            <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">Workspace Page</p>
           </div>
         </div>
       </div>
 
       {/* Widgets Grid */}
-      <div className="grid grid-cols-12 gap-6 relative z-10">
+      <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
+        <div ref={containerRef} className="w-full relative">
         {widgets.length === 0 ? (
-          <div className="col-span-12 flex flex-col items-center justify-center p-12 bg-white/40 dark:bg-white/[0.03] border border-dashed border-zinc-300 dark:border-zinc-800 rounded-3xl text-center space-y-3">
+          <div className="flex flex-col items-center justify-center p-12 bg-white/40 dark:bg-white/[0.03] border border-dashed border-zinc-300 dark:border-zinc-800 rounded-3xl text-center space-y-3">
             <Layout size={32} className="text-zinc-400" />
             <div>
               <p className="text-sm font-bold text-zinc-650 dark:text-zinc-300">This page has no widgets</p>
@@ -106,21 +257,39 @@ export const WorkspacePageView = () => {
             </div>
           </div>
         ) : (
-          widgets.map((widget: any) => {
-            const widthClass = widget.w === 6 ? 'col-span-12 lg:col-span-6' : 
-                               widget.w === 4 ? 'col-span-12 lg:col-span-4' :
-                               widget.w === 8 ? 'col-span-12 lg:col-span-8' :
-                               'col-span-12';
-            return (
-              <div key={widget.id} className={widthClass}>
-                <WidgetRenderer widget={widget} tenant={tenant} session={session} />
-              </div>
-            );
-          })
+          mounted && (
+            <ReactGridLayout
+              className="layout read-only-layout"
+              layout={layout}
+              width={width}
+              gridConfig={{
+                cols: 12,
+                rowHeight: 50,
+                margin: [24, 24]
+              }}
+              dragConfig={{
+                enabled: false
+              }}
+              resizeConfig={{
+                enabled: false
+              }}
+            >
+              {widgets.map((widget: any) => (
+                <div 
+                  key={widget.id} 
+                  className="w-full h-full [&>div]:h-full"
+                >
+                  <WidgetRenderer widget={widget} tenant={tenant} session={session} />
+                </div>
+              ))}
+            </ReactGridLayout>
+          )
         )}
+      </div>
       </div>
     </PageWrapper>
   );
+
 };
 
 // --- WIDGET RENDERER CONTROLLER ---
@@ -599,7 +768,7 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
                 <XAxis dataKey="date" stroke="#888888" tickLine={false} />
                 <YAxis stroke="#888888" tickLine={false} />
                 <Tooltip contentStyle={{ background: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                <Line type="monotone" dataKey="volume" stroke="#6366f1" strokeWidth={2.5} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="volume" stroke="#6366f1" strokeWidth={2.5} activeDot={{ r: 6 }} animationDuration={300} />
               </LineChart>
             ) : (
               <BarChart data={chartData}>
@@ -607,7 +776,7 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
                 <XAxis dataKey="date" stroke="#888888" tickLine={false} />
                 <YAxis stroke="#888888" tickLine={false} />
                 <Tooltip contentStyle={{ background: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                <Bar dataKey="volume" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="volume" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={300} />
               </BarChart>
             )}
           </ResponsiveContainer>
@@ -636,6 +805,7 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
   const { modules } = usePlatform();
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
   
   // Database datasets cache
   const [records, setRecords] = useState<any[]>([]);
@@ -682,36 +852,28 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
   useEffect(() => {
     if (!tenant?.id || !report) return;
     const fetchSources = async () => {
+      setSourcesLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
 
-        fetch(`http://localhost:3001/api/data/records`, { headers })
-          .then(res => res.json())
-          .then(data => setRecords(data.records || []))
-          .catch(() => {});
+        const [recsRes, memsRes, teamsRes, autosRes, catalogRes] = await Promise.all([
+          fetch(`http://localhost:3001/api/data/records`, { headers }).then(res => res.json()).catch(() => ({ records: [] as any[] })),
+          fetch(`http://localhost:3001/api/members`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+          fetch(`http://localhost:3001/api/teams`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+          fetch(`http://localhost:3001/api/automations`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+          fetch(`http://localhost:3001/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[])
+        ]);
 
-        fetch(`http://localhost:3001/api/members`, { headers })
-          .then(res => res.json())
-          .then(data => setMembers(data || []))
-          .catch(() => {});
-
-        fetch(`http://localhost:3001/api/teams`, { headers })
-          .then(res => res.json())
-          .then(data => setTeams(data || []))
-          .catch(() => {});
-
-        fetch(`http://localhost:3001/api/automations`, { headers })
-          .then(res => res.json())
-          .then(data => setAutomations(data || []))
-          .catch(() => {});
-
-        fetch(`http://localhost:3001/api/pricing-catalog`, { headers })
-          .then(res => res.json())
-          .then(data => setCatalogItems(data || []))
-          .catch(() => {});
+        setRecords(recsRes.records || []);
+        setMembers(memsRes || []);
+        setTeams(teamsRes || []);
+        setAutomations(autosRes || []);
+        setCatalogItems(catalogRes || []);
       } catch (err) {
         console.error("Failed to load source datasets for report embed", err);
+      } finally {
+        setSourcesLoading(false);
       }
     };
     fetchSources();
@@ -1024,7 +1186,9 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                 </div>
 
                 <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4 text-xs">
-                  {aggData.length === 0 ? (
+                  {sourcesLoading ? (
+                    <VisualSkeleton type={w.type} />
+                  ) : aggData.length === 0 ? (
                     <span className="text-[10px] text-zinc-400 italic">No dataset rows found.</span>
                   ) : w.type === 'kpi' ? (
                     <div className="text-center">
@@ -1069,7 +1233,8 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
                             <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                            <Bar dataKey="value" fill={w.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} />
+                            {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                            <Bar dataKey="value" fill={w.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} animationDuration={300} />
                           </BarChart>
                         ) : w.type === 'line' ? (
                           <LineChart 
@@ -1085,7 +1250,8 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
                             <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                            <Line type="monotone" dataKey="value" stroke={w.properties.color || '#6366f1'} strokeWidth={2} />
+                            {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                            <Line type="monotone" dataKey="value" stroke={w.properties.color || '#6366f1'} strokeWidth={2} animationDuration={300} />
                           </LineChart>
                         ) : w.type === 'area' ? (
                           <AreaChart 
@@ -1101,7 +1267,8 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
                             <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
-                            <Area type="monotone" dataKey="value" fill={w.properties.color || '#6366f1'} stroke={w.properties.color || '#6366f1'} fillOpacity={0.15} />
+                            {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
+                            <Area type="monotone" dataKey="value" fill={w.properties.color || '#6366f1'} stroke={w.properties.color || '#6366f1'} fillOpacity={0.15} animationDuration={300} />
                           </AreaChart>
                         ) : (
                           <PieChart>
@@ -1119,12 +1286,14 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                                   handleChartElementClick(w.properties.xAxisKey, data.name);
                                 }
                               }}
+                              animationDuration={300}
                             >
                               {aggData.map((_, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS_PALETTE[index % COLORS_PALETTE.length]} />
                               ))}
                             </Pie>
                             <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                           </PieChart>
                         )}
                       </ResponsiveContainer>

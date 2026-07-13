@@ -31,7 +31,7 @@ import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
-import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue, checkCondition, evaluateExpression, evaluateFormula } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
 import { validateRecordRules, ValidationError } from '../../lib/validationEngine';
 
@@ -71,12 +71,21 @@ export const RecordDetailView = ({
   onClose?: () => void;
 } = {}) => {
   const { moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
-  const moduleId = moduleIdProp || routeModuleId;
-  const recordId = recordIdProp || routeRecordId;
   const navigate = useNavigate();
   const auth = useAuth();
   const { session, user: supabaseUser } = auth;
-  const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members } = usePlatform();
+  const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members, modules } = usePlatform();
+  
+  const resolvedRouteModuleId = useMemo(() => {
+    if (!routeModuleId || !modules) return routeModuleId || '';
+    const matchedMod = modules.find(
+      (m: any) => m.type !== 'PAGE' && (slugify(m.name) === routeModuleId || m.name.toLowerCase() === routeModuleId.toLowerCase())
+    );
+    return matchedMod ? matchedMod.id : routeModuleId;
+  }, [routeModuleId, modules]);
+
+  const moduleId = moduleIdProp || resolvedRouteModuleId;
+  const recordId = recordIdProp || routeRecordId;
   const [moduleData, setModuleData] = useState<Module | null>(null);
   const [record, setRecord] = useState<Record<string, any> | null>(null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
@@ -1469,7 +1478,7 @@ export const RecordDetailView = ({
         if (parentModuleId && parentRecordId) {
           navigate(`/workspace/modules/${parentModuleId}/records/${parentRecordId}`);
         } else {
-          navigate(`/workspace/modules/${moduleId}`);
+          navigate(`/workspace/modules/${routeModuleId || moduleId}`);
         }
       }
     } catch (error: any) {
@@ -2137,7 +2146,7 @@ export const RecordDetailView = ({
         if (parentModuleId && parentRecordId) {
           navigate(`/workspace/modules/${parentModuleId}/records/${parentRecordId}`);
         } else {
-          navigate(`/workspace/modules/${moduleId}`);
+          navigate(`/workspace/modules/${routeModuleId || moduleId}`);
         }
       }
     };
@@ -2342,7 +2351,7 @@ export const RecordDetailView = ({
             </button>
           ) : (
             <Link 
-              to={parentModuleId && parentRecordId ? `/workspace/modules/${parentModuleId}/records/${parentRecordId}` : `/workspace/modules/${moduleId}`}
+              to={parentModuleId && parentRecordId ? `/workspace/modules/${parentModuleId}/records/${parentRecordId}` : `/workspace/modules/${routeModuleId || moduleId}`}
               className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
             >
               <ArrowLeft size={20} />

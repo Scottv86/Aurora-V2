@@ -78,7 +78,11 @@ export const Navbar = () => {
   return (
     <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4 flex-1">
-        <div className="flex items-center gap-2">
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-all"
+          onClick={() => navigate('/workspace')}
+          title="Back to Workspace Home"
+        >
           <div 
             className={cn(
               "w-8 h-8 rounded-lg flex items-center justify-center shadow-lg overflow-hidden",

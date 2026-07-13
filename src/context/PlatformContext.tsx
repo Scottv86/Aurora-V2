@@ -5,6 +5,7 @@ import { API_BASE_URL } from '../config';
 import { MenuConfig } from '../types/menu';
 import { systemDefaultMenuConfig } from '../config/menuDefaults';
 import { toast } from 'sonner';
+import { slugify } from '../lib/utils';
 
 interface PlatformContextType {
   user: User | null;
@@ -203,14 +204,14 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
                   id: `module:${dashPage.id}`,
                   label: 'Dashboard',
                   iconName: 'LayoutDashboard',
-                  to: `/workspace/pages/${dashPage.id}`,
+                  to: `/workspace/pages/${slugify(dashPage.name || 'Dashboard')}`,
                   isVisible: true
                 },
                 {
                   id: `module:${workPage.id}`,
                   label: 'My Work',
                   iconName: 'ClipboardList',
-                  to: `/workspace/pages/${workPage.id}`,
+                  to: `/workspace/pages/${slugify(workPage.name || 'My Work')}`,
                   isVisible: true
                 }
               ]

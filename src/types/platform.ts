@@ -44,6 +44,7 @@ export interface Tenant {
     defaultModuleVisibility?: 'public' | 'private';
     autoCategorization?: boolean;
     archivingPolicyDays?: number;
+    homePageId?: string | null;
   };
   menuConfig?: any;
 }

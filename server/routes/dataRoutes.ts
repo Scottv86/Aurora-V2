@@ -1218,6 +1218,20 @@ router.delete('/modules/:id', async (req: TenantRequest, res) => {
     const { id } = req.params;
 
     await db.module.delete({ where: { id } });
+
+    // Check if this module was the home page, and if so clear it in tenant workspaceSettings
+    const tenant = await globalPrisma.tenant.findUnique({ where: { id: tenantId } });
+    if (tenant) {
+      const workspaceSettings = (tenant.workspaceSettings as any) || {};
+      if (workspaceSettings.homePageId === id) {
+        const updatedSettings = { ...workspaceSettings };
+        delete updatedSettings.homePageId;
+        await globalPrisma.tenant.update({
+          where: { id: tenantId },
+          data: { workspaceSettings: updatedSettings }
+        });
+      }
+    }
     
     emitTenantUpdate(tenantId, 'module_deleted', id);
 

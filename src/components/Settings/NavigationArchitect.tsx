@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '../UI/Primitives';
-import { cn, flattenFields } from '../../lib/utils';
+import { cn, flattenFields, slugify } from '../../lib/utils';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 import { toast } from 'sonner';
 
@@ -578,10 +578,33 @@ const ItemCard = ({
         rules: validRules
       };
 
-      const queueId = item.id;
+      // Enforce label uniqueness (prevent duplicate slugs for queues)
+      const newSlug = slugify(editLabel);
+      const getAllQueues = (items: any[]): any[] => {
+        const q: any[] = [];
+        items.forEach(it => {
+          if (it.isUnifiedQueue || it.to?.startsWith('/workspace/queues/')) {
+            q.push(it);
+          }
+          if (it.children) {
+            q.push(...getAllQueues(it.children));
+          }
+        });
+        return q;
+      };
+      const existingQueues = getAllQueues(allSections.flatMap((s: any) => s.items || []));
+      const isDuplicate = existingQueues.some(q => q.id !== item.id && slugify(q.label) === newSlug);
+      if (isDuplicate) {
+        toast.error(`A queue with the label "${editLabel}" (slug: "${newSlug}") already exists. Please choose a unique label.`);
+        return;
+      }
+
       const updatedTo = editQueueItemType === 'single'
-        ? `/workspace/modules/${editQueueModuleId}?queueId=${queueId}`
-        : `/workspace/queues/${queueId}`;
+        ? `/workspace/modules/${(() => {
+            const mod = modules.find((m: any) => m.id === editQueueModuleId);
+            return mod ? slugify(mod.name) : editQueueModuleId;
+          })()}?queueId=${slugify(editLabel)}`
+        : `/workspace/queues/${slugify(editLabel)}`;
 
       onUpdate({
         label: editLabel,

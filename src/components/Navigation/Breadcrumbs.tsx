@@ -127,6 +127,18 @@ export const Breadcrumbs = () => {
     return !['records', 'sub', 'member', 'teams', 'positions', 'pages', 'page'].includes(item.segment);
   });
 
+  const searchParams = new URLSearchParams(location.search);
+  const isReportBuilder = location.pathname.includes('/report-management') && searchParams.get('mode') === 'builder';
+  
+  if (isReportBuilder) {
+    const reportName = breadcrumbOverrides['active-report'] || 'Edit Report';
+    breadcrumbItems.push({
+      segment: 'active-report',
+      to: `${location.pathname}${location.search}`,
+      label: reportName
+    });
+  }
+
   if (breadcrumbItems.length === 0) return null;
 
   return (

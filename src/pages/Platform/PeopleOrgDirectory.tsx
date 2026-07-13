@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { PageHeader } from '../../components/UI/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
@@ -106,30 +105,56 @@ export const PeopleOrgDirectory = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== 'all').length;
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
+    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
       {/* Background Glows */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
 
-      <div className="relative z-10 flex flex-col w-full space-y-8">
-        <PageHeader 
-          title="People & Organisations"
-          description="Centralized management of all internal and external parties, personnel, and organizational structures."
-          actions={
-            <div className="flex items-center gap-3 relative">
+      {/* Header Panel */}
+      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+            <Users size={24} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">People & Organisations</h1>
+            <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
+              Centralized management of all internal and external parties, personnel, and organizational structures.
+            </p>
+          </div>
+        </div>
+
+        {/* Toolbar Controls / Actions / Search */}
+        <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+          {activeTab === 'all' && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search directory..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500 w-60 transition-all shadow-sm"
+              />
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
               <button 
                 onClick={() => setShowFilters(!showFilters)}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 bg-white dark:bg-white/5 dark:backdrop-blur-md border rounded-xl text-sm font-bold transition-all",
+                  "flex h-9 items-center gap-2 px-4 rounded-xl border transition-all active:scale-95 shadow-sm text-xs font-bold",
                   activeFilterCount > 0 
                     ? "border-indigo-500 text-indigo-600 bg-indigo-50/50" 
-                    : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
+                    : "border-zinc-200/50 bg-white/50 dark:bg-zinc-900/30 text-zinc-650 hover:bg-zinc-50 dark:border-zinc-800/50"
                 )}
               >
-                <Filter size={18} />
+                <Filter size={14} />
                 <span>Filter</span>
                 {activeFilterCount > 0 && (
-                  <span className="flex items-center justify-center w-5 h-5 bg-indigo-600 text-white text-[10px] rounded-full">
+                  <span className="flex items-center justify-center w-4 h-4 bg-indigo-600 text-white text-[9px] rounded-full">
                     {activeFilterCount}
                   </span>
                 )}
@@ -141,7 +166,7 @@ export const PeopleOrgDirectory = () => {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute top-full right-0 mt-2 w-72 bg-white/80 dark:bg-zinc-900/60 dark:backdrop-blur-xl border border-white/20 dark:border-zinc-800 rounded-2xl shadow-2xl z-50 p-4 space-y-4"
+                    className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 p-4 space-y-4"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Active Filters</h4>
@@ -189,29 +214,33 @@ export const PeopleOrgDirectory = () => {
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              <button 
-                onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20"
-              >
-                <Plus size={18} />
-                <span>Add Person/Org</span>
-              </button>
             </div>
-          }
-        />
+
+            <button 
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-md shadow-indigo-500/10 shrink-0"
+            >
+              <Plus size={14} />
+              <span>Add Person/Org</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Grid View */}
+      <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
 
         {/* Integrated Table Card */}
-        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl shadow-xl overflow-hidden">
+        <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col">
           {/* Integrated Header Controls */}
-          <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-white/5 dark:backdrop-blur-md rounded-xl border border-zinc-200/50 dark:border-white/10">
+          <div className="px-6 py-4 border-b border-zinc-200/40 dark:border-zinc-800/40 flex flex-col sm:flex-row items-center justify-between gap-4 bg-zinc-50/10 dark:bg-zinc-900/5 shrink-0">
+            <div className="flex items-center gap-1 p-1 bg-zinc-150/40 dark:bg-zinc-950/20 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50">
               <button
                 onClick={() => setActiveTab('all')}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'all' 
-                    ? 'bg-white dark:bg-white/10 text-zinc-900 dark:text-white shadow-sm' 
-                    : 'text-zinc-550 hover:text-zinc-700 dark:hover:text-zinc-300'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm' 
+                    : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
                 }`}
               >
                 <Users size={14} />
@@ -221,8 +250,8 @@ export const PeopleOrgDirectory = () => {
                 onClick={() => setActiveTab('pending')}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'pending' 
-                    ? 'bg-white dark:bg-white/10 text-zinc-900 dark:text-white shadow-sm' 
-                    : 'text-zinc-555 hover:text-zinc-700 dark:hover:text-zinc-300'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm' 
+                    : 'text-zinc-550 hover:text-zinc-700 dark:hover:text-zinc-300'
                 }`}
               >
                 <Inbox size={14} />
@@ -234,22 +263,9 @@ export const PeopleOrgDirectory = () => {
                 )}
               </button>
             </div>
-
-            {activeTab === 'all' && (
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
-                <input 
-                  type="text" 
-                  placeholder="Search records..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-transparent border border-white/20 dark:border-white/5 rounded-xl pl-9 pr-4 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-            )}
           </div>
 
-          <div className="relative">
+          <div className="relative flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
               {activeTab === 'all' ? (
                 <motion.div
