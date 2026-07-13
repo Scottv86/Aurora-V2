@@ -390,8 +390,8 @@ export const QueueView = () => {
       </div>
 
       {/* Main Grid View */}
-      <div className="flex-1 p-6 lg:p-8 overflow-hidden min-h-0 flex flex-col">
-        <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col">
+      <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+        <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl overflow-hidden flex flex-col">
           <div className="flex-1 overflow-auto custom-scrollbar">
             {paginatedRecords.length > 0 ? (
               <table className="w-full border-collapse text-left">
