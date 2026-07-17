@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
-import { runAgentLoop } from '../services/antigravityAgent';
+import { runAgentLoop, executeAgentTool, resumeAgentLoop } from '../services/antigravityAgent';
 
 const router = Router();
 
@@ -97,14 +97,14 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const userId = req.user!.uid; // Resolved by authMiddleware
     const { id } = req.params;
-    const { message, socketId, context, model } = req.body;
+    const { message, socketId, context, model, attachments } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
     // Run the agent loop asynchronously. The socket emits intermediate thoughts/results
-    const result = await runAgentLoop(tenantId, userId, id, message, socketId, context, model);
+    const result = await runAgentLoop(tenantId, userId, id, message, socketId, context, model, attachments);
 
     // Also update session title if it was default
     const db = req.db!;
@@ -121,6 +121,107 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
   } catch (err: any) {
     console.error('[AntigravityRoutes] POST /sessions/:id/chat Error:', err);
     res.status(500).json({ error: err.message || 'Agent loop encountered an error' });
+  }
+});
+
+// POST action approval callback
+router.post('/sessions/:id/approve', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const userId = req.user!.uid;
+    const { id } = req.params;
+    const { action, socketId, model } = req.body; // 'approve' or 'reject'
+    const db = req.db!;
+
+    const session = await db.antigravitySession.findUnique({
+      where: { id }
+    });
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const metadata = (session.metadata as any) || {};
+    const pausedState = metadata.pausedSessionState;
+
+    if (!pausedState) {
+      return res.status(400).json({ error: 'No paused action found for this session' });
+    }
+
+    if (action === 'reject') {
+      // Clear paused state
+      metadata.pausedSessionState = null;
+      await db.antigravitySession.update({
+        where: { id },
+        data: { metadata }
+      });
+
+      const text = "Action rejected by user. The request has been cancelled.";
+      await db.antigravityMessage.create({
+        data: {
+          sessionId: id,
+          role: 'model',
+          content: text,
+          steps: []
+        }
+      });
+
+      return res.json({ success: true, text });
+    }
+
+    // Process approved tool execution
+    const { contents, steps, pendingTool } = pausedState;
+    const { name, args } = pendingTool;
+
+    console.log(`[Approval] User approved execution of: ${name} with args`, args);
+
+    let result: any = null;
+    try {
+      result = await executeAgentTool(db, tenantId, name, args, id, metadata);
+    } catch (toolErr: any) {
+      result = { error: toolErr.message || "Failed to execute approved action" };
+    }
+
+    // Append response to history
+    const functionResponses = [{
+      response: { output: result },
+      name
+    }];
+    const nextContents = [...contents];
+    nextContents.push({
+      role: 'user',
+      parts: functionResponses.map(r => ({
+        functionResponse: { name: r.name, response: r.response }
+      }))
+    });
+
+    // Update message steps
+    const lastMsg = await db.antigravityMessage.findFirst({
+      where: { sessionId: id, role: 'model' },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (lastMsg) {
+      const msgSteps = Array.isArray(lastMsg.steps) ? lastMsg.steps : [];
+      const updatedSteps = msgSteps.map((s: any) => 
+        s.name === name ? { ...s, status: 'done', result } : s
+      );
+      await db.antigravityMessage.update({
+        where: { id: lastMsg.id },
+        data: { steps: updatedSteps as any }
+      });
+    }
+
+    // Clear paused state from metadata
+    metadata.pausedSessionState = null;
+    await db.antigravitySession.update({
+      where: { id },
+      data: { metadata }
+    });
+
+    // Resume agent loop
+    const resumeResult = await resumeAgentLoop(tenantId, userId, id, nextContents, steps, socketId, model, metadata);
+
+    res.json({ success: true, ...resumeResult });
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] Action Approval Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to process approval action' });
   }
 });
 

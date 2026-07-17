@@ -5,6 +5,7 @@ import { RLS_CONTEXT, globalPrisma } from '../lib/prisma';
 import { validateRecordRules } from '../../src/lib/validationEngine';
 import { WorkflowEngine } from '../services/workflowEngine';
 import { AutomationEngine } from '../services/automationEngine';
+import { triggerWebhooks } from '../services/webhookService';
 
 const router = express.Router();
 
@@ -639,6 +640,9 @@ router.post('/records', async (req: TenantRequest, res) => {
     };
     emitTenantUpdate(tenantId, 'record_added', formatted);
 
+    // Trigger Webhooks
+    triggerWebhooks(tenantId, 'record.created', formatted);
+
     res.json(formatted);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -873,6 +877,9 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
 
+    // Trigger Webhooks
+    triggerWebhooks(tenantId, 'record.updated', formatted);
+
     res.json(formatted);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1100,6 +1107,9 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
 
+    // Trigger Webhooks
+    triggerWebhooks(tenantId, 'record.updated', formatted);
+
     res.json(formatted);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1119,6 +1129,9 @@ router.delete('/records/:id', async (req: TenantRequest, res) => {
 
     // Websocket emit
     emitTenantUpdate(tenantId, 'record_deleted', id);
+
+    // Trigger Webhooks
+    triggerWebhooks(tenantId, 'record.deleted', { id });
 
     res.json({ success: true, count: result.count });
   } catch (err: any) {

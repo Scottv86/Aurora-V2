@@ -7,15 +7,16 @@ import { Navbar } from './Navigation/Navbar';
 import { 
   Sparkles, Bot, Terminal, Play, CheckCircle2, AlertCircle, 
   Loader2, Trash2, Send, Mic, MicOff, Plus, FileText, CheckSquare, 
-  Search, Copy, Check, Table, Compass, RefreshCw, Layers, Cpu, 
-  Code, BookOpen, Globe, Plug, User, Users, Tag, ChevronDown, 
-  ChevronRight, Layout, Info, ArrowUpRight, GitBranch,
+  Copy, Table, Compass, Layers, 
+  Code, Globe, Plug, Paperclip, ChevronDown, 
+  Layout, GitBranch,
   History, Calendar, Folder, Settings, MessageSquare
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
-import { useTheme } from '../hooks/useTheme';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/antigravity';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
@@ -36,6 +37,161 @@ interface ChatSession {
   updatedAt: string;
 }
 
+const QueryResultVisualizer = ({ result }: { result: any[] }) => {
+  const [view, setView] = useState<'table' | 'chart'>('table');
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+  const pageSize = 5;
+  const [pageIndex, setPageIndex] = useState(0);
+
+  if (!Array.isArray(result) || result.length === 0) return null;
+
+  const sample = result[0];
+  if (typeof sample !== 'object' || sample === null) return null;
+
+  const keys = Object.keys(sample);
+  const numericKeys = keys.filter(k => typeof sample[k] === 'number' || (!isNaN(Number(sample[k])) && typeof sample[k] !== 'boolean'));
+  const stringKeys = keys.filter(k => typeof sample[k] === 'string');
+
+  const canShowChart = numericKeys.length > 0 && keys.length > 1;
+
+  // Sorting
+  let sortedData = [...result];
+  if (sortKey) {
+    sortedData.sort((a, b) => {
+      const valA = a[sortKey];
+      const valB = b[sortKey];
+      if (valA < valB) return sortAsc ? -1 : 1;
+      if (valA > valB) return sortAsc ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // Pagination
+  const pageData = sortedData.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+  const maxPages = Math.ceil(sortedData.length / pageSize);
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  };
+
+  return (
+    <div className="mt-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3 max-w-full">
+      <div className="flex items-center justify-between border-b border-zinc-250/30 dark:border-zinc-800/40 pb-2">
+        <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 select-none">
+          <Table size={12} /> SQL Query Results ({result.length} rows)
+        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setView('table')}
+            className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
+              view === 'table'
+                ? 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
+                : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/5'
+            }`}
+          >
+            Table view
+          </button>
+          {canShowChart && (
+            <button
+              onClick={() => setView('chart')}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                view === 'chart'
+                  ? 'bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300'
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/5'
+              }`}
+            >
+              Chart view
+            </button>
+          )}
+        </div>
+      </div>
+
+      {view === 'table' ? (
+        <div className="space-y-2">
+          <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800 max-w-full">
+            <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-xs font-sans">
+              <thead className="bg-zinc-100 dark:bg-zinc-950/50 text-[10px] text-zinc-500 uppercase tracking-wider font-bold select-none">
+                <tr>
+                  {keys.map(k => (
+                    <th
+                      key={k}
+                      onClick={() => toggleSort(k)}
+                      className="px-3 py-2 cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-900 transition-all active:scale-[0.98]"
+                    >
+                      <div className="flex items-center gap-1">
+                        {k}
+                        {sortKey === k && (sortAsc ? ' ▴' : ' ▾')}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 bg-transparent text-zinc-700 dark:text-zinc-300">
+                {pageData.map((row, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-zinc-100/30 dark:hover:bg-white/2 cursor-default transition-all">
+                    {keys.map(k => (
+                      <td key={k} className="px-3 py-1.5 font-mono text-[11px] max-w-xs truncate" title={String(row[k])}>
+                        {typeof row[k] === 'object' ? JSON.stringify(row[k]) : String(row[k])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {maxPages > 1 && (
+            <div className="flex items-center justify-between text-[10px] text-zinc-550 select-none pt-1">
+              <span>Page {pageIndex + 1} of {maxPages}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={pageIndex === 0}
+                  onClick={() => setPageIndex(p => p - 1)}
+                  className="px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 disabled:opacity-50 hover:bg-zinc-100 dark:hover:bg-white/5 transition-all text-[9px] font-bold"
+                >
+                  Prev
+                </button>
+                <button
+                  disabled={pageIndex >= maxPages - 1}
+                  onClick={() => setPageIndex(p => p + 1)}
+                  className="px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 disabled:opacity-50 hover:bg-zinc-100 dark:hover:bg-white/5 transition-all text-[9px] font-bold"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="w-full pt-1">
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={result} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <XAxis dataKey={stringKeys[0] || keys[0]} stroke="#888888" fontSize={9} tickLine={false} />
+              <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  fontSize: '11px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}
+              />
+              <Bar dataKey={numericKeys[0]} fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={45} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const AntigravityChat = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -44,12 +200,8 @@ export const AntigravityChat = () => {
   if (lastPlatformPath.includes('/settings')) {
     lastPlatformPath = '/workspace';
   }
-  const isAurora = location.pathname.startsWith('/workspace/aurora-vibe');
-  const isSettings = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
-  const isPlatform = !isAurora && !isSettings;
   const { tenant } = usePlatform();
   const { session: authSession } = useAuth();
-  const { theme } = useTheme();
   
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -58,14 +210,19 @@ export const AntigravityChat = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [streamingText, setStreamingText] = useState('');
+  const [attachments, setAttachments] = useState<{ name: string; type: string; base64: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionType, setSuggestionType] = useState<'mention' | 'command' | null>(null);
+  const [suggestionFilter, setSuggestionFilter] = useState('');
+  const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
+  const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Real-time telemetry
-  const [telemetry, setTelemetry] = useState({
-    model: 'Gemini 2.5 Flash Lite',
-    speed: '48.2 t/s',
-    latency: '1.2s',
-    quota: 'Safe (92/100)'
-  });
 
   // Streaming thought trace
   const [agentTrace, setAgentTrace] = useState<any[]>([]);
@@ -191,6 +348,14 @@ export const AntigravityChat = () => {
         if (step.name.includes('module') || step.name.includes('automation') || step.name.includes('connector')) {
           loadWorkspaceSchema();
         }
+      } else if (step.type === 'stream_start') {
+        setStreamingText('');
+        setAgentThought(null);
+      } else if (step.type === 'chunk') {
+        setStreamingText(prev => prev + step.content);
+      } else if (step.type === 'approval_required') {
+        setLoading(false);
+        setAgentThought(null);
       }
     });
 
@@ -218,7 +383,7 @@ export const AntigravityChat = () => {
         behavior: 'smooth'
       });
     }
-  }, [messages, agentThought, agentTrace]);
+  }, [messages, agentThought, agentTrace, streamingText]);
 
   const fetchSessions = async () => {
     try {
@@ -250,6 +415,8 @@ export const AntigravityChat = () => {
       const data = await res.json();
       setActiveSession(data);
       setMessages(data.messages);
+      setAgentTrace([]);
+      setAgentThought(null);
     } catch (error) {
       toast.error("Failed to load conversation history.");
     }
@@ -277,12 +444,16 @@ export const AntigravityChat = () => {
     }
   };
 
-  const deleteSession = async (id: string, e: React.MouseEvent) => {
+  const deleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this session?")) return;
+    setDeleteSessionId(id);
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!deleteSessionId) return;
     try {
       const token = authSession?.access_token;
-      const res = await fetch(`${API_BASE_URL}/sessions/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/sessions/${deleteSessionId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -290,11 +461,13 @@ export const AntigravityChat = () => {
         }
       });
       if (!res.ok) throw new Error("Failed to delete session");
-      setSessions(prev => prev.filter(s => s.id !== id));
-      if (sessionId === id) navigate('/workspace/aurora-vibe');
+      setSessions(prev => prev.filter(s => s.id !== deleteSessionId));
+      if (sessionId === deleteSessionId) navigate('/workspace/aurora-vibe');
       toast.success("Session deleted successfully.");
     } catch (error) {
       toast.error("Could not delete session.");
+    } finally {
+      setDeleteSessionId(null);
     }
   };
 
@@ -348,16 +521,21 @@ export const AntigravityChat = () => {
     if (!inputMessage.trim() || !sessionId) return;
     
     const userMsg = inputMessage;
+    const userAttachments = [...attachments];
     setInputMessage('');
+    setAttachments([]);
     setLoading(true);
     setAgentTrace([]);
     setAgentThought("Queued...");
 
-    // Optimistically add user message
+    // Optimistically add user message with files description
+    const fileNamesList = userAttachments.map(a => `[Attached File: ${a.name} (${a.type})]`).join('\n');
+    const displayMsgContent = fileNamesList ? `${userMsg}\n\n${fileNamesList}` : userMsg;
+
     const tempUserMessage: ChatMessage = {
       id: Math.random().toString(),
       role: 'user',
-      content: userMsg,
+      content: displayMsgContent,
       createdAt: new Date().toISOString()
     };
     setMessages(prev => [...prev, tempUserMessage]);
@@ -417,7 +595,8 @@ export const AntigravityChat = () => {
           message: userMsg,
           socketId: socketRef.current?.id,
           context: contextObj,
-          model: modelName
+          model: modelName,
+          attachments: userAttachments
         })
       });
 
@@ -445,8 +624,50 @@ export const AntigravityChat = () => {
       fetchSessions();
       loadSession(sessionId);
 
-    } catch (error) {
-      toast.error("Agent loop failed to complete.");
+    } catch (error: any) {
+      toast.error(error?.message || "Agent loop failed to complete.");
+    } finally {
+      setLoading(false);
+      setAgentThought(null);
+      setAgentTrace([]);
+      setStreamingText('');
+      setAttachments([]);
+    }
+  };
+
+  const handleActionApproval = async (action: 'approve' | 'reject') => {
+    if (!sessionId) return;
+    setLoading(true);
+    setAgentThought(action === 'approve' ? "Executing action..." : "Cancelling action...");
+    setStreamingText('');
+
+    try {
+      const token = authSession?.access_token;
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant!.id
+        },
+        body: JSON.stringify({
+          action,
+          socketId: socketRef.current?.id,
+          model: modelName
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to process approval");
+      }
+
+      // Refresh session
+      loadSession(sessionId);
+      fetchSessions();
+
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit action approval");
     } finally {
       setLoading(false);
       setAgentThought(null);
@@ -597,21 +818,21 @@ export const AntigravityChat = () => {
           // Headers
           if (trimmed.startsWith('# ')) {
             return (
-              <h1 key={idx} className="text-sm font-bold text-zinc-800 dark:text-zinc-200 mt-4 mb-2 pb-1 border-b border-zinc-200/60 dark:border-zinc-800/80">
+              <h1 key={idx} className="text-lg font-bold text-zinc-800 dark:text-zinc-200 mt-4 mb-2 pb-1 border-b border-zinc-200/60 dark:border-zinc-800/80">
                 {trimmed.replace('# ', '')}
               </h1>
             );
           }
           if (trimmed.startsWith('## ')) {
             return (
-              <h2 key={idx} className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 mt-3 mb-1.5">
+              <h2 key={idx} className="text-base font-semibold text-zinc-700 dark:text-zinc-200 mt-3 mb-1.5">
                 {trimmed.replace('## ', '')}
               </h2>
             );
           }
           if (trimmed.startsWith('### ')) {
             return (
-              <h3 key={idx} className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-350 mt-2.5 mb-1">
+              <h3 key={idx} className="text-sm font-semibold text-zinc-600 dark:text-zinc-350 mt-2.5 mb-1">
                 {trimmed.replace('### ', '')}
               </h3>
             );
@@ -621,7 +842,7 @@ export const AntigravityChat = () => {
           if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
             const content = trimmed.substring(2);
             return (
-              <ul key={idx} className="list-disc pl-5 my-0.5 text-xs text-zinc-650 dark:text-zinc-400">
+              <ul key={idx} className="list-disc pl-5 my-0.5 text-sm text-zinc-650 dark:text-zinc-400">
                 <li>{parseInlineFormatting(content)}</li>
               </ul>
             );
@@ -639,7 +860,7 @@ export const AntigravityChat = () => {
 
           // Normal paragraph
           return (
-            <p key={idx} className="text-xs leading-relaxed text-zinc-650 dark:text-zinc-400 my-1 text-justify">
+            <p key={idx} className="text-sm leading-relaxed text-zinc-650 dark:text-zinc-400 my-1 text-justify">
               {parseInlineFormatting(trimmed)}
             </p>
           );
@@ -656,7 +877,7 @@ export const AntigravityChat = () => {
       }
       if (part.startsWith('`') && part.endsWith('`')) {
         return (
-          <code key={i} className="bg-zinc-100 dark:bg-zinc-800/80 px-1 py-0.5 rounded text-[10px] font-mono text-indigo-650 dark:text-indigo-400 border border-zinc-200/50 dark:border-zinc-700/50">
+          <code key={i} className="bg-zinc-100 dark:bg-zinc-800/80 px-1 py-0.5 rounded text-xs font-mono text-indigo-650 dark:text-indigo-400 border border-zinc-200/50 dark:border-zinc-700/50">
             {part.slice(1, -1)}
           </code>
         );
@@ -666,14 +887,153 @@ export const AntigravityChat = () => {
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputMessage(e.target.value);
+    const val = e.target.value;
+    setInputMessage(val);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+
+    // Autocomplete triggers detection
+    const selectionEnd = e.target.selectionEnd;
+    const textBeforeCursor = val.substring(0, selectionEnd);
+    const slashMatch = textBeforeCursor.match(/\/(\w*)$/);
+    const atMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (slashMatch) {
+      setShowSuggestions(true);
+      setSuggestionType('command');
+      setSuggestionFilter(slashMatch[1]);
+      setSelectedSuggestionIdx(0);
+    } else if (atMatch) {
+      setShowSuggestions(true);
+      setSuggestionType('mention');
+      setSuggestionFilter(atMatch[1]);
+      setSelectedSuggestionIdx(0);
+    } else {
+      setShowSuggestions(false);
+      setSuggestionType(null);
+      setSuggestionFilter('');
+    }
   };
 
-  const getActivePlan = () => activeSession?.metadata?.plan || "No active implementation plan compiled yet.";
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setAttachments(prev => [
+          ...prev,
+          {
+            name: file.name,
+            type: file.type,
+            base64: base64String.split(',')[1]
+          }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (e.target) e.target.value = '';
+  };
+
+  const getSuggestions = () => {
+    if (suggestionType === 'command') {
+      const allCommands = [
+        { name: '/sql', desc: 'Construct and run SELECT SQL queries' },
+        { name: '/test-connector', desc: 'Simulate custom Nexus Connector dry-runs' },
+        { name: '/clear', desc: 'Clear the current chat history' },
+        { name: '/help', desc: 'Show co-pilot guidelines & available tools' }
+      ];
+      return allCommands.filter(c => c.name.toLowerCase().includes('/' + suggestionFilter.toLowerCase()));
+    } else if (suggestionType === 'mention') {
+      const allMentions = [
+        ...explorerData.modules.map((m: any) => ({ name: `@${m.name}`, desc: 'Database Module' })),
+        ...explorerData.connectors.map((c: any) => ({ name: `@${c.name}`, desc: 'Integration Connector' }))
+      ];
+      return allMentions.filter(m => m.name.toLowerCase().includes('@' + suggestionFilter.toLowerCase()));
+    }
+    return [];
+  };
+
+  const handleSelectSuggestion = (suggestion: any) => {
+    if (!textareaRef.current) return;
+    const selectionEnd = textareaRef.current.selectionEnd;
+    const textBeforeCursor = inputMessage.substring(0, selectionEnd);
+    const textAfterCursor = inputMessage.substring(selectionEnd);
+
+    let regex = suggestionType === 'command' ? /\/(\w*)$/ : /@(\w*)$/;
+    const replacement = suggestion.name + ' ';
+    const newTextBeforeCursor = textBeforeCursor.replace(regex, replacement);
+
+    setInputMessage(newTextBeforeCursor + textAfterCursor);
+    setShowSuggestions(false);
+    setSuggestionType(null);
+    setSuggestionFilter('');
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const cursorPosition = newTextBeforeCursor.length;
+        textareaRef.current.setSelectionRange(cursorPosition, cursorPosition);
+      }
+    }, 10);
+  };
+
+  const getGroupedSessions = (sessionList: ChatSession[]) => {
+    const today: ChatSession[] = [];
+    const yesterday: ChatSession[] = [];
+    const lastWeek: ChatSession[] = [];
+    const older: ChatSession[] = [];
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+    const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
+
+    sessionList.forEach(s => {
+      const createdTime = new Date(s.createdAt).getTime();
+      if (createdTime >= todayStart) {
+        today.push(s);
+      } else if (createdTime >= yesterdayStart) {
+        yesterday.push(s);
+      } else if (createdTime >= weekStart) {
+        lastWeek.push(s);
+      } else {
+        older.push(s);
+      }
+    });
+
+    return { today, yesterday, lastWeek, older };
+  };
+
+  const filteredSessions = sessions.filter(s =>
+    (s.title || '').toLowerCase().includes(sessionSearch.toLowerCase())
+  );
+  const groupedSessions = getGroupedSessions(filteredSessions);
+
+  const renderSessionItem = (s: ChatSession) => (
+    <div 
+      key={s.id}
+      onClick={() => navigate(`/workspace/aurora-vibe/${s.id}`)}
+      className={`group w-full flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer transition-all border ${
+        s.id === sessionId 
+          ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
+          : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
+      }`}
+    >
+      <MessageSquare size={18} className={cn("shrink-0", s.id === sessionId ? "text-indigo-600 dark:text-white" : "text-zinc-400 dark:text-zinc-550")} />
+      <span className="text-sm font-medium flex-1 text-left truncate">{s.title || 'Untitled Session'}</span>
+      <button 
+        onClick={(e) => deleteSession(s.id, e)}
+        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-555 hover:text-red-500 transition-all flex-shrink-0"
+        title="Delete Session"
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </div>
+  );
+
   const getActiveTasks = () => activeSession?.metadata?.tasks || [];
-  const getActiveWalkthrough = () => activeSession?.metadata?.walkthrough || "No walkthrough completed yet.";
 
   return (
     <div 
@@ -795,31 +1155,47 @@ export const AntigravityChat = () => {
                 <span>aurora</span>
               </div>
               
-              <div className="pl-6 space-y-1">
-                {sessions.length === 0 ? (
+              {/* Search Box */}
+              <div className="px-3 mb-2">
+                <input 
+                  type="text"
+                  placeholder="Search chats..."
+                  value={sessionSearch}
+                  onChange={(e) => setSessionSearch(e.target.value)}
+                  className="w-full text-xs bg-zinc-100 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-zinc-700 dark:text-zinc-300 placeholder-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="pl-6 space-y-3">
+                {filteredSessions.length === 0 ? (
                   <div className="p-2 text-xs text-zinc-500 dark:text-zinc-650 italic">No conversations</div>
                 ) : (
-                  sessions.map(s => (
-                    <div 
-                      key={s.id}
-                      onClick={() => navigate(`/workspace/aurora-vibe/${s.id}`)}
-                      className={`group w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all border ${
-                        s.id === sessionId 
-                          ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
-                          : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      <MessageSquare size={18} className={cn("shrink-0", s.id === sessionId ? "text-indigo-600 dark:text-white" : "text-zinc-400 dark:text-zinc-550")} />
-                      <span className="text-sm font-medium flex-1 text-left truncate">{s.title}</span>
-                      <button 
-                        onClick={(e) => deleteSession(s.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition-all flex-shrink-0"
-                        title="Delete Session"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))
+                  <>
+                    {groupedSessions.today.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Today</div>
+                        {groupedSessions.today.map(renderSessionItem)}
+                      </div>
+                    )}
+                    {groupedSessions.yesterday.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Yesterday</div>
+                        {groupedSessions.yesterday.map(renderSessionItem)}
+                      </div>
+                    )}
+                    {groupedSessions.lastWeek.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Last 7 Days</div>
+                        {groupedSessions.lastWeek.map(renderSessionItem)}
+                      </div>
+                    )}
+                    {groupedSessions.older.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Older</div>
+                        {groupedSessions.older.map(renderSessionItem)}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -927,6 +1303,53 @@ export const AntigravityChat = () => {
                       {renderMarkdown(m.content)}
                     </div>
 
+                    {/* Action Approval Card */}
+                    {(() => {
+                      const pendingStep = m.steps?.find((st: any) => st.status === 'pending_approval');
+                      if (!pendingStep) return null;
+                      return (
+                        <div className="mt-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 dark:bg-amber-500/10 dark:border-amber-500/20 space-y-3 max-w-lg shadow-sm">
+                          <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5 select-none">
+                            <AlertCircle size={14} className="text-amber-500 animate-pulse" />
+                            Action Approval Required
+                          </div>
+                          <div className="text-xs text-zinc-700 dark:text-zinc-300">
+                            Aurora requires authorization to execute a configuration mutation:
+                            <div className="mt-2 p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded font-mono text-[10.5px] overflow-x-auto text-left">
+                              <strong>Tool:</strong> {pendingStep.name}<br />
+                              <strong>Arguments:</strong> {JSON.stringify(pendingStep.arguments, null, 2)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={() => handleActionApproval('approve')}
+                              disabled={loading}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1 shadow-sm disabled:opacity-50 cursor-pointer"
+                            >
+                              <CheckCircle2 size={13} /> Approve & Continue
+                            </button>
+                            <button
+                              onClick={() => handleActionApproval('reject')}
+                              disabled={loading}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-400 text-zinc-700 dark:text-zinc-300 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer border border-zinc-200 dark:border-zinc-700"
+                            >
+                              Reject Request
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Interactive Query Visualizer (Table & Chart) */}
+                    {m.steps && m.steps.filter((st: any) => 
+                      ['execute_read_only_query', 'query_explain_and_assist'].includes(st.name) && 
+                      st.result && 
+                      (Array.isArray(st.result) || (st.result.dryRunResults && Array.isArray(st.result.dryRunResults)))
+                    ).map((st: any, sidx: number) => {
+                      const rawData = Array.isArray(st.result) ? st.result : st.result.dryRunResults;
+                      return <QueryResultVisualizer key={sidx} result={rawData} />;
+                    })}
+
                     {/* Dynamic Action Redirect Cards based on tool executions */}
                     {m.steps && m.steps.some((st: any) => 
                       ['create_or_update_module', 'create_or_update_automation', 'create_or_update_connector'].includes(st.name) && st.result && !st.result.error
@@ -1025,8 +1448,21 @@ export const AntigravityChat = () => {
                 );
               })}
 
+              {/* Streaming Assistant reply */}
+              {streamingText && (
+                <div className="w-full space-y-3 py-2 border-b border-zinc-250/20 dark:border-zinc-800/30 pb-6">
+                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-450 font-medium select-none">
+                    <Loader2 className="h-3 w-3 animate-spin text-indigo-500" />
+                    <span>Streaming response...</span>
+                  </div>
+                  <div className="text-sm text-zinc-750 dark:text-zinc-300 leading-relaxed font-sans">
+                    {renderMarkdown(streamingText)}
+                  </div>
+                </div>
+              )}
+
               {/* Active agent streaming logs */}
-              {(agentThought || agentTrace.length > 0) && (
+              {loading && (agentThought || agentTrace.length > 0) && (
                 <div className="w-full space-y-3 py-2">
                   <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-450">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500 dark:text-indigo-400" />
@@ -1072,15 +1508,87 @@ export const AntigravityChat = () => {
               </div>
             )}
 
+            {/* Suggestions Popover */}
+            {showSuggestions && getSuggestions().length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 max-h-52 overflow-y-auto animate-fade-in flex flex-col gap-0.5">
+                {getSuggestions().map((item, idx) => (
+                  <div
+                    key={item.name}
+                    onClick={() => handleSelectSuggestion(item)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition-all ${
+                      idx === selectedSuggestionIdx
+                        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold'
+                        : 'text-zinc-650 dark:text-zinc-400 hover:bg-zinc-55 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <span className="font-mono">{item.name}</span>
+                    <span className="text-[10px] text-zinc-450 dark:text-zinc-550">{item.desc}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Attachments Preview Row */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 pb-2 mb-1 border-b border-zinc-200/50 dark:border-zinc-800/40">
+                {attachments.map((file, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 px-2.5 py-1 rounded-lg text-xs text-zinc-700 dark:text-zinc-300">
+                    {file.type.startsWith('image/') ? (
+                      <img src={`data:${file.type};base64,${file.base64}`} alt="preview" className="h-5 w-5 rounded object-cover" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-indigo-500" />
+                    )}
+                    <span className="truncate max-w-[120px] font-medium">{file.name}</span>
+                    <button
+                      onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-zinc-450 dark:text-zinc-550 hover:text-red-500 transition-all font-bold ml-1"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Hidden File Input */}
+            <input 
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              multiple
+              accept="image/*,text/*,application/json,text/csv"
+              className="hidden"
+            />
+
             {/* Expanding Textarea */}
             <textarea 
+              ref={textareaRef}
               rows={1}
               value={inputMessage}
               onChange={handleTextareaChange}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
+                if (showSuggestions) {
+                  const suggestionsList = getSuggestions();
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setSelectedSuggestionIdx(prev => (prev + 1) % Math.max(1, suggestionsList.length));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setSelectedSuggestionIdx(prev => (prev - 1 + suggestionsList.length) % Math.max(1, suggestionsList.length));
+                  } else if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    if (suggestionsList[selectedSuggestionIdx]) {
+                      handleSelectSuggestion(suggestionsList[selectedSuggestionIdx]);
+                    }
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowSuggestions(false);
+                  }
+                } else {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
                 }
               }}
               disabled={loading || !sessionId}
@@ -1094,6 +1602,13 @@ export const AntigravityChat = () => {
               <div className="flex items-center gap-2">
                 <button className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-all">
                   <Plus className="h-4 w-4" />
+                </button>
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400 transition-all"
+                  title="Attach file or image"
+                >
+                  <Paperclip className="h-4 w-4" />
                 </button>
 
                 {/* Model selector dropdown */}
@@ -1112,7 +1627,6 @@ export const AntigravityChat = () => {
                           key={m}
                           onClick={() => {
                             setModelName(m);
-                            setTelemetry(prev => ({ ...prev, model: m }));
                             setShowModelMenu(false);
                           }}
                           className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-55 dark:hover:bg-zinc-800 transition-all"
@@ -1416,6 +1930,15 @@ export const AntigravityChat = () => {
         </div>
       </div>
       )}
+      
+      <DeleteConfirmationModal
+        isOpen={deleteSessionId !== null}
+        onClose={() => setDeleteSessionId(null)}
+        onConfirm={confirmDeleteSession}
+        title="Delete Conversation"
+        description="Are you sure you want to delete this session? All message history will be permanently lost."
+      />
+      
       </div>
     </div>
   );

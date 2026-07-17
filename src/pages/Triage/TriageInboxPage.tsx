@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
@@ -1074,8 +1075,8 @@ export const TriageInboxPage = () => {
     if (!selectedRecord) return null;
     const originalModule = getOriginalModule(selectedRecord, modules);
     
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
+    return createPortal(
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
         <div className="bg-zinc-950 border border-zinc-900 w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           
           {/* Header */}
@@ -1099,7 +1100,7 @@ export const TriageInboxPage = () => {
                   className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
                 >
                   <option value="">Select Target Module...</option>
-                  {modules?.filter((m: any) => m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
+                  {modules?.filter((m: any) => m.enabled && m.type !== 'PAGE' && m.id !== triageModule.id && m.isIntakeTriage !== true && m.config?.isIntakeTriage !== true).map((m: any) => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
@@ -1458,7 +1459,8 @@ export const TriageInboxPage = () => {
           </div>
 
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 

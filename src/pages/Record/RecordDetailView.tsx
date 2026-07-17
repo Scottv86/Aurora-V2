@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { 
   motion, 
   AnimatePresence 
@@ -3077,9 +3078,10 @@ export const RecordDetailView = ({
 
 
 
-      <AnimatePresence>
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-[101] flex items-center justify-center p-6">
+      {createPortal(
+        <AnimatePresence>
+          {showDeleteModal && (
+            <div className="fixed inset-0 z-[1001] flex items-center justify-center p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -3119,12 +3121,15 @@ export const RecordDetailView = ({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
 
       {/* Workflow Visualizer Modal */}
-      <AnimatePresence>
-        {showVisualizer && activeWorkflow && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-12">
+      {createPortal(
+        <AnimatePresence>
+          {showVisualizer && activeWorkflow && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-12">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -3182,8 +3187,13 @@ export const RecordDetailView = ({
             </motion.div>
           </div>
         )}
-        {showQuickActionModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+      </AnimatePresence>,
+      document.body
+    )}
+      {createPortal(
+        <AnimatePresence>
+          {showQuickActionModal && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -3420,10 +3430,14 @@ export const RecordDetailView = ({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
 
-      {pendingBypassSave && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+      {createPortal(
+        <AnimatePresence>
+          {pendingBypassSave && (
+            <div className="fixed inset-0 z-[1050] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] max-w-md w-full p-8 shadow-2xl space-y-6 animate-in zoom-in-95 duration-300">
             <div className="flex items-center gap-3 text-amber-500">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
@@ -3483,6 +3497,9 @@ export const RecordDetailView = ({
           </div>
         </div>
       )}
+    </AnimatePresence>,
+    document.body
+  )}
     </div>
   );
 };

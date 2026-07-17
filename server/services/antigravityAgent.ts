@@ -288,6 +288,208 @@ const agentTools = [
         }
       },
       {
+        name: "manage_module_field",
+        description: "Add, modify, or remove an individual field configuration inside a module's layout.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            moduleId: { type: Type.STRING, description: "The ID of the target module." },
+            action: { type: Type.STRING, description: "Action to perform: ADD, UPDATE, or REMOVE." },
+            fieldId: { type: Type.STRING, description: "The ID of the field (required for UPDATE/REMOVE, optional for ADD)." },
+            fieldConfig: {
+              type: Type.OBJECT,
+              description: "Configuration properties of the field to add or update (name, label, type, required, tabId, colSpan, etc.)."
+            }
+          },
+          required: ["moduleId", "action"]
+        }
+      },
+      {
+        name: "manage_module_validation",
+        description: "Add, modify, or remove custom validation rules for fields in a module config.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            moduleId: { type: Type.STRING, description: "The ID of the target module." },
+            action: { type: Type.STRING, description: "Action to perform: ADD, UPDATE, or REMOVE." },
+            ruleId: { type: Type.STRING, description: "The ID of the validation rule (required for UPDATE/REMOVE, optional for ADD)." },
+            ruleConfig: {
+              type: Type.OBJECT,
+              description: "Validation rule properties (name, expression, errorMessage, severity)."
+            }
+          },
+          required: ["moduleId", "action"]
+        }
+      },
+      {
+        name: "manage_module_workflow",
+        description: "Manage workflow nodes (STATUS, DECISION, ACTION) and transition edges for a module.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            moduleId: { type: Type.STRING, description: "The ID of the target module." },
+            action: { type: Type.STRING, description: "Action: ADD_NODE, UPDATE_NODE, REMOVE_NODE, ADD_EDGE, UPDATE_EDGE, REMOVE_EDGE." },
+            node: {
+              type: Type.OBJECT,
+              description: "For node actions: properties of the node (id, name, type, config, position)."
+            },
+            edge: {
+              type: Type.OBJECT,
+              description: "For edge actions: properties of the edge (id, label, source, target, condition)."
+            }
+          },
+          required: ["moduleId", "action"]
+        }
+      },
+      {
+        name: "manage_page_widget",
+        description: "Add, update, or remove layout widgets configured inside PAGE type modules.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            pageId: { type: Type.STRING, description: "The ID of the target module of type PAGE." },
+            action: { type: Type.STRING, description: "Action to perform: ADD, UPDATE, or REMOVE." },
+            widgetId: { type: Type.STRING, description: "The ID of the widget (required for UPDATE/REMOVE, optional for ADD)." },
+            widgetConfig: {
+              type: Type.OBJECT,
+              description: "Properties of the widget (name, type, w, h, x, y, config)."
+            }
+          },
+          required: ["pageId", "action"]
+        }
+      },
+      {
+        name: "manage_document_template",
+        description: "Create, update, delete, or fetch document templates for document generation.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, description: "Action to perform: CREATE, UPDATE, DELETE, or GET." },
+            templateId: { type: Type.STRING, description: "Optional template ID." },
+            name: { type: Type.STRING, description: "Template display name." },
+            description: { type: Type.STRING, description: "Description of the template purpose." },
+            moduleId: { type: Type.STRING, description: "Target module ID for data binding." },
+            content: { type: Type.STRING, description: "HTML/Markdown design layout content." },
+            status: { type: Type.STRING, description: "Status (Draft, Active)." }
+          },
+          required: ["action"]
+        }
+      },
+      {
+        name: "manage_org_graph",
+        description: "Create/edit/delete teams and positions, or assign tenant members in the org graph.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, description: "Action: CREATE_TEAM, UPDATE_TEAM, DELETE_TEAM, CREATE_POSITION, UPDATE_POSITION, DELETE_POSITION, ASSIGN_MEMBER." },
+            teamId: { type: Type.STRING, description: "Target team ID." },
+            positionId: { type: Type.STRING, description: "Target position ID." },
+            memberId: { type: Type.STRING, description: "Target member ID." },
+            name: { type: Type.STRING, description: "Name (for teams)." },
+            description: { type: Type.STRING, description: "Description (for teams or positions)." },
+            title: { type: Type.STRING, description: "Title (for positions)." },
+            positionNumber: { type: Type.STRING, description: "Unique code (for positions)." },
+            parentId: { type: Type.STRING, description: "Parent position ID (for reporting hierarchy)." }
+          },
+          required: ["action"]
+        }
+      },
+      {
+        name: "test_connector_integration",
+        description: "Simulate/test execution of a custom API connector with custom parameters, returning dry-run logs and outputs.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            connectorId: { type: Type.STRING, description: "The ID of the custom nexus connector." },
+            payload: { type: Type.OBJECT, description: "Sample parameters (JSON payload) to pass to the connector." }
+          },
+          required: ["connectorId", "payload"]
+        }
+      },
+      {
+        name: "manage_webhook_subscription",
+        description: "Configure or register custom outgoing webhook integrations for module data events.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, description: "Action: CREATE, UPDATE, DELETE, or GET." },
+            subscriptionId: { type: Type.STRING, description: "The ID of the target webhook subscription." },
+            name: { type: Type.STRING, description: "Name of subscription." },
+            url: { type: Type.STRING, description: "The destination webhook listener URL." },
+            secret: { type: Type.STRING, description: "Secret token for signing payload." },
+            eventTypes: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Array of events (e.g. ['record.created', 'record.updated'])."
+            },
+            isActive: { type: Type.BOOLEAN, description: "Whether the subscription is active." }
+          },
+          required: ["action"]
+        }
+      },
+      {
+        name: "manage_scheduled_job",
+        description: "Register or manage cron scheduled tasks and background sync jobs.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, description: "Action: CREATE, UPDATE, DELETE, or GET." },
+            jobId: { type: Type.STRING, description: "The ID of the target scheduled job." },
+            name: { type: Type.STRING, description: "Display name of the scheduled task." },
+            description: { type: Type.STRING, description: "Purpose of the job." },
+            cronExpression: { type: Type.STRING, description: "Standard 5-field cron string (e.g. '0 0 * * *')." },
+            actionType: { type: Type.STRING, description: "Action type: RUN_AUTOMATION or FETCH_CONNECTOR." },
+            targetId: { type: Type.STRING, description: "Target Automation or TenantConnector ID." },
+            isActive: { type: Type.BOOLEAN, description: "Whether the job schedule is active." }
+          },
+          required: ["action"]
+        }
+      },
+      {
+        name: "query_explain_and_assist",
+        description: "Explain, construct, and validate SQL SELECT queries based on natural language descriptions to assist business users.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            description: { type: Type.STRING, description: "Natural language description of what you want to query or report." },
+            sql: { type: Type.STRING, description: "Optional SQL query to validate, explain, and preview." }
+          },
+          required: ["description"]
+        }
+      },
+      {
+        name: "explore_audit_trail",
+        description: "Query system audit logs and change histories for a target module, automation, or record.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, description: "Action: LIST, GET_BY_ENTITY, or GET_BY_USER." },
+            entityType: { type: Type.STRING, description: "Optional entity type (e.g. 'record', 'module', 'automation')." },
+            entityId: { type: Type.STRING, description: "Optional entity ID." },
+            userId: { type: Type.STRING, description: "Optional user ID." }
+          },
+          required: ["action"]
+        }
+      },
+      {
+        name: "manage_agent_profile",
+        description: "Configure AI agent profiles, models, prompt contexts, and instructions in the Agent Studio.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, description: "Action: CREATE, UPDATE, DELETE, or GET." },
+            agentId: { type: Type.STRING, description: "Target Agent profile ID." },
+            name: { type: Type.STRING, description: "Name of the AI agent worker." },
+            modelType: { type: Type.STRING, description: "Gemini Model type (e.g. gemini-2.5-pro)." },
+            config: {
+              type: Type.OBJECT,
+              description: "Configuration properties (e.g. prompt instructions, roles, tools config)."
+            }
+          },
+          required: ["action"]
+        }
+      },
+      {
         name: "write_agent_plan",
         description: "Update the live project plan, task checklist, or verification walkthrough in the session panel.",
         parameters: {
@@ -317,7 +519,8 @@ export const runAgentLoop = async (
   userMessage: string,
   socketId?: string,
   context?: any,
-  modelName?: string
+  modelName?: string,
+  attachments?: { name: string; type: string; base64: string }[]
 ): Promise<{ text: string; steps: any[] }> => {
   const ai = getAI();
   if (!ai) throw new Error("AI Agent execution failed: API key missing.");
@@ -361,7 +564,11 @@ export const runAgentLoop = async (
       memberships: {
         where: { tenantId },
         include: {
-          position: true,
+          position: {
+            include: {
+              parent: true
+            }
+          },
           team: true,
           permissionGroups: {
             include: {
@@ -383,6 +590,38 @@ export const runAgentLoop = async (
     ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] 
     : await resolveCapabilities(groupIds, tenantId);
 
+  // Fetch tenant settings and timezone
+  const tenantDetails = await db.tenant.findUnique({
+    where: { id: tenantId }
+  });
+
+  // Fetch active connectors list (excluding secrets)
+  const activeConnectors = await db.tenantConnector.findMany({
+    where: { tenantId, isActive: true },
+    include: { connector: true }
+  });
+  const connectorList = activeConnectors.map(c => `- ${c.displayName || c.connector.name} (ID: ${c.connectorId})`).join('\n') || 'None';
+
+  // Format user profile
+  const positionTitle = membership?.position?.title || 'None';
+  const positionDept = membership?.position?.description || 'None';
+  const teamName = membership?.team?.name || 'None';
+
+  let managerName = 'None';
+  if (membership?.position?.parent) {
+    const managerMember = await db.tenantMember.findFirst({
+      where: { tenantId, positionId: membership.position.parentId }
+    });
+    if (managerMember) {
+      managerName = `${managerMember.firstName || ''} ${managerMember.familyName || ''}`.trim();
+    }
+  }
+
+  // System time and timezone calculations
+  const tenantTimezone = tenantDetails?.timezone || 'UTC';
+  const localTimeStr = new Date().toLocaleString('en-US', { timeZone: tenantTimezone });
+  const serverTimeStr = new Date().toISOString();
+
   let contextBlock = "";
   if (context && context.path) {
     contextBlock = `\nUSER'S CURRENT LOCATION IN THE PLATFORM (REAL-TIME CONTEXT):
@@ -397,25 +636,50 @@ Use this information to ground your understanding. For example, if they ask to a
   const systemInstruction = `You are Aurora, the autonomous agentic co-pilot for the Aurora Business Platform.
 You assist both developers (building database modules, automations, public websites) and business users (querying records, auditing leads, writing communications).
 
+CURRENT DATE & TIME CONTEXT:
+  - Tenant Timezone: "${tenantTimezone}"
+  - Current Date & Time (Tenant Local): "${localTimeStr}"
+  - Current Date & Time (UTC/ISO): "${serverTimeStr}"
+
 CURRENT LOGGED-IN USER CONTEXT:
   - Name: "${userFullName}"
   - User ID: "${userId}"
   - Role: "${role}"
   - License Type: "${licenceType}"
   - Permissions/Capabilities: ${JSON.stringify(capabilities)}
+  - Company Position/Title: "${positionTitle}"
+  - Department/Function: "${positionDept}"
+  - Active Team: "${teamName}"
+  - Manager Name: "${managerName}"
 ${contextBlock}
-CURRENT TENANT ID: "${tenantId}"
+CURRENT TENANT CONTEXT:
+  - Tenant ID: "${tenantId}"
+  - Subdomain: "${tenantDetails?.subdomain || 'None'}"
+  - Currency: "${tenantDetails?.currency || 'USD'}"
+  - Installed Connectors / Integrations:
+${connectorList}
 
 SYSTEM DATABASE SCHEMAS (PHYSICAL TABLES Whitelisted for "execute_read_only_query"):
   - tenant_members (id, tenant_id, user_id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id)
-    *Note: Always filter by tenant_id = '${tenantId}' to isolate data.
   - teams (id, tenant_id, name, description)
-  - positions (id, tenant_id, name, department)
+  - positions (id, tenant_id, title, position_number, description, parent_id)
   - workspaces (id, tenant_id, name)
   - modules (id, tenant_id, name, type, category, config)
-  - records (id, tenant_id, module_id, data)
-    *Note: records.data is a JSONB column containing custom module fields. Use ->> to query them (e.g. data->>'email').
+  - records (id, tenant_id, module_id, data, status, workflow_state, sla_status, created_at)
   - audit_logs (id, tenant_id, action, entity_type, entity_id, user_id, metadata, created_at)
+  - permission_groups (id, tenant_id, name, description, parent_group_id)
+  - member_permission_groups (id, tenant_id, member_id, permission_group_id)
+  - global_lists (id, tenant_id, name, description)
+  - global_list_items (id, list_id, tenant_id, value, label)
+
+ENTITY RELATIONSHIPS & JOIN PATHS:
+  - Join Member to Position: tenant_members.position_id = positions.id
+  - Join Member to Team: tenant_members.team_id = teams.id
+  - Join Position to Manager Position: positions.parent_id = positions.id (manager's position)
+  - Join Member to User: tenant_members.user_id = users.id (Note: users table is restricted; query tenant_members instead)
+  - Join Member to Permission Group: member_permission_groups.member_id = tenant_members.id -> join to permission_groups.id
+  - Join Record to Module: records.module_id = modules.id
+  - Join Global List Items: global_list_items.list_id = global_lists.id
 
 CURRENT WORKSPACE SCHEMA (CUSTOM MODULES):
 ${JSON.stringify(schemaOverview, null, 2)}
@@ -453,9 +717,21 @@ CORE GUIDELINES:
     });
   }
 
+  const initialParts: any[] = [{ text: userMessage }];
+  if (attachments && attachments.length > 0) {
+    attachments.forEach(att => {
+      initialParts.push({
+        inlineData: {
+          mimeType: att.type,
+          data: att.base64
+        }
+      });
+    });
+  }
+
   contents.push({
     role: 'user',
-    parts: [{ text: userMessage }]
+    parts: initialParts
   });
 
   let loopCount = 0;
@@ -508,10 +784,143 @@ CORE GUIDELINES:
         const { name, args } = call.functionCall!;
         console.log(`[AgentLoop] Model called function: ${name} with args`, args);
 
-        emitStep(socketId, { type: 'tool_call', name, arguments: args });
-        let result: any = null;
+        const MUTATING_TOOLS = [
+          'manage_module_field',
+          'manage_module_validation',
+          'manage_module_workflow',
+          'manage_page_widget',
+          'manage_document_template',
+          'manage_org_graph',
+          'manage_agent_profile',
+          'manage_scheduled_job',
+          'manage_webhook_subscription'
+        ];
 
-        try {
+        if (MUTATING_TOOLS.includes(name)) {
+          console.log(`[AgentLoop] Mutating tool call detected: ${name}. Requesting user approval...`);
+          
+          activeMetadata.pausedSessionState = {
+            contents,
+            steps: [...steps, { name, arguments: args, status: 'pending_approval' }],
+            pendingTool: { name, args }
+          };
+          await db.antigravitySession.update({
+            where: { id: sessionId },
+            data: { metadata: activeMetadata }
+          });
+
+          const fileNamesList = (attachments || []).map(a => `[Attached File: ${a.name} (${a.type})]`).join('\n');
+          const savedUserMessage = fileNamesList ? `${userMessage}\n\n${fileNamesList}` : userMessage;
+
+          if (loopCount === 1) {
+            await db.antigravityMessage.create({
+              data: {
+                sessionId,
+                role: 'user',
+                content: savedUserMessage
+              }
+            });
+          }
+
+          const pendingSteps = [...steps, { name, arguments: args, status: 'pending_approval' }];
+          await db.antigravityMessage.create({
+            data: {
+              sessionId,
+              role: 'model',
+              content: `I need your approval to execute the action: **${name}**.\n\nArguments:\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``,
+              steps: pendingSteps as any
+            }
+          });
+
+          emitStep(socketId, { type: 'approval_required', name, arguments: args });
+
+          return { 
+            text: `Approval required for action: ${name}`, 
+            steps: pendingSteps, 
+            paused: true 
+          };
+        }
+
+        emitStep(socketId, { type: 'tool_call', name, arguments: args });
+        let result = await executeAgentTool(db, tenantId, name, args, sessionId, activeMetadata);
+
+        emitStep(socketId, { type: 'tool_result', name, result });
+        steps.push({ name, arguments: args, result });
+
+        functionResponses.push({
+          response: { output: result },
+          name
+        });
+      }
+
+      contents.push(candidate.content);
+      contents.push({
+        role: 'user',
+        parts: functionResponses.map(r => ({
+          functionResponse: {
+            name: r.name,
+            response: r.response
+          }
+        }))
+      });
+      const text = part?.text || "";
+
+      // Stream the text to the client with natural pacing
+      try {
+        emitStep(socketId, { type: 'stream_start' });
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        const words = text.split(/(\s+)/);
+        for (const word of words) {
+          if (!word) continue;
+          emitStep(socketId, { type: 'chunk', content: word });
+          await delay(15); // 15ms pacing
+        }
+      } catch (streamErr) {
+        console.error("[AgentLoop] Error during text streaming:", streamErr);
+        emitStep(socketId, { type: 'chunk', content: text });
+      }
+
+      const fileNamesList = (attachments || []).map(a => `[Attached File: ${a.name} (${a.type})]`).join('\n');
+      const savedUserMessage = fileNamesList ? `${userMessage}\n\n${fileNamesList}` : userMessage;
+
+      await db.antigravityMessage.create({
+        data: {
+          sessionId,
+          role: 'user',
+          content: savedUserMessage
+        }
+      });
+
+      await db.antigravityMessage.create({
+        data: {
+          sessionId,
+          role: 'model',
+          content: text,
+          steps: steps as any
+        }
+      });
+
+      return { text, steps };
+    }
+  }
+
+  throw new Error("Agent loop exceeded maximum turns without producing a final text response.");
+};
+
+function PartIsFunctionCall(part: any): boolean {
+  return part.functionCall !== undefined || (Array.isArray(part) && part.some(p => p.functionCall));
+}
+
+export const executeAgentTool = async (
+  db: any,
+  tenantId: string,
+  name: string,
+  args: any,
+  sessionId: string,
+  activeMetadata: any
+): Promise<any> => {
+  let result: any = null;
+          try {
           if (name === 'get_workspace_schema') {
             const mods = await db.module.findMany({ where: { tenantId } });
             const autos = await db.automation.findMany({ where: { tenantId } });
@@ -524,7 +933,8 @@ CORE GUIDELINES:
             if (!securityCheck.isValid) {
               result = { error: securityCheck.error };
             } else {
-              result = await db.$queryRawUnsafe(args.sql);
+              const rawResult = await db.$queryRawUnsafe(args.sql);
+              result = serializeBigInts(rawResult);
             }
           } 
           else if (name === 'create_or_update_module') {
@@ -653,6 +1063,600 @@ CORE GUIDELINES:
             };
             result = await runScript();
           } 
+          else if (name === 'manage_module_field') {
+            const { moduleId, action, fieldId, fieldConfig } = args;
+            const targetModule = await db.module.findFirst({
+              where: { id: moduleId, tenantId }
+            });
+            if (!targetModule) {
+              result = { error: `Module '${moduleId}' not found.` };
+            } else {
+              const config = (targetModule.config as any) || {};
+              let layout = Array.isArray(config.layout) ? config.layout : [];
+
+              if (action === 'ADD') {
+                const newField = {
+                  id: fieldId || `field-${Date.now()}`,
+                  ...fieldConfig
+                };
+                layout.push(newField);
+              } else if (action === 'UPDATE') {
+                layout = layout.map((f: any) => 
+                  (f.id === fieldId || f.name === fieldId) ? { ...f, ...fieldConfig } : f
+                );
+              } else if (action === 'REMOVE') {
+                layout = layout.filter((f: any) => f.id !== fieldId && f.name !== fieldId);
+              }
+
+              const updatedModule = await db.module.update({
+                where: { id: moduleId },
+                data: { config: { ...config, layout } }
+              });
+              result = { success: true, module: updatedModule };
+            }
+          }
+          else if (name === 'manage_module_validation') {
+            const { moduleId, action, ruleId, ruleConfig } = args;
+            const targetModule = await db.module.findFirst({
+              where: { id: moduleId, tenantId }
+            });
+            if (!targetModule) {
+              result = { error: `Module '${moduleId}' not found.` };
+            } else {
+              const config = (targetModule.config as any) || {};
+              let validationRules = Array.isArray(config.validationRules) ? config.validationRules : [];
+
+              if (action === 'ADD') {
+                const newRule = {
+                  id: ruleId || `rule-${Date.now()}`,
+                  ...ruleConfig
+                };
+                validationRules.push(newRule);
+              } else if (action === 'UPDATE') {
+                validationRules = validationRules.map((r: any) =>
+                  r.id === ruleId ? { ...r, ...ruleConfig } : r
+                );
+              } else if (action === 'REMOVE') {
+                validationRules = validationRules.filter((r: any) => r.id !== ruleId);
+              }
+
+              const updatedModule = await db.module.update({
+                where: { id: moduleId },
+                data: { config: { ...config, validationRules } }
+              });
+              result = { success: true, module: updatedModule };
+            }
+          }
+          else if (name === 'manage_module_workflow') {
+            const { moduleId, action, node, edge } = args;
+            const targetModule = await db.module.findFirst({
+              where: { id: moduleId, tenantId }
+            });
+            if (!targetModule) {
+              result = { error: `Module '${moduleId}' not found.` };
+            } else {
+              const config = (targetModule.config as any) || {};
+              let workflows = Array.isArray(config.workflows) ? config.workflows : [];
+              if (workflows.length === 0) {
+                workflows.push({
+                  id: `wf-${Date.now()}`,
+                  name: "New Workflow",
+                  nodes: [],
+                  edges: []
+                });
+              }
+              const wf = workflows[0];
+              wf.nodes = wf.nodes || [];
+              wf.edges = wf.edges || [];
+
+              if (action === 'ADD_NODE') {
+                const newNode = {
+                  id: node.id || `node-${Date.now()}`,
+                  ...node
+                };
+                wf.nodes.push(newNode);
+              } else if (action === 'UPDATE_NODE') {
+                wf.nodes = wf.nodes.map((n: any) =>
+                  n.id === node.id ? { ...n, ...node } : n
+                );
+              } else if (action === 'REMOVE_NODE') {
+                wf.nodes = wf.nodes.filter((n: any) => n.id !== node.id);
+                wf.edges = wf.edges.filter((e: any) => e.source !== node.id && e.target !== node.id);
+              } else if (action === 'ADD_EDGE') {
+                const newEdge = {
+                  id: edge.id || `edge-${Date.now()}`,
+                  ...edge
+                };
+                wf.edges.push(newEdge);
+              } else if (action === 'UPDATE_EDGE') {
+                wf.edges = wf.edges.map((e: any) =>
+                  e.id === edge.id ? { ...e, ...edge } : e
+                );
+              } else if (action === 'REMOVE_EDGE') {
+                wf.edges = wf.edges.filter((e: any) => e.id !== edge.id);
+              }
+
+              const updatedModule = await db.module.update({
+                where: { id: moduleId },
+                data: { config: { ...config, workflows } }
+              });
+              result = { success: true, module: updatedModule };
+            }
+          }
+          else if (name === 'manage_page_widget') {
+            const { pageId, action, widgetId, widgetConfig } = args;
+            const targetModule = await db.module.findFirst({
+              where: { id: pageId, tenantId, type: 'PAGE' }
+            });
+            if (!targetModule) {
+              result = { error: `PAGE module '${pageId}' not found.` };
+            } else {
+              const config = (targetModule.config as any) || {};
+              let widgets = Array.isArray(config.widgets) ? config.widgets : [];
+
+              if (action === 'ADD') {
+                const newWidget = {
+                  id: widgetId || `widget-${Date.now()}`,
+                  ...widgetConfig
+                };
+                widgets.push(newWidget);
+              } else if (action === 'UPDATE') {
+                widgets = widgets.map((w: any) =>
+                  w.id === widgetId ? { ...w, ...widgetConfig } : w
+                );
+              } else if (action === 'REMOVE') {
+                widgets = widgets.filter((w: any) => w.id !== widgetId);
+              }
+
+              const updatedModule = await db.module.update({
+                where: { id: pageId },
+                data: { config: { ...config, widgets } }
+              });
+              result = { success: true, module: updatedModule };
+            }
+          }
+          else if (name === 'manage_document_template') {
+            const { action, templateId, name: tName, description, moduleId, content, status } = args;
+
+            if (action === 'CREATE') {
+              result = await db.documentTemplate.create({
+                data: {
+                  tenantId,
+                  name: tName || 'New Document Template',
+                  description,
+                  moduleId,
+                  content: content || '<html><body></body></html>',
+                  status: status || 'Draft'
+                }
+              });
+            } else if (action === 'UPDATE') {
+              if (!templateId) {
+                result = { error: "templateId is required for UPDATE action." };
+              } else {
+                result = await db.documentTemplate.update({
+                  where: { id: templateId, tenantId },
+                  data: {
+                    name: tName,
+                    description,
+                    moduleId,
+                    content,
+                    status
+                  }
+                });
+              }
+            } else if (action === 'DELETE') {
+              if (!templateId) {
+                result = { error: "templateId is required for DELETE action." };
+              } else {
+                await db.documentTemplate.delete({
+                  where: { id: templateId, tenantId }
+                });
+                result = { success: true, message: `Template '${templateId}' deleted.` };
+              }
+            } else if (action === 'GET') {
+              if (templateId) {
+                result = await db.documentTemplate.findFirst({
+                  where: { id: templateId, tenantId }
+                });
+              } else {
+                result = await db.documentTemplate.findMany({
+                  where: { tenantId }
+                });
+              }
+            }
+          }
+          else if (name === 'manage_org_graph') {
+            const { action, teamId, positionId, memberId, name: oName, description, title, positionNumber, parentId } = args;
+
+            if (action === 'CREATE_TEAM') {
+              result = await db.team.create({
+                data: {
+                  tenantId,
+                  name: oName || 'New Team',
+                  description
+                }
+              });
+            } else if (action === 'UPDATE_TEAM') {
+              if (!teamId) {
+                result = { error: "teamId is required for UPDATE_TEAM action." };
+              } else {
+                result = await db.team.update({
+                  where: { id: teamId, tenantId },
+                  data: {
+                    name: oName,
+                    description
+                  }
+                });
+              }
+            } else if (action === 'DELETE_TEAM') {
+              if (!teamId) {
+                result = { error: "teamId is required for DELETE_TEAM action." };
+              } else {
+                await db.team.delete({
+                  where: { id: teamId, tenantId }
+                });
+                result = { success: true, message: `Team '${teamId}' deleted.` };
+              }
+            } else if (action === 'CREATE_POSITION') {
+              result = await db.position.create({
+                data: {
+                  tenantId,
+                  title: title || 'New Position',
+                  positionNumber: positionNumber || `POS-${Date.now()}`,
+                  description,
+                  parentId
+                }
+              });
+            } else if (action === 'UPDATE_POSITION') {
+              if (!positionId) {
+                result = { error: "positionId is required for UPDATE_POSITION action." };
+              } else {
+                result = await db.position.update({
+                  where: { id: positionId, tenantId },
+                  data: {
+                    title,
+                    positionNumber,
+                    description,
+                    parentId
+                  }
+                });
+              }
+            } else if (action === 'DELETE_POSITION') {
+              if (!positionId) {
+                result = { error: "positionId is required for DELETE_POSITION action." };
+              } else {
+                await db.position.delete({
+                  where: { id: positionId, tenantId }
+                });
+                result = { success: true, message: `Position '${positionId}' deleted.` };
+              }
+            } else if (action === 'ASSIGN_MEMBER') {
+              if (!memberId) {
+                result = { error: "memberId is required for ASSIGN_MEMBER action." };
+              } else {
+                result = await db.tenantMember.update({
+                  where: { id: memberId, tenantId },
+                  data: {
+                    teamId: teamId || null,
+                    positionId: positionId || null
+                  }
+                });
+              }
+            }
+          }
+          else if (name === 'test_connector_integration') {
+            const { connectorId, payload } = args;
+            const connector = await db.nexusConnector.findFirst({
+              where: { id: connectorId, tenantId }
+            });
+            if (!connector) {
+              result = { error: `Connector '${connectorId}' not found.` };
+            } else {
+              const tenantConnector = await db.tenantConnector.findFirst({
+                where: { tenantId, connectorId },
+                include: { secrets: true }
+              });
+              const secrets: Record<string, string> = {};
+              tenantConnector?.secrets.forEach((s: any) => {
+                secrets[s.secretKey] = s.secretValue;
+              });
+
+              const connectorConfig = (connector.config as any) || {};
+              const edgeFunctionLogic = connectorConfig.edgeFunctionLogic;
+              let rawResultData: any = {};
+              let executionPath = 'simulation';
+
+              try {
+                if (edgeFunctionLogic && typeof edgeFunctionLogic === 'string') {
+                  executionPath = 'vm';
+                  const vm = await import('vm');
+                  const context = {
+                    params: payload || {},
+                    secrets: secrets || {},
+                    fetch: fetch,
+                    console,
+                    promise: null as any
+                  };
+                  vm.createContext(context);
+                  const wrapperCode = `
+                    promise = (async () => {
+                      const fn = ${edgeFunctionLogic};
+                      return await fn(params, secrets);
+                    })();
+                  `;
+                  const script = new vm.Script(wrapperCode);
+                  script.runInContext(context);
+                  rawResultData = await context.promise;
+                } else if (connectorConfig.url) {
+                  executionPath = 'http';
+                  let targetUrlStr = connectorConfig.url;
+                  const replacePlaceholders = (str: string) => {
+                    if (!str || typeof str !== 'string') return str;
+                    let temp = str;
+                    Object.entries(payload || {}).forEach(([k, v]) => {
+                      temp = temp.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
+                    });
+                    Object.entries(secrets || {}).forEach(([k, v]) => {
+                      temp = temp.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), String(v));
+                    });
+                    return temp;
+                  };
+                  targetUrlStr = replacePlaceholders(targetUrlStr);
+                  const method = connectorConfig.method || 'GET';
+                  const headers: Record<string, string> = {
+                    'Content-Type': 'application/json'
+                  };
+                  if (connectorConfig.headers && typeof connectorConfig.headers === 'object') {
+                    Object.entries(connectorConfig.headers).forEach(([k, v]) => {
+                      headers[k] = replacePlaceholders(v as string);
+                    });
+                  }
+                  let body: any = undefined;
+                  if (method !== 'GET' && method !== 'HEAD' && connectorConfig.body) {
+                    body = typeof connectorConfig.body === 'string' 
+                      ? replacePlaceholders(connectorConfig.body) 
+                      : replacePlaceholders(JSON.stringify(connectorConfig.body));
+                  }
+                  const fetchRes = await fetch(targetUrlStr, { method, headers, body });
+                  if (!fetchRes.ok) {
+                    throw new Error(`API returned HTTP ${fetchRes.status}`);
+                  }
+                  rawResultData = await fetchRes.json();
+                } else {
+                  rawResultData = { message: "Dummy simulator output (no HTTP or Edge logic defined)" };
+                }
+
+                // Log execution
+                await db.connectorLog.create({
+                  data: {
+                    tenantId,
+                    connectorId,
+                    connectorName: connector.name,
+                    payload: { params: payload },
+                    response: rawResultData,
+                    status: 'SUCCESS'
+                  }
+                });
+                result = { success: true, result: rawResultData, executionPath };
+              } catch (execErr: any) {
+                await db.connectorLog.create({
+                  data: {
+                    tenantId,
+                    connectorId,
+                    connectorName: connector.name,
+                    payload: { params: payload },
+                    response: null,
+                    status: 'ERROR',
+                    errorMessage: execErr.message || String(execErr)
+                  }
+                });
+                result = { error: execErr.message || String(execErr) };
+              }
+            }
+          }
+          else if (name === 'manage_webhook_subscription') {
+            const { action, subscriptionId, name: wName, url: wUrl, secret, eventTypes, isActive } = args;
+            if (action === 'CREATE') {
+              result = await db.webhookSubscription.create({
+                data: {
+                  tenantId,
+                  name: wName || 'New Webhook Subscription',
+                  url: wUrl || '',
+                  secret,
+                  eventTypes: eventTypes || [],
+                  isActive: isActive !== undefined ? isActive : true
+                }
+              });
+            } else if (action === 'UPDATE') {
+              if (!subscriptionId) {
+                result = { error: "subscriptionId is required for UPDATE action." };
+              } else {
+                result = await db.webhookSubscription.update({
+                  where: { id: subscriptionId, tenantId },
+                  data: {
+                    name: wName,
+                    url: wUrl,
+                    secret,
+                    eventTypes,
+                    isActive
+                  }
+                });
+              }
+            } else if (action === 'DELETE') {
+              if (!subscriptionId) {
+                result = { error: "subscriptionId is required for DELETE action." };
+              } else {
+                await db.webhookSubscription.delete({
+                  where: { id: subscriptionId, tenantId }
+                });
+                result = { success: true, message: `Webhook subscription '${subscriptionId}' deleted.` };
+              }
+            } else if (action === 'GET') {
+              if (subscriptionId) {
+                result = await db.webhookSubscription.findFirst({
+                  where: { id: subscriptionId, tenantId }
+                });
+              } else {
+                result = await db.webhookSubscription.findMany({
+                  where: { tenantId }
+                });
+              }
+            }
+          }
+          else if (name === 'manage_scheduled_job') {
+            const { action, jobId, name: jName, description, cronExpression, actionType, targetId, isActive } = args;
+            if (action === 'CREATE') {
+              result = await db.scheduledJob.create({
+                data: {
+                  tenantId,
+                  name: jName || 'New Scheduled Job',
+                  description,
+                  cronExpression: cronExpression || '* * * * *',
+                  actionType: actionType || 'RUN_AUTOMATION',
+                  targetId: targetId || '',
+                  isActive: isActive !== undefined ? isActive : true
+                }
+              });
+            } else if (action === 'UPDATE') {
+              if (!jobId) {
+                result = { error: "jobId is required for UPDATE action." };
+              } else {
+                result = await db.scheduledJob.update({
+                  where: { id: jobId, tenantId },
+                  data: {
+                    name: jName,
+                    description,
+                    cronExpression,
+                    actionType,
+                    targetId,
+                    isActive
+                  }
+                });
+              }
+            } else if (action === 'DELETE') {
+              if (!jobId) {
+                result = { error: "jobId is required for DELETE action." };
+              } else {
+                await db.scheduledJob.delete({
+                  where: { id: jobId, tenantId }
+                });
+                result = { success: true, message: `Scheduled job '${jobId}' deleted.` };
+              }
+            } else if (action === 'GET') {
+              if (jobId) {
+                result = await db.scheduledJob.findFirst({
+                  where: { id: jobId, tenantId }
+                });
+              } else {
+                result = await db.scheduledJob.findMany({
+                  where: { tenantId }
+                });
+              }
+            }
+          }
+          else if (name === 'query_explain_and_assist') {
+            const { description, sql } = args;
+            if (!sql) {
+              result = {
+                success: true,
+                message: "Here are the whitelisted physical tables you can query using raw SQL. Please construct a SELECT query for: " + description,
+                tables: [
+                  { name: "tenant_members", columns: "id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id" },
+                  { name: "teams", columns: "id, name, description" },
+                  { name: "positions", columns: "id, title, position_number, description" },
+                  { name: "modules", columns: "id, name, type, config" },
+                  { name: "records", columns: "id, module_id, data (JSONB custom properties)" },
+                  { name: "audit_logs", columns: "id, action, entity_type, entity_id, user_id, metadata, created_at" }
+                ]
+              };
+            } else {
+              const securityCheck = validateQuerySecurity(sql);
+              if (!securityCheck.isValid) {
+                result = { error: securityCheck.error };
+              } else {
+                const queryData = await db.$queryRawUnsafe(sql);
+                result = {
+                  success: true,
+                  explanation: "Validated security filters successfully. Query executed correctly.",
+                  sql,
+                  dryRunResults: serializeBigInts(queryData)
+                };
+              }
+            }
+          }
+          else if (name === 'explore_audit_trail') {
+            const { action, entityType, entityId, userId } = args;
+            if (action === 'LIST') {
+              result = await db.auditLog.findMany({
+                where: { tenantId },
+                orderBy: { createdAt: 'desc' },
+                take: 50
+              });
+            } else if (action === 'GET_BY_ENTITY') {
+              if (!entityType || !entityId) {
+                result = { error: "entityType and entityId are required for GET_BY_ENTITY." };
+              } else {
+                result = await db.auditLog.findMany({
+                  where: { tenantId, entityType, entityId },
+                  orderBy: { createdAt: 'desc' }
+                });
+              }
+            } else if (action === 'GET_BY_USER') {
+              if (!userId) {
+                result = { error: "userId is required for GET_BY_USER." };
+              } else {
+                result = await db.auditLog.findMany({
+                  where: { tenantId, userId },
+                  orderBy: { createdAt: 'desc' }
+                });
+              }
+            }
+          }
+          else if (name === 'manage_agent_profile') {
+            const { action, agentId, name: aName, modelType, config } = args;
+            if (action === 'CREATE') {
+              result = await db.agent.create({
+                data: {
+                  tenantId,
+                  name: aName || 'New Agent Worker',
+                  modelType: modelType || 'gemini-2.5-flash-lite',
+                  config: config || {}
+                }
+              });
+            } else if (action === 'UPDATE') {
+              if (!agentId) {
+                result = { error: "agentId is required for UPDATE action." };
+              } else {
+                result = await db.agent.update({
+                  where: { id: agentId, tenantId },
+                  data: {
+                    name: aName,
+                    modelType,
+                    config
+                  }
+                });
+              }
+            } else if (action === 'DELETE') {
+              if (!agentId) {
+                result = { error: "agentId is required for DELETE action." };
+              } else {
+                await db.agent.delete({
+                  where: { id: agentId, tenantId }
+                });
+                result = { success: true, message: `Agent profile '${agentId}' deleted.` };
+              }
+            } else if (action === 'GET') {
+              if (agentId) {
+                result = await db.agent.findFirst({
+                  where: { id: agentId, tenantId }
+                });
+              } else {
+                result = await db.agent.findMany({
+                  where: { tenantId }
+                });
+              }
+            }
+          }
           else if (name === 'write_agent_plan') {
             if (args.planMarkdown !== undefined) activeMetadata.plan = args.planMarkdown;
             if (args.tasksList !== undefined) activeMetadata.tasks = args.tasksList;
@@ -668,6 +1672,227 @@ CORE GUIDELINES:
           console.error(`Error executing tool ${name}:`, err);
           result = { error: err.message || "Failed to execute tool" };
         }
+  return result;
+};
+
+export const resumeAgentLoop = async (
+  tenantId: string,
+  userId: string,
+  sessionId: string,
+  contents: any[],
+  steps: any[],
+  socketId?: string,
+  modelName?: string,
+  activeMetadata?: any
+): Promise<{ text: string; steps: any[] }> => {
+  const ai = getAI();
+  if (!ai) throw new Error("AI Agent execution failed: API key missing.");
+
+  let apiModel = 'gemini-2.5-flash-lite';
+  if (modelName) {
+    const normalized = modelName.toLowerCase();
+    if (normalized.includes('pro')) apiModel = 'gemini-2.5-pro';
+    else if (normalized.includes('flash') && !normalized.includes('lite')) apiModel = 'gemini-2.5-flash';
+    else if (normalized.includes('2.0')) apiModel = 'gemini-2.0-flash';
+    else if (normalized.includes('lite')) apiModel = 'gemini-2.5-flash-lite';
+  }
+
+  const db = globalPrisma;
+  const tenantDetails = await db.tenant.findUnique({ where: { id: tenantId } });
+  const activeConnectors = await db.tenantConnector.findMany({
+    where: { tenantId, isActive: true },
+    include: { connector: true }
+  });
+  const connectorList = activeConnectors.map(c => `- ${c.displayName || c.connector.name} (ID: ${c.connectorId})`).join('\n') || 'None';
+
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: {
+      memberships: {
+        where: { tenantId },
+        include: {
+          position: { include: { parent: true } },
+          team: true,
+          permissionGroups: { include: { permissionGroup: true } }
+        }
+      }
+    }
+  });
+
+  const membership = user?.memberships?.[0];
+  const licenceType = membership?.licenceType || (user?.isSuperAdmin ? 'Developer' : 'Standard');
+  const role = user?.isSuperAdmin ? 'SUPERADMIN' : (membership?.roleId || 'USER');
+  const userFullName = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : (user?.email || 'Unknown User');
+  const groupIds = membership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
+  const capabilities = user?.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : await resolveCapabilities(groupIds, tenantId);
+
+  const modules = await db.module.findMany({ where: { tenantId } });
+  const schemaOverview = modules.map(m => ({
+    id: m.id,
+    name: m.name,
+    type: m.type,
+    category: m.category,
+    fields: (m.config as any)?.layout?.flatMap((t: any) => t.columns?.flatMap((c: any) => c.fields || [])) || []
+  }));
+
+  const tenantTimezone = tenantDetails?.timezone || 'UTC';
+  const localTimeStr = new Date().toLocaleString('en-US', { timeZone: tenantTimezone });
+  const serverTimeStr = new Date().toISOString();
+
+  let contextBlock = "";
+  const systemInstruction = `You are Aurora, the autonomous agentic co-pilot for the Aurora Business Platform.
+You assist both developers (building database modules, automations, public websites) and business users (querying records, auditing leads, writing communications).
+
+CURRENT DATE & TIME CONTEXT:
+  - Tenant Timezone: "${tenantTimezone}"
+  - Current Date & Time (Tenant Local): "${localTimeStr}"
+  - Current Date & Time (UTC/ISO): "${serverTimeStr}"
+
+CURRENT LOGGED-IN USER CONTEXT:
+  - Name: "${userFullName}"
+  - User ID: "${userId}"
+  - Role: "${role}"
+  - License Type: "${licenceType}"
+  - Permissions/Capabilities: ${JSON.stringify(capabilities)}
+  - Company Position/Title: "${membership?.position?.title || 'None'}"
+  - Department/Function: "${membership?.position?.description || 'None'}"
+  - Active Team: "${membership?.team?.name || 'None'}"
+  - Manager Name: "None"
+CURRENT TENANT CONTEXT:
+  - Tenant ID: "${tenantId}"
+  - Subdomain: "${tenantDetails?.subdomain || 'None'}"
+  - Currency: "${tenantDetails?.currency || 'USD'}"
+  - Installed Connectors / Integrations:
+${connectorList}
+
+SYSTEM DATABASE SCHEMAS (PHYSICAL TABLES Whitelisted for "execute_read_only_query"):
+  - tenant_members (id, tenant_id, user_id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id)
+  - teams (id, tenant_id, name, description)
+  - positions (id, tenant_id, title, position_number, description, parent_id)
+  - workspaces (id, tenant_id, name)
+  - modules (id, tenant_id, name, type, category, config)
+  - records (id, tenant_id, module_id, data, status, workflow_state, sla_status, created_at)
+  - audit_logs (id, tenant_id, action, entity_type, entity_id, user_id, metadata, created_at)
+  - permission_groups (id, tenant_id, name, description, parent_group_id)
+  - member_permission_groups (id, tenant_id, member_id, permission_group_id)
+  - global_lists (id, tenant_id, name, description)
+  - global_list_items (id, list_id, tenant_id, value, label)
+
+ENTITY RELATIONSHIPS & JOIN PATHS:
+  - Join Member to Position: tenant_members.position_id = positions.id
+  - Join Member to Team: tenant_members.team_id = teams.id
+  - Join Position to Manager Position: positions.parent_id = positions.id (manager's position)
+  - Join Member to User: tenant_members.user_id = users.id (Note: users table is restricted; query tenant_members instead)
+  - Join Member to Permission Group: member_permission_groups.member_id = tenant_members.id -> join to permission_groups.id
+  - Join Record to Module: records.module_id = modules.id
+  - Join Global List Items: global_list_items.list_id = global_lists.id
+
+CURRENT WORKSPACE SCHEMA (CUSTOM MODULES):
+${JSON.stringify(schemaOverview, null, 2)}
+
+CORE GUIDELINES:
+1. You have a deep understanding of Aurora's 20 core subsystems:
+   - Module Builder & Form Builder ("Studio"): Modifies modules with config layout grid (tabs, rows, columns, fields).
+   - Workflow Builder: configures Module.config.workflows nodes (STATUS, DECISION, ACTION) and transition edges.
+   - Automation Builder: configures Automations (triggers, actions, isActive).
+   - Integration Builder: configures custom Connectors (NexusConnector) and tenant secrets.
+   - Site Builder & Page Builder: configures workspaces pages (Module.type="PAGE") with widgets.
+   - Composer: document generation (DocumentTemplate html).
+   - Agent Studio: configures workforce AI members (Agent model).
+   - Org Graph: workforce TenantMember, Team, Position structures.
+   - Validation Builder: validation criteria in Module.config.validations.
+   - Query Explorer & Schema Builder: SQL data queries and schema charts.
+2. ALWAYS use the strict 3-phase lifecycle for multi-step requests:
+   - Phase 1: Write an implementation plan via "write_agent_plan" (with planMarkdown, tasksList) and request review in your chat response.
+   - Phase 2: Execute code/configuration changes only after the user aligns, tracking progress using the plan.
+   - Phase 3: Verify results and write the walkthrough via "write_agent_plan" (walkthroughMarkdown).
+3. If the user asks for database queries (e.g. "find the 10 most viable open leads"), write a SELECT SQL query and execute it using "execute_read_only_query".
+   Remember, records data is stored in the "records" table:
+     - records.module_id matches the target Module's id.
+     - records.data is a JSONB column containing fields. (e.g., data->>'status' = 'Open').
+4. If testing third-party APIs, write a node/javascript snippet and execute it via "execute_scratch_script".
+5. Run searches using "search_web" to look up API structures or code formats.
+6. Keep chat responses concise. Rely heavily on the right-hand panel artifacts for large layouts, plans, and charts.`;
+
+  let loopCount = 0;
+  const maxLoops = 15;
+  const metadata = activeMetadata || {};
+
+  while (loopCount < maxLoops) {
+    loopCount++;
+    console.log(`[AgentLoop:Resume] Running step ${loopCount}...`);
+
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: apiModel,
+        contents,
+        config: { systemInstruction, tools: agentTools }
+      });
+    } catch (err: any) {
+      if (apiModel !== 'gemini-2.5-flash-lite') {
+        console.warn(`[AgentLoop:Resume] Model ${apiModel} failed, falling back to gemini-2.5-flash-lite.`);
+        apiModel = 'gemini-2.5-flash-lite';
+        response = await ai.models.generateContent({
+          model: apiModel,
+          contents,
+          config: { systemInstruction, tools: agentTools }
+        });
+      } else {
+        throw err;
+      }
+    }
+
+    const candidate = response.candidates?.[0];
+    const part = candidate?.content?.parts?.[0];
+
+    if (part && PartIsFunctionCall(part)) {
+      const calls = candidate.content.parts.filter(p => p.functionCall);
+      const functionResponses: any[] = [];
+
+      for (const call of calls) {
+        const { name, args } = call.functionCall!;
+        console.log(`[AgentLoop:Resume] Model called function: ${name} with args`, args);
+
+        const MUTATING_TOOLS = [
+          'manage_module_field',
+          'manage_module_validation',
+          'manage_module_workflow',
+          'manage_page_widget',
+          'manage_document_template',
+          'manage_org_graph',
+          'manage_agent_profile',
+          'manage_scheduled_job',
+          'manage_webhook_subscription'
+        ];
+
+        if (MUTATING_TOOLS.includes(name)) {
+          metadata.pausedSessionState = {
+            contents,
+            steps: [...steps, { name, arguments: args, status: 'pending_approval' }],
+            pendingTool: { name, args }
+          };
+          await db.antigravitySession.update({
+            where: { id: sessionId },
+            data: { metadata }
+          });
+
+          const pendingSteps = [...steps, { name, arguments: args, status: 'pending_approval' }];
+          await db.antigravityMessage.create({
+            data: {
+              sessionId,
+              role: 'model',
+              content: `I need your approval to execute the action: **${name}**.\n\nArguments:\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``,
+              steps: pendingSteps as any
+            }
+          });
+
+          emitStep(socketId, { type: 'approval_required', name, arguments: args });
+          return { text: `Approval required for action: ${name}`, steps: pendingSteps, paused: true };
+        }
+
+        emitStep(socketId, { type: 'tool_call', name, arguments: args });
+        let result = await executeAgentTool(db, tenantId, name, args, sessionId, metadata);
 
         emitStep(socketId, { type: 'tool_result', name, result });
         steps.push({ name, arguments: args, result });
@@ -682,23 +1907,24 @@ CORE GUIDELINES:
       contents.push({
         role: 'user',
         parts: functionResponses.map(r => ({
-          functionResponse: {
-            name: r.name,
-            response: r.response
-          }
+          functionResponse: { name: r.name, response: r.response }
         }))
       });
     } else {
       const text = part?.text || "";
-      emitStep(socketId, { type: 'chunk', content: text });
 
-      await db.antigravityMessage.create({
-        data: {
-          sessionId,
-          role: 'user',
-          content: userMessage
+      try {
+        emitStep(socketId, { type: 'stream_start' });
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        const words = text.split(/(\s+)/);
+        for (const word of words) {
+          if (!word) continue;
+          emitStep(socketId, { type: 'chunk', content: word });
+          await delay(15);
         }
-      });
+      } catch (streamErr) {
+        emitStep(socketId, { type: 'chunk', content: text });
+      }
 
       await db.antigravityMessage.create({
         data: {
@@ -713,9 +1939,24 @@ CORE GUIDELINES:
     }
   }
 
-  throw new Error("Agent loop exceeded maximum turns without producing a final text response.");
+  throw new Error("Resumed agent loop exceeded maximum turns.");
 };
 
-function PartIsFunctionCall(part: any): boolean {
-  return part.functionCall !== undefined || (Array.isArray(part) && part.some(p => p.functionCall));
+// Helper to serialize BigInts to safe javascript numbers or strings
+function serializeBigInts(val: any): any {
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'bigint') {
+    return val <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(val) : val.toString();
+  }
+  if (Array.isArray(val)) {
+    return val.map(serializeBigInts);
+  }
+  if (typeof val === 'object') {
+    const copy: any = {};
+    for (const key of Object.keys(val)) {
+      copy[key] = serializeBigInts(val[key]);
+    }
+    return copy;
+  }
+  return val;
 }

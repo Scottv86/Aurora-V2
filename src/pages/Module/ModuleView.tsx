@@ -3850,7 +3850,7 @@ export const ModuleView = () => {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-6 lg:p-8 overflow-hidden min-h-0 flex flex-col">
+      <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
 
 
 
@@ -3928,9 +3928,10 @@ export const ModuleView = () => {
       )}
 
       {/* Modals */}
-      <AnimatePresence>
-        {showNewEntryModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+      {createPortal(
+        <AnimatePresence>
+          {showNewEntryModal && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -4311,9 +4312,14 @@ export const ModuleView = () => {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>,
+      document.body
+    )}
 
-        {showQuickActionModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+      {createPortal(
+        <AnimatePresence>
+          {showQuickActionModal && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -4550,9 +4556,14 @@ export const ModuleView = () => {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>,
+      document.body
+    )}
 
-        {recordToDelete && (
-          <div className="fixed inset-0 z-[101] flex items-center justify-center p-6">
+      {createPortal(
+        <AnimatePresence>
+          {recordToDelete && (
+            <div className="fixed inset-0 z-[1001] flex items-center justify-center p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -4592,9 +4603,14 @@ export const ModuleView = () => {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>,
+      document.body
+    )}
 
-        {activeDetailRecordId && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-200">
+      {createPortal(
+        <AnimatePresence>
+          {activeDetailRecordId && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 animate-in fade-in duration-200">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -4625,7 +4641,9 @@ export const ModuleView = () => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
       </div>
     </div>
   );

@@ -42,6 +42,8 @@ model Tenant {
   connectorLogs          ConnectorLog[]
   catalogItems           CatalogItem[]
   antigravitySessions    AntigravitySession[]
+  scheduledJobs          ScheduledJob[]
+  webhookSubscriptions   WebhookSubscription[]
 
   @@map("tenants")
 }
@@ -773,6 +775,40 @@ model AntigravityMessage {
 
   @@index([sessionId])
   @@map("antigravity_messages")
+}
+
+model ScheduledJob {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  name           String
+  description    String?
+  cronExpression String    @map("cron_expression")
+  actionType     String    @map("action_type") // e.g. "RUN_AUTOMATION" or "FETCH_CONNECTOR"
+  targetId       String    @map("target_id")
+  isActive       Boolean   @default(true) @map("is_active")
+  lastRunAt      DateTime? @map("last_run_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("scheduled_jobs")
+}
+
+model WebhookSubscription {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  name       String
+  url        String
+  secret     String?
+  eventTypes Json     @map("event_types") // e.g. ["record.created", "record.updated", "record.deleted"]
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("webhook_subscriptions")
 }
 
 

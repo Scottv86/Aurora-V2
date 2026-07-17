@@ -40,6 +40,56 @@ export class AutomationScheduler {
     // Check SLA warning and breach deadlines
     await this.checkSLAs();
 
+    // Fetch and execute active scheduled jobs
+    try {
+      const scheduledJobs = await globalPrisma.scheduledJob.findMany({
+        where: { isActive: true }
+      });
+
+      for (const job of scheduledJobs) {
+        if (this.matchesCron(job.cronExpression, now)) {
+          console.log(`[Scheduler] ScheduledJob matched: "${job.name}" (${job.id})`);
+          try {
+            if (job.actionType === 'RUN_AUTOMATION') {
+              const automation = await globalPrisma.automation.findUnique({
+                where: { id: job.targetId }
+              });
+              if (automation) {
+                console.log(`[Scheduler] Executing scheduled automation: "${automation.name}"`);
+                await AutomationEngine.runPipeline(automation, null, {}, 'SCHEDULED_JOB', globalPrisma);
+              }
+            } else if (job.actionType === 'FETCH_CONNECTOR') {
+              const connector = await globalPrisma.tenantConnector.findUnique({
+                where: { id: job.targetId }
+              });
+              if (connector) {
+                console.log(`[Scheduler] Executing scheduled connector sync: "${connector.displayName}"`);
+                await globalPrisma.connectorLog.create({
+                  data: {
+                    tenantId: job.tenantId,
+                    connectorId: connector.connectorId,
+                    status: 'SUCCESS',
+                    payload: JSON.stringify({ message: "Scheduled sync execution" }),
+                    direction: 'OUTBOUND'
+                  }
+                });
+              }
+            }
+
+            // Update last run time
+            await globalPrisma.scheduledJob.update({
+              where: { id: job.id },
+              data: { lastRunAt: now }
+            });
+          } catch (jobErr) {
+            console.error(`[Scheduler] Error running job ${job.id}:`, jobErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Scheduler] Error fetching scheduled jobs:', err);
+    }
+
     // Fetch all active automations
     const automations = await globalPrisma.automation.findMany({
       where: { isActive: true }

@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { X, AlertTriangle, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { createPortal } from 'react-dom';
 
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
@@ -25,10 +26,12 @@ export const DeleteConfirmationModal = ({
   moduleId,
   isDeleting = false 
 }: DeleteConfirmationModalProps) => {
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -131,6 +134,7 @@ export const DeleteConfirmationModal = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
