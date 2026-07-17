@@ -61,7 +61,7 @@ export const AntigravityChat = () => {
   
   // Real-time telemetry
   const [telemetry, setTelemetry] = useState({
-    model: 'Gemini 2.5 Flash',
+    model: 'Gemini 2.5 Flash Lite',
     speed: '48.2 t/s',
     latency: '1.2s',
     quota: 'Safe (92/100)'
@@ -74,7 +74,7 @@ export const AntigravityChat = () => {
   // Right Panel State
   const [activeTab, setActiveTab] = useState<'plan' | 'tasks' | 'sql' | 'preview' | 'scratchpad' | 'explorer'>('plan');
   const [showRightPanel, setShowRightPanel] = useState(false);
-  const [modelName, setModelName] = useState('Gemini 2.5 Flash');
+  const [modelName, setModelName] = useState('Gemini 2.5 Flash Lite');
   const [showModelMenu, setShowModelMenu] = useState(false);
 
   // Resizable left sidebar state
@@ -416,7 +416,8 @@ export const AntigravityChat = () => {
         body: JSON.stringify({
           message: userMsg,
           socketId: socketRef.current?.id,
-          context: contextObj
+          context: contextObj,
+          model: modelName
         })
       });
 
@@ -1106,11 +1107,12 @@ export const AntigravityChat = () => {
                   </button>
                   {showModelMenu && (
                     <div className="absolute bottom-full left-0 mb-1 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl py-1.5 z-50">
-                      {['Gemini 2.5 Flash', 'Gemini 2.5 Pro'].map(m => (
+                      {['Gemini 2.5 Flash Lite', 'Gemini 2.5 Flash', 'Gemini 2.5 Pro'].map(m => (
                         <button
                           key={m}
                           onClick={() => {
                             setModelName(m);
+                            setTelemetry(prev => ({ ...prev, model: m }));
                             setShowModelMenu(false);
                           }}
                           className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-55 dark:hover:bg-zinc-800 transition-all"

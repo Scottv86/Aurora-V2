@@ -316,10 +316,25 @@ export const runAgentLoop = async (
   sessionId: string,
   userMessage: string,
   socketId?: string,
-  context?: any
+  context?: any,
+  modelName?: string
 ): Promise<{ text: string; steps: any[] }> => {
   const ai = getAI();
   if (!ai) throw new Error("AI Agent execution failed: API key missing.");
+
+  let apiModel = 'gemini-2.5-flash-lite'; // Default to lite to avoid quota issues
+  if (modelName) {
+    const normalized = modelName.toLowerCase();
+    if (normalized.includes('pro')) {
+      apiModel = 'gemini-2.5-pro';
+    } else if (normalized.includes('flash') && !normalized.includes('lite')) {
+      apiModel = 'gemini-2.5-flash';
+    } else if (normalized.includes('2.0')) {
+      apiModel = 'gemini-2.0-flash';
+    } else if (normalized.includes('lite')) {
+      apiModel = 'gemini-2.5-flash-lite';
+    }
+  }
 
   const db = globalPrisma;
 
@@ -455,14 +470,32 @@ CORE GUIDELINES:
     loopCount++;
     console.log(`[AgentLoop] Running step ${loopCount}...`);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents,
-      config: {
-        systemInstruction,
-        tools: agentTools
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: apiModel,
+        contents,
+        config: {
+          systemInstruction,
+          tools: agentTools
+        }
+      });
+    } catch (err: any) {
+      if (apiModel !== 'gemini-2.5-flash-lite') {
+        console.warn(`[AgentLoop] Model ${apiModel} failed, falling back to gemini-2.5-flash-lite. Error:`, err.message || err);
+        apiModel = 'gemini-2.5-flash-lite';
+        response = await ai.models.generateContent({
+          model: apiModel,
+          contents,
+          config: {
+            systemInstruction,
+            tools: agentTools
+          }
+        });
+      } else {
+        throw err;
       }
-    });
+    }
 
     const candidate = response.candidates?.[0];
     const part = candidate?.content?.parts?.[0];

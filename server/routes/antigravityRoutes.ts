@@ -97,14 +97,14 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const userId = req.user!.uid; // Resolved by authMiddleware
     const { id } = req.params;
-    const { message, socketId, context } = req.body;
+    const { message, socketId, context, model } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
     // Run the agent loop asynchronously. The socket emits intermediate thoughts/results
-    const result = await runAgentLoop(tenantId, userId, id, message, socketId, context);
+    const result = await runAgentLoop(tenantId, userId, id, message, socketId, context, model);
 
     // Also update session title if it was default
     const db = req.db!;

@@ -161,12 +161,26 @@ router.get('/modules', async (req: TenantRequest, res) => {
   }
 });
 
+async function findModuleByIdOrSlug(db: any, tenantId: string, idOrSlug: string) {
+  let module = await db.module.findUnique({ where: { id: idOrSlug } });
+  if (!module) {
+    const allModules = await db.module.findMany({ where: { tenantId } });
+    const slugify = (text: string) => {
+      if (!text) return '';
+      return text.toString().toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
+    };
+    module = allModules.find((m: any) => slugify(m.name) === idOrSlug || m.name.toLowerCase() === idOrSlug.toLowerCase()) || null;
+  }
+  return module;
+}
+
 // GET single module by ID
 router.get('/modules/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
-    const module = await db.module.findUnique({ where: { id } });
+    const module = await findModuleByIdOrSlug(db, tenantId, id);
     if (!module) {
       return res.status(404).json({ error: 'Module not found' });
     }
@@ -1175,11 +1189,16 @@ router.put('/modules/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
+    const targetModule = await findModuleByIdOrSlug(db, tenantId, id);
+    if (!targetModule) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+    const resolvedId = targetModule.id;
     const { name, category, iconName, type, isGlobal, templateId, enabled: enabledBody, status, ...config } = req.body;
     const enabled = enabledBody !== undefined ? enabledBody : (status !== undefined ? status === 'ACTIVE' : undefined);
 
     const module = await db.module.update({
-      where: { id },
+      where: { id: resolvedId },
       data: {
         name,
         category,
@@ -1216,14 +1235,19 @@ router.delete('/modules/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
+    const targetModule = await findModuleByIdOrSlug(db, tenantId, id);
+    if (!targetModule) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+    const resolvedId = targetModule.id;
 
-    await db.module.delete({ where: { id } });
+    await db.module.delete({ where: { id: resolvedId } });
 
     // Check if this module was the home page, and if so clear it in tenant workspaceSettings
     const tenant = await globalPrisma.tenant.findUnique({ where: { id: tenantId } });
     if (tenant) {
       const workspaceSettings = (tenant.workspaceSettings as any) || {};
-      if (workspaceSettings.homePageId === id) {
+      if (workspaceSettings.homePageId === resolvedId) {
         const updatedSettings = { ...workspaceSettings };
         delete updatedSettings.homePageId;
         await globalPrisma.tenant.update({
@@ -1233,7 +1257,7 @@ router.delete('/modules/:id', async (req: TenantRequest, res) => {
       }
     }
     
-    emitTenantUpdate(tenantId, 'module_deleted', id);
+    emitTenantUpdate(tenantId, 'module_deleted', resolvedId);
 
     res.json({ success: true });
   } catch (err: any) {
@@ -1250,10 +1274,11 @@ router.put('/modules/:id/fields', async (req: TenantRequest, res) => {
     const { id } = req.params;
     const { field } = req.body;
 
-    const module = await db.module.findUnique({ where: { id } });
+    const module = await findModuleByIdOrSlug(db, tenantId, id);
     if (!module) {
       return res.status(404).json({ error: 'Module not found' });
     }
+    const resolvedId = module.id;
 
     const config = module.config as any;
     const layout = config.layout || [];
@@ -1273,14 +1298,14 @@ router.put('/modules/:id/fields', async (req: TenantRequest, res) => {
     };
 
     await db.module.update({
-      where: { id },
+      where: { id: resolvedId },
       data: { config: updatedConfig }
     });
 
     // Simulate underlying DB column addition (e.g., if using direct SQL tables)
-    // await db.$executeRawUnsafe(`ALTER TABLE "tenant_data_${tenantId}_${id}" ADD COLUMN IF NOT EXISTS "${field.id}" TEXT;`);
+    // await db.$executeRawUnsafe(`ALTER TABLE "tenant_data_${tenantId}_${resolvedId}" ADD COLUMN IF NOT EXISTS "${field.id}" TEXT;`);
 
-    emitTenantUpdate(tenantId, 'module_updated', { ...updatedConfig, id: module.id });
+    emitTenantUpdate(tenantId, 'module_updated', { ...updatedConfig, id: resolvedId });
 
     res.json({ success: true, field: newField });
   } catch (err: any) {
