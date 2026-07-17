@@ -41,6 +41,7 @@ model Tenant {
   workspaces             Workspace[]
   connectorLogs          ConnectorLog[]
   catalogItems           CatalogItem[]
+  antigravitySessions    AntigravitySession[]
 
   @@map("tenants")
 }
@@ -746,4 +747,32 @@ model Report {
   @@index([tenantId])
   @@map("reports")
 }
+
+model AntigravitySession {
+  id        String               @id @default(cuid())
+  tenantId  String               @map("tenant_id")
+  title     String
+  metadata  Json?                @default("{}")
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  messages  AntigravityMessage[]
+  tenant    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("antigravity_sessions")
+}
+
+model AntigravityMessage {
+  id        String             @id @default(cuid())
+  sessionId String             @map("session_id")
+  role      String             // user, model, system
+  content   String
+  steps     Json?              // thinking trace, tool executions, etc.
+  createdAt DateTime           @default(now()) @map("created_at")
+  session   AntigravitySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("antigravity_messages")
+}
+
 

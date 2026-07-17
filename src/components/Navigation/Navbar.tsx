@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   Sparkles, 
   Search, 
@@ -40,6 +40,13 @@ export const Navbar = () => {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  let lastPlatformPath = localStorage.getItem('lastPlatformPath') || '/workspace';
+  if (lastPlatformPath.includes('/settings')) {
+    lastPlatformPath = '/workspace';
+  }
+  const isAurora = location.pathname.startsWith('/workspace/aurora-vibe');
+  const isSettings = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
+  const isPlatform = !isAurora && !isSettings;
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showEnvMenu, setShowEnvMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -253,6 +260,8 @@ export const Navbar = () => {
           </>
         )}
 
+        {/* Old Launch Aurora Vibe button replaced by header experience switcher */}
+
         <button 
           onClick={() => {
             setIsNotificationsOpen(!isNotificationsOpen);
@@ -273,10 +282,10 @@ export const Navbar = () => {
           <Bell size={20} />
           {!isNotificationsOpen && <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full border-2 border-white dark:border-zinc-950" />}
         </button>
-        <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800 relative" ref={menuRef}>
-          <div className="text-right hidden sm:block">
-            <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none">{displayName}</p>
-            <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter">
+        <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800 relative shrink-0" ref={menuRef}>
+          <div className="text-right hidden sm:block shrink-0">
+            <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none whitespace-nowrap">{displayName}</p>
+            <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter whitespace-nowrap">
               {platformUser?.position || platformUser?.role?.replace(/_/g, ' ') || 'User'}
             </p>
           </div>
@@ -362,34 +371,45 @@ export const Navbar = () => {
           )}
         </div>
 
-        <LicenseGate>
-          <div className="pl-4 border-l border-zinc-200 dark:border-zinc-800">
-            <button 
-              onClick={() => {
-                const isAdminPath = location.pathname.startsWith('/admin');
-                const isSettingsPath = location.pathname.includes('/settings');
-                if (isSettingsPath) {
-                  navigate(isAdminPath ? '/admin' : '/workspace');
-                } else {
-                  navigate(isAdminPath ? '/admin/settings' : '/workspace/settings');
-                }
-              }}
-              className={cn(
-                "p-2 transition-colors",
-                location.pathname.includes('/settings') 
-                  ? "text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300" 
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-              )}
-              title={location.pathname.includes('/settings') ? "Return to Workspace" : "Platform Settings"}
-            >
-              {location.pathname.includes('/settings') ? (
-                <Monitor size={20} />
-              ) : (
-                <SettingsIcon size={20} />
-              )}
-            </button>
-          </div>
-        </LicenseGate>
+
+
+        {/* Experience Switcher - Platform | Aurora | Settings */}
+        <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0 ml-2">
+          <Link
+            to={lastPlatformPath}
+            className={cn(
+              "px-3 py-1 text-[10px] font-bold rounded-full transition-all duration-300 select-none",
+              isPlatform 
+                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
+                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
+            )}
+          >
+            Workspace
+          </Link>
+          <Link
+            to="/workspace/aurora-vibe"
+            className={cn(
+              "px-3 py-1 text-[10px] font-bold rounded-full transition-all duration-300 select-none flex items-center gap-1",
+              isAurora 
+                ? "bg-gradient-to-r from-indigo-500 to-purple-650 text-white shadow-md shadow-indigo-500/20" 
+                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
+            )}
+          >
+            <Sparkles size={10} className={isAurora ? "animate-pulse text-white" : "text-zinc-400 dark:text-zinc-500"} />
+            Aurora
+          </Link>
+          <Link
+            to="/workspace/settings"
+            className={cn(
+              "px-3 py-1 text-[10px] font-bold rounded-full transition-all duration-300 select-none",
+              isSettings 
+                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
+                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-755 dark:hover:text-zinc-300"
+            )}
+          >
+            Settings
+          </Link>
+        </div>
       </div>
     </header>
   );

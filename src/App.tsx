@@ -34,6 +34,7 @@ import { WorkQueue } from './components/WorkQueue';
 import { ExternalPortal } from './components/ExternalPortal';
 import { ModuleEditor } from './components/ModuleEditor';
 import { Analytics } from './components/Analytics';
+import { AntigravityChat } from './components/AntigravityChat';
 
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
@@ -176,8 +177,11 @@ const App = () => {
               {/* Login & Root Redirect */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/workspace" replace />} />
+                {/* Aurora Chat (Unified all-in-one sidebar/screen) */}
+                <Route path="/workspace/aurora-vibe" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
+                <Route path="/workspace/aurora-vibe/:sessionId" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
 
-              {/* Platform Operations & Administration (SuperAdmin Only) */}
+               {/* Platform Operations & Administration (SuperAdmin Only) */}
               <Route path="/admin" element={<ProtectedRoute requireAdmin><PlatformShell><SuperAdmin /></PlatformShell></ProtectedRoute>} />
               <Route path="/admin/health" element={<ProtectedRoute requireAdmin><PlatformShell><HealthMonitor /></PlatformShell></ProtectedRoute>} />
               <Route path="/admin/fleet" element={<ProtectedRoute requireAdmin><PlatformShell><FleetManager /></PlatformShell></ProtectedRoute>} />

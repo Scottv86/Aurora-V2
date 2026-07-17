@@ -66,7 +66,9 @@ export const getScopedPrisma = (
             'TenantConnector',
             'Automation',
             'AutomationRun',
-            'CatalogItem'
+            'CatalogItem',
+            'AntigravitySession',
+            'AntigravityMessage'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);

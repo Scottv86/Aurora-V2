@@ -1,4 +1,4 @@
-import { ReactNode, useState, useMemo } from 'react';
+import { ReactNode, useState, useMemo, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -244,6 +244,51 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebarWidth');
+    return saved ? parseInt(saved, 10) : 256;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = e.clientX;
+      if (newWidth > 180 && newWidth < 480) {
+        setSidebarWidth(newWidth);
+        localStorage.setItem('sidebarWidth', newWidth.toString());
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+
+
+  useEffect(() => {
+    const path = location.pathname + location.search;
+    const isSettings = path.includes('/settings');
+    if (path.startsWith('/workspace') && !path.startsWith('/workspace/aurora-vibe') && !isSettings) {
+      localStorage.setItem('lastPlatformPath', path);
+    }
+  }, [location]);
 
   const toggleExpand = (itemId: string) => {
     setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
@@ -399,6 +444,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       ? isSidebarHovered 
       : isSidebarOpen);
 
+  const currentWidth = isModuleBuilder || layoutStyle === 'top'
+    ? 0
+    : (isSidebarReallyOpen ? sidebarWidth : 64);
+
   const collapsed = !isSidebarReallyOpen;
 
   const asideWidthClass = isModuleBuilder 
@@ -535,9 +584,11 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             onMouseLeave={() => {
               if (layoutStyle === 'slim') setIsSidebarHovered(false);
             }}
+            style={{ width: `${currentWidth}px` }}
             className={cn(
-              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl transition-all duration-300 z-40 overflow-y-auto overflow-x-hidden",
-              asideWidthClass
+              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl z-45 overflow-y-auto overflow-x-hidden",
+              (isModuleBuilder || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
+              !isResizing && "transition-all duration-300"
             )}
           >
             <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "p-4" : "p-2")}>
@@ -630,40 +681,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
                 {!isAdminPath && isSettingsMode && (
                   <div className="flex flex-col h-full">
-                    <nav className={cn("mb-6", isSidebarReallyOpen ? "px-2" : "px-0")}>
-                      <button
-                        onClick={() => navigate('/workspace')}
-                        className={cn(
-                          "w-full flex items-center transition-all duration-300 group relative mb-4",
-                          isSidebarReallyOpen 
-                            ? "premium-pill h-9 gap-2 px-4" 
-                            : "justify-center h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400"
-                        )}
-                      >
-                        <ArrowLeft size={16} className={cn("shrink-0", isSidebarReallyOpen ? "text-zinc-400 group-hover:text-white" : "")} />
-                        {isSidebarReallyOpen && (
-                          <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 truncate">
-                            Back to Workspace
-                          </span>
-                        )}
-                      </button>
 
-                      {isSidebarReallyOpen && (
-                        <div className="relative group/search px-2">
-                          <div className="absolute inset-0 bg-indigo-500/5 blur-lg rounded-xl opacity-0 group-hover/search:opacity-100 transition-opacity" />
-                          <div className="relative flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-100/50 dark:bg-white/5 border border-zinc-200/50 dark:border-white/5 focus-within:border-indigo-500/30 transition-all">
-                            <Search size={14} className="text-zinc-400 shrink-0" />
-                            <input 
-                              type="text"
-                              placeholder="Search settings..."
-                              className="w-full bg-transparent border-none outline-none text-[11px] text-zinc-600 dark:text-zinc-300 placeholder:text-zinc-400"
-                              value={settingsSearchQuery}
-                              onChange={(e) => setSettingsSearchQuery(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </nav>
                     
                     <div className={cn("flex-1 space-y-0.5 overflow-y-auto custom-scrollbar", isSidebarReallyOpen ? "px-2" : "px-0")}>
                       {filteredSettingsItems.map((item) => (
@@ -696,17 +714,27 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                 )}
               </div>
             </div>
+
+            {isSidebarReallyOpen && (
+              <div 
+                onMouseDown={startResizing}
+                className="absolute top-0 right-0 w-[4px] h-full cursor-col-resize hover:bg-zinc-300/45 dark:hover:bg-zinc-700/45 active:bg-zinc-400 dark:active:bg-zinc-600 transition-all z-50"
+              />
+            )}
           </aside>
         )}
 
-        <main className={cn(
-          "flex-1 flex flex-col overflow-y-auto transition-all duration-300",
-          layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
-            ? "h-[calc(100vh-7rem)]" 
-            : "h-[calc(100vh-4rem)]",
-          mainMarginClass,
-          (isAIAssistantOpen || isChatOpen || isAppLauncherOpen || isNotificationsOpen) && "mr-96"
-        )}>
+        <main 
+          style={{ marginLeft: `${currentWidth}px` }}
+          className={cn(
+            "flex-1 flex flex-col overflow-y-auto",
+            !isResizing && "transition-all duration-300",
+            layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
+              ? "h-[calc(100vh-7rem)]" 
+              : "h-[calc(100vh-4rem)]",
+            (isAIAssistantOpen || isChatOpen || isAppLauncherOpen || isNotificationsOpen) && "mr-96"
+          )}
+        >
           <div className={cn(
             "mx-auto flex flex-col min-h-full",
             fullBleed ? "w-full flex-1" : "max-w-7xl w-full"
