@@ -123,7 +123,9 @@ export async function resolveTenantAIClient(
   // Determine target provider from model prefix or name
   let targetProvider = 'google';
   const lowerModel = targetModel.toLowerCase();
-  if (lowerModel.includes('gpt') || lowerModel.includes('o1') || lowerModel.includes('o3')) {
+  if (lowerModel.startsWith('openrouter/') || lowerModel.startsWith('openrouter:') || lowerModel === 'openrouter') {
+    targetProvider = 'openrouter';
+  } else if (lowerModel.includes('gpt') || lowerModel.includes('o1') || lowerModel.includes('o3')) {
     targetProvider = 'openai';
   } else if (lowerModel.includes('claude')) {
     targetProvider = 'anthropic';
@@ -133,8 +135,6 @@ export async function resolveTenantAIClient(
     targetProvider = 'deepseek';
   } else if (lowerModel.includes('groq') || lowerModel.includes('llama') || lowerModel.includes('mixtral')) {
     targetProvider = 'groq';
-  } else if (lowerModel.includes('openrouter')) {
-    targetProvider = 'openrouter';
   } else if (lowerModel.includes('azure')) {
     targetProvider = 'azure_openai';
   } else if (lowerModel.includes('bedrock')) {
@@ -301,6 +301,9 @@ export async function executeAICompletion(
     modelStr = client.model || 'gpt-4o';
   } else if (provider === 'anthropic') {
     modelStr = client.model || 'claude-3-5-sonnet-latest';
+  } else if (provider === 'openrouter') {
+    let raw = client.model ? client.model.replace(/^openrouter[\/:]/i, '') : 'auto';
+    modelStr = raw || 'auto';
   }
 
   // Convert contents + systemInstruction to OpenAI messages format

@@ -431,12 +431,21 @@ export const AISettingsPage = () => {
                       onChange={(e) => setMapping({ ...mapping, lowModel: e.target.value })}
                       className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-xs font-mono font-bold"
                     >
-                      <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                      <option value="llama-3.1-8b-instant">Groq Llama 3.1 8B Instant (30k TPM)</option>
-                      <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
-                      <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
-                      <option value="gpt-5.5-instant">GPT-5.5 Instant</option>
-                      <option value="deepseek-v4-flash">DeepSeek V4-Flash</option>
+                      <optgroup label="Direct Providers">
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                        <option value="llama-3.1-8b-instant">Groq Llama 3.1 8B Instant (30k TPM)</option>
+                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
+                        <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                        <option value="gpt-5.5-instant">GPT-5.5 Instant</option>
+                        <option value="deepseek-v4-flash">DeepSeek V4-Flash</option>
+                      </optgroup>
+                      <optgroup label="OpenRouter (Unified API)">
+                        <option value="openrouter/auto">OpenRouter Auto (Best Available)</option>
+                        <option value="openrouter/meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Llama 3.3 70B (Free)</option>
+                        <option value="openrouter/google/gemini-2.0-flash-exp:free">OpenRouter: Gemini 2.0 Flash (Free)</option>
+                        <option value="openrouter/deepseek/deepseek-chat:free">OpenRouter: DeepSeek V3 (Free)</option>
+                        <option value="openrouter/openai/gpt-4o-mini">OpenRouter: GPT-4o Mini</option>
+                      </optgroup>
                     </select>
                   </div>
 
@@ -456,12 +465,21 @@ export const AISettingsPage = () => {
                       onChange={(e) => setMapping({ ...mapping, mediumModel: e.target.value })}
                       className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-xs font-mono font-bold"
                     >
-                      <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B Versatile</option>
-                      <option value="grok-4.5">xAI Grok 4.5</option>
-                      <option value="claude-sonnet-4.6">Claude Sonnet 4.6</option>
-                      <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
-                      <option value="gpt-5.5">GPT-5.5</option>
-                      <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                      <optgroup label="Direct Providers">
+                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B Versatile</option>
+                        <option value="grok-4.5">xAI Grok 4.5</option>
+                        <option value="claude-sonnet-4.6">Claude Sonnet 4.6</option>
+                        <option value="gpt-5.6-terra">GPT-5.6 Terra</option>
+                        <option value="gpt-5.5">GPT-5.5</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                      </optgroup>
+                      <optgroup label="OpenRouter (Unified API)">
+                        <option value="openrouter/deepseek/deepseek-r1:free">OpenRouter: DeepSeek R1 Reasoning (Free)</option>
+                        <option value="openrouter/meta-llama/llama-3.3-70b-instruct">OpenRouter: Llama 3.3 70B Instruct</option>
+                        <option value="openrouter/anthropic/claude-3.5-sonnet">OpenRouter: Claude 3.5 Sonnet</option>
+                        <option value="openrouter/openai/gpt-4o-mini">OpenRouter: GPT-4o Mini</option>
+                        <option value="openrouter/mistralai/mistral-small-24b-instruct-2501:free">OpenRouter: Mistral Small 24B (Free)</option>
+                      </optgroup>
                     </select>
                   </div>
 
@@ -481,12 +499,21 @@ export const AISettingsPage = () => {
                       onChange={(e) => setMapping({ ...mapping, highModel: e.target.value })}
                       className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-xs font-mono font-bold"
                     >
-                      <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B Versatile</option>
-                      <option value="claude-fable-5">Claude Fable 5</option>
-                      <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
-                      <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
-                      <option value="deepseek-v4-pro">DeepSeek V4-Pro (1M Context)</option>
-                      <option value="grok-4.5">xAI Grok 4.5</option>
+                      <optgroup label="Direct Providers">
+                        <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B Versatile</option>
+                        <option value="claude-fable-5">Claude Fable 5</option>
+                        <option value="gpt-5.6-sol">GPT-5.6 Sol</option>
+                        <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
+                        <option value="deepseek-v4-pro">DeepSeek V4-Pro (1M Context)</option>
+                        <option value="grok-4.5">xAI Grok 4.5</option>
+                      </optgroup>
+                      <optgroup label="OpenRouter (Unified API)">
+                        <option value="openrouter/deepseek/deepseek-r1">OpenRouter: DeepSeek R1 (Full)</option>
+                        <option value="openrouter/openai/gpt-4o">OpenRouter: OpenAI GPT-4o</option>
+                        <option value="openrouter/anthropic/claude-3.5-sonnet">OpenRouter: Claude 3.5 Sonnet</option>
+                        <option value="openrouter/google/gemini-pro-1.5">OpenRouter: Gemini 1.5 Pro</option>
+                        <option value="openrouter/qwen/qwen-2.5-coder-32b-instruct">OpenRouter: Qwen 2.5 Coder 32B</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>
