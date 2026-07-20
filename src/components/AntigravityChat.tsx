@@ -11,7 +11,7 @@ import {
   Copy, Table, Compass, Layers, X,
   Code, Globe, Plug, Paperclip, ChevronDown,
   Layout, GitBranch, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
-  History, Calendar, Folder, Settings, MessageSquare
+  History, Calendar, Folder, Settings
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
@@ -21,6 +21,132 @@ import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/antigravity';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
+
+interface ProviderQuickKeyConfig {
+  id: string;
+  name: string;
+  keyName: string;
+  keyUrl: string;
+  placeholder: string;
+  label: string;
+  freeTierNote: string;
+}
+
+const PROVIDER_QUICK_KEY_CONFIGS: Record<string, ProviderQuickKeyConfig> = {
+  google: {
+    id: 'google',
+    name: 'Google Gemini',
+    keyName: 'Google AI Key',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    placeholder: 'AIzaSy...',
+    label: 'Paste Your Google AI API Key',
+    freeTierNote: 'Generate a free key instantly at aistudio.google.com/apikey (no credit card required).'
+  },
+  openai: {
+    id: 'openai',
+    name: 'OpenAI',
+    keyName: 'OpenAI API Key',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    placeholder: 'sk-proj-...',
+    label: 'Paste Your OpenAI API Key',
+    freeTierNote: 'Get your API key at platform.openai.com/api-keys.'
+  },
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    keyName: 'Anthropic API Key',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    placeholder: 'sk-ant-...',
+    label: 'Paste Your Anthropic API Key',
+    freeTierNote: 'Get your API key at console.anthropic.com/settings/keys.'
+  },
+  groq: {
+    id: 'groq',
+    name: 'Groq',
+    keyName: 'Groq API Key',
+    keyUrl: 'https://console.groq.com/keys',
+    placeholder: 'gsk_...',
+    label: 'Paste Your Groq API Key',
+    freeTierNote: 'Get your free Groq LPU API key at console.groq.com/keys.'
+  },
+  openrouter: {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    keyName: 'OpenRouter API Key',
+    keyUrl: 'https://openrouter.ai/keys',
+    placeholder: 'sk-or-v1-...',
+    label: 'Paste Your OpenRouter API Key',
+    freeTierNote: 'Get your OpenRouter API key at openrouter.ai/keys.'
+  },
+  xai: {
+    id: 'xai',
+    name: 'xAI Grok',
+    keyName: 'xAI API Key',
+    keyUrl: 'https://console.x.ai/',
+    placeholder: 'xai-...',
+    label: 'Paste Your xAI API Key',
+    freeTierNote: 'Get your xAI API key at console.x.ai.'
+  },
+  deepseek: {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    keyName: 'DeepSeek API Key',
+    keyUrl: 'https://platform.deepseek.com/api_keys',
+    placeholder: 'sk-...',
+    label: 'Paste Your DeepSeek API Key',
+    freeTierNote: 'Get your DeepSeek API key at platform.deepseek.com/api_keys.'
+  },
+  azure_openai: {
+    id: 'azure_openai',
+    name: 'Azure OpenAI',
+    keyName: 'Azure OpenAI Key',
+    keyUrl: 'https://portal.azure.com',
+    placeholder: 'azure-...',
+    label: 'Paste Your Azure OpenAI Key',
+    freeTierNote: 'Get your key from Azure Portal -> OpenAI Resource.'
+  },
+  aws_bedrock: {
+    id: 'aws_bedrock',
+    name: 'AWS Bedrock',
+    keyName: 'AWS Bedrock Key',
+    keyUrl: 'https://console.aws.amazon.com/bedrock/',
+    placeholder: 'AKIA...',
+    label: 'Paste Your AWS Bedrock Key',
+    freeTierNote: 'Get your credentials from AWS Management Console.'
+  },
+  ollama: {
+    id: 'ollama',
+    name: 'Ollama / Local AI',
+    keyName: 'Ollama API Key',
+    keyUrl: 'http://localhost:11434',
+    placeholder: 'ollama',
+    label: 'Paste Your Local Endpoint Key',
+    freeTierNote: 'Ensure your local Ollama server is running at localhost:11434.'
+  }
+};
+
+const resolveProviderFromModelName = (modelNameStr: string): string => {
+  if (!modelNameStr) return 'google';
+  const lower = modelNameStr.toLowerCase();
+  if (lower.includes('gpt') || lower.includes('o1') || lower.includes('o3')) return 'openai';
+  if (lower.includes('claude')) return 'anthropic';
+  if (lower.includes('grok')) return 'xai';
+  if (lower.includes('deepseek')) return 'deepseek';
+  if (lower.includes('groq') || lower.includes('llama') || lower.includes('mixtral')) return 'groq';
+  if (lower.includes('openrouter')) return 'openrouter';
+  if (lower.includes('azure')) return 'azure_openai';
+  if (lower.includes('bedrock')) return 'aws_bedrock';
+  if (lower.includes('ollama') || lower.includes('local')) return 'ollama';
+  return 'google';
+};
+
+const getModelDisplayName = (modelNameStr: string): string => {
+  if (!modelNameStr || modelNameStr === 'default') return 'Gemini 2.0 Flash';
+  if (modelNameStr === 'low') return 'Low Tier Model';
+  if (modelNameStr === 'medium') return 'Medium Tier Model';
+  if (modelNameStr === 'high') return 'High Tier Model';
+  return modelNameStr;
+};
 
 interface ChatMessage {
   id: string;
@@ -238,6 +364,8 @@ export const AntigravityChat = () => {
   const [suggestionFilter, setSuggestionFilter] = useState('');
   const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionTitle, setEditingSessionTitle] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -284,8 +412,13 @@ export const AntigravityChat = () => {
   };
 
   const handleRenameFolder = (folderId: string) => {
-    if (!editingFolderName.trim()) return;
-    const updated = folders.map(f => f.id === folderId ? { ...f, name: editingFolderName.trim() } : f);
+    const trimmed = editingFolderName.trim();
+    if (!trimmed) {
+      setEditingFolderId(null);
+      setEditingFolderName('');
+      return;
+    }
+    const updated = folders.map(f => f.id === folderId ? { ...f, name: trimmed } : f);
     saveFolders(updated);
     setEditingFolderId(null);
     setEditingFolderName('');
@@ -359,6 +492,40 @@ export const AntigravityChat = () => {
       toast.error("Failed to move conversation");
     }
   };
+
+  const handleRenameSession = async (sessionIdToRename: string, newTitle: string) => {
+    const trimmedTitle = newTitle.trim();
+    if (!trimmedTitle) {
+      setEditingSessionId(null);
+      return;
+    }
+
+    setSessions(prev => prev.map(item => item.id === sessionIdToRename ? { ...item, title: trimmedTitle } : item));
+    if (activeSession?.id === sessionIdToRename) {
+      setActiveSession(prev => prev ? { ...prev, title: trimmedTitle } : null);
+    }
+
+    try {
+      const token = authSession?.access_token;
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionIdToRename}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant!.id
+        },
+        body: JSON.stringify({ title: trimmedTitle })
+      });
+      if (!res.ok) throw new Error("Failed to rename conversation");
+      toast.success("Conversation renamed");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to rename conversation");
+      fetchSessions();
+    } finally {
+      setEditingSessionId(null);
+    }
+  };
   
   // Real-time telemetry
 
@@ -367,7 +534,7 @@ export const AntigravityChat = () => {
   const [agentThought, setAgentThought] = useState<string | null>(null);
 
   // Right Panel State
-  const [activeTab, setActiveTab] = useState<'plan' | 'tasks' | 'sql' | 'preview' | 'scratchpad' | 'explorer'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'tasks' | 'sql' | 'canvas' | 'preview' | 'scratchpad' | 'explorer'>('plan');
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [modelName, setModelName] = useState(() => localStorage.getItem('aurora_selected_ai_model') || 'default');
   const [showModelMenu, setShowModelMenu] = useState(false);
@@ -407,12 +574,15 @@ export const AntigravityChat = () => {
 
   // Quick BYOK Key Modal State
   const [showQuickKeyModal, setShowQuickKeyModal] = useState(false);
+  const [quickKeyProvider, setQuickKeyProvider] = useState('google');
+  const [quickKeyModel, setQuickKeyModel] = useState('');
   const [quickApiKey, setQuickApiKey] = useState('');
   const [savingQuickKey, setSavingQuickKey] = useState(false);
 
   const handleSaveQuickKey = async () => {
     if (!quickApiKey.trim()) return;
     setSavingQuickKey(true);
+    const config = PROVIDER_QUICK_KEY_CONFIGS[quickKeyProvider] || PROVIDER_QUICK_KEY_CONFIGS.google;
     try {
       const token = authSession?.access_token;
       const res = await fetch('http://localhost:3001/api/ai/keys', {
@@ -423,14 +593,14 @@ export const AntigravityChat = () => {
           'x-tenant-id': tenant!.id
         },
         body: JSON.stringify({
-          provider: 'google',
-          keyName: 'Google Free Tier Key',
+          provider: config.id,
+          keyName: config.keyName,
           apiKey: quickApiKey.trim(),
           isDefault: true
         })
       });
       if (!res.ok) throw new Error("Failed to save key");
-      toast.success("API key saved! Resuming chat without limits...");
+      toast.success(`API key for ${config.name} saved! Resuming chat without limits...`);
       setShowQuickKeyModal(false);
       setQuickApiKey('');
     } catch (e: any) {
@@ -861,7 +1031,10 @@ export const AntigravityChat = () => {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to process request");
+        const errObj: any = new Error(errData.error || "Failed to process request");
+        errObj.provider = errData.provider;
+        errObj.model = errData.model;
+        throw errObj;
       }
 
       const data = await res.json();
@@ -885,7 +1058,11 @@ export const AntigravityChat = () => {
 
     } catch (error: any) {
       const msg = error?.message || "Agent loop failed to complete.";
-      if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota')) {
+      if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+        const detectedProvider = error?.provider || resolveProviderFromModelName(modelName);
+        const detectedModel = error?.model || getModelDisplayName(modelName);
+        setQuickKeyProvider(detectedProvider);
+        setQuickKeyModel(detectedModel);
         setShowQuickKeyModal(true);
       }
       toast.error(msg);
@@ -922,7 +1099,10 @@ export const AntigravityChat = () => {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to process approval");
+        const errObj: any = new Error(errData.error || "Failed to process approval");
+        errObj.provider = errData.provider;
+        errObj.model = errData.model;
+        throw errObj;
       }
 
       // Refresh session
@@ -930,7 +1110,15 @@ export const AntigravityChat = () => {
       fetchSessions();
 
     } catch (err: any) {
-      toast.error(err.message || "Failed to submit action approval");
+      const msg = err?.message || "Failed to submit action approval";
+      if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+        const detectedProvider = err?.provider || resolveProviderFromModelName(modelName);
+        const detectedModel = err?.model || getModelDisplayName(modelName);
+        setQuickKeyProvider(detectedProvider);
+        setQuickKeyModel(detectedModel);
+        setShowQuickKeyModal(true);
+      }
+      toast.error(msg);
     } finally {
       setLoading(false);
       setAgentThought(null);
@@ -1325,77 +1513,108 @@ export const AntigravityChat = () => {
   const renderSessionItem = (s: ChatSession) => {
     const isPinned = !!s.metadata?.isPinned;
     const currentFolderId = s.metadata?.folderId || 'aurora';
+    const isEditing = editingSessionId === s.id;
 
     return (
       <div 
         key={s.id}
-        onClick={() => navigate(`/workspace/aurora-vibe/${s.id}`)}
+        onClick={() => !isEditing && navigate(`/workspace/aurora-vibe/${s.id}`)}
         className={`group relative w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all border ${
           s.id === sessionId 
             ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
             : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
         }`}
       >
-        <MessageSquare size={16} className={cn("shrink-0", s.id === sessionId ? "text-indigo-600 dark:text-white" : "text-zinc-400 dark:text-zinc-550")} />
-        <span className="text-xs font-medium flex-1 text-left truncate">{s.title || 'Untitled Session'}</span>
+        {isEditing ? (
+          <input 
+            type="text"
+            value={editingSessionTitle}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setEditingSessionTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleRenameSession(s.id, editingSessionTitle);
+              if (e.key === 'Escape') setEditingSessionId(null);
+            }}
+            onBlur={() => handleRenameSession(s.id, editingSessionTitle)}
+            autoFocus
+            className="flex-1 bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-900 dark:text-white outline-none"
+          />
+        ) : (
+          <span className="text-xs font-medium flex-1 text-left truncate">{s.title || 'Untitled Session'}</span>
+        )}
         
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {/* Pin Toggle */}
-          <button 
-            onClick={(e) => handleTogglePinSession(s, e)}
-            className={cn(
-              "p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer",
-              isPinned ? "text-amber-500 opacity-100" : "text-zinc-400 hover:text-amber-500"
-            )}
-            title={isPinned ? "Unpin Conversation" : "Pin Conversation"}
-          >
-            <Pin className={cn("h-3 w-3", isPinned && "fill-amber-500")} />
-          </button>
-
-          {/* Move to Folder */}
-          <div className="relative">
+        {!isEditing && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Rename Session */}
             <button 
               onClick={(e) => {
                 e.stopPropagation();
-                setMovingSessionId(movingSessionId === s.id ? null : s.id);
+                setEditingSessionId(s.id);
+                setEditingSessionTitle(s.title || '');
               }}
               className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
-              title="Move to Folder"
+              title="Rename Conversation"
             >
-              <FolderPlus className="h-3 w-3" />
+              <Edit2 className="h-3 w-3" />
             </button>
-            {movingSessionId === s.id && (
-              <div 
-                onClick={(e) => e.stopPropagation()} 
-                className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 z-50 text-xs"
-              >
-                <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Move to Folder</div>
-                {folders.map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => handleMoveSessionToFolder(s.id, f.id)}
-                    className={cn(
-                      "w-full text-left px-2 py-1 rounded-md transition-all truncate flex items-center gap-1.5 cursor-pointer",
-                      currentFolderId === f.id ? "font-bold text-indigo-600 dark:text-indigo-400" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    )}
-                  >
-                    <Folder className="h-3 w-3" />
-                    <span className="truncate">{f.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
-          {/* Delete Session */}
-          <button 
-            onClick={(e) => deleteSession(s.id, e)}
-            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
-            title="Delete Session"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
-        </div>
+            {/* Pin Toggle */}
+            <button 
+              onClick={(e) => handleTogglePinSession(s, e)}
+              className={cn(
+                "p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer",
+                isPinned ? "text-amber-500 opacity-100" : "text-zinc-400 hover:text-amber-500"
+              )}
+              title={isPinned ? "Unpin Conversation" : "Pin Conversation"}
+            >
+              <Pin className={cn("h-3 w-3", isPinned && "fill-amber-500")} />
+            </button>
+
+            {/* Move to Folder */}
+            <div className="relative">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMovingSessionId(movingSessionId === s.id ? null : s.id);
+                }}
+                className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                title="Move to Folder"
+              >
+                <FolderPlus className="h-3 w-3" />
+              </button>
+              {movingSessionId === s.id && (
+                <div 
+                  onClick={(e) => e.stopPropagation()} 
+                  className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 z-50 text-xs"
+                >
+                  <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Move to Folder</div>
+                  {folders.map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => handleMoveSessionToFolder(s.id, f.id)}
+                      className={cn(
+                        "w-full text-left px-2 py-1 rounded-md transition-all truncate flex items-center gap-1.5 cursor-pointer",
+                        currentFolderId === f.id ? "font-bold text-indigo-600 dark:text-indigo-400" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      <Folder className="h-3 w-3" />
+                      <span className="truncate">{f.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Delete Session */}
+            <button 
+              onClick={(e) => deleteSession(s.id, e)}
+              className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
+              title="Delete Session"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -1572,28 +1791,39 @@ export const AntigravityChat = () => {
                               if (e.key === 'Enter') handleRenameFolder(folder.id);
                               if (e.key === 'Escape') setEditingFolderId(null);
                             }}
+                            onBlur={() => handleRenameFolder(folder.id)}
                             autoFocus
-                            className="bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs outline-none"
+                            className="bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-900 dark:text-white outline-none"
                           />
                         ) : (
-                          <span className="truncate">{folder.name}</span>
-                        )}
-                        <span className="text-[10px] text-zinc-400 font-mono">({folderSessions.length})</span>
-                      </div>
-
-                      {folder.id !== 'aurora' && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={(e) => {
+                          <span 
+                            onDoubleClick={(e) => {
                               e.stopPropagation();
                               setEditingFolderId(folder.id);
                               setEditingFolderName(folder.name);
                             }}
-                            className="p-1 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
-                            title="Rename Folder"
+                            className="truncate hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                            title="Double-click to rename folder"
                           >
-                            <Edit2 className="h-3 w-3" />
-                          </button>
+                            {folder.name}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-zinc-400 font-mono">({folderSessions.length})</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingFolderId(folder.id);
+                            setEditingFolderName(folder.name);
+                          }}
+                          className="p-1 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                          title="Rename Folder"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                        {folder.id !== 'aurora' && (
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1604,8 +1834,8 @@ export const AntigravityChat = () => {
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     {/* Folder Sessions */}
@@ -1641,9 +1871,43 @@ export const AntigravityChat = () => {
             {activeSession && (
               <>
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-semibold text-xs text-zinc-800 dark:text-zinc-200">
-                  {activeSession.title}
-                </span>
+                {editingSessionId === activeSession.id ? (
+                  <input 
+                    type="text"
+                    value={editingSessionTitle}
+                    onChange={(e) => setEditingSessionTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameSession(activeSession.id, editingSessionTitle);
+                      if (e.key === 'Escape') setEditingSessionId(null);
+                    }}
+                    onBlur={() => handleRenameSession(activeSession.id, editingSessionTitle)}
+                    autoFocus
+                    className="bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-2 py-0.5 text-xs text-zinc-900 dark:text-white font-semibold outline-none"
+                  />
+                ) : (
+                  <div className="flex items-center gap-1.5 group">
+                    <span 
+                      onClick={() => {
+                        setEditingSessionId(activeSession.id);
+                        setEditingSessionTitle(activeSession.title || '');
+                      }}
+                      className="font-semibold text-xs text-zinc-800 dark:text-zinc-200 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      title="Click to rename conversation"
+                    >
+                      {activeSession.title}
+                    </span>
+                    <button 
+                      onClick={() => {
+                        setEditingSessionId(activeSession.id);
+                        setEditingSessionTitle(activeSession.title || '');
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                      title="Rename Conversation"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 <button 
                   onClick={handleForkSession}
                   className="flex items-center gap-1 px-2 py-1 text-[10px] bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm"
@@ -2237,6 +2501,7 @@ export const AntigravityChat = () => {
             { id: 'plan', label: 'Plan', icon: FileText },
             { id: 'tasks', label: 'Tasks', icon: CheckSquare },
             { id: 'sql', label: 'SQL Runner', icon: Table },
+            { id: 'canvas', label: 'Live Canvas', icon: Sparkles },
             { id: 'preview', label: 'Form Preview', icon: Layout },
             { id: 'scratchpad', label: 'Scratchpad', icon: Code },
             { id: 'explorer', label: 'Explorer', icon: Compass }
@@ -2502,55 +2767,62 @@ export const AntigravityChat = () => {
         description="Are you sure you want to delete this session? All message history will be permanently lost."
       />
 
-      {showQuickKeyModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-amber-500">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                <Zap className="h-5 w-5" />
+      {showQuickKeyModal && (() => {
+        const config = PROVIDER_QUICK_KEY_CONFIGS[quickKeyProvider] || PROVIDER_QUICK_KEY_CONFIGS.google;
+        const modelLabel = quickKeyModel ? getModelDisplayName(quickKeyModel) : config.name;
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center gap-3 text-amber-500">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">Traffic Limit Reached</h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">The request for {modelLabel} reached {config.name}'s limit.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">Free Tier Traffic Limit Reached</h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">The shared fallback demo key reached Google's 10 req/min limit.</p>
+
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-xl text-xs space-y-1">
+                <div className="font-bold text-indigo-700 dark:text-indigo-300">Get your personal {config.name} API Key:</div>
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  {config.freeTierNote}{' '}
+                  <a href={config.keyUrl} target="_blank" rel="noreferrer" className="underline font-semibold text-indigo-600 dark:text-indigo-400">
+                    {config.keyUrl.replace(/^https?:\/\//, '')}
+                  </a>
+                </p>
               </div>
-            </div>
 
-            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-xl text-xs space-y-1">
-              <div className="font-bold text-indigo-700 dark:text-indigo-300">Get your personal 100% Free Key (15 RPM):</div>
-              <p className="text-zinc-600 dark:text-zinc-400">
-                Generate a free key instantly at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline font-semibold text-indigo-600 dark:text-indigo-400">aistudio.google.com/apikey</a> (no credit card required).
-              </p>
-            </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{config.label}</label>
+                <input 
+                  type="password"
+                  placeholder={config.placeholder}
+                  value={quickApiKey}
+                  onChange={(e) => setQuickApiKey(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Paste Your Google AI API Key</label>
-              <input 
-                type="password"
-                placeholder="AIzaSy..."
-                value={quickApiKey}
-                onChange={(e) => setQuickApiKey(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowQuickKeyModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-all"
-              >
-                Dismiss
-              </button>
-              <button
-                onClick={handleSaveQuickKey}
-                disabled={!quickApiKey.trim() || savingQuickKey}
-                className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition-all flex items-center gap-1.5"
-              >
-                {savingQuickKey ? 'Saving...' : 'Save & Bypass Limit'}
-              </button>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setShowQuickKeyModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-all"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={handleSaveQuickKey}
+                  disabled={!quickApiKey.trim() || savingQuickKey}
+                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                >
+                  {savingQuickKey ? 'Saving...' : 'Save & Bypass Limit'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Premium Aurora Create Folder Modal */}
       {createPortal(

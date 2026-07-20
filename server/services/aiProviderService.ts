@@ -459,30 +459,75 @@ function normalizeJsonSchema(schema: any): any {
     const errorMsg = data?.error?.message || data?.error || response.statusText;
     const failedGen = data?.error?.failed_generation;
 
-    if (failedGen && typeof failedGen === 'string' && (typeof errorMsg === 'string' && (errorMsg.includes('Failed to call a function') || errorMsg.includes('failed_generation')))) {
-      console.warn(`[AIProviderService] Recovering function call from Groq failed_generation:`, failedGen);
-      const fnMatch = failedGen.match(/<function\((\w+)\)\s*(\{[\s\S]*?\})\s*>(?:<\/function>)?/i) ||
-                      failedGen.match(/(\w+)\s*\(\s*(\{[\s\S]*?\})\s*\)/i);
-      if (fnMatch) {
-        const fnName = fnMatch[1];
-        let fnArgs = {};
-        try {
-          fnArgs = JSON.parse(fnMatch[2]);
-        } catch (e) {}
+    if (typeof errorMsg === 'string' && (errorMsg.includes('Failed to call a function') || errorMsg.includes('failed_generation'))) {
+      if (failedGen && typeof failedGen === 'string') {
+        console.warn(`[AIProviderService] Recovering from Groq failed_generation:`, failedGen);
+        
+        let fnName = '';
+        let fnArgs: any = {};
+        let isFnCall = false;
 
-        return {
-          candidates: [{
-            content: {
-              parts: [{
-                functionCall: {
-                  id: `call_${fnName}_${Math.random().toString(36).substring(2, 7)}`,
-                  name: fnName,
-                  args: fnArgs
-                }
-              }]
-            }
-          }]
-        };
+        const match1 = failedGen.match(/<function\((\w+)\)\s*(\{[\s\S]*?\})\s*>(?:<\/function>)?/i);
+        const match2 = failedGen.match(/<function[= ]"?(\w+)"?>\s*(\{[\s\S]*?\})\s*(?:<\/function>)?/i);
+        const match3 = failedGen.match(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/i);
+        const match4 = failedGen.match(/(\w+)\s*\(\s*(\{[\s\S]*?\})\s*\)/i);
+
+        if (match1) {
+          fnName = match1[1];
+          try { fnArgs = JSON.parse(match1[2]); } catch (e) {}
+          isFnCall = true;
+        } else if (match2) {
+          fnName = match2[1];
+          try { fnArgs = JSON.parse(match2[2]); } catch (e) {}
+          isFnCall = true;
+        } else if (match3) {
+          try {
+            const parsed = JSON.parse(match3[1]);
+            fnName = parsed.name || parsed.function || '';
+            fnArgs = parsed.arguments || parsed.args || {};
+            if (fnName) isFnCall = true;
+          } catch (e) {}
+        } else if (match4) {
+          fnName = match4[1];
+          try { fnArgs = JSON.parse(match4[2]); } catch (e) {}
+          if (fnName) isFnCall = true;
+        }
+
+        if (isFnCall && fnName) {
+          return {
+            candidates: [{
+              content: {
+                parts: [{
+                  functionCall: {
+                    id: `call_${fnName}_${Math.random().toString(36).substring(2, 7)}`,
+                    name: fnName,
+                    args: fnArgs
+                  }
+                }]
+              }
+            }]
+          };
+        }
+
+        if (failedGen.trim()) {
+          return {
+            candidates: [{
+              content: {
+                parts: [{
+                  text: failedGen
+                }]
+              }
+            }]
+          };
+        }
+      }
+
+      if (bodyPayload.tools && attempt < maxRetries) {
+        console.warn(`[AIProviderService] Groq failed to call function. Retrying prompt without native tool binding...`);
+        delete bodyPayload.tools;
+        delete bodyPayload.tool_choice;
+        attempt++;
+        continue;
       }
     }
 

@@ -147,7 +147,7 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     res.json({ success: true, ...result });
   } catch (err: any) {
     console.error('[AntigravityRoutes] POST /sessions/:id/chat Error:', err);
-    res.status(500).json({ error: err.message || 'Agent loop encountered an error' });
+    res.status(500).json({ error: err.message || 'Agent loop encountered an error', provider: err.provider, model: err.model });
   }
 });
 
@@ -248,7 +248,7 @@ router.post('/sessions/:id/approve', async (req: TenantRequest, res) => {
     res.json({ success: true, ...resumeResult });
   } catch (err: any) {
     console.error('[AntigravityRoutes] Action Approval Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to process approval action' });
+    res.status(500).json({ error: err.message || 'Failed to process approval action', provider: err.provider, model: err.model });
   }
 });
 
