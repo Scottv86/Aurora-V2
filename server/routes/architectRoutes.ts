@@ -1,11 +1,12 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
+import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
+import { TenantRequest } from '../middleware/tenantMiddleware';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const router = express.Router();
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 const SYSTEM_PROMPT = `
 You are the "Shadow Architect", an AI design partner for the Aurora Module Builder.
@@ -77,8 +78,10 @@ Generate the updated layout based on the request. Preserve existing fields if th
 Ensure all fields follow the 12-column grid rules and do not overlap.
 `;
 
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
+    const client = await resolveTenantAIClient(tenantId);
+
+    const result = await executeAICompletion(client, {
       contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     

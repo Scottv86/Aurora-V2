@@ -39,11 +39,20 @@ const SETTINGS_ITEMS: SettingItem[] = [
   {
     id: 'subscription',
     label: 'Subscription',
-    description: 'Manage subscriptions, seat licenses, payment methods, and monitor AI model usage.',
+    description: 'Manage platform software seat licenses, invoices, and payment methods.',
     icon: 'CreditCard',
     to: '/workspace/settings/subscription',
     category: 'General',
-    tags: ['subscription', 'payment', 'invoices', 'ai', 'tokens', 'cost', 'usage', 'quota']
+    tags: ['subscription', 'payment', 'invoices', 'licenses', 'seats']
+  },
+  {
+    id: 'ai-services',
+    label: 'AI Services',
+    description: 'Bring your own API keys (BYOK), tier routing, usage cost tracking, and data privacy.',
+    icon: 'Sparkles',
+    to: '/workspace/settings/ai-services',
+    category: 'General',
+    tags: ['ai', 'byok', 'openai', 'anthropic', 'gemini', 'grok', 'deepseek', 'privacy', 'keys', 'tokens']
   },
 
   

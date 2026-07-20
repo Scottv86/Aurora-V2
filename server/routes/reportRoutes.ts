@@ -1,12 +1,12 @@
 import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { GoogleGenAI, Type } from '@google/genai';
+import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const router = Router();
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 // GET all reports for the tenant
 router.get('/', async (req: TenantRequest, res: Response) => {
@@ -146,13 +146,10 @@ router.post('/ai-builder', async (req: TenantRequest, res: Response) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: 'Gemini API key is not configured on the server.' });
-    }
+    const tenantId = req.tenantId || 'default-tenant';
+    const client = await resolveTenantAIClient(tenantId);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
-      contents: `You are Aurora BI AI, an expert business intelligence designer.
+    const promptText = `You are Aurora BI AI, an expert business intelligence designer.
       Generate a report dashboard layout based on the user's request: "${prompt}".
       
       Available local tables in Aurora tenancy:
@@ -172,7 +169,10 @@ router.post('/ai-builder', async (req: TenantRequest, res: Response) => {
       If the user wants custom calculations (e.g. "case age in days"), you can configure calculated fields in 'calculatedFields'. Formula expressions should use standard Excel-like syntax, e.g. TIMESPAN("days", {created_at}, TODAY()).
       
       Provide a suitable title, description, and config schema.
-      Return the output as a valid structured JSON object matching the report schema.`,
+      Return the output as a valid structured JSON object matching the report schema.`;
+
+    const response = await executeAICompletion(client, {
+      contents: [{ role: 'user', parts: [{ text: promptText }] }],
       config: {
         responseMimeType: 'application/json',
         responseSchema: {

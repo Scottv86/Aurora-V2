@@ -6,10 +6,8 @@ import {
   Activity, 
   Cpu, 
   CloudUpload, 
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  Search,
   Settings2,
   LayoutDashboard,
   Layout,
@@ -21,7 +19,8 @@ import {
   Palette,
   Compass,
   LayoutGrid,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -243,7 +242,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
-  const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
+  const [settingsSearchQuery] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebarWidth');
     return saved ? parseInt(saved, 10) : 256;
@@ -384,6 +383,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
         { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
+        { label: 'AI Services', icon: Sparkles, to: '/workspace/settings/ai-services' },
       ]
     },
     {
@@ -449,20 +449,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     : (isSidebarReallyOpen ? sidebarWidth : 64);
 
   const collapsed = !isSidebarReallyOpen;
-
-  const asideWidthClass = isModuleBuilder 
-    ? "w-0 opacity-0 pointer-events-none border-none" 
-    : (layoutStyle === 'top' 
-      ? "w-0 opacity-0 pointer-events-none border-none" 
-      : (isSidebarReallyOpen ? "w-64" : "w-16"));
-
-  const mainMarginClass = isModuleBuilder 
-    ? "ml-0" 
-    : (layoutStyle === 'top' 
-      ? "ml-0" 
-      : (layoutStyle === 'slim' 
-        ? "ml-16" 
-        : (isSidebarOpen ? "ml-64" : "ml-16")));
 
   const resolvedConfig = useMemo(() => {
     if (!menuConfig || !modules) return menuConfig;

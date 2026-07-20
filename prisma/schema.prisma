@@ -44,6 +44,9 @@ model Tenant {
   antigravitySessions    AntigravitySession[]
   scheduledJobs          ScheduledJob[]
   webhookSubscriptions   WebhookSubscription[]
+  aiKeys                 TenantAIKey[]
+  aiMapping              TenantAIMapping?
+  aiMetrics              AIUsageMetric[]
 
   @@map("tenants")
 }
@@ -809,6 +812,63 @@ model WebhookSubscription {
 
   @@index([tenantId])
   @@map("webhook_subscriptions")
+}
+
+model TenantAIKey {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  provider       String   // 'openai' | 'anthropic' | 'google' | 'xai' | 'deepseek' | 'azure_openai' | 'aws_bedrock' | 'ollama' | 'openrouter'
+  alias          String?
+  encryptedKey   String   @map("encrypted_key")
+  keyHint        String   @map("key_hint")
+  baseUrl        String?  @map("base_url")
+  apiExtraConfig Json?    @map("api_extra_config")
+  isDefault      Boolean  @default(false) @map("is_default")
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, provider])
+  @@map("tenant_ai_keys")
+}
+
+model TenantAIMapping {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique @map("tenant_id")
+  lowModel          String   @default("gemini-2.0-flash")
+  mediumModel       String   @default("claude-3-5-sonnet")
+  highModel         String   @default("gpt-4o")
+  zeroDataRetention Boolean  @default(true) @map("zero_data_retention")
+  piiRedaction      Boolean  @default(false) @map("pii_redaction")
+  allowLocalOnly    Boolean  @default(false) @map("allow_local_only")
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_ai_mappings")
+}
+
+model AIUsageMetric {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  userId           String?  @map("user_id")
+  provider         String
+  model            String
+  tier             String?  // "low" | "medium" | "high" | "custom"
+  feature          String   @default("chat") // "chat" | "builder" | "automation"
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  estimatedCost    Float    @default(0.0) @map("estimated_cost")
+  latencyMs        Int      @default(0) @map("latency_ms")
+  timestamp        DateTime @default(now())
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, timestamp])
+  @@index([tenantId, provider])
+  @@map("ai_usage_metrics")
 }
 
 

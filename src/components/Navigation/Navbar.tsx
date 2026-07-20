@@ -11,8 +11,7 @@ import {
   Settings as SettingsIcon,
   ChevronDown,
   MessageSquare,
-  LayoutGrid,
-  Monitor
+  LayoutGrid
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';

@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { globalPrisma } from '../lib/prisma';
 import { resolveCapabilities } from '../lib/permissions';
+import { resolveTenantAIClient, logAIUsageMetric, executeAICompletion } from './aiProviderService';
 import { io } from '../socket';
 import { exec } from 'child_process';
 import * as fs from 'fs';
@@ -522,21 +523,12 @@ export const runAgentLoop = async (
   modelName?: string,
   attachments?: { name: string; type: string; base64: string }[]
 ): Promise<{ text: string; steps: any[] }> => {
-  const ai = getAI();
-  if (!ai) throw new Error("AI Agent execution failed: API key missing.");
-
-  let apiModel = 'gemini-2.5-flash-lite'; // Default to lite to avoid quota issues
-  if (modelName) {
-    const normalized = modelName.toLowerCase();
-    if (normalized.includes('pro')) {
-      apiModel = 'gemini-2.5-pro';
-    } else if (normalized.includes('flash') && !normalized.includes('lite')) {
-      apiModel = 'gemini-2.5-flash';
-    } else if (normalized.includes('2.0')) {
-      apiModel = 'gemini-2.0-flash';
-    } else if (normalized.includes('lite')) {
-      apiModel = 'gemini-2.5-flash-lite';
-    }
+  const client = await resolveTenantAIClient(tenantId, modelName);
+  let apiModel = 'gemini-2.0-flash';
+  if (client.model.toLowerCase().includes('pro')) {
+    apiModel = 'gemini-1.5-pro';
+  } else {
+    apiModel = 'gemini-2.0-flash';
   }
 
   const db = globalPrisma;
@@ -744,33 +736,20 @@ CORE GUIDELINES:
 
   while (loopCount < maxLoops) {
     loopCount++;
-    console.log(`[AgentLoop] Running step ${loopCount}...`);
+    console.log(`[AgentLoop] Running step ${loopCount} with provider: ${client.provider}, model: ${client.model}...`);
 
     let response;
     try {
-      response = await ai.models.generateContent({
-        model: apiModel,
+      response = await executeAICompletion(client, {
         contents,
-        config: {
-          systemInstruction,
-          tools: agentTools
-        }
+        systemInstruction,
+        tools: agentTools
       });
     } catch (err: any) {
-      if (apiModel !== 'gemini-2.5-flash-lite') {
-        console.warn(`[AgentLoop] Model ${apiModel} failed, falling back to gemini-2.5-flash-lite. Error:`, err.message || err);
-        apiModel = 'gemini-2.5-flash-lite';
-        response = await ai.models.generateContent({
-          model: apiModel,
-          contents,
-          config: {
-            systemInstruction,
-            tools: agentTools
-          }
-        });
-      } else {
-        throw err;
+      if (!client.isBYOK && err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota'))) {
+        throw new Error('Google AI Free Tier rate limit reached (10 requests/min). Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.');
       }
+      throw err;
     }
 
     const candidate = response.candidates?.[0];
@@ -863,7 +842,36 @@ CORE GUIDELINES:
           }
         }))
       });
-      const text = part?.text || "";
+      continue;
+    }
+
+    const textPart = candidate?.content?.parts?.find((p: any) => p && typeof p.text === 'string');
+    let text = textPart?.text || candidate?.content?.parts?.map((p: any) => p.text).filter(Boolean).join('\n') || "";
+
+    const pseudoFuncMatch = text.match(/<function\((\w+)\)\s*(\{[\s\S]*?\})\s*(?:<\/function>|$)/i);
+    if (pseudoFuncMatch) {
+      const fnName = pseudoFuncMatch[1];
+      const fnArgsStr = pseudoFuncMatch[2];
+      try {
+        const fnArgs = JSON.parse(fnArgsStr);
+        console.log(`[AgentLoop] Parsed text-embedded function call: ${fnName} with args:`, fnArgs);
+        emitStep(socketId, { type: 'tool_call', name: fnName, arguments: fnArgs });
+        const result = await executeAgentTool(db, tenantId, fnName, fnArgs, sessionId, activeMetadata);
+        emitStep(socketId, { type: 'tool_result', name: fnName, result });
+        steps.push({ name: fnName, arguments: fnArgs, result });
+        if (fnName === 'write_agent_plan' && fnArgs.planMarkdown) {
+          text = fnArgs.planMarkdown;
+        }
+      } catch (e) {
+        console.error("[AgentLoop] Failed to parse pseudo function call JSON:", e);
+      }
+    }
+
+    text = text
+      .replace(/<function\([\s\S]*?<\/function>/gi, '')
+      .replace(/<function\([\s\S]*$/gi, '')
+      .replace(/<\/function>/gi, '')
+      .trim();
 
       // Stream the text to the client with natural pacing
       try {
@@ -902,8 +910,6 @@ CORE GUIDELINES:
 
       return { text, steps };
     }
-  }
-
   throw new Error("Agent loop exceeded maximum turns without producing a final text response.");
 };
 
@@ -1688,13 +1694,9 @@ export const resumeAgentLoop = async (
   const ai = getAI();
   if (!ai) throw new Error("AI Agent execution failed: API key missing.");
 
-  let apiModel = 'gemini-2.5-flash-lite';
-  if (modelName) {
-    const normalized = modelName.toLowerCase();
-    if (normalized.includes('pro')) apiModel = 'gemini-2.5-pro';
-    else if (normalized.includes('flash') && !normalized.includes('lite')) apiModel = 'gemini-2.5-flash';
-    else if (normalized.includes('2.0')) apiModel = 'gemini-2.0-flash';
-    else if (normalized.includes('lite')) apiModel = 'gemini-2.5-flash-lite';
+  let apiModel = 'gemini-2.0-flash';
+  if (modelName && modelName.toLowerCase().includes('pro')) {
+    apiModel = 'gemini-1.5-pro';
   }
 
   const db = globalPrisma;
@@ -1830,14 +1832,25 @@ CORE GUIDELINES:
         config: { systemInstruction, tools: agentTools }
       });
     } catch (err: any) {
-      if (apiModel !== 'gemini-2.5-flash-lite') {
-        console.warn(`[AgentLoop:Resume] Model ${apiModel} failed, falling back to gemini-2.5-flash-lite.`);
-        apiModel = 'gemini-2.5-flash-lite';
-        response = await ai.models.generateContent({
-          model: apiModel,
-          contents,
-          config: { systemInstruction, tools: agentTools }
-        });
+      if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota'))) {
+        throw new Error('Google AI Free Tier rate limit reached (10 requests/min). Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.');
+      }
+
+      if (apiModel !== 'gemini-2.0-flash') {
+        console.warn(`[AgentLoop:Resume] Model ${apiModel} failed, falling back to gemini-2.0-flash.`);
+        apiModel = 'gemini-2.0-flash';
+        try {
+          response = await ai.models.generateContent({
+            model: apiModel,
+            contents,
+            config: { systemInstruction, tools: agentTools }
+          });
+        } catch (retryErr: any) {
+          if (retryErr.message && (retryErr.message.includes('429') || retryErr.message.includes('RESOURCE_EXHAUSTED') || retryErr.message.includes('quota'))) {
+            throw new Error('Google AI Free Tier rate limit reached (10 requests/min). Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.');
+          }
+          throw retryErr;
+        }
       } else {
         throw err;
       }
@@ -1911,7 +1924,32 @@ CORE GUIDELINES:
         }))
       });
     } else {
-      const text = part?.text || "";
+      let text = part?.text || "";
+
+      const pseudoFuncMatch = text.match(/<function\((\w+)\)\s*(\{[\s\S]*?\})\s*(?:<\/function>|$)/i);
+      if (pseudoFuncMatch) {
+        const fnName = pseudoFuncMatch[1];
+        const fnArgsStr = pseudoFuncMatch[2];
+        try {
+          const fnArgs = JSON.parse(fnArgsStr);
+          console.log(`[ResumeAgentLoop] Parsed text-embedded function call: ${fnName} with args:`, fnArgs);
+          emitStep(socketId, { type: 'tool_call', name: fnName, arguments: fnArgs });
+          const result = await executeAgentTool(db, tenantId, fnName, fnArgs, sessionId, metadata);
+          emitStep(socketId, { type: 'tool_result', name: fnName, result });
+          steps.push({ name: fnName, arguments: fnArgs, result });
+          if (fnName === 'write_agent_plan' && fnArgs.planMarkdown) {
+            text = fnArgs.planMarkdown;
+          }
+        } catch (e) {
+          console.error("[ResumeAgentLoop] Failed to parse pseudo function call JSON:", e);
+        }
+      }
+
+      text = text
+        .replace(/<function\([\s\S]*?<\/function>/gi, '')
+        .replace(/<function\([\s\S]*$/gi, '')
+        .replace(/<\/function>/gi, '')
+        .trim();
 
       try {
         emitStep(socketId, { type: 'stream_start' });

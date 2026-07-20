@@ -74,6 +74,33 @@ router.post('/sessions', async (req: TenantRequest, res) => {
   }
 });
 
+// PATCH update session title or metadata
+router.patch('/sessions/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+    const { title, metadata } = req.body;
+
+    const existing = await db.antigravitySession.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const updated = await db.antigravitySession.update({
+      where: { id },
+      data: {
+        ...(title !== undefined ? { title } : {}),
+        ...(metadata !== undefined ? { metadata: { ...((existing.metadata as object) || {}), ...metadata } } : {})
+      }
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] PATCH /sessions/:id Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update session' });
+  }
+});
+
 // DELETE session
 router.delete('/sessions/:id', async (req: TenantRequest, res) => {
   try {

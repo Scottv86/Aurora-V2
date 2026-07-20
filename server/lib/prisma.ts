@@ -68,7 +68,9 @@ export const getScopedPrisma = (
             'AutomationRun',
             'CatalogItem',
             'AntigravitySession',
-            'AntigravityMessage'
+            'AntigravityMessage',
+            'TenantAIKey',
+            'TenantAIMapping'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);
@@ -106,9 +108,9 @@ export const getScopedPrisma = (
                 }
               }
 
-              // Execute the operation on the transaction client
-              const modelName = model.charAt(0).toLowerCase() + model.slice(1);
-              const txModel = (tx as any)[modelName];
+              // Execute the operation on the transaction client with safe model resolution
+              const modelCamel = model.charAt(0).toLowerCase() + model.slice(1);
+              const txModel = (tx as any)[modelCamel] || (tx as any)[model] || (tx as any)[model.toLowerCase()];
               
               if (txModel && typeof txModel[operation] === 'function') {
                 return txModel[operation]({ ...args, [RLS_CONTEXT]: true } as any);

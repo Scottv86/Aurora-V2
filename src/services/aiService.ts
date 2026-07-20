@@ -50,7 +50,7 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
   if (!ai) throw new Error("AI service not initialized");
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-2.0-flash",
     contents: `You are Aurora AI, the architect for a business operating platform. 
     A user wants to build a solution for: "${prompt}".
     
@@ -209,7 +209,7 @@ export const generateDocumentTemplate = async (prompt: string, moduleId?: string
   if (!ai) throw new Error("AI service not initialized");
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-2.0-flash",
     contents: `You are Aurora AI, an expert in business document automation. 
     A user wants to create a document template for: "${prompt}".
     ${moduleId ? `This template is for the module: "${moduleId}".` : ""}
@@ -258,7 +258,7 @@ Data: ${dataString}`;
 
     // FIXED: Use a valid model name
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
     
@@ -281,7 +281,7 @@ export const generateExpression = async (prompt: string, fields: any[], function
     const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.0-flash",
       contents: `You are an expert logic architect for the Aurora Platform. 
       Your task is to convert a natural language request into a valid Aurora Expression.
 
@@ -330,7 +330,7 @@ export const fixExpression = async (expression: string, errors: any[], fields: a
     const errorsString = JSON.stringify(errors, null, 2);
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.0-flash",
       contents: `You are an expert logic architect for the Aurora Platform. 
       The user has an expression with errors, and you need to fix it.
 
@@ -483,7 +483,7 @@ export const generateTrainingQuestions = async (role: string, scopeDescription: 
     ];
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.0-flash",
       contents: `You are an expert AI architect. A user is provisioning a custom AI Agent on the Aurora Operating Platform.
       Agent Role: "${role}"
       Agent Scope/Task Description: "${scopeDescription}"
@@ -537,7 +537,7 @@ export const compileAgentDirectives = async (
     const articlesContent = articles.map(art => `Document: "${art.title}"\n${art.content}`).join('\n\n');
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.0-flash",
       contents: `You are an expert AI architect. Combine this agent's configuration into a cohesive, highly effective system prompt (directives) for this AI Agent operating on the Aurora Platform.
 
       Agent Role: "${role}"

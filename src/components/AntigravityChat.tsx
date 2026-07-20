@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { cn, slugify } from '../lib/utils';
-import { motion } from 'motion/react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { io, Socket } from 'socket.io-client';
 import { Navbar } from './Navigation/Navbar';
 import { 
   Sparkles, Bot, Terminal, Play, CheckCircle2, AlertCircle, 
   Loader2, Trash2, Send, Mic, MicOff, Plus, FileText, CheckSquare, 
-  Copy, Table, Compass, Layers, 
-  Code, Globe, Plug, Paperclip, ChevronDown, 
-  Layout, GitBranch,
+  Copy, Table, Compass, Layers, X,
+  Code, Globe, Plug, Paperclip, ChevronDown,
+  Layout, GitBranch, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
   History, Calendar, Folder, Settings, MessageSquare
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
@@ -195,17 +196,36 @@ const QueryResultVisualizer = ({ result }: { result: any[] }) => {
 export const AntigravityChat = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   let lastPlatformPath = localStorage.getItem('lastPlatformPath') || '/workspace';
   if (lastPlatformPath.includes('/settings')) {
     lastPlatformPath = '/workspace';
   }
-  const { tenant } = usePlatform();
-  const { session: authSession } = useAuth();
+  const { tenant, user: platformUser } = usePlatform();
+  const { session: authSession, user: authUser } = useAuth();
+  
+  const getFirstName = (): string => {
+    const rawName = (platformUser as any)?.firstName || (platformUser as any)?.name || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || authUser?.user_metadata?.first_name;
+    if (rawName && typeof rawName === 'string') {
+      const firstWord = rawName.trim().split(/\s+/)[0];
+      if (firstWord && !firstWord.includes('@') && !firstWord.includes('.')) {
+        return firstWord;
+      }
+    }
+    const emailPrefix = authUser?.email?.split('@')[0] || '';
+    const nameParts = emailPrefix.split(/[._-]/).filter(Boolean);
+    if (nameParts.length > 0 && isNaN(Number(nameParts[0]))) {
+      return nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1);
+    }
+    return 'Kenny';
+  };
+
+  const userName = getFirstName();
   
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -221,6 +241,124 @@ export const AntigravityChat = () => {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Folder Management State
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('aurora_chat_folders');
+      return saved ? JSON.parse(saved) : [{ id: 'aurora', name: 'aurora' }];
+    } catch {
+      return [{ id: 'aurora', name: 'aurora' }];
+    }
+  });
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [movingSessionId, setMovingSessionId] = useState<string | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+
+  const toggleFolderCollapse = (folderId: string) => {
+    setCollapsedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
+  };
+
+  const saveFolders = (updatedFolders: { id: string; name: string }[]) => {
+    setFolders(updatedFolders);
+    localStorage.setItem('aurora_chat_folders', JSON.stringify(updatedFolders));
+  };
+
+  const handleCreateFolder = () => {
+    if (!newFolderName.trim()) return;
+    const folderId = slugify(newFolderName.trim());
+    if (folders.some(f => f.id === folderId)) {
+      toast.error("A folder with this name already exists.");
+      return;
+    }
+    const updated = [...folders, { id: folderId, name: newFolderName.trim() }];
+    saveFolders(updated);
+    setNewFolderName('');
+    setIsCreatingFolder(false);
+    toast.success(`Folder "${newFolderName.trim()}" created`);
+  };
+
+  const handleRenameFolder = (folderId: string) => {
+    if (!editingFolderName.trim()) return;
+    const updated = folders.map(f => f.id === folderId ? { ...f, name: editingFolderName.trim() } : f);
+    saveFolders(updated);
+    setEditingFolderId(null);
+    setEditingFolderName('');
+    toast.success("Folder renamed");
+  };
+
+  const handleDeleteFolder = (folderId: string) => {
+    if (folderId === 'aurora') {
+      toast.error("The root 'aurora' folder cannot be deleted.");
+      return;
+    }
+    const updated = folders.filter(f => f.id !== folderId);
+    saveFolders(updated);
+    setSessions(prev => prev.map(s => s.metadata?.folderId === folderId ? { ...s, metadata: { ...s.metadata, folderId: 'aurora' } } : s));
+    toast.success("Folder deleted");
+  };
+
+  const handleTogglePinSession = async (s: ChatSession, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentPinned = !!s.metadata?.isPinned;
+    const nextPinned = !currentPinned;
+
+    setSessions(prev => prev.map(item => item.id === s.id ? { ...item, metadata: { ...(item.metadata || {}), isPinned: nextPinned } } : item));
+    if (activeSession?.id === s.id) {
+      setActiveSession(prev => prev ? { ...prev, metadata: { ...(prev.metadata || {}), isPinned: nextPinned } } : null);
+    }
+
+    try {
+      const token = authSession?.access_token;
+      await fetch(`${API_BASE_URL}/sessions/${s.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant!.id
+        },
+        body: JSON.stringify({
+          metadata: { isPinned: nextPinned }
+        })
+      });
+      toast.success(nextPinned ? "Conversation pinned" : "Conversation unpinned");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update pin status");
+    }
+  };
+
+  const handleMoveSessionToFolder = async (sessionIdToMove: string, targetFolderId: string) => {
+    setMovingSessionId(null);
+    setSessions(prev => prev.map(item => item.id === sessionIdToMove ? { ...item, metadata: { ...(item.metadata || {}), folderId: targetFolderId } } : item));
+    if (activeSession?.id === sessionIdToMove) {
+      setActiveSession(prev => prev ? { ...prev, metadata: { ...(prev.metadata || {}), folderId: targetFolderId } } : null);
+    }
+
+    try {
+      const token = authSession?.access_token;
+      await fetch(`${API_BASE_URL}/sessions/${sessionIdToMove}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant!.id
+        },
+        body: JSON.stringify({
+          metadata: { folderId: targetFolderId }
+        })
+      });
+      toast.success("Conversation moved");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to move conversation");
+    }
+  };
   
   // Real-time telemetry
 
@@ -231,8 +369,76 @@ export const AntigravityChat = () => {
   // Right Panel State
   const [activeTab, setActiveTab] = useState<'plan' | 'tasks' | 'sql' | 'preview' | 'scratchpad' | 'explorer'>('plan');
   const [showRightPanel, setShowRightPanel] = useState(false);
-  const [modelName, setModelName] = useState('Gemini 2.5 Flash Lite');
+  const [modelName, setModelName] = useState(() => localStorage.getItem('aurora_selected_ai_model') || 'default');
   const [showModelMenu, setShowModelMenu] = useState(false);
+
+  // Click-outside listener for model menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
+        setShowModelMenu(false);
+      }
+    };
+    if (showModelMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showModelMenu]);
+
+  const handleSelectModel = (name: string) => {
+    setModelName(name);
+    localStorage.setItem('aurora_selected_ai_model', name);
+    setShowModelMenu(false);
+  };
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setLoading(false);
+    setStreamingText('');
+    setAgentThought(null);
+    setAgentTrace([]);
+    toast.info("Generation stopped.");
+  };
+
+  // Quick BYOK Key Modal State
+  const [showQuickKeyModal, setShowQuickKeyModal] = useState(false);
+  const [quickApiKey, setQuickApiKey] = useState('');
+  const [savingQuickKey, setSavingQuickKey] = useState(false);
+
+  const handleSaveQuickKey = async () => {
+    if (!quickApiKey.trim()) return;
+    setSavingQuickKey(true);
+    try {
+      const token = authSession?.access_token;
+      const res = await fetch('http://localhost:3001/api/ai/keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant!.id
+        },
+        body: JSON.stringify({
+          provider: 'google',
+          keyName: 'Google Free Tier Key',
+          apiKey: quickApiKey.trim(),
+          isDefault: true
+        })
+      });
+      if (!res.ok) throw new Error("Failed to save key");
+      toast.success("API key saved! Resuming chat without limits...");
+      setShowQuickKeyModal(false);
+      setQuickApiKey('');
+    } catch (e: any) {
+      toast.error(e.message || "Could not save API key");
+    } finally {
+      setSavingQuickKey(false);
+    }
+  };
 
   // Resizable left sidebar state
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -318,10 +524,10 @@ export const AntigravityChat = () => {
 
   // Load chat sessions on mount
   useEffect(() => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || !authSession?.access_token) return;
     fetchSessions();
     loadWorkspaceSchema();
-  }, [tenant?.id]);
+  }, [tenant?.id, authSession?.access_token]);
 
   // Handle socket setup
   useEffect(() => {
@@ -366,14 +572,15 @@ export const AntigravityChat = () => {
 
   // Load session details when URL sessionId changes
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && tenant?.id && authSession?.access_token) {
       loadSession(sessionId);
-    } else {
+    } else if (!sessionId) {
+      setMessagesLoading(false);
       setMessages([]);
       setActiveSession(null);
       setAgentTrace([]);
     }
-  }, [sessionId]);
+  }, [sessionId, tenant?.id, authSession?.access_token]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -386,12 +593,14 @@ export const AntigravityChat = () => {
   }, [messages, agentThought, agentTrace, streamingText]);
 
   const fetchSessions = async () => {
+    if (!tenant?.id || !authSession?.access_token) return;
     try {
-      const token = authSession?.access_token;
+      setSessionsLoading(true);
+      const token = authSession.access_token;
       const res = await fetch(`${API_BASE_URL}/sessions`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant!.id
+          'x-tenant-id': tenant.id
         }
       });
       if (!res.ok) throw new Error("Failed to fetch sessions");
@@ -399,26 +608,47 @@ export const AntigravityChat = () => {
       setSessions(data);
     } catch (error) {
       console.error(error);
+    } finally {
+      setSessionsLoading(false);
     }
   };
 
   const loadSession = async (id: string) => {
+    if (!tenant?.id || !authSession?.access_token) return;
     try {
-      const token = authSession?.access_token;
+      setMessagesLoading(true);
+      const token = authSession.access_token;
       const res = await fetch(`${API_BASE_URL}/sessions/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant!.id
+          'x-tenant-id': tenant.id
         }
       });
       if (!res.ok) throw new Error("Failed to load session");
       const data = await res.json();
       setActiveSession(data);
-      setMessages(data.messages);
+
+      const sanitizedMessages = (data.messages || []).map((m: any) => {
+        let stepsArr = [];
+        if (Array.isArray(m.steps)) {
+          stepsArr = m.steps;
+        } else if (typeof m.steps === 'string') {
+          try { stepsArr = JSON.parse(m.steps); } catch { stepsArr = []; }
+        }
+        return {
+          ...m,
+          steps: stepsArr
+        };
+      });
+
+      setMessages(sanitizedMessages);
       setAgentTrace([]);
       setAgentThought(null);
     } catch (error) {
+      console.error("[loadSession Error]", error);
       toast.error("Failed to load conversation history.");
+    } finally {
+      setMessagesLoading(false);
     }
   };
 
@@ -518,7 +748,34 @@ export const AntigravityChat = () => {
   };
 
   const sendMessage = async () => {
-    if (!inputMessage.trim() || !sessionId) return;
+    if (!inputMessage.trim()) return;
+
+    let activeSessionId = sessionId;
+
+    // Auto-create session on the fly if no session is active
+    if (!activeSessionId) {
+      try {
+        const token = authSession?.access_token;
+        const res = await fetch(`${API_BASE_URL}/sessions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant!.id
+          },
+          body: JSON.stringify({ title: inputMessage.trim().substring(0, 30) || 'New Vibe Chat' })
+        });
+        if (!res.ok) throw new Error("Failed to initialize session");
+        const newSession = await res.json();
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSession(newSession);
+        activeSessionId = newSession.id;
+        window.history.replaceState(null, '', `/workspace/aurora-vibe/${newSession.id}`);
+      } catch (e: any) {
+        toast.error("Could not start conversation.");
+        return;
+      }
+    }
     
     const userMsg = inputMessage;
     const userAttachments = [...attachments];
@@ -583,14 +840,16 @@ export const AntigravityChat = () => {
     }
 
     try {
+      abortControllerRef.current = new AbortController();
       const token = authSession?.access_token;
-      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/chat`, {
+      const res = await fetch(`${API_BASE_URL}/sessions/${activeSessionId}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant!.id
         },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           message: userMsg,
           socketId: socketRef.current?.id,
@@ -622,10 +881,14 @@ export const AntigravityChat = () => {
       
       // Refresh session plan metadata
       fetchSessions();
-      loadSession(sessionId);
+      if (activeSessionId) loadSession(activeSessionId);
 
     } catch (error: any) {
-      toast.error(error?.message || "Agent loop failed to complete.");
+      const msg = error?.message || "Agent loop failed to complete.";
+      if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota')) {
+        setShowQuickKeyModal(true);
+      }
+      toast.error(msg);
     } finally {
       setLoading(false);
       setAgentThought(null);
@@ -810,76 +1073,152 @@ export const AntigravityChat = () => {
     if (!text) return <p className="text-zinc-400 italic">No plan compiled yet.</p>;
 
     const lines = text.split('\n');
-    return (
-      <div className="space-y-3 font-sans">
-        {lines.map((line, idx) => {
-          const trimmed = line.trim();
+    const elements: React.ReactNode[] = [];
+    let inCodeBlock = false;
+    let codeBlockLines: string[] = [];
+    let codeBlockLang = '';
 
-          // Headers
-          if (trimmed.startsWith('# ')) {
-            return (
-              <h1 key={idx} className="text-lg font-bold text-zinc-800 dark:text-zinc-200 mt-4 mb-2 pb-1 border-b border-zinc-200/60 dark:border-zinc-800/80">
-                {trimmed.replace('# ', '')}
-              </h1>
-            );
-          }
-          if (trimmed.startsWith('## ')) {
-            return (
-              <h2 key={idx} className="text-base font-semibold text-zinc-700 dark:text-zinc-200 mt-3 mb-1.5">
-                {trimmed.replace('## ', '')}
-              </h2>
-            );
-          }
-          if (trimmed.startsWith('### ')) {
-            return (
-              <h3 key={idx} className="text-sm font-semibold text-zinc-600 dark:text-zinc-350 mt-2.5 mb-1">
-                {trimmed.replace('### ', '')}
-              </h3>
-            );
-          }
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
 
-          // Lists
-          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-            const content = trimmed.substring(2);
-            return (
-              <ul key={idx} className="list-disc pl-5 my-0.5 text-sm text-zinc-650 dark:text-zinc-400">
-                <li>{parseInlineFormatting(content)}</li>
-              </ul>
-            );
-          }
-
-          // Horizontal Rule
-          if (trimmed === '---') {
-            return <hr key={idx} className="my-3 border-t border-zinc-200 dark:border-zinc-800" />;
-          }
-
-          // Empty line
-          if (!trimmed) {
-            return <div key={idx} className="h-1" />;
-          }
-
-          // Normal paragraph
-          return (
-            <p key={idx} className="text-sm leading-relaxed text-zinc-650 dark:text-zinc-400 my-1 text-justify">
-              {parseInlineFormatting(trimmed)}
-            </p>
+      if (trimmed.startsWith('```')) {
+        if (inCodeBlock) {
+          elements.push(
+            <div key={`code-${idx}`} className="my-2.5 p-3.5 bg-zinc-900 text-zinc-100 rounded-xl font-mono text-xs overflow-x-auto border border-zinc-800 shadow-sm">
+              {codeBlockLang && <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5 font-bold">{codeBlockLang}</div>}
+              <pre className="whitespace-pre-wrap leading-relaxed">{codeBlockLines.join('\n')}</pre>
+            </div>
           );
-        })}
-      </div>
-    );
+          codeBlockLines = [];
+          codeBlockLang = '';
+          inCodeBlock = false;
+        } else {
+          inCodeBlock = true;
+          codeBlockLang = trimmed.replace('```', '').trim();
+        }
+        return;
+      }
+
+      if (inCodeBlock) {
+        codeBlockLines.push(line);
+        return;
+      }
+
+      // Headers
+      if (trimmed.startsWith('# ')) {
+        elements.push(
+          <h1 key={idx} className="text-lg font-bold text-zinc-800 dark:text-zinc-200 mt-4 mb-2 pb-1 border-b border-zinc-200/60 dark:border-zinc-800/80">
+            {trimmed.replace('# ', '')}
+          </h1>
+        );
+        return;
+      }
+      if (trimmed.startsWith('## ')) {
+        elements.push(
+          <h2 key={idx} className="text-base font-semibold text-zinc-700 dark:text-zinc-200 mt-3 mb-1.5">
+            {trimmed.replace('## ', '')}
+          </h2>
+        );
+        return;
+      }
+      if (trimmed.startsWith('### ')) {
+        elements.push(
+          <h3 key={idx} className="text-sm font-semibold text-zinc-600 dark:text-zinc-350 mt-2.5 mb-1">
+            {trimmed.replace('### ', '')}
+          </h3>
+        );
+        return;
+      }
+
+      // Numbered Lists (e.g. "1. ")
+      if (/^\d+\.\s+/.test(trimmed)) {
+        const num = trimmed.match(/^(\d+)\./)?.[1] || '1';
+        const content = trimmed.replace(/^\d+\.\s+/, '');
+        elements.push(
+          <div key={idx} className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300 my-1">
+            <span className="font-semibold text-indigo-600 dark:text-indigo-400 shrink-0 select-none">{num}.</span>
+            <div className="flex-1">{parseInlineFormatting(content)}</div>
+          </div>
+        );
+        return;
+      }
+
+      // Bullet Lists
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const content = trimmed.substring(2);
+        elements.push(
+          <div key={idx} className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300 my-1 pl-1">
+            <span className="text-indigo-500 shrink-0 select-none">•</span>
+            <div className="flex-1">{parseInlineFormatting(content)}</div>
+          </div>
+        );
+        return;
+      }
+
+      // Blockquotes
+      if (trimmed.startsWith('> ')) {
+        elements.push(
+          <blockquote key={idx} className="pl-3 border-l-2 border-indigo-500 text-sm text-zinc-600 dark:text-zinc-400 italic my-2">
+            {parseInlineFormatting(trimmed.substring(2))}
+          </blockquote>
+        );
+        return;
+      }
+
+      // Horizontal Rule
+      if (trimmed === '---') {
+        elements.push(<hr key={idx} className="my-3 border-t border-zinc-200 dark:border-zinc-800" />);
+        return;
+      }
+
+      // Empty line
+      if (!trimmed) {
+        elements.push(<div key={idx} className="h-1" />);
+        return;
+      }
+
+      // Normal paragraph
+      elements.push(
+        <p key={idx} className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 my-1">
+          {parseInlineFormatting(trimmed)}
+        </p>
+      );
+    });
+
+    if (inCodeBlock && codeBlockLines.length > 0) {
+      elements.push(
+        <div key="code-eof" className="my-2.5 p-3.5 bg-zinc-900 text-zinc-100 rounded-xl font-mono text-xs overflow-x-auto border border-zinc-800 shadow-sm">
+          <pre className="whitespace-pre-wrap leading-relaxed">{codeBlockLines.join('\n')}</pre>
+        </div>
+      );
+    }
+
+    return <div className="space-y-1.5 font-sans">{elements}</div>;
   };
 
   const parseInlineFormatting = (str: string) => {
-    const parts = str.split(/(\*\*.*?\*\*|`.*?`)/g);
+    const parts = str.split(/(\*\*.*?\*\*|`.*?`|\*.*?\*|\[.*?\]\(.*?\))/g);
     return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
+      if (!part) return null;
+      if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
         return <strong key={i} className="font-semibold text-zinc-800 dark:text-white">{part.slice(2, -2)}</strong>;
       }
-      if (part.startsWith('`') && part.endsWith('`')) {
+      if (part.startsWith('*') && part.endsWith('*') && part.length >= 2 && !part.startsWith('**')) {
+        return <em key={i} className="italic text-zinc-700 dark:text-zinc-300">{part.slice(1, -1)}</em>;
+      }
+      if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
         return (
-          <code key={i} className="bg-zinc-100 dark:bg-zinc-800/80 px-1 py-0.5 rounded text-xs font-mono text-indigo-650 dark:text-indigo-400 border border-zinc-200/50 dark:border-zinc-700/50">
+          <code key={i} className="bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs font-mono text-indigo-650 dark:text-indigo-400 border border-zinc-200/50 dark:border-zinc-700/50">
             {part.slice(1, -1)}
           </code>
+        );
+      }
+      const linkMatch = part.match(/^\[(.*?)\]\((.*?)\)$/);
+      if (linkMatch) {
+        return (
+          <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-500">
+            {linkMatch[1]}
+          </a>
         );
       }
       return part;
@@ -979,59 +1318,87 @@ export const AntigravityChat = () => {
     }, 10);
   };
 
-  const getGroupedSessions = (sessionList: ChatSession[]) => {
-    const today: ChatSession[] = [];
-    const yesterday: ChatSession[] = [];
-    const lastWeek: ChatSession[] = [];
-    const older: ChatSession[] = [];
-
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-    const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
-
-    sessionList.forEach(s => {
-      const createdTime = new Date(s.createdAt).getTime();
-      if (createdTime >= todayStart) {
-        today.push(s);
-      } else if (createdTime >= yesterdayStart) {
-        yesterday.push(s);
-      } else if (createdTime >= weekStart) {
-        lastWeek.push(s);
-      } else {
-        older.push(s);
-      }
-    });
-
-    return { today, yesterday, lastWeek, older };
-  };
-
   const filteredSessions = sessions.filter(s =>
     (s.title || '').toLowerCase().includes(sessionSearch.toLowerCase())
   );
-  const groupedSessions = getGroupedSessions(filteredSessions);
 
-  const renderSessionItem = (s: ChatSession) => (
-    <div 
-      key={s.id}
-      onClick={() => navigate(`/workspace/aurora-vibe/${s.id}`)}
-      className={`group w-full flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer transition-all border ${
-        s.id === sessionId 
-          ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
-          : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
-      }`}
-    >
-      <MessageSquare size={18} className={cn("shrink-0", s.id === sessionId ? "text-indigo-600 dark:text-white" : "text-zinc-400 dark:text-zinc-550")} />
-      <span className="text-sm font-medium flex-1 text-left truncate">{s.title || 'Untitled Session'}</span>
-      <button 
-        onClick={(e) => deleteSession(s.id, e)}
-        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 dark:text-zinc-555 hover:text-red-500 transition-all flex-shrink-0"
-        title="Delete Session"
+  const renderSessionItem = (s: ChatSession) => {
+    const isPinned = !!s.metadata?.isPinned;
+    const currentFolderId = s.metadata?.folderId || 'aurora';
+
+    return (
+      <div 
+        key={s.id}
+        onClick={() => navigate(`/workspace/aurora-vibe/${s.id}`)}
+        className={`group relative w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all border ${
+          s.id === sessionId 
+            ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
+            : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
+        }`}
       >
-        <Trash2 className="h-3 w-3" />
-      </button>
-    </div>
-  );
+        <MessageSquare size={16} className={cn("shrink-0", s.id === sessionId ? "text-indigo-600 dark:text-white" : "text-zinc-400 dark:text-zinc-550")} />
+        <span className="text-xs font-medium flex-1 text-left truncate">{s.title || 'Untitled Session'}</span>
+        
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Pin Toggle */}
+          <button 
+            onClick={(e) => handleTogglePinSession(s, e)}
+            className={cn(
+              "p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer",
+              isPinned ? "text-amber-500 opacity-100" : "text-zinc-400 hover:text-amber-500"
+            )}
+            title={isPinned ? "Unpin Conversation" : "Pin Conversation"}
+          >
+            <Pin className={cn("h-3 w-3", isPinned && "fill-amber-500")} />
+          </button>
+
+          {/* Move to Folder */}
+          <div className="relative">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setMovingSessionId(movingSessionId === s.id ? null : s.id);
+              }}
+              className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+              title="Move to Folder"
+            >
+              <FolderPlus className="h-3 w-3" />
+            </button>
+            {movingSessionId === s.id && (
+              <div 
+                onClick={(e) => e.stopPropagation()} 
+                className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 z-50 text-xs"
+              >
+                <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Move to Folder</div>
+                {folders.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => handleMoveSessionToFolder(s.id, f.id)}
+                    className={cn(
+                      "w-full text-left px-2 py-1 rounded-md transition-all truncate flex items-center gap-1.5 cursor-pointer",
+                      currentFolderId === f.id ? "font-bold text-indigo-600 dark:text-indigo-400" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    )}
+                  >
+                    <Folder className="h-3 w-3" />
+                    <span className="truncate">{f.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Delete Session */}
+          <button 
+            onClick={(e) => deleteSession(s.id, e)}
+            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
+            title="Delete Session"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const getActiveTasks = () => activeSession?.metadata?.tasks || [];
 
@@ -1132,86 +1499,137 @@ export const AntigravityChat = () => {
 
           {/* Pinned Conversations */}
           <div>
-            <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2 select-none">
-              <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" />
-              Pinned Conversations
+            <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] mb-2 px-3 flex items-center justify-between select-none">
+              <div className="flex items-center gap-2">
+                <Pin className="h-3 w-3 text-amber-500 fill-amber-500" />
+                <span>Pinned Conversations</span>
+              </div>
+              {sessions.filter(s => s.metadata?.isPinned).length > 0 && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold">
+                  {sessions.filter(s => s.metadata?.isPinned).length}
+                </span>
+              )}
             </div>
-            <div className="text-xs text-zinc-500 dark:text-zinc-650 px-3 italic pl-6">No pinned conversations yet</div>
+            {sessions.filter(s => s.metadata?.isPinned).length === 0 ? (
+              <div className="text-xs text-zinc-500 dark:text-zinc-650 px-3 italic pl-6">No pinned conversations yet</div>
+            ) : (
+              <div className="space-y-1">
+                {sessions.filter(s => s.metadata?.isPinned).map(renderSessionItem)}
+              </div>
+            )}
           </div>
 
-          {/* Projects Folder Structure */}
+          {/* Folders Structure */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 select-none">
               <div className="flex items-center gap-2">
-                <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" />
-                <span>Projects</span>
+                <Folder className="h-3.5 w-3.5 text-indigo-500" />
+                <span>Folders</span>
               </div>
-              <ChevronDown className="h-3.5 w-3.5" />
+              <button 
+                onClick={() => setIsCreatingFolder(true)}
+                className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                title="Create New Folder"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
             </div>
-            
-            <div className="pl-3 space-y-1">
-              <div className="flex items-center gap-3 px-3 py-2 text-sm font-bold text-zinc-700 dark:text-zinc-300 select-none">
-                <Folder size={18} className="shrink-0 text-indigo-500 dark:text-indigo-400" />
-                <span>aurora</span>
-              </div>
-              
-              {/* Search Box */}
-              <div className="px-3 mb-2">
-                <input 
-                  type="text"
-                  placeholder="Search chats..."
-                  value={sessionSearch}
-                  onChange={(e) => setSessionSearch(e.target.value)}
-                  className="w-full text-xs bg-zinc-100 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-zinc-700 dark:text-zinc-300 placeholder-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-                />
-              </div>
 
-              <div className="pl-6 space-y-3">
-                {filteredSessions.length === 0 ? (
-                  <div className="p-2 text-xs text-zinc-500 dark:text-zinc-650 italic">No conversations</div>
-                ) : (
-                  <>
-                    {groupedSessions.today.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Today</div>
-                        {groupedSessions.today.map(renderSessionItem)}
+            {/* Search Box */}
+            <div className="px-3 mb-2">
+              <input 
+                type="text"
+                placeholder="Search chats..."
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+                className="w-full text-xs bg-zinc-100 dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-zinc-700 dark:text-zinc-300 placeholder-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+              />
+            </div>
+
+            {/* Folder List & Sessions */}
+            <div className="space-y-3">
+              {folders.map(folder => {
+                const folderSessions = filteredSessions.filter(s => (s.metadata?.folderId || 'aurora') === folder.id);
+                const isEditing = editingFolderId === folder.id;
+                const isCollapsed = !!collapsedFolders[folder.id];
+
+                return (
+                  <div key={folder.id} className="space-y-1">
+                    <div 
+                      onClick={() => toggleFolderCollapse(folder.id)}
+                      className="group flex items-center justify-between px-2.5 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-all select-none cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate flex-1">
+                        <ChevronDown className={cn("h-3.5 w-3.5 text-zinc-400 transition-transform duration-200 shrink-0", isCollapsed && "-rotate-90")} />
+                        <Folder className="h-4 w-4 shrink-0 text-indigo-500 dark:text-indigo-400" />
+                        {isEditing ? (
+                          <input 
+                            type="text"
+                            value={editingFolderName}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setEditingFolderName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameFolder(folder.id);
+                              if (e.key === 'Escape') setEditingFolderId(null);
+                            }}
+                            autoFocus
+                            className="bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs outline-none"
+                          />
+                        ) : (
+                          <span className="truncate">{folder.name}</span>
+                        )}
+                        <span className="text-[10px] text-zinc-400 font-mono">({folderSessions.length})</span>
+                      </div>
+
+                      {folder.id !== 'aurora' && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingFolderId(folder.id);
+                              setEditingFolderName(folder.name);
+                            }}
+                            className="p-1 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                            title="Rename Folder"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFolder(folder.id);
+                            }}
+                            className="p-1 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
+                            title="Delete Folder"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Folder Sessions */}
+                    {!isCollapsed && (
+                      <div className="pl-4 space-y-1">
+                        {sessionsLoading ? (
+                          <div className="space-y-1.5 pr-2 py-1">
+                            {[1, 2, 3].map(n => (
+                              <div key={n} className="h-6 w-full bg-zinc-200/60 dark:bg-zinc-800/60 animate-pulse rounded-md" />
+                            ))}
+                          </div>
+                        ) : folderSessions.length === 0 ? (
+                          <div className="p-1.5 text-[11px] text-zinc-400 dark:text-zinc-600 italic">No conversations</div>
+                        ) : (
+                          folderSessions.map(renderSessionItem)
+                        )}
                       </div>
                     )}
-                    {groupedSessions.yesterday.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Yesterday</div>
-                        {groupedSessions.yesterday.map(renderSessionItem)}
-                      </div>
-                    )}
-                    {groupedSessions.lastWeek.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Last 7 Days</div>
-                        {groupedSessions.lastWeek.map(renderSessionItem)}
-                      </div>
-                    )}
-                    {groupedSessions.older.length > 0 && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 select-none">Older</div>
-                        {groupedSessions.older.map(renderSessionItem)}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-        </div>
-        
-        {/* Footer info */}
-        <div className="p-3 border-t border-zinc-200/50 dark:border-zinc-800/40 bg-zinc-50/50 dark:bg-zinc-900/30 text-[10px] text-zinc-550 dark:text-zinc-500 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Settings className="h-4 w-4 text-zinc-400 dark:text-zinc-550 hover:text-zinc-800 dark:hover:text-zinc-200 cursor-pointer" />
-            <span className="truncate max-w-[120px]">{tenant?.name || 'Local Dev'}</span>
-          </div>
-          <span className="text-emerald-500 font-medium flex items-center gap-1 shrink-0">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Co-Pilot Live
-          </span>
         </div>
       </div>
 
@@ -1220,20 +1638,29 @@ export const AntigravityChat = () => {
         {/* Top Header telemetry */}
         <div className="h-12 border-b border-zinc-200/50 dark:border-zinc-800/40 px-6 flex items-center justify-between flex-shrink-0 bg-white/70 dark:bg-zinc-950/50 backdrop-blur-xl z-10">
           <div className="flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-xs text-zinc-800 dark:text-zinc-200">
-              {activeSession ? activeSession.title : 'Aurora'}
-            </span>
             {activeSession && (
-              <button 
-                onClick={handleForkSession}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm"
-              >
-                <GitBranch className="h-3 w-3" /> Fork
-              </button>
+              <>
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-semibold text-xs text-zinc-800 dark:text-zinc-200">
+                  {activeSession.title}
+                </span>
+                <button 
+                  onClick={handleForkSession}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm"
+                >
+                  <GitBranch className="h-3 w-3" /> Fork
+                </button>
+              </>
             )}
           </div>
           <div className="flex items-center gap-3">
+            {/* Real-Time Rolling Gauge Indicator */}
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-300 shadow-sm" title="Real-time rolling capacity limits (5-hour and 7-day windows)">
+              <span className="text-amber-500">⚡ 5h: 0%</span>
+              <span className="text-zinc-400">|</span>
+              <span className="text-purple-400">7d: 0%</span>
+            </div>
+
             <button 
               onClick={() => setShowRightPanel(!showRightPanel)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-650 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all font-semibold shadow-sm"
@@ -1246,17 +1673,49 @@ export const AntigravityChat = () => {
 
         {/* Message Area */}
         <div ref={messageAreaRef} className="flex-1 overflow-y-auto px-4 py-8 space-y-8 scrollbar-thin z-10">
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto p-4 space-y-4">
-              <div className="h-16 w-16 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shadow-sm">
-                <Bot className="h-8 w-8 text-indigo-500 dark:text-indigo-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-zinc-800 dark:text-zinc-200">Aurora Unified Builder & Chat</h3>
-                <p className="text-xs text-zinc-550 dark:text-zinc-400 mt-1 leading-relaxed">
-                  Enter commands to configure forms, inspect workspace components, lookup APIs, or query database records. 
-                  Try saying: *"I want to create a lookup to the Australian Business Register API"* or *"Find the 10 most viable open leads."*
+          {messagesLoading ? (
+            <div className="max-w-3xl mx-auto w-full space-y-6 pt-4">
+              <div className="h-12 w-2/3 ml-auto bg-zinc-200/50 dark:bg-zinc-800/40 animate-pulse rounded-2xl" />
+              <div className="h-28 w-full bg-zinc-200/30 dark:bg-zinc-900/30 animate-pulse rounded-2xl" />
+              <div className="h-12 w-1/2 ml-auto bg-zinc-200/50 dark:bg-zinc-800/40 animate-pulse rounded-2xl" />
+            </div>
+          ) : !sessionId && messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center max-w-2xl mx-auto p-6 space-y-8 animate-in fade-in zoom-in-95 duration-500">
+              <div className="space-y-3">
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100 font-sans">
+                  Hi {userName}, what's the move?
+                </h1>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium max-w-md mx-auto">
+                  Ask Aurora to build database modules, automate workflows, connect APIs, or analyze enterprise data.
                 </p>
+              </div>
+
+              {/* Quick Start Prompt Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl text-left">
+                {[
+                  { title: "Australian Business Register API", desc: "Create an ABN lookup connector for lead enrichment", prompt: "Create a lookup to the Australian Business Register API" },
+                  { title: "Audit & Score Open Leads", desc: "Query top 10 viable leads and summarize high-value opportunities", prompt: "Find the 10 most viable open leads and summarize them" },
+                  { title: "Customer Onboarding Workflow", desc: "Build an automated multi-step verification pipeline", prompt: "Build an automated customer onboarding verification workflow" },
+                  { title: "Platform Architecture Plan", desc: "Draft a dynamic schema & task checklist for a new module", prompt: "Draft a dynamic module schema and architecture plan for Inventory Management" }
+                ].map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setInputMessage(item.prompt);
+                      if (textareaRef.current) textareaRef.current.focus();
+                    }}
+                    className="p-4 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-zinc-200/70 dark:border-zinc-800 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all text-left group shadow-sm flex flex-col justify-between cursor-pointer"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {item.title}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                        {item.desc}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
@@ -1279,7 +1738,7 @@ export const AntigravityChat = () => {
                 return (
                   <div key={m.id || idx} className="w-full space-y-3 py-2 border-b border-zinc-200/50 dark:border-zinc-900/50 pb-6 animate-fade-in">
                     {/* Collapsible Steps Trace */}
-                    {m.steps && m.steps.length > 0 && (
+                    {Array.isArray(m.steps) && m.steps.length > 0 && (
                       <details className="group mb-3">
                         <summary className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-455 font-medium cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-200 select-none">
                           <span className="transition-transform group-open:rotate-90">▸</span>
@@ -1299,9 +1758,54 @@ export const AntigravityChat = () => {
                     )}
 
                     {/* Agent Response Markdown */}
-                    <div className="text-sm text-zinc-750 dark:text-zinc-300 leading-relaxed font-sans">
-                      {renderMarkdown(m.content)}
-                    </div>
+                    {(() => {
+                      let displayContent = (m.content || '')
+                        .replace(/<function\([\s\S]*?<\/function>/gi, '')
+                        .replace(/<function\([\s\S]*$/gi, '')
+                        .replace(/<\/function>/gi, '')
+                        .trim();
+
+                      // If displayContent is empty, check if m.content has embedded pseudo-function call
+                      if (!displayContent && m.content && m.content.includes('<function(')) {
+                        const match = m.content.match(/<function\(\w+\)\s*(\{[\s\S]*?\})\s*(?:<\/function>|$)/i) || m.content.match(/<function\(\w+\)([\s\S]*?)(?:<\/function>|$)/i);
+                        if (match && match[1]) {
+                          try {
+                            const parsed = JSON.parse(match[1].trim());
+                            if (parsed.planMarkdown) {
+                              displayContent = parsed.planMarkdown;
+                            } else if (typeof parsed === 'string') {
+                              displayContent = parsed;
+                            }
+                          } catch {
+                            displayContent = match[1].trim();
+                          }
+                        }
+                      }
+
+                      // Also check steps if displayContent is still empty
+                      if (!displayContent && Array.isArray(m.steps)) {
+                        const planStep = m.steps.find((st: any) => st.name === 'write_agent_plan');
+                        if (planStep?.arguments?.planMarkdown) {
+                          displayContent = planStep.arguments.planMarkdown;
+                        }
+                      }
+
+                      if (displayContent) {
+                        return (
+                          <div className="text-sm text-zinc-750 dark:text-zinc-300 leading-relaxed font-sans">
+                            {renderMarkdown(displayContent)}
+                          </div>
+                        );
+                      }
+                      if (Array.isArray(m.steps) && m.steps.length > 0) {
+                        return (
+                          <div className="text-xs text-zinc-400 dark:text-zinc-500 italic">
+                            Action completed successfully. See workspace side panel for details.
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {/* Action Approval Card */}
                     {(() => {
@@ -1591,8 +2095,8 @@ export const AntigravityChat = () => {
                   }
                 }
               }}
-              disabled={loading || !sessionId}
-              placeholder={sessionId ? "Ask anything, @ to mention, / for actions" : "Select or start a chat session in the sidebar..."}
+              disabled={loading}
+              placeholder="Ask anything, @ to mention, / for actions"
               className="w-full bg-transparent border-none outline-none resize-none text-sm text-zinc-800 dark:text-zinc-200 placeholder-zinc-500 py-1 scrollbar-none"
               style={{ minHeight: '24px', maxHeight: '180px' }}
             />
@@ -1611,29 +2115,77 @@ export const AntigravityChat = () => {
                   <Paperclip className="h-4 w-4" />
                 </button>
 
-                {/* Model selector dropdown */}
-                <div className="relative">
+                {/* Single Consolidated Model & Tier Selector Dropdown */}
+                <div className="relative" ref={modelMenuRef}>
                   <button 
                     onClick={() => setShowModelMenu(!showModelMenu)}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[10.5px] bg-zinc-100 dark:bg-zinc-800/65 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-750 text-zinc-650 dark:text-zinc-350 rounded-lg transition-all font-semibold shadow-sm"
+                    className="flex items-center gap-1.5 px-3 py-1 text-[11px] bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-lg transition-all font-bold shadow-sm"
                   >
-                    <span>{modelName}</span>
-                    <span className="text-[7.5px] text-zinc-400">▲</span>
+                    <Sparkles className="h-3 w-3 text-indigo-500" />
+                    <span>
+                      {modelName === 'default' ? 'Default (Gemini 2.0 Flash)' : 
+                       modelName === 'low' ? 'Low Tier (Fast)' : 
+                       modelName === 'medium' ? 'Medium Tier (Balanced)' : 
+                       modelName === 'high' ? 'High Tier (Pro)' : modelName}
+                    </span>
+                    <span className="text-[8px] text-zinc-400">▲</span>
                   </button>
                   {showModelMenu && (
-                    <div className="absolute bottom-full left-0 mb-1 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl py-1.5 z-50">
-                      {['Gemini 2.5 Flash Lite', 'Gemini 2.5 Flash', 'Gemini 2.5 Pro'].map(m => (
+                    <div className="absolute bottom-full left-0 mb-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-2 z-50 space-y-2.5">
+                      {/* Platform Default Section */}
+                      <div>
+                        <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2.5 py-1">Platform Default Model</div>
                         <button
-                          key={m}
-                          onClick={() => {
-                            setModelName(m);
-                            setShowModelMenu(false);
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-55 dark:hover:bg-zinc-800 transition-all"
+                          onClick={() => handleSelectModel('default')}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all text-left border",
+                            modelName === 'default'
+                              ? "bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300"
+                              : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200/60 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          )}
                         >
-                          {m}
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-indigo-500 shrink-0" />
+                            <div>
+                              <div className="font-bold flex items-center gap-1.5">
+                                Gemini 2.0 Flash
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 font-extrabold uppercase">Free Default</span>
+                              </div>
+                              <div className="text-[9.5px] text-zinc-400 font-normal">Built-in Aurora platform default</div>
+                            </div>
+                          </div>
+                          {modelName === 'default' && <Check className="h-4 w-4 text-indigo-500 shrink-0" />}
                         </button>
-                      ))}
+                      </div>
+
+                      {/* Presets */}
+                      <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2">
+                        <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2.5 py-1">Preset Capability Tiers</div>
+                        <div className="space-y-0.5">
+                          {[
+                            { id: 'low', label: 'Low (Fast / Budget)', icon: Zap, color: 'text-green-500' },
+                            { id: 'medium', label: 'Medium (Balanced Workhorse)', icon: Cpu, color: 'text-blue-500' },
+                            { id: 'high', label: 'High (Pro Reasoning)', icon: Sparkles, color: 'text-purple-500' },
+                          ].map(t => (
+                            <button
+                              key={t.id}
+                              onClick={() => handleSelectModel(t.id)}
+                              className={cn(
+                                "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-left",
+                                modelName === t.id
+                                  ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300"
+                                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              )}
+                            >
+                              <span className="flex items-center gap-2">
+                                <t.icon className={cn("h-3.5 w-3.5", t.color)} />
+                                {t.label}
+                              </span>
+                              {modelName === t.id && <Check className="h-3.5 w-3.5 text-indigo-500" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1652,13 +2204,24 @@ export const AntigravityChat = () => {
                   {isListening ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
                 </button>
 
-                <button 
-                  onClick={sendMessage}
-                  disabled={loading || !inputMessage.trim() || !sessionId}
-                  className="p-1.5 bg-indigo-650 hover:bg-indigo-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-white rounded-lg transition-all shadow flex items-center justify-center"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </button>
+                {loading ? (
+                  <button 
+                    onClick={handleStopGeneration}
+                    className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all shadow flex items-center gap-1.5 text-[11px] font-bold animate-pulse cursor-pointer"
+                    title="Stop response generation"
+                  >
+                    <Square className="h-3 w-3 fill-current" />
+                    <span>Stop</span>
+                  </button>
+                ) : (
+                  <button 
+                    onClick={sendMessage}
+                    disabled={!inputMessage.trim()}
+                    className="p-1.5 bg-indigo-650 hover:bg-indigo-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-white rounded-lg transition-all shadow flex items-center justify-center cursor-pointer"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1938,6 +2501,137 @@ export const AntigravityChat = () => {
         title="Delete Conversation"
         description="Are you sure you want to delete this session? All message history will be permanently lost."
       />
+
+      {showQuickKeyModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-amber-500">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                <Zap className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">Free Tier Traffic Limit Reached</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">The shared fallback demo key reached Google's 10 req/min limit.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-xl text-xs space-y-1">
+              <div className="font-bold text-indigo-700 dark:text-indigo-300">Get your personal 100% Free Key (15 RPM):</div>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                Generate a free key instantly at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline font-semibold text-indigo-600 dark:text-indigo-400">aistudio.google.com/apikey</a> (no credit card required).
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Paste Your Google AI API Key</label>
+              <input 
+                type="password"
+                placeholder="AIzaSy..."
+                value={quickApiKey}
+                onChange={(e) => setQuickApiKey(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowQuickKeyModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-all"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={handleSaveQuickKey}
+                disabled={!quickApiKey.trim() || savingQuickKey}
+                className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                {savingQuickKey ? 'Saving...' : 'Save & Bypass Limit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Premium Aurora Create Folder Modal */}
+      {createPortal(
+        <AnimatePresence>
+          {isCreatingFolder && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsCreatingFolder(false)}
+                className="absolute inset-0 bg-white/60 dark:bg-black/65 backdrop-blur-md"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="relative w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded-3xl shadow-2xl overflow-hidden z-10"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                      <FolderPlus size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-zinc-900 dark:text-white">Create New Folder</h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">Organize your co-pilot conversations</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsCreatingFolder(false)}
+                    className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Form Body */}
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">
+                      Folder Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Sales Automations, Finance, Marketing..."
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreateFolder();
+                        if (e.key === 'Escape') setIsCreatingFolder(false);
+                      }}
+                      autoFocus
+                      className="w-full px-4 py-2.5 text-sm bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-4 bg-zinc-50/80 dark:bg-zinc-900/80 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setIsCreatingFolder(false)}
+                    className="px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 rounded-xl transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateFolder}
+                    disabled={!newFolderName.trim()}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-indigo-500/20 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus size={14} /> Create Folder
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
       
       </div>
     </div>

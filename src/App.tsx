@@ -56,6 +56,7 @@ import { TeamDetailView } from './pages/Settings/TeamDetailView';
 import { PositionDetailView } from './pages/Settings/PositionDetailView';
 import { SubscriptionPage } from './pages/Settings/SubscriptionPage';
 import { OrganizationPage } from './pages/Settings/OrganizationPage';
+import { AISettingsPage } from './pages/Settings/AISettingsPage';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
 
 // Pages
@@ -250,6 +251,7 @@ const App = () => {
                 <Route index element={<SettingsOverview />} />
                 <Route path="organization" element={<OrganizationPage />} />
                 <Route path="subscription" element={<SubscriptionPage />} />
+                <Route path="ai-services" element={<AISettingsPage />} />
                 <Route path="billing" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 <Route path="usage" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 

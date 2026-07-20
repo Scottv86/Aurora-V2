@@ -23,6 +23,7 @@ import pricingCatalogRoutes from './routes/pricingCatalogRoutes';
 import queryExplorerRoutes from './routes/queryExplorerRoutes';
 import reportRoutes from './routes/reportRoutes';
 import antigravityRoutes from './routes/antigravityRoutes';
+import aiSettingsRoutes from './routes/aiSettingsRoutes';
 
 
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
@@ -115,6 +116,7 @@ app.use('/api/pricing-catalog', authenticate, requireTenantAccess, pricingCatalo
 app.use('/api/query-explorer', authenticate, requireTenantAccess, queryExplorerRoutes);
 app.use('/api/reports', authenticate, requireTenantAccess, reportRoutes);
 app.use('/api/antigravity', authenticate, requireTenantAccess, antigravityRoutes);
+app.use('/api/ai', authenticate, requireTenantAccess, aiSettingsRoutes);
 
 
 
