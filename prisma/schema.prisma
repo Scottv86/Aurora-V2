@@ -42,6 +42,7 @@ model Tenant {
   connectorLogs          ConnectorLog[]
   catalogItems           CatalogItem[]
   antigravitySessions    AntigravitySession[]
+  antigravityScheduledTasks AntigravityScheduledTask[]
   scheduledJobs          ScheduledJob[]
   webhookSubscriptions   WebhookSubscription[]
   aiKeys                 TenantAIKey[]
@@ -778,6 +779,29 @@ model AntigravityMessage {
 
   @@index([sessionId])
   @@map("antigravity_messages")
+}
+
+model AntigravityScheduledTask {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  name           String
+  project        String    @default("aurora")
+  scheduleType   String    @default("Daily") @map("schedule_type")
+  scheduleTime   String    @default("9:00 AM") @map("schedule_time")
+  cronExpression String?   @map("cron_expression")
+  prompt         String
+  model          String    @default("Flash")
+  isActive       Boolean   @default(true) @map("is_active")
+  lastRunAt      DateTime? @map("last_run_at")
+  nextRunAt      DateTime? @map("next_run_at")
+  status         String    @default("idle")
+  lastResult     String?   @map("last_result")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("antigravity_scheduled_tasks")
 }
 
 model ScheduledJob {

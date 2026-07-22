@@ -12,7 +12,7 @@ async function generateSmartSessionTitle(message: string): Promise<string> {
     prompt = prompt.charAt(0).toUpperCase() + prompt.slice(1);
 
     const words = prompt.split(/\s+/);
-    if (words.length <= 5 && prompt.length <= 45) {
+    if (words.length <= 7 && prompt.length <= 60) {
       return prompt.replace(/[?.!]+$/, '');
     }
 
@@ -31,7 +31,7 @@ async function generateSmartSessionTitle(message: string): Promise<string> {
   }
 
   const words = message.replace(/^(what is an|what is a|what is|tell me how to|tell me how|tell me|explain|how do i|how to|i want to|give me all the|give me|i want you to)\s+/i, '').split(/\s+/);
-  const fallback = words.slice(0, 6).join(' ').replace(/[?.!]+$/, '');
+  const fallback = words.slice(0, 7).join(' ').replace(/[?.!]+$/, '');
   return fallback.charAt(0).toUpperCase() + fallback.slice(1);
 }
 
@@ -48,13 +48,13 @@ router.get('/sessions', async (req: TenantRequest, res) => {
 
     // Clean up legacy truncated/verbose session titles
     for (const session of sessions) {
-      if (session.title.includes('...') || /^(what is|tell me|give me|i want|explain|how do|what are)/i.test(session.title)) {
+      if (session.title.includes('...') || session.title.length <= 30 || /^(what is|tell me|give me|i want|explain|how do|what are)/i.test(session.title)) {
         const cleaned = session.title
           .replace(/^(what is an|what is a|what is|tell me how to|tell me how|tell me|explain|how do i|how to|i want to|give me all the|give me|i want you to|what are the|what are)\s+/i, '')
           .replace(/\.\.\.$/, '')
           .trim();
         const words = cleaned.split(/\s+/);
-        const newTitle = words.slice(0, 4).join(' ').replace(/[?.!]+$/, '');
+        const newTitle = words.slice(0, 6).join(' ').replace(/[?.!]+$/, '');
         const formatted = newTitle ? (newTitle.charAt(0).toUpperCase() + newTitle.slice(1)) : session.title;
         if (formatted && formatted !== session.title && formatted.length > 1) {
           session.title = formatted;
@@ -87,6 +87,26 @@ router.get('/sessions/:id', async (req: TenantRequest, res) => {
 
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Auto-heal truncated or default session title if messages exist
+    if (session.messages.length > 0) {
+      const isDefaultOrTruncated = session.title === 'New Vibe Chat' || 
+                                    session.title.length <= 30 || 
+                                    session.title.endsWith('...');
+      if (isDefaultOrTruncated) {
+        const firstUserMsg = session.messages.find(m => m.role === 'user');
+        if (firstUserMsg && firstUserMsg.content) {
+          const smartTitle = await generateSmartSessionTitle(firstUserMsg.content);
+          if (smartTitle && smartTitle !== session.title) {
+            session.title = smartTitle;
+            await db.antigravitySession.update({
+              where: { id: session.id },
+              data: { title: smartTitle }
+            }).catch(() => {});
+          }
+        }
+      }
     }
 
     res.json(session);
@@ -181,15 +201,26 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     // Run the agent loop asynchronously. The socket emits intermediate thoughts/results
     const result = await runAgentLoop(tenantId, userId, id, message, socketId, context, model, attachments);
 
-    // Also update session title if it was default or a raw prompt
+    // Update session title if default, initial message, or legacy truncated snippet
     const db = req.db!;
-    const session = await db.antigravitySession.findUnique({ where: { id } });
-    if (session && (session.title === 'New Vibe Chat' || session.title.startsWith('what is') || session.title.startsWith('tell me') || session.title.startsWith('give me') || session.title.startsWith('I want'))) {
-      const summaryTitle = await generateSmartSessionTitle(message);
-      await db.antigravitySession.update({
-        where: { id },
-        data: { title: summaryTitle }
-      });
+    const session = await db.antigravitySession.findUnique({
+      where: { id },
+      include: { messages: true }
+    });
+    if (session) {
+      const isFirstMessage = session.messages.length <= 1;
+      const isDefaultOrTruncated = session.title === 'New Vibe Chat' || 
+                                    session.title.length <= 30 || 
+                                    session.title.endsWith('...') ||
+                                    /^(what is|tell me|give me|i want|explain|how do|what are)/i.test(session.title);
+
+      if (isFirstMessage || isDefaultOrTruncated) {
+        const summaryTitle = await generateSmartSessionTitle(message);
+        await db.antigravitySession.update({
+          where: { id },
+          data: { title: summaryTitle }
+        });
+      }
     }
 
     res.json({ success: true, ...result });
@@ -325,6 +356,168 @@ router.post('/sessions/:id/approve', async (req: TenantRequest, res) => {
   } catch (err: any) {
     console.error('[AntigravityRoutes] Action Approval Error:', err);
     res.status(500).json({ error: err.message || 'Failed to process approval action', provider: err.provider, model: err.model });
+  }
+});
+
+// ==========================================
+// SCHEDULED TASKS API
+// ==========================================
+
+// GET all scheduled tasks for tenant
+router.get('/scheduled-tasks', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+
+    const tasks = await (db as any).antigravityScheduledTask.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(tasks);
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] GET /scheduled-tasks Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch scheduled tasks' });
+  }
+});
+
+// POST create scheduled task
+router.post('/scheduled-tasks', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { name, project, scheduleType, scheduleTime, cronExpression, prompt, model } = req.body;
+
+    if (!name || !prompt) {
+      return res.status(400).json({ error: 'Name and prompt are required' });
+    }
+
+    const newTask = await (db as any).antigravityScheduledTask.create({
+      data: {
+        tenantId,
+        name,
+        project: project || 'aurora',
+        scheduleType: scheduleType || 'Daily',
+        scheduleTime: scheduleTime || '9:00 AM',
+        cronExpression: cronExpression || null,
+        prompt,
+        model: model || 'Flash',
+        isActive: true,
+        status: 'idle'
+      }
+    });
+
+    res.json(newTask);
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] POST /scheduled-tasks Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create scheduled task' });
+  }
+});
+
+// PATCH update scheduled task
+router.patch('/scheduled-tasks/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const existing = await (db as any).antigravityScheduledTask.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Scheduled task not found' });
+    }
+
+    const updated = await (db as any).antigravityScheduledTask.update({
+      where: { id },
+      data: updateData
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] PATCH /scheduled-tasks/:id Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update scheduled task' });
+  }
+});
+
+// POST trigger manual run for a scheduled task
+router.post('/scheduled-tasks/:id/run', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const userId = (req as any).user?.id || 'system';
+    const { id } = req.params;
+
+    const task = await (db as any).antigravityScheduledTask.findUnique({ where: { id } });
+    if (!task) {
+      return res.status(404).json({ error: 'Scheduled task not found' });
+    }
+
+    // Update status to running
+    await (db as any).antigravityScheduledTask.update({
+      where: { id },
+      data: { status: 'running', lastRunAt: new Date() }
+    });
+
+    // Create a new session for executing this task
+    const session = await db.antigravitySession.create({
+      data: {
+        tenantId,
+        title: `[Scheduled Task] ${task.name}`,
+        metadata: {
+          scheduledTaskId: task.id,
+          project: task.project,
+          isScheduledRun: true
+        }
+      }
+    });
+
+    const modelKey = (task.model || 'Default').toLowerCase();
+    const targetModel = modelKey === 'medium' ? 'openrouter/anthropic/claude-3.5-sonnet' :
+                       modelKey === 'high' ? 'openrouter/openai/gpt-4o' :
+                       'gemini-3.1-flash-lite';
+
+    // Run agent loop asynchronously or return session ID
+    runAgentLoop(
+      tenantId,
+      userId,
+      session.id,
+      [{ role: 'user', parts: [{ text: task.prompt }] }],
+      [],
+      undefined,
+      targetModel,
+      { scheduledTaskId: task.id }
+    ).then(async () => {
+      await (db as any).antigravityScheduledTask.update({
+        where: { id },
+        data: { status: 'idle', lastResult: 'Execution completed successfully' }
+      });
+    }).catch(async (e: any) => {
+      await (db as any).antigravityScheduledTask.update({
+        where: { id },
+        data: { status: 'failed', lastResult: e?.message || 'Execution failed' }
+      });
+    });
+
+    res.json({ success: true, sessionId: session.id, message: `Scheduled task '${task.name}' triggered.` });
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] POST /scheduled-tasks/:id/run Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to run scheduled task' });
+  }
+});
+
+// DELETE scheduled task
+router.delete('/scheduled-tasks/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const { id } = req.params;
+
+    await (db as any).antigravityScheduledTask.delete({
+      where: { id }
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] DELETE /scheduled-tasks/:id Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete scheduled task' });
   }
 });
 

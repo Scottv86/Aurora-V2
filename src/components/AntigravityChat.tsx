@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
 import { showAuroraToast } from './UI/AuroraToast';
+import { ScheduledTasksView } from './chat/ScheduledTasksView';
+import { NewScheduledTaskModal, ScheduledTaskData } from './chat/NewScheduledTaskModal';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/antigravity';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
@@ -549,6 +551,175 @@ export const AntigravityChat = () => {
   const [agentTrace, setAgentTrace] = useState<any[]>([]);
   const [agentThought, setAgentThought] = useState<string | null>(null);
 
+  // Scheduled Tasks & Main View State
+  const [activeMainView, setActiveMainView] = useState<'chat' | 'scheduled_tasks'>('chat');
+  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskData[]>(() => {
+    try {
+      const saved = localStorage.getItem('aurora_scheduled_tasks');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isScheduledTasksLoading, setIsScheduledTasksLoading] = useState(false);
+  const [isNewScheduledTaskModalOpen, setIsNewScheduledTaskModalOpen] = useState(false);
+  const [editingScheduledTask, setEditingScheduledTask] = useState<ScheduledTaskData | null>(null);
+
+  const fetchScheduledTasks = async () => {
+    if (!tenant?.id || !authSession?.access_token) return;
+    try {
+      setIsScheduledTasksLoading(true);
+      const token = authSession.access_token;
+      const res = await fetch(`${API_BASE_URL}/scheduled-tasks`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScheduledTasks(data);
+        localStorage.setItem('aurora_scheduled_tasks', JSON.stringify(data));
+      }
+    } catch (error) {
+      console.warn('Failed to fetch scheduled tasks from server:', error);
+    } finally {
+      setIsScheduledTasksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeMainView === 'scheduled_tasks') {
+      fetchScheduledTasks();
+    }
+  }, [activeMainView, tenant?.id, authSession?.access_token]);
+
+  const handleSaveScheduledTask = async (taskData: ScheduledTaskData) => {
+    try {
+      const token = authSession?.access_token;
+      let updatedTask: ScheduledTaskData;
+
+      if (taskData.id) {
+        const res = await fetch(`${API_BASE_URL}/scheduled-tasks/${taskData.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify(taskData)
+        });
+        if (res.ok) {
+          updatedTask = await res.json();
+        } else {
+          updatedTask = { ...taskData };
+        }
+        setScheduledTasks(prev => prev.map(t => t.id === taskData.id ? updatedTask : t));
+        toast.success("Scheduled task updated");
+      } else {
+        const res = await fetch(`${API_BASE_URL}/scheduled-tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token || ''}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify(taskData)
+        });
+        if (res.ok) {
+          updatedTask = await res.json();
+        } else {
+          updatedTask = { ...taskData, id: `task-${Date.now()}` };
+        }
+        setScheduledTasks(prev => [updatedTask, ...prev]);
+        toast.success("Scheduled task created");
+      }
+
+      setTimeout(() => {
+        setScheduledTasks(current => {
+          localStorage.setItem('aurora_scheduled_tasks', JSON.stringify(current));
+          return current;
+        });
+      }, 50);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to save scheduled task");
+    }
+  };
+
+  const handleDeleteScheduledTask = async (taskId: string) => {
+    try {
+      const token = authSession?.access_token;
+      fetch(`${API_BASE_URL}/scheduled-tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token || ''}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      }).catch(() => {});
+
+      setScheduledTasks(prev => {
+        const next = prev.filter(t => t.id !== taskId);
+        localStorage.setItem('aurora_scheduled_tasks', JSON.stringify(next));
+        return next;
+      });
+      toast.success("Scheduled task deleted");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Failed to delete scheduled task");
+    }
+  };
+
+  const handleToggleScheduledTaskActive = async (taskId: string, isActive: boolean) => {
+    try {
+      setScheduledTasks(prev => {
+        const next = prev.map(t => t.id === taskId ? { ...t, isActive } : t);
+        localStorage.setItem('aurora_scheduled_tasks', JSON.stringify(next));
+        return next;
+      });
+
+      const token = authSession?.access_token;
+      await fetch(`${API_BASE_URL}/scheduled-tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || ''}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ isActive })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRunScheduledTaskNow = async (taskId: string) => {
+    try {
+      const token = authSession?.access_token;
+      const res = await fetch(`${API_BASE_URL}/scheduled-tasks/${taskId}/run`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token || ''}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(`Triggered scheduled task.`);
+        if (data.sessionId) {
+          fetchSessions(true);
+          loadSession(data.sessionId);
+          setActiveMainView('chat');
+        }
+      } else {
+        toast.success("Task execution started.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Failed to run scheduled task");
+    }
+  };
+
   // Right Panel State
   const [activeTab, setActiveTab] = useState<'plan' | 'tasks' | 'sql' | 'canvas' | 'preview' | 'scratchpad' | 'explorer'>('plan');
   const [showRightPanel, setShowRightPanel] = useState(false);
@@ -851,6 +1022,7 @@ export const AntigravityChat = () => {
   };
 
   const loadSession = async (id: string, isSilent = false) => {
+    setActiveMainView('chat');
     if (!tenant?.id || !authSession?.access_token) return;
     const shouldShowSkeleton = !isSilent && (messages.length === 0 || activeSession?.id !== id);
     try {
@@ -877,14 +1049,15 @@ export const AntigravityChat = () => {
         const msgModel = m.model || metaStep?._meta?.model;
         const msgProvider = m.provider || metaStep?._meta?.provider;
         const msgIsBYOK = m.isBYOK !== undefined ? m.isBYOK : metaStep?._meta?.isBYOK;
-        const msgKeyHint = m.keyHint || metaStep?._meta?.keyHint;
         return {
-          ...m,
+          id: m.id,
+          role: m.role as 'user' | 'model' | 'system',
+          content: m.content,
           steps: stepsArr,
+          timestamp: new Date(m.createdAt),
           model: msgModel,
           provider: msgProvider,
-          isBYOK: msgIsBYOK,
-          keyHint: msgKeyHint
+          isBYOK: msgIsBYOK
         };
       });
 
@@ -900,6 +1073,7 @@ export const AntigravityChat = () => {
   };
 
   const createSession = async () => {
+    setActiveMainView('chat');
     try {
       const token = authSession?.access_token;
       const res = await fetch(`${API_BASE_URL}/sessions`, {
@@ -1010,7 +1184,7 @@ export const AntigravityChat = () => {
             'Authorization': `Bearer ${token}`,
             'x-tenant-id': tenant!.id
           },
-          body: JSON.stringify({ title: inputMessage.trim().substring(0, 30) || 'New Vibe Chat' })
+          body: JSON.stringify({ title: 'New Vibe Chat' })
         });
         if (!res.ok) throw new Error("Failed to initialize session");
         const newSession = await res.json();
@@ -1773,11 +1947,27 @@ export const AntigravityChat = () => {
 
           {/* Core Explorer Items */}
           <div className="space-y-1">
-            <div className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer transition-all">
+            <div 
+              onClick={() => setActiveMainView('chat')}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all",
+                activeMainView === 'chat' 
+                  ? "bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-900 dark:text-white font-semibold" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
+              )}
+            >
               <History size={18} className="shrink-0 text-zinc-400 dark:text-zinc-500" />
               <span>Conversation History</span>
             </div>
-            <div className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer transition-all">
+            <div 
+              onClick={() => setActiveMainView('scheduled_tasks')}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all",
+                activeMainView === 'scheduled_tasks' 
+                  ? "bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-900 dark:text-white font-semibold" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
+              )}
+            >
               <Calendar size={18} className="shrink-0 text-zinc-400 dark:text-zinc-500" />
               <span>Scheduled Tasks</span>
             </div>
@@ -1930,11 +2120,29 @@ export const AntigravityChat = () => {
         </div>
       </div>
 
-      {/* 2. Middle Panel: Chat Window */}
-      <div className="flex-1 flex flex-col min-w-0 bg-transparent border-r border-zinc-200/50 dark:border-zinc-800/40">
+      {/* 2. Middle Panel: Chat Window or Scheduled Tasks */}
+      {activeMainView === 'scheduled_tasks' ? (
+        <ScheduledTasksView
+          tasks={scheduledTasks}
+          isLoading={isScheduledTasksLoading}
+          onOpenNewModal={() => {
+            setEditingScheduledTask(null);
+            setIsNewScheduledTaskModalOpen(true);
+          }}
+          onEditTask={(task) => {
+            setEditingScheduledTask(task);
+            setIsNewScheduledTaskModalOpen(true);
+          }}
+          onDeleteTask={handleDeleteScheduledTask}
+          onToggleTaskActive={handleToggleScheduledTaskActive}
+          onRunTaskNow={handleRunScheduledTaskNow}
+        />
+      ) : (
+        <>
+          <div className="flex-1 flex flex-col min-w-0 bg-transparent border-r border-zinc-200/50 dark:border-zinc-800/40">
         {/* Top Header telemetry */}
         <div className="h-12 border-b border-zinc-200/50 dark:border-zinc-800/40 px-6 flex items-center justify-between flex-shrink-0 bg-white/70 dark:bg-zinc-950/50 backdrop-blur-xl z-10">
-          <div className="flex items-center gap-3 min-w-0 max-w-2xl flex-1 mr-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1 mr-4">
             {activeSession && (
               <>
                 <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
@@ -1958,7 +2166,7 @@ export const AntigravityChat = () => {
                         setEditingSessionId(activeSession.id);
                         setEditingSessionTitle(activeSession.title || '');
                       }}
-                      className="font-semibold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate max-w-xl"
+                      className="font-semibold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate min-w-0"
                       title={activeSession.title}
                     >
                       {activeSession.title}
@@ -2961,6 +3169,8 @@ export const AntigravityChat = () => {
         </div>
       </div>
       )}
+        </>
+      )}
       
       <DeleteConfirmationModal
         isOpen={deleteSessionId !== null}
@@ -3108,6 +3318,17 @@ export const AntigravityChat = () => {
         document.body
       )}
       
+      <NewScheduledTaskModal
+        isOpen={isNewScheduledTaskModalOpen}
+        onClose={() => {
+          setIsNewScheduledTaskModalOpen(false);
+          setEditingScheduledTask(null);
+        }}
+        onSave={handleSaveScheduledTask}
+        initialTask={editingScheduledTask}
+        projects={folders.map(f => f.name).length > 0 ? folders.map(f => f.name) : ['aurora']}
+      />
+
       </div>
     </div>
   );
