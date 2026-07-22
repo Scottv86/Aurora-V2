@@ -46,22 +46,24 @@ export const NewScheduledTaskModal: React.FC<NewScheduledTaskModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (initialTask) {
-      setName(initialTask.name || '');
-      setProject(initialTask.project || 'aurora');
-      setScheduleType(initialTask.scheduleType || 'Daily');
-      setScheduleTime(initialTask.scheduleTime || '9:00 AM');
-      setPrompt(initialTask.prompt || '');
-      setModel(initialTask.model || 'Default');
-    } else {
-      setName('');
-      setProject(projects[0] || 'aurora');
-      setScheduleType('Daily');
-      setScheduleTime('9:00 AM');
-      setPrompt('');
-      setModel('Default');
+    if (isOpen) {
+      if (initialTask) {
+        setName(initialTask.name || '');
+        setProject(initialTask.project || 'aurora');
+        setScheduleType(initialTask.scheduleType || 'Daily');
+        setScheduleTime(initialTask.scheduleTime || '9:00 AM');
+        setPrompt(initialTask.prompt || '');
+        setModel(initialTask.model || 'Default');
+      } else {
+        setName('');
+        setProject(projects[0] || 'aurora');
+        setScheduleType('Daily');
+        setScheduleTime('9:00 AM');
+        setPrompt('');
+        setModel('Default');
+      }
     }
-  }, [initialTask, isOpen, projects]);
+  }, [isOpen, initialTask]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
