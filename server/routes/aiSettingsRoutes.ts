@@ -369,12 +369,12 @@ router.get('/usage', async (req: TenantRequest, res) => {
 
     const fiveHourTokens = fiveHourAgg._sum.totalTokens || 0;
     const fiveHourRequests = fiveHourAgg._count.id || 0;
-    const fiveHourBudget = 250000; // 250k token rolling limit benchmark
+    const fiveHourBudget = 2500000; // 2.5M token rolling limit benchmark (Google AI Studio Free Tier allows 1M TPM)
     const fiveHourPercent = Math.min(100, Math.round((fiveHourTokens / fiveHourBudget) * 100));
 
     const sevenDayTokens = sevenDayAgg._sum.totalTokens || 0;
     const sevenDayRequests = sevenDayAgg._count.id || 0;
-    const sevenDayBudget = 5000000; // 5M token rolling limit benchmark
+    const sevenDayBudget = 25000000; // 25M token rolling limit benchmark
     const sevenDayPercent = Math.min(100, Math.round((sevenDayTokens / sevenDayBudget) * 100));
 
     res.json({

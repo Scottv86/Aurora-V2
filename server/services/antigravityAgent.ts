@@ -765,7 +765,7 @@ ENTITY RELATIONSHIPS & JOIN PATHS:
   - Join Global List Items: global_list_items.list_id = global_lists.id
 
 CURRENT WORKSPACE SCHEMA (CUSTOM MODULES):
-${JSON.stringify(schemaOverview, null, 2)}
+${JSON.stringify(schemaOverview)}
 
 CORE GUIDELINES:
 1. You have a deep understanding of Aurora's 20 core subsystems:
@@ -793,7 +793,9 @@ CORE GUIDELINES:
 
   const contents: any[] = [];
   
-  for (const msg of session.messages) {
+  // Sliding window: keep last 8 messages for context to optimize prompt token consumption
+  const recentMessages = (session.messages || []).slice(-8);
+  for (const msg of recentMessages) {
     contents.push({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
@@ -820,6 +822,9 @@ CORE GUIDELINES:
   let loopCount = 0;
   const maxLoops = 15;
   const steps: any[] = [];
+  let turnPromptTokens = 0;
+  let turnCompletionTokens = 0;
+  const turnStartTime = Date.now();
 
   emitStep(socketId, { type: 'thought', content: "Initializing Aurora..." });
 
@@ -831,7 +836,6 @@ CORE GUIDELINES:
 
     let response;
     try {
-      const startTime = Date.now();
       response = await executeAICompletion(client, {
         contents,
         systemInstruction,
@@ -839,20 +843,11 @@ CORE GUIDELINES:
       });
 
       const usageMeta = response?.usageMetadata || (response as any)?.usage_metadata;
-      const promptTokens = usageMeta?.promptTokenCount || Math.max(100, Math.ceil(JSON.stringify(contents).length / 4));
-      const completionTokens = usageMeta?.candidatesTokenCount || Math.max(50, Math.ceil(JSON.stringify(response).length / 4));
+      const stepPromptTokens = usageMeta?.promptTokenCount || Math.max(100, Math.ceil(JSON.stringify(contents).length / 4));
+      const stepCompletionTokens = usageMeta?.candidatesTokenCount || Math.max(50, Math.ceil(JSON.stringify(response).length / 4));
 
-      logAIUsageMetric({
-        tenantId,
-        userId,
-        provider: client.provider,
-        model: client.model,
-        tier: client.isBYOK ? 'byok' : 'tier1',
-        feature: 'chat',
-        promptTokens,
-        completionTokens,
-        latencyMs: Date.now() - startTime
-      }).catch(e => console.warn('[antigravityAgent] logAIUsageMetric error:', e));
+      turnPromptTokens = Math.max(turnPromptTokens, stepPromptTokens);
+      turnCompletionTokens += stepCompletionTokens;
     } catch (err: any) {
       if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota') || err.message.includes('rate limit') || err.message.includes('Rate limit'))) {
         const provName = client.provider ? client.provider.toUpperCase() : 'AI';
@@ -1016,16 +1011,39 @@ CORE GUIDELINES:
         }
       });
 
+      const keyHint = client.apiKey && client.apiKey.length > 4 ? `...${client.apiKey.slice(-4)}` : 'Default Key';
+
       await db.antigravityMessage.create({
         data: {
           sessionId,
           role: 'model',
           content: text,
-          steps: steps as any
+          steps: [...steps, { _meta: { model: client.model, provider: client.provider, isBYOK: client.isBYOK, keyHint } }] as any
         }
       });
 
-      return { text, steps };
+      logAIUsageMetric({
+        tenantId,
+        userId,
+        provider: client.provider,
+        model: client.model,
+        tier: client.isBYOK ? 'byok' : 'tier1',
+        feature: 'chat',
+        promptTokens: turnPromptTokens,
+        completionTokens: turnCompletionTokens,
+        latencyMs: Date.now() - turnStartTime
+      }).catch(e => console.warn('[antigravityAgent] logAIUsageMetric error:', e));
+
+      return { 
+        text, 
+        steps, 
+        promptTokens: turnPromptTokens, 
+        completionTokens: turnCompletionTokens, 
+        model: client.model, 
+        provider: client.provider,
+        isBYOK: client.isBYOK,
+        keyHint
+      };
     }
   throw new Error("Agent loop exceeded maximum turns without producing a final text response.");
 };
@@ -1066,13 +1084,14 @@ export const executeAgentTool = async (
                 
                 const serialized = serializeBigInts(rawResult);
                 if (Array.isArray(serialized)) {
-                  result = serialized.filter((row: any) => {
+                  const filtered = serialized.filter((row: any) => {
                     const rowTenant = row.tenant_id || row.tenantId;
-                    if (rowTenant && rowTenant !== tenantId) {
-                      return false;
-                    }
-                    return true;
+                    return !rowTenant || rowTenant === tenantId;
                   });
+                  result = filtered.slice(0, 15);
+                  if (filtered.length > 15) {
+                    (result as any)._meta = `Showing top 15 of ${filtered.length} total matching records for token optimization.`;
+                  }
                 } else {
                   result = serialized;
                 }
@@ -2077,7 +2096,7 @@ ENTITY RELATIONSHIPS & JOIN PATHS:
   - Join Global List Items: global_list_items.list_id = global_lists.id
 
 CURRENT WORKSPACE SCHEMA (CUSTOM MODULES):
-${JSON.stringify(schemaOverview, null, 2)}
+${JSON.stringify(schemaOverview)}
 
 CORE GUIDELINES:
 1. You have a deep understanding of Aurora's 20 core subsystems:
@@ -2106,6 +2125,9 @@ CORE GUIDELINES:
   let loopCount = 0;
   const maxLoops = 15;
   const metadata = activeMetadata || {};
+  let turnPromptTokens = 0;
+  let turnCompletionTokens = 0;
+  const turnStartTime = Date.now();
 
   while (loopCount < maxLoops) {
     loopCount++;
@@ -2113,7 +2135,6 @@ CORE GUIDELINES:
 
     let response;
     try {
-      const startTime = Date.now();
       response = await executeAICompletion(client, {
         contents,
         systemInstruction,
@@ -2121,20 +2142,11 @@ CORE GUIDELINES:
       });
 
       const usageMeta = response?.usageMetadata || (response as any)?.usage_metadata;
-      const promptTokens = usageMeta?.promptTokenCount || Math.max(100, Math.ceil(JSON.stringify(contents).length / 4));
-      const completionTokens = usageMeta?.candidatesTokenCount || Math.max(50, Math.ceil(JSON.stringify(response).length / 4));
+      const stepPromptTokens = usageMeta?.promptTokenCount || Math.max(100, Math.ceil(JSON.stringify(contents).length / 4));
+      const stepCompletionTokens = usageMeta?.candidatesTokenCount || Math.max(50, Math.ceil(JSON.stringify(response).length / 4));
 
-      logAIUsageMetric({
-        tenantId,
-        userId,
-        provider: client.provider,
-        model: client.model,
-        tier: client.isBYOK ? 'byok' : 'tier1',
-        feature: 'chat',
-        promptTokens,
-        completionTokens,
-        latencyMs: Date.now() - startTime
-      }).catch(e => console.warn('[antigravityAgent] logAIUsageMetric error:', e));
+      turnPromptTokens = Math.max(turnPromptTokens, stepPromptTokens);
+      turnCompletionTokens += stepCompletionTokens;
     } catch (err: any) {
       if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota') || err.message.includes('rate limit') || err.message.includes('Rate limit'))) {
         const provName = client.provider ? client.provider.toUpperCase() : 'AI';
@@ -2256,16 +2268,39 @@ CORE GUIDELINES:
         emitStep(socketId, { type: 'chunk', content: text });
       }
 
+      const keyHint = client.apiKey && client.apiKey.length > 4 ? `...${client.apiKey.slice(-4)}` : 'Default Key';
+
       await db.antigravityMessage.create({
         data: {
           sessionId,
           role: 'model',
           content: text,
-          steps: steps as any
+          steps: [...steps, { _meta: { model: client.model, provider: client.provider, isBYOK: client.isBYOK, keyHint } }] as any
         }
       });
 
-      return { text, steps };
+      logAIUsageMetric({
+        tenantId,
+        userId,
+        provider: client.provider,
+        model: client.model,
+        tier: client.isBYOK ? 'byok' : 'tier1',
+        feature: 'chat',
+        promptTokens: turnPromptTokens,
+        completionTokens: turnCompletionTokens,
+        latencyMs: Date.now() - turnStartTime
+      }).catch(e => console.warn('[antigravityAgent] logAIUsageMetric error:', e));
+
+      return { 
+        text, 
+        steps, 
+        promptTokens: turnPromptTokens, 
+        completionTokens: turnCompletionTokens, 
+        model: client.model, 
+        provider: client.provider,
+        isBYOK: client.isBYOK,
+        keyHint
+      };
     }
   }
 

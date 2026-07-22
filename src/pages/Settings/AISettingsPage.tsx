@@ -12,7 +12,6 @@ import {
   RefreshCw, 
   Sliders,
   Sparkles,
-  Info,
   ShieldCheck
 } from 'lucide-react';
 import { Button, Badge, cn } from '../../components/UI/Primitives';
@@ -350,14 +349,6 @@ export const AISettingsPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono text-zinc-400">Rate Limit Protection: <strong className="text-emerald-400">5 RPM Intercept Active</strong></span>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
-                <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                  <p className="font-black uppercase tracking-wider">Bring Your Own Key (BYOK) Billing Model</p>
-                  <p>Aurora does not markup AI models or charge for AI usage. All API calls execute using your organization's own provider keys, so billing is handled directly between your tenant and the AI provider.</p>
                 </div>
               </div>
 

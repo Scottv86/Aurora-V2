@@ -26,6 +26,7 @@ export const Navbar = () => {
     environment, 
     setEnvironment, 
     user: platformUser, 
+    isDeveloper,
     isAIAssistantOpen, 
     setIsAIAssistantOpen,
     isChatOpen,
@@ -372,42 +373,49 @@ export const Navbar = () => {
 
 
 
-        {/* Experience Switcher - Platform | Aurora | Settings */}
-        <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0 ml-2">
+        {/* Divider */}
+        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1" />
+
+        {/* 3-Way Icon-Only Experience Switcher */}
+        <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0 ml-1">
           <Link
             to={lastPlatformPath}
             className={cn(
-              "px-3 py-1 text-[10px] font-bold rounded-full transition-all duration-300 select-none",
+              "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
               isPlatform 
                 ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
                 : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
             )}
+            title="Workspace"
           >
-            Workspace
+            <LayoutGrid size={14} />
           </Link>
           <Link
             to="/workspace/aurora-vibe"
             className={cn(
-              "px-3 py-1 text-[10px] font-bold rounded-full transition-all duration-300 select-none flex items-center gap-1",
+              "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
               isAurora 
                 ? "bg-gradient-to-r from-indigo-500 to-purple-650 text-white shadow-md shadow-indigo-500/20" 
                 : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
             )}
+            title="Aurora AI Chat"
           >
-            <Sparkles size={10} className={isAurora ? "animate-pulse text-white" : "text-zinc-400 dark:text-zinc-500"} />
-            Aurora
+            <Sparkles size={14} className={isAurora ? "animate-pulse text-white" : ""} />
           </Link>
-          <Link
-            to="/workspace/settings"
-            className={cn(
-              "px-3 py-1 text-[10px] font-bold rounded-full transition-all duration-300 select-none",
-              isSettings 
-                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
-                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-755 dark:hover:text-zinc-300"
-            )}
-          >
-            Settings
-          </Link>
+          {isDeveloper && (
+            <Link
+              to="/workspace/settings"
+              className={cn(
+                "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
+                isSettings 
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
+                  : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
+              )}
+              title="Developer Settings"
+            >
+              <SettingsIcon size={14} />
+            </Link>
+          )}
         </div>
       </div>
     </header>

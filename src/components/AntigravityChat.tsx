@@ -10,7 +10,7 @@ import {
   Loader2, Trash2, Send, Mic, MicOff, Plus, FileText, CheckSquare, 
   Copy, Table, Compass, Layers, X,
   Code, Globe, Plug, Paperclip, ChevronDown,
-  Layout, GitBranch, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
+  Layout, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
   History, Calendar, Folder, Settings
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
@@ -143,10 +143,18 @@ const resolveProviderFromModelName = (modelNameStr: string): string => {
 };
 
 const getModelDisplayName = (modelNameStr: string): string => {
-  if (!modelNameStr || modelNameStr === 'default') return 'Gemini 3.1 Flash-Lite (Free Tier)';
-  if (modelNameStr === 'low') return 'Gemini 3.1 Flash-Lite';
-  if (modelNameStr === 'medium') return 'Claude 3.5 Sonnet';
-  if (modelNameStr === 'high') return 'GPT-4o';
+  if (!modelNameStr || modelNameStr === 'default') return 'Gemini 3.1 Flash-Lite';
+  const m = modelNameStr.toLowerCase();
+  if (m === 'low' || m === 'tier1' || m.includes('3.1-flash-lite')) return 'Gemini 3.1 Flash-Lite';
+  if (m === 'medium' || m === 'med' || m === 'tier2' || m.includes('2.5-flash')) return 'Gemini 2.5 Flash';
+  if (m === 'high' || m === 'pro' || m === 'tier3' || m.includes('2.0-flash')) return 'Gemini 2.0 Flash';
+  if (m.includes('1.5-pro')) return 'Gemini 1.5 Pro';
+  if (m.includes('1.5-flash')) return 'Gemini 1.5 Flash';
+  if (m.includes('gpt-4o-mini')) return 'OpenAI GPT-4o Mini';
+  if (m.includes('gpt-4o')) return 'OpenAI GPT-4o';
+  if (m.includes('claude')) return 'Claude 3.5 Sonnet';
+  if (m.includes('llama')) return 'Groq Llama 3.3 70B';
+  if (m.includes('deepseek')) return 'DeepSeek V3';
   return modelNameStr;
 };
 
@@ -157,6 +165,10 @@ interface ChatMessage {
   steps?: any;
   promptTokens?: number;
   completionTokens?: number;
+  model?: string;
+  provider?: string;
+  isBYOK?: boolean;
+  keyHint?: string;
   createdAt: string;
 }
 
@@ -553,8 +565,8 @@ export const AntigravityChat = () => {
     totalTokens: number;
     estimatedCostUSD: number;
   }>({
-    fiveHour: { tokensUsed: 0, tokenBudget: 250000, percentage: 0 },
-    sevenDay: { tokensUsed: 0, tokenBudget: 5000000, percentage: 0 },
+    fiveHour: { tokensUsed: 0, tokenBudget: 2500000, percentage: 0 },
+    sevenDay: { tokensUsed: 0, tokenBudget: 25000000, percentage: 0 },
     totalRequests: 0,
     totalTokens: 0,
     estimatedCostUSD: 0
@@ -861,9 +873,18 @@ export const AntigravityChat = () => {
         } else if (typeof m.steps === 'string') {
           try { stepsArr = JSON.parse(m.steps); } catch { stepsArr = []; }
         }
+        const metaStep = stepsArr.find((s: any) => s._meta);
+        const msgModel = m.model || metaStep?._meta?.model;
+        const msgProvider = m.provider || metaStep?._meta?.provider;
+        const msgIsBYOK = m.isBYOK !== undefined ? m.isBYOK : metaStep?._meta?.isBYOK;
+        const msgKeyHint = m.keyHint || metaStep?._meta?.keyHint;
         return {
           ...m,
-          steps: stepsArr
+          steps: stepsArr,
+          model: msgModel,
+          provider: msgProvider,
+          isBYOK: msgIsBYOK,
+          keyHint: msgKeyHint
         };
       });
 
@@ -1113,6 +1134,10 @@ export const AntigravityChat = () => {
           steps: data.steps,
           promptTokens: data.promptTokens,
           completionTokens: data.completionTokens,
+          model: data.model,
+          provider: data.provider,
+          isBYOK: data.isBYOK,
+          keyHint: data.keyHint,
           createdAt: new Date().toISOString()
         }
       ]);
@@ -1292,42 +1317,7 @@ export const AntigravityChat = () => {
     recObj.start();
   };
 
-  const handleForkSession = async () => {
-    if (!activeSession) return;
-    try {
-      const token = authSession?.access_token;
-      // Fork copies message history to a new session
-      const res = await fetch(`${API_BASE_URL}/sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant!.id
-        },
-        body: JSON.stringify({ title: `Fork of ${activeSession.title}` })
-      });
-      const newSess = await res.json();
-      
-      // Copy messages
-      for (const msg of messages) {
-        await fetch(`${API_BASE_URL}/sessions/${newSess.id}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-id': tenant!.id
-          },
-          body: JSON.stringify({ message: msg.content })
-        });
-      }
-      
-      fetchSessions();
-      navigate(`/workspace/aurora-vibe/${newSess.id}`);
-      toast.success("Conversation forked to new branch.");
-    } catch (error) {
-      toast.error("Could not fork conversation.");
-    }
-  };
+
 
   const renderMarkdown = (text: string) => {
     if (!text) return <p className="text-zinc-400 italic">No plan compiled yet.</p>;
@@ -1985,12 +1975,6 @@ export const AntigravityChat = () => {
                     </button>
                   </div>
                 )}
-                <button 
-                  onClick={handleForkSession}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm"
-                >
-                  <GitBranch className="h-3 w-3" /> Fork
-                </button>
               </>
             )}
           </div>
@@ -2355,24 +2339,42 @@ export const AntigravityChat = () => {
                           const pTokens = m.promptTokens || Math.max(120, Math.ceil((m.steps ? JSON.stringify(m.steps).length : 600) / 4));
                           const cTokens = m.completionTokens || Math.max(80, Math.ceil((m.content || '').length / 4));
                           const totalTok = pTokens + cTokens;
+                          const rawModel = m.model || (m.steps && Array.isArray(m.steps) && m.steps.find((s: any) => s._meta)?._meta?.model) || modelName || 'default';
+                          const formattedModelName = getModelDisplayName(rawModel);
+
+                          const isBYOK = m.isBYOK !== undefined ? m.isBYOK : (m.steps && Array.isArray(m.steps) && m.steps.find((s: any) => s._meta)?._meta?.isBYOK);
+                          const keyHint = m.keyHint || (m.steps && Array.isArray(m.steps) && m.steps.find((s: any) => s._meta)?._meta?.keyHint) || 'Default Key';
 
                           return (
                             <div className="relative group/token ml-1">
                               <div 
                                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-mono text-zinc-500 dark:text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400 hover:border-amber-500/40 cursor-help transition-all shadow-2xs"
-                                title="Hover to view prompt & response token breakdown"
+                                title="Hover to view model & token breakdown"
                               >
                                 <Zap size={11} className="text-amber-500" />
                                 <span>{totalTok.toLocaleString()} tok</span>
                               </div>
 
                               {/* Hover Popup Card */}
-                              <div className="absolute bottom-full left-0 mb-2 hidden group-hover/token:flex flex-col w-52 p-3 rounded-xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 text-white text-[11px] shadow-2xl z-50 font-sans space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                              <div className="absolute bottom-full left-0 mb-2 hidden group-hover/token:flex flex-col w-56 p-3 rounded-xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 text-white text-[11px] shadow-2xl z-50 font-sans space-y-2 animate-in fade-in zoom-in-95 duration-150">
                                 <div className="flex items-center justify-between font-bold border-b border-zinc-800/80 pb-1 text-[10px] uppercase tracking-wider text-zinc-400">
                                   <span className="flex items-center gap-1.5"><Zap size={12} className="text-amber-500" /> Token Metrics</span>
                                   <span className="font-mono text-indigo-400">{totalTok.toLocaleString()}</span>
                                 </div>
+
                                 <div className="space-y-1">
+                                  <div className="flex justify-between items-center font-mono text-[10px] text-zinc-300">
+                                    <span className="text-zinc-400">AI Model:</span>
+                                    <span className="font-bold text-amber-400 font-sans truncate max-w-[125px]" title={rawModel}>
+                                      {formattedModelName}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center font-mono text-[10px] text-zinc-300">
+                                    <span className="text-zinc-400">Key Source:</span>
+                                    <span className={cn("font-bold font-sans truncate max-w-[125px]", isBYOK ? "text-emerald-400" : "text-indigo-400")} title={isBYOK ? `BYOK Key (${keyHint})` : "Aurora Baseline Free Tier"}>
+                                      {isBYOK ? `BYOK (${keyHint})` : 'Free Tier'}
+                                    </span>
+                                  </div>
                                   <div className="flex justify-between font-mono text-[10px] text-zinc-300">
                                     <span className="text-zinc-400">Prompt (Input):</span>
                                     <span className="font-bold text-zinc-200">{pTokens.toLocaleString()} tok</span>
@@ -2382,9 +2384,15 @@ export const AntigravityChat = () => {
                                     <span className="font-bold text-zinc-200">{cTokens.toLocaleString()} tok</span>
                                   </div>
                                 </div>
-                                <div className="pt-1.5 border-t border-zinc-800/80 flex justify-between text-[9.5px] font-mono text-emerald-400">
-                                  <span>Quota Impact:</span>
-                                  <span>~{((totalTok / 250000) * 100).toFixed(2)}% of 5h limit</span>
+
+                                <div className="pt-1.5 border-t border-zinc-800/80 flex flex-col gap-0.5 text-[9.5px]">
+                                  <div className="flex justify-between font-mono text-emerald-400 font-bold">
+                                    <span>This Turn Usage:</span>
+                                    <span>{((totalTok / 2500000) * 100).toFixed(2)}% of 5h limit</span>
+                                  </div>
+                                  <p className="text-[8.5px] text-zinc-500 italic leading-tight mt-0.5">
+                                    Top right 5h gauge tracks your total cumulative rolling tokens across all sessions.
+                                  </p>
                                 </div>
                               </div>
                             </div>
