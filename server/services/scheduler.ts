@@ -317,4 +317,23 @@ export class AutomationScheduler {
       console.error('[Scheduler] SLA evaluation loop error:', err);
     }
   }
+
+  /**
+   * Pre-computes a compact (50-word) Daily Standup Digest Memo for a tenant.
+   * Injected at prompt startup to give instant holistic context for < 50 tokens.
+   */
+  public static async generateDailyStandupMemo(tenantId: string): Promise<string> {
+    try {
+      const [moduleCount, recordCount, activeAutomations, activeConnectors] = await Promise.all([
+        globalPrisma.module.count({ where: { tenantId } }),
+        globalPrisma.record.count({ where: { tenantId } }),
+        globalPrisma.automation.count({ where: { tenantId, isActive: true } }),
+        globalPrisma.tenantConnector.count({ where: { tenantId, isActive: true } })
+      ]);
+
+      return `DAILY STANDUP MEMO [Tenant ${tenantId}]: ${moduleCount} Custom Modules, ${recordCount} Total Records, ${activeAutomations} Active Automations, ${activeConnectors} Active Integration Connectors. System topology operational.`;
+    } catch (err: any) {
+      return `DAILY STANDUP MEMO: Tenant Workspace Active.`;
+    }
+  }
 }

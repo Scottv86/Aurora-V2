@@ -1,8 +1,39 @@
 import { Router } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { runAgentLoop, executeAgentTool, resumeAgentLoop } from '../services/antigravityAgent';
+import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 
 const router = Router();
+
+async function generateSmartSessionTitle(message: string): Promise<string> {
+  try {
+    const cleanMsg = message.trim();
+    let prompt = cleanMsg.replace(/^(what is an|what is a|what is|tell me how to|tell me how|tell me|explain|how do i|how to|i want to|give me all the|give me|i want you to)\s+/i, '');
+    prompt = prompt.charAt(0).toUpperCase() + prompt.slice(1);
+
+    const words = prompt.split(/\s+/);
+    if (words.length <= 5 && prompt.length <= 45) {
+      return prompt.replace(/[?.!]+$/, '');
+    }
+
+    const client = await resolveTenantAIClient('default-tenant', 'gemini-3.1-flash-lite');
+    const result = await executeAICompletion(client, {
+      contents: [{ role: 'user', parts: [{ text: `Summarize this user request into a clean 3 to 6 word chat title (like ChatGPT/Gemini titles). Do NOT use quotes, punctuation, or filler words. Return ONLY the short title text.\n\nUSER REQUEST: "${message}"` }] }],
+      systemInstruction: "You are an automated chat title generator. Output ONLY a clean 3-6 word title."
+    });
+
+    const title = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim()?.replace(/["']/g, '');
+    if (title && title.length > 0 && title.length < 60) {
+      return title;
+    }
+  } catch (e) {
+    console.warn('[antigravityRoutes] Smart title generation failed, using fallback:', e);
+  }
+
+  const words = message.replace(/^(what is an|what is a|what is|tell me how to|tell me how|tell me|explain|how do i|how to|i want to|give me all the|give me|i want you to)\s+/i, '').split(/\s+/);
+  const fallback = words.slice(0, 6).join(' ').replace(/[?.!]+$/, '');
+  return fallback.charAt(0).toUpperCase() + fallback.slice(1);
+}
 
 // GET all sessions
 router.get('/sessions', async (req: TenantRequest, res) => {
@@ -14,6 +45,23 @@ router.get('/sessions', async (req: TenantRequest, res) => {
       where: { tenantId },
       orderBy: { updatedAt: 'desc' }
     });
+
+    // Clean up legacy truncated/verbose session titles
+    for (const session of sessions) {
+      if (session.title.includes('...') || /^(what is|tell me|give me|i want|explain|how do|what are)/i.test(session.title)) {
+        const cleaned = session.title
+          .replace(/^(what is an|what is a|what is|tell me how to|tell me how|tell me|explain|how do i|how to|i want to|give me all the|give me|i want you to|what are the|what are)\s+/i, '')
+          .replace(/\.\.\.$/, '')
+          .trim();
+        const words = cleaned.split(/\s+/);
+        const newTitle = words.slice(0, 4).join(' ').replace(/[?.!]+$/, '');
+        const formatted = newTitle ? (newTitle.charAt(0).toUpperCase() + newTitle.slice(1)) : session.title;
+        if (formatted && formatted !== session.title && formatted.length > 1) {
+          session.title = formatted;
+          db.antigravitySession.update({ where: { id: session.id }, data: { title: formatted } }).catch(() => {});
+        }
+      }
+    }
 
     res.json(sessions);
   } catch (err: any) {
@@ -133,11 +181,11 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     // Run the agent loop asynchronously. The socket emits intermediate thoughts/results
     const result = await runAgentLoop(tenantId, userId, id, message, socketId, context, model, attachments);
 
-    // Also update session title if it was default
+    // Also update session title if it was default or a raw prompt
     const db = req.db!;
     const session = await db.antigravitySession.findUnique({ where: { id } });
-    if (session && session.title === 'New Vibe Chat') {
-      const summaryTitle = message.substring(0, 30) + (message.length > 30 ? '...' : '');
+    if (session && (session.title === 'New Vibe Chat' || session.title.startsWith('what is') || session.title.startsWith('tell me') || session.title.startsWith('give me') || session.title.startsWith('I want'))) {
+      const summaryTitle = await generateSmartSessionTitle(message);
       await db.antigravitySession.update({
         where: { id },
         data: { title: summaryTitle }
@@ -147,7 +195,35 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     res.json({ success: true, ...result });
   } catch (err: any) {
     console.error('[AntigravityRoutes] POST /sessions/:id/chat Error:', err);
-    res.status(500).json({ error: err.message || 'Agent loop encountered an error', provider: err.provider, model: err.model });
+    const errStr = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+    let statusCode = 500;
+    let code = "SERVICE_UNAVAILABLE";
+    let title = "AI Provider Error";
+    let message = "An error occurred while calling the AI provider.";
+
+    if (errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota') || errStr.includes('rate limit')) {
+      statusCode = 429;
+      code = "RATE_LIMIT_EXCEEDED";
+      title = "AI Quota Reached";
+      message = "The AI is currently processing too many requests. Please wait a moment.";
+    } else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('key') || errStr.includes('unauthorized')) {
+      statusCode = 401;
+      code = "INVALID_KEY";
+      title = "Invalid AI Gateway Key";
+      message = "Your AI Gateway key is invalid or lacks proper permission.";
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code,
+        title,
+        message,
+        technical_details: errStr
+      },
+      provider: err.provider,
+      model: err.model
+    });
   }
 });
 

@@ -1,11 +1,19 @@
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
-const SECRET_KEY = process.env.ENCRYPTION_SECRET || process.env.JWT_SECRET || 'aurora-byok-default-secure-secret-key-32chars!';
+
+const getSecretKey = (): string => {
+  const secret = process.env.ENCRYPTION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.JWT_SECRET;
+  if (!secret) {
+    console.warn('[Crypto Warning] ENCRYPTION_SECRET / SUPABASE_SERVICE_ROLE_KEY is not defined. Using strict process memory key.');
+    return process.env.NODE_ENV === 'production' ? (() => { throw new Error('FATAL: ENCRYPTION_SECRET is required in production'); })() : 'aurora-dev-runtime-secret-key-32chars!';
+  }
+  return secret;
+};
 
 // Ensure master key is 32 bytes
 const getMasterKey = (): Buffer => {
-  return crypto.createHash('sha256').update(SECRET_KEY).digest();
+  return crypto.createHash('sha256').update(getSecretKey()).digest();
 };
 
 export interface EncryptedData {

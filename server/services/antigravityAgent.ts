@@ -617,13 +617,6 @@ export const runAgentLoop = async (
   attachments?: { name: string; type: string; base64: string }[]
 ): Promise<{ text: string; steps: any[] }> => {
   const client = await resolveTenantAIClient(tenantId, modelName);
-  let apiModel = 'gemini-2.0-flash';
-  if (client.model.toLowerCase().includes('pro')) {
-    apiModel = 'gemini-1.5-pro';
-  } else {
-    apiModel = 'gemini-2.0-flash';
-  }
-
   const db = globalPrisma;
 
   const session = await db.antigravitySession.findUnique({
@@ -744,6 +737,11 @@ CURRENT TENANT CONTEXT:
   - Installed Connectors / Integrations:
 ${connectorList}
 
+TENANT ISOLATION BOUNDARY DIRECTIVE:
+  - YOU ARE STRICTLY BOUND TO TENANT ID: "${tenantId}".
+  - You MUST NEVER aggregate, count, query, or expose data belonging to other tenancies.
+  - When generating SQL queries for "execute_read_only_query", always include "WHERE tenant_id = '${tenantId}'" on physical tables.
+
 SYSTEM DATABASE SCHEMAS (PHYSICAL TABLES Whitelisted for "execute_read_only_query"):
   - tenant_members (id, tenant_id, user_id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id)
   - teams (id, tenant_id, name, description)
@@ -833,11 +831,28 @@ CORE GUIDELINES:
 
     let response;
     try {
+      const startTime = Date.now();
       response = await executeAICompletion(client, {
         contents,
         systemInstruction,
         tools: agentTools
       });
+
+      const usageMeta = response?.usageMetadata || (response as any)?.usage_metadata;
+      const promptTokens = usageMeta?.promptTokenCount || Math.max(100, Math.ceil(JSON.stringify(contents).length / 4));
+      const completionTokens = usageMeta?.candidatesTokenCount || Math.max(50, Math.ceil(JSON.stringify(response).length / 4));
+
+      logAIUsageMetric({
+        tenantId,
+        userId,
+        provider: client.provider,
+        model: client.model,
+        tier: client.isBYOK ? 'byok' : 'tier1',
+        feature: 'chat',
+        promptTokens,
+        completionTokens,
+        latencyMs: Date.now() - startTime
+      }).catch(e => console.warn('[antigravityAgent] logAIUsageMetric error:', e));
     } catch (err: any) {
       if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota') || err.message.includes('rate limit') || err.message.includes('Rate limit'))) {
         const provName = client.provider ? client.provider.toUpperCase() : 'AI';
@@ -1041,8 +1056,29 @@ export const executeAgentTool = async (
             if (!securityCheck.isValid) {
               result = { error: securityCheck.error };
             } else {
-              const rawResult = await db.$queryRawUnsafe(args.sql);
-              result = serializeBigInts(rawResult);
+              try {
+                const rawResult = await db.$transaction(async (tx: any) => {
+                  if (tenantId) {
+                    await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId.replace(/'/g, "''")}';`).catch(() => {});
+                  }
+                  return await tx.$queryRawUnsafe(args.sql);
+                });
+                
+                const serialized = serializeBigInts(rawResult);
+                if (Array.isArray(serialized)) {
+                  result = serialized.filter((row: any) => {
+                    const rowTenant = row.tenant_id || row.tenantId;
+                    if (rowTenant && rowTenant !== tenantId) {
+                      return false;
+                    }
+                    return true;
+                  });
+                } else {
+                  result = serialized;
+                }
+              } catch (queryErr: any) {
+                result = { error: `Query execution error: ${queryErr.message}` };
+              }
             }
           } 
           else if (name === 'create_or_update_module') {
@@ -1052,16 +1088,21 @@ export const executeAgentTool = async (
             }
 
             if (args.id) {
-              result = await db.module.update({
-                where: { id: args.id },
-                data: {
-                  name: args.name,
-                  icon: args.icon || "Box",
-                  type: args.type || "RECORD",
-                  category: args.category || "Custom",
-                  config: args.config || {}
-                }
-              });
+              const existing = await db.module.findFirst({ where: { id: args.id, tenantId } });
+              if (!existing) {
+                result = { error: `Module '${args.id}' not found in your tenant workspace.` };
+              } else {
+                result = await db.module.update({
+                  where: { id: args.id },
+                  data: {
+                    name: args.name,
+                    icon: args.icon || "Box",
+                    type: args.type || "RECORD",
+                    category: args.category || "Custom",
+                    config: args.config || {}
+                  }
+                });
+              }
             } else {
               result = await db.module.create({
                 data: {
@@ -1078,17 +1119,22 @@ export const executeAgentTool = async (
           } 
           else if (name === 'create_or_update_automation') {
             if (args.id) {
-              result = await db.automation.update({
-                where: { id: args.id },
-                data: {
-                  name: args.name,
-                  description: args.description,
-                  triggers: args.triggers || [],
-                  conditions: args.conditions || null,
-                  actions: args.actions || [],
-                  isActive: args.isActive !== undefined ? args.isActive : true
-                }
-              });
+              const existing = await db.automation.findFirst({ where: { id: args.id, tenantId } });
+              if (!existing) {
+                result = { error: `Automation '${args.id}' not found in your tenant workspace.` };
+              } else {
+                result = await db.automation.update({
+                  where: { id: args.id },
+                  data: {
+                    name: args.name,
+                    description: args.description,
+                    triggers: args.triggers || [],
+                    conditions: args.conditions || null,
+                    actions: args.actions || [],
+                    isActive: args.isActive !== undefined ? args.isActive : true
+                  }
+                });
+              }
             } else {
               result = await db.automation.create({
                 data: {
@@ -1129,10 +1175,15 @@ export const executeAgentTool = async (
           } 
           else if (name === 'upsert_record') {
             if (args.recordId) {
-              result = await db.record.update({
-                where: { id: args.recordId },
-                data: { data: args.data }
-              });
+              const existing = await db.record.findFirst({ where: { id: args.recordId, tenantId } });
+              if (!existing) {
+                result = { error: `Record '${args.recordId}' not found in your tenant workspace.` };
+              } else {
+                result = await db.record.update({
+                  where: { id: args.recordId },
+                  data: { data: args.data }
+                });
+              }
             } else {
               result = await db.record.create({
                 data: {
@@ -1150,26 +1201,7 @@ export const executeAgentTool = async (
             result = await fetchPageText(args.url);
           } 
           else if (name === 'execute_scratch_script') {
-            const scratchDir = path.join(process.cwd(), 'scratch');
-            if (!fs.existsSync(scratchDir)) {
-              fs.mkdirSync(scratchDir, { recursive: true });
-            }
-            const scriptPath = path.join(scratchDir, `agent_run_${Date.now()}.js`);
-            fs.writeFileSync(scriptPath, args.code);
-
-            const runScript = (): Promise<any> => {
-              return new Promise((resolve) => {
-                exec(`node "${scriptPath}"`, { timeout: 8000 }, (error, stdout, stderr) => {
-                  try { fs.unlinkSync(scriptPath); } catch {}
-                  resolve({
-                    stdout: stdout.substring(0, 10000),
-                    stderr: stderr.substring(0, 5000),
-                    exitCode: error ? error.code : 0
-                  });
-                });
-              });
-            };
-            result = await runScript();
+            result = { error: "Scratch script execution is disabled in production multi-tenant environments for security." };
           } 
           else if (name === 'manage_module_field') {
             const { moduleId, action, fieldId, fieldConfig } = args;
@@ -1947,13 +1979,7 @@ export const resumeAgentLoop = async (
   modelName?: string,
   activeMetadata?: any
 ): Promise<{ text: string; steps: any[] }> => {
-  const ai = getAI();
-  if (!ai) throw new Error("AI Agent execution failed: API key missing.");
-
-  let apiModel = 'gemini-2.0-flash';
-  if (modelName && modelName.toLowerCase().includes('pro')) {
-    apiModel = 'gemini-1.5-pro';
-  }
+  const client = await resolveTenantAIClient(tenantId, modelName);
 
   const db = globalPrisma;
   const tenantDetails = await db.tenant.findUnique({ where: { id: tenantId } });
@@ -2023,6 +2049,11 @@ CURRENT TENANT CONTEXT:
   - Installed Connectors / Integrations:
 ${connectorList}
 
+TENANT ISOLATION BOUNDARY DIRECTIVE:
+  - YOU ARE STRICTLY BOUND TO TENANT ID: "${tenantId}".
+  - You MUST NEVER aggregate, count, query, or expose data belonging to other tenancies.
+  - When generating SQL queries for "execute_read_only_query", always include "WHERE tenant_id = '${tenantId}'" on physical tables.
+
 SYSTEM DATABASE SCHEMAS (PHYSICAL TABLES Whitelisted for "execute_read_only_query"):
   - tenant_members (id, tenant_id, user_id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id)
   - teams (id, tenant_id, name, description)
@@ -2078,48 +2109,43 @@ CORE GUIDELINES:
 
   while (loopCount < maxLoops) {
     loopCount++;
-    console.log(`[AgentLoop:Resume] Running step ${loopCount}...`);
+    console.log(`[AgentLoop:Resume] Running step ${loopCount} with provider: ${client.provider}, model: ${client.model}...`);
 
     let response;
     try {
-      response = await ai.models.generateContent({
-        model: apiModel,
+      const startTime = Date.now();
+      response = await executeAICompletion(client, {
         contents,
-        config: { systemInstruction, tools: agentTools }
+        systemInstruction,
+        tools: agentTools
       });
+
+      const usageMeta = response?.usageMetadata || (response as any)?.usage_metadata;
+      const promptTokens = usageMeta?.promptTokenCount || Math.max(100, Math.ceil(JSON.stringify(contents).length / 4));
+      const completionTokens = usageMeta?.candidatesTokenCount || Math.max(50, Math.ceil(JSON.stringify(response).length / 4));
+
+      logAIUsageMetric({
+        tenantId,
+        userId,
+        provider: client.provider,
+        model: client.model,
+        tier: client.isBYOK ? 'byok' : 'tier1',
+        feature: 'chat',
+        promptTokens,
+        completionTokens,
+        latencyMs: Date.now() - startTime
+      }).catch(e => console.warn('[antigravityAgent] logAIUsageMetric error:', e));
     } catch (err: any) {
       if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota') || err.message.includes('rate limit') || err.message.includes('Rate limit'))) {
-        const rateLimitErr: any = new Error(`Rate limit reached for model ${apiModel}. Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.`);
-        rateLimitErr.provider = 'google';
-        rateLimitErr.model = apiModel;
+        const provName = client.provider ? client.provider.toUpperCase() : 'AI';
+        const rateLimitErr: any = new Error(`${provName} rate limit reached for model ${client.model}. Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.`);
+        rateLimitErr.provider = client.provider;
+        rateLimitErr.model = client.model;
         throw rateLimitErr;
       }
-
-      if (apiModel !== 'gemini-2.0-flash') {
-        console.warn(`[AgentLoop:Resume] Model ${apiModel} failed, falling back to gemini-2.0-flash.`);
-        apiModel = 'gemini-2.0-flash';
-        try {
-          response = await ai.models.generateContent({
-            model: apiModel,
-            contents,
-            config: { systemInstruction, tools: agentTools }
-          });
-        } catch (retryErr: any) {
-          if (retryErr.message && (retryErr.message.includes('429') || retryErr.message.includes('RESOURCE_EXHAUSTED') || retryErr.message.includes('quota') || retryErr.message.includes('rate limit') || retryErr.message.includes('Rate limit'))) {
-            const retryErrObj: any = new Error(`Rate limit reached for model ${apiModel}. Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.`);
-            retryErrObj.provider = 'google';
-            retryErrObj.model = apiModel;
-            throw retryErrObj;
-          }
-          retryErr.provider = 'google';
-          retryErr.model = apiModel;
-          throw retryErr;
-        }
-      } else {
-        err.provider = 'google';
-        err.model = apiModel;
-        throw err;
-      }
+      err.provider = client.provider;
+      err.model = client.model;
+      throw err;
     }
 
     const candidate = response.candidates?.[0];

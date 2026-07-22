@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
 import { encryptSecret, decryptSecret, generateKeyHint } from '../lib/crypto';
-import { PROVIDER_PRICING, calculateEstimatedCost } from '../services/aiProviderService';
+import { PROVIDER_PRICING, calculateEstimatedCost, resolveTenantAIClient, executeAICompletion, logAIUsageMetric } from '../services/aiProviderService';
 import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
@@ -133,63 +133,57 @@ router.delete('/keys/:id', async (req: TenantRequest, res) => {
 // POST test connectivity for an API Key
 router.post('/keys/test', async (req: TenantRequest, res) => {
   try {
-    const { provider, apiKey, baseUrl } = req.body;
-    if (!apiKey) {
-      return res.status(400).json({ error: 'API Key is required for testing' });
-    }
+    const { keyId, apiKey, rawKey: inputRawKey, provider, baseUrl } = req.body;
+    const tenantId = req.tenantId;
 
-    const db = req.db || globalPrisma;
-    const keyModel = getKeyModel(db) || getKeyModel(globalPrisma);
-
-    let rawKey = apiKey;
+    let rawKey = apiKey || inputRawKey;
+    let targetProvider = (provider || 'google').toLowerCase();
     let targetBaseUrl = baseUrl;
 
-    if (keyModel && typeof apiKey === 'string') {
-      try {
+    if (keyId) {
+      const db = req.db || globalPrisma;
+      const keyModel = getKeyModel(db) || getKeyModel(globalPrisma);
+      if (keyModel) {
         const storedKeyRecord = await keyModel.findFirst({
-          where: { id: apiKey }
+          where: { id: keyId, tenantId }
         });
         if (storedKeyRecord) {
           rawKey = decryptSecret(storedKeyRecord.encryptedKey);
-          if (!targetBaseUrl && storedKeyRecord.baseUrl) {
-            targetBaseUrl = storedKeyRecord.baseUrl;
-          }
+          targetProvider = (provider || storedKeyRecord.provider || 'google').toLowerCase();
+          targetBaseUrl = baseUrl || storedKeyRecord.baseUrl;
         }
-      } catch (e) {}
+      }
     }
 
-    if (rawKey.includes(':')) {
-      // It's an encrypted stored key ID or payload
-      try {
-        rawKey = decryptSecret(rawKey);
-      } catch (e) {}
+    if (!rawKey) {
+      return res.status(400).json({ error: 'API Key or Key ID is required for connectivity testing' });
     }
-
-    const targetProvider = (provider || 'google').toLowerCase();
 
     if (targetProvider === 'google') {
       const ai = new GoogleGenAI({ apiKey: rawKey });
       let response;
-      try {
-        response = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: 'ping'
-        });
-      } catch (e1: any) {
+      let lastError: any = null;
+
+      const testModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.1-flash-lite'];
+      for (const testModel of testModels) {
         try {
           response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: testModel,
             contents: 'ping'
           });
-        } catch (e2: any) {
-          response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro',
-            contents: 'ping'
-          });
+          if (response && response.text) break;
+        } catch (err: any) {
+          lastError = err;
         }
       }
+
       if (response && response.text) {
         return res.json({ success: true, message: 'Successfully connected to Google Gemini API' });
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: lastError?.message || 'Google Gemini API test failed. Please verify your API key.'
+        });
       }
     } else if (
       targetProvider === 'openai' || 
@@ -411,8 +405,91 @@ router.get('/usage', async (req: TenantRequest, res) => {
       pricingCatalog: PROVIDER_PRICING
     });
   } catch (err: any) {
-    console.error('[AISettingsRoutes] GET /usage Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to fetch AI usage analytics' });
+    console.error('[AISettingsRoutes] GET /metrics Error:', err);
+    res.status(500).json({ error: 'Failed to fetch AI usage metrics' });
+  }
+});
+
+// POST execute generic AI completion (used by frontend aiService tools: formula generator, solution builder, summaries, etc.)
+router.post('/completion', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId || 'default-tenant';
+    const { model, prompt, contents, systemInstruction, responseMimeType, feature } = req.body;
+
+    const client = await resolveTenantAIClient(tenantId, model);
+
+    let payloadContents = contents;
+    if (!payloadContents && prompt) {
+      payloadContents = [{ role: 'user', parts: [{ text: prompt }] }];
+    }
+
+    let sysInst = systemInstruction;
+    if (responseMimeType === 'application/json' && sysInst) {
+      sysInst += '\n\nIMPORTANT: Return valid JSON only.';
+    } else if (responseMimeType === 'application/json' && !sysInst) {
+      sysInst = 'Return valid JSON only.';
+    }
+
+    const startTime = Date.now();
+    const result = await executeAICompletion(client, {
+      contents: payloadContents,
+      systemInstruction: sysInst
+    });
+
+    const candidate = result.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text || '';
+
+    const promptTokens = Math.max(100, Math.ceil(JSON.stringify(payloadContents).length / 4));
+    const completionTokens = Math.max(50, Math.ceil(text.length / 4));
+
+    logAIUsageMetric({
+      tenantId,
+      provider: client.provider,
+      model: client.model,
+      tier: client.isBYOK ? 'byok' : 'tier1',
+      feature: feature || 'completion',
+      promptTokens,
+      completionTokens,
+      latencyMs: Date.now() - startTime
+    }).catch(e => console.warn('[AISettingsRoutes] logAIUsageMetric error:', e));
+
+    res.json({
+      success: true,
+      text,
+      candidates: result.candidates,
+      provider: client.provider,
+      model: client.model
+    });
+  } catch (err: any) {
+    console.error('[AISettingsRoutes] POST /completion Error:', err);
+    
+    const errStr = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+    let statusCode = 500;
+    let code = "SERVICE_UNAVAILABLE";
+    let title = "AI Provider Unavailable";
+    let message = "The upstream AI provider service is currently unavailable. Please try again shortly.";
+
+    if (errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota') || errStr.includes('rate limit')) {
+      statusCode = 429;
+      code = "RATE_LIMIT_EXCEEDED";
+      title = "AI Quota Reached";
+      message = "The AI is currently processing too many requests. Please wait a moment.";
+    } else if (errStr.includes('401') || errStr.includes('403') || errStr.includes('key') || errStr.includes('unauthorized')) {
+      statusCode = 401;
+      code = "INVALID_KEY";
+      title = "Invalid AI Gateway Key";
+      message = "Your AI Gateway key is invalid or lacks proper permission.";
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code,
+        title,
+        message,
+        technical_details: errStr
+      }
+    });
   }
 });
 

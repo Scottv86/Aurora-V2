@@ -207,7 +207,7 @@ export const AISettingsPage = () => {
       const res = await fetch(`${API_BASE_URL}/api/ai/keys/test`, {
         method: 'POST',
         headers: getAuthHeader(),
-        body: JSON.stringify({ provider, apiKey: rawKey, baseUrl })
+        body: JSON.stringify({ provider, keyId: rawKey, apiKey: rawKey, baseUrl })
       });
       const data = await res.json();
       if (data.success) {
@@ -331,6 +331,28 @@ export const AISettingsPage = () => {
           {/* TAB 1: API KEYS & PROVIDERS */}
           {activeTab === 'keys' && (
             <div className="space-y-6">
+              <div className="p-4 rounded-xl bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-purple-900/40 border border-blue-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold border border-blue-500/30">
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-extrabold text-sm text-zinc-100">Default Baseline Active Model</h4>
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        Zero-Config Baseline
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-300 mt-0.5 font-medium">
+                      Powered by Gemini 3.1 Flash-Lite (Free Tier)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-zinc-400">Rate Limit Protection: <strong className="text-emerald-400">5 RPM Intercept Active</strong></span>
+                </div>
+              </div>
+
               <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
                 <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                 <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
@@ -403,9 +425,101 @@ export const AISettingsPage = () => {
             </div>
           )}
 
-          {/* TAB 2: MODEL TIERS & ROUTING */}
+          {/* TAB 2: ROUTING & SYSTEM TOPOLOGY */}
           {activeTab === 'routing' && (
-            <div className="max-w-4xl space-y-6">
+            <div className="space-y-6">
+              <div className="p-6 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 space-y-6">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
+                      <Cpu size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                        4-Tier Connection Architecture
+                      </h3>
+                      <p className="text-xs text-zinc-400">
+                        Multi-tiered AI backend selector supporting zero-config native baseline, enterprise VPC, BYOK, and custom OpenAI-compatible endpoints.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  {/* Tier 1 */}
+                  <div className="p-4 rounded-xl bg-zinc-950/60 border border-indigo-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Zap size={14} /> Tier 1: Aurora Native AI (Default)
+                      </span>
+                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Active Free Tier
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-200">
+                      Gemini 3.1 Flash-Lite (Native Baseline)
+                    </p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Zero-configuration platform baseline using Google Gemini Free Tier via GEMINI_API_KEY. Optimized for speed and cost efficiency.
+                    </p>
+                  </div>
+
+                  {/* Tier 2 */}
+                  <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck size={14} /> Tier 2: Tenant-Hosted Native AI
+                      </span>
+                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Enterprise Orgs
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-200">
+                      Private Endpoint Docker Container
+                    </p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Runs self-hosted model containers inside tenant private cloud (VPC) with custom endpoint URLs and tokens.
+                    </p>
+                  </div>
+
+                  {/* Tier 3 */}
+                  <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Key size={14} /> Tier 3: OpenRouter & BYOK
+                      </span>
+                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                        Supabase Vault
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-200">
+                      Claude 3.5 Sonnet, GPT-4o, DeepSeek-V3
+                    </p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Encrypted API keys stored in Vault. Direct tenant billing with Anthropic, OpenAI, or OpenRouter.
+                    </p>
+                  </div>
+
+                  {/* Tier 4 */}
+                  <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Cpu size={14} /> Tier 4: Custom Local Models
+                      </span>
+                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                        OpenAI Compatible
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-200">
+                      Ollama / Local LLM Endpoints
+                    </p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Air-gapped flexibility. Connects local OpenAI-compatible endpoints with custom headers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="p-6 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 space-y-6">
                 <div>
                   <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-50">Preset Capability Tiers</h3>
@@ -432,17 +546,17 @@ export const AISettingsPage = () => {
                       className="px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-xs font-mono font-bold"
                     >
                       <optgroup label="Direct Providers">
+                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Aurora Default)</option>
                         <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
                         <option value="llama-3.1-8b-instant">Groq Llama 3.1 8B Instant (30k TPM)</option>
-                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite</option>
                         <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
                         <option value="gpt-5.5-instant">GPT-5.5 Instant</option>
                         <option value="deepseek-v4-flash">DeepSeek V4-Flash</option>
                       </optgroup>
                       <optgroup label="OpenRouter (Unified API)">
+                        <option value="openrouter/google/gemini-2.0-flash-lite-001">OpenRouter: Gemini Flash-Lite (Aurora Default Stunt Double)</option>
                         <option value="openrouter/auto">OpenRouter Auto (Best Available)</option>
                         <option value="openrouter/meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Llama 3.3 70B (Free)</option>
-                        <option value="openrouter/google/gemini-2.0-flash-exp:free">OpenRouter: Gemini 2.0 Flash (Free)</option>
                         <option value="openrouter/deepseek/deepseek-chat:free">OpenRouter: DeepSeek V3 (Free)</option>
                         <option value="openrouter/openai/gpt-4o-mini">OpenRouter: GPT-4o Mini</option>
                       </optgroup>

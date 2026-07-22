@@ -85,9 +85,9 @@ export async function resolveTenantAIClient(
   const db = customDb || globalPrisma;
 
   let mapping = {
-    lowModel: 'gemini-3.5-flash',
-    mediumModel: 'gemini-3.5-flash',
-    highModel: 'gemini-3.5-flash',
+    lowModel: 'gemini-3.1-flash-lite',
+    mediumModel: 'claude-3-5-sonnet',
+    highModel: 'gpt-4o',
     zeroDataRetention: true,
     piiRedaction: false
   };
@@ -110,14 +110,14 @@ export async function resolveTenantAIClient(
   }
 
   // 2. Resolve model name from tier or exact model string
-  let targetModel = requestedModelOrTier || 'medium';
+  let targetModel = requestedModelOrTier || 'default';
 
-  if (targetModel.toLowerCase() === 'default' || targetModel.toLowerCase() === 'medium' || targetModel.toLowerCase() === 'balanced' || !targetModel) {
-    targetModel = mapping.mediumModel || 'gemini-3.5-flash';
-  } else if (targetModel.toLowerCase() === 'low' || targetModel.toLowerCase() === 'fast') {
-    targetModel = mapping.lowModel || 'gemini-3.5-flash';
+  if (targetModel.toLowerCase() === 'default' || targetModel.toLowerCase() === 'low' || targetModel.toLowerCase() === 'fast') {
+    targetModel = mapping.lowModel || 'gemini-3.1-flash-lite';
+  } else if (targetModel.toLowerCase() === 'medium' || targetModel.toLowerCase() === 'balanced') {
+    targetModel = mapping.mediumModel || 'claude-3-5-sonnet';
   } else if (targetModel.toLowerCase() === 'high' || targetModel.toLowerCase() === 'pro') {
-    targetModel = mapping.highModel || 'gemini-3.5-flash';
+    targetModel = mapping.highModel || 'gpt-4o';
   }
 
   // Determine target provider from model prefix or name
@@ -143,7 +143,7 @@ export async function resolveTenantAIClient(
     targetProvider = 'ollama';
   }
 
-  // 3. Search for active BYOK Key for this provider
+  // 3. Search for active BYOK Key for this specific provider (or fall back to active OpenRouter key)
   try {
     const keyModel = getKeyModel(db) || getKeyModel(globalPrisma);
     if (keyModel) {
@@ -156,43 +156,54 @@ export async function resolveTenantAIClient(
         orderBy: { isDefault: 'desc' }
       });
 
-      // If no key found for specific provider, try finding any default active BYOK key or active key
-      if (!keyRecord) {
+      // If no direct key for this provider, check for an active OpenRouter BYOK key
+      if (!keyRecord && targetProvider !== 'openrouter') {
         keyRecord = await keyModel.findFirst({
-          where: { tenantId, status: 'active', isDefault: true }
-        });
-      }
-
-      if (!keyRecord) {
-        keyRecord = await keyModel.findFirst({
-          where: { tenantId, status: 'active' },
-          orderBy: { createdAt: 'desc' }
+          where: {
+            tenantId,
+            provider: 'openrouter',
+            status: 'active'
+          },
+          orderBy: { isDefault: 'desc' }
         });
       }
 
       if (keyRecord) {
-        const rawKey = decryptSecret(keyRecord.encryptedKey);
-        return {
-          provider: keyRecord.provider,
-          model: targetModel,
-          apiKey: rawKey,
-          baseUrl: keyRecord.baseUrl || undefined,
-          apiExtraConfig: keyRecord.apiExtraConfig,
-          zeroDataRetention: mapping.zeroDataRetention,
-          piiRedaction: mapping.piiRedaction,
-          isBYOK: true
-        };
+        try {
+          const rawKey = decryptSecret(keyRecord.encryptedKey);
+          
+          // Auto-correct provider if key format unmistakably indicates a different provider
+          let resolvedProvider = keyRecord.provider;
+          if (rawKey.startsWith('AIzaSy') && resolvedProvider !== 'google') {
+            resolvedProvider = 'google';
+          } else if (rawKey.startsWith('sk-or-') && resolvedProvider !== 'openrouter') {
+            resolvedProvider = 'openrouter';
+          }
+
+          return {
+            provider: resolvedProvider,
+            model: targetModel,
+            apiKey: rawKey,
+            baseUrl: keyRecord.baseUrl || undefined,
+            apiExtraConfig: keyRecord.apiExtraConfig,
+            zeroDataRetention: mapping.zeroDataRetention,
+            piiRedaction: mapping.piiRedaction,
+            isBYOK: true
+          };
+        } catch (decryptErr) {
+          console.warn(`[AIProviderService] Stale key record ${keyRecord.id} could not be decrypted, skipping.`);
+        }
       }
     }
   } catch (e) {
     console.warn('[AIProviderService] Could not fetch tenantAIKey, using fallback:', e);
   }
 
-  // 4. Fallback to Server Environment Key if no BYOK key present
-  const fallbackGeminiKey = process.env.GEMINI_API_KEY || '';
+  // 4. Tier 1 Fallback to Aurora Native AI Baseline (Gemini Free Tier: gemini-3.1-flash-lite)
+  const fallbackGeminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
   return {
     provider: 'google',
-    model: 'gemini-3.5-flash',
+    model: 'gemini-3.1-flash-lite',
     apiKey: fallbackGeminiKey,
     zeroDataRetention: mapping.zeroDataRetention,
     piiRedaction: mapping.piiRedaction,
@@ -244,6 +255,74 @@ export async function logAIUsageMetric(params: {
 }
 
 /**
+ * Maps generic or tier model names to valid OpenRouter API model identifiers.
+ */
+export function mapModelForOpenRouter(modelName: string): string {
+  if (!modelName || modelName === 'default' || modelName === 'auto') {
+    return 'google/gemini-2.0-flash-lite-001';
+  }
+
+  const raw = modelName.replace(/^openrouter[\/:]/i, '');
+
+  // If already contains provider prefix (e.g., google/..., openai/..., anthropic/...)
+  if (raw.includes('/')) {
+    return raw;
+  }
+
+  const lower = raw.toLowerCase();
+
+  // Gemini models
+  if (lower.includes('gemini-2.0-flash-lite') || lower.includes('gemini-3.1-flash-lite') || lower.includes('gemini-3.5-flash') || lower.includes('flash-lite')) {
+    return 'google/gemini-2.0-flash-lite-001';
+  }
+  if (lower.includes('gemini-2.0-flash') || lower.includes('gemini')) {
+    return 'google/gemini-2.0-flash-lite-001';
+  }
+  if (lower.includes('gemini-3.1-pro') || lower.includes('gemini-pro')) {
+    return 'google/gemini-pro-1.5';
+  }
+
+  // Claude models
+  if (lower.includes('claude-3-5-haiku') || lower.includes('haiku')) {
+    return 'anthropic/claude-3.5-haiku';
+  }
+  if (lower.includes('claude')) {
+    return 'anthropic/claude-3.5-sonnet';
+  }
+
+  // OpenAI models
+  if (lower.includes('mini') || lower.includes('instant') || lower.includes('luna')) {
+    return 'openai/gpt-4o-mini';
+  }
+  if (lower.includes('gpt') || lower.includes('o1') || lower.includes('o3') || lower.includes('sol') || lower.includes('terra')) {
+    return 'openai/gpt-4o';
+  }
+
+  // DeepSeek models
+  if (lower.includes('r1')) {
+    return 'deepseek/deepseek-r1';
+  }
+  if (lower.includes('deepseek')) {
+    return 'deepseek/deepseek-chat';
+  }
+
+  // Llama / Groq models
+  if (lower.includes('70b')) {
+    return 'meta-llama/llama-3.3-70b-instruct';
+  }
+  if (lower.includes('llama') || lower.includes('mixtral')) {
+    return 'meta-llama/llama-3.1-8b-instruct';
+  }
+
+  // Grok models
+  if (lower.includes('grok')) {
+    return 'x-ai/grok-2';
+  }
+
+  return raw;
+}
+
+/**
  * Universal execution runner supporting Google, xAI (Grok), Groq, OpenAI, Anthropic, DeepSeek, OpenRouter, and Ollama.
  */
 export async function executeAICompletion(
@@ -254,26 +333,64 @@ export async function executeAICompletion(
     tools?: any[];
   }
 ): Promise<{ candidates: any[] }> {
-  // If provider is Google or fallback Gemini key is used
-  if (client.provider === 'google' || !client.provider) {
+  // If provider is Google or key is a Google AI Studio key (AIzaSy...)
+  if (client.provider === 'google' || !client.provider || (client.apiKey && client.apiKey.startsWith('AIzaSy'))) {
     const ai = new GoogleGenAI({ apiKey: client.apiKey });
-    let apiModel = 'gemini-2.0-flash';
-    if (client.model && client.model.toLowerCase().includes('pro')) {
-      apiModel = 'gemini-1.5-pro';
-    }
-    const response = await ai.models.generateContent({
-      model: apiModel,
-      contents: params.contents,
-      config: {
-        systemInstruction: params.systemInstruction,
-        tools: params.tools
+    const googleModels = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+    let lastGoogleError: any = null;
+    
+    for (const apiModel of googleModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model: apiModel,
+          contents: params.contents,
+          config: {
+            systemInstruction: params.systemInstruction,
+            tools: params.tools
+          }
+        });
+        return response as any;
+      } catch (err: any) {
+        lastGoogleError = err;
+        if (err.message && (err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED') || err.message.includes('quota') || err.message.includes('rate limit'))) {
+          console.warn(`[AIProviderService] Google API rate limit hit on ${apiModel}. Rotating to next model...`);
+          continue;
+        }
+        throw err;
       }
-    });
-    return response as any;
+    }
+
+    // If Google model buckets are rate-limited, failover to OpenRouter Stunt Double with clean headers
+    console.warn('[AIProviderService] Google key buckets rate limited. Executing OpenRouter Stunt Double failover...');
+    try {
+      const openRouterApiKey = (client.apiKey && client.apiKey.startsWith('sk-or-'))
+        ? client.apiKey
+        : (process.env.OPENROUTER_API_KEY || client.apiKey);
+
+      const openRouterClient: ResolvedAIClient = {
+        provider: 'openrouter',
+        model: 'google/gemini-2.0-flash-lite-001',
+        apiKey: openRouterApiKey,
+        zeroDataRetention: client.zeroDataRetention,
+        piiRedaction: client.piiRedaction,
+        isBYOK: false
+      };
+      return await executeAICompletion(openRouterClient, params);
+    } catch (failoverErr: any) {
+      console.warn('[AIProviderService] OpenRouter failover error:', failoverErr.message);
+    }
+
+    // Explicitly throw Google error to prevent fallthrough to OpenAI HTTP client
+    throw lastGoogleError || new Error('Google GenAI rate limits exceeded on all available models.');
   }
 
   // Non-Google provider (xAI Grok, Groq, OpenAI, DeepSeek, OpenRouter, Anthropic, Ollama, etc.)
   const provider = client.provider.toLowerCase();
+
+  // Guard against sending Google API keys to non-Google endpoints
+  if (client.apiKey && client.apiKey.startsWith('AIzaSy') && provider !== 'google') {
+    throw new Error('Attempted to execute non-Google endpoint with a Google AI Studio API key.');
+  }
 
   // Resolve base endpoint
   let endpoint = client.baseUrl;
@@ -284,7 +401,8 @@ export async function executeAICompletion(
     else if (provider === 'openrouter') endpoint = 'https://openrouter.ai/api/v1';
     else if (provider === 'ollama') endpoint = 'http://localhost:11434/v1';
     else if (provider === 'anthropic') endpoint = 'https://api.anthropic.com/v1';
-    else endpoint = 'https://api.openai.com/v1';
+    else if (provider === 'openai') endpoint = 'https://api.openai.com/v1';
+    else throw new Error(`Unsupported provider '${provider}'. Please check model configuration in Settings > AI Services.`);
   }
 
   // Resolve model string
@@ -302,8 +420,7 @@ export async function executeAICompletion(
   } else if (provider === 'anthropic') {
     modelStr = client.model || 'claude-3-5-sonnet-latest';
   } else if (provider === 'openrouter') {
-    let raw = client.model ? client.model.replace(/^openrouter[\/:]/i, '') : 'auto';
-    modelStr = raw || 'auto';
+    modelStr = mapModelForOpenRouter(client.model);
   }
 
   // Convert contents + systemInstruction to OpenAI messages format
@@ -424,10 +541,20 @@ function normalizeJsonSchema(schema: any): any {
   };
 
   if (provider === 'anthropic') {
-    requestHeaders['x-api-key'] = client.apiKey;
+    if (client.apiKey) requestHeaders['x-api-key'] = client.apiKey;
     requestHeaders['anthropic-version'] = '2023-06-01';
+  } else if (provider === 'openrouter') {
+    requestHeaders['HTTP-Referer'] = 'https://aurora.platform';
+    requestHeaders['X-Title'] = 'Aurora AI';
+    if (client.apiKey && client.apiKey.startsWith('sk-or-')) {
+      requestHeaders['Authorization'] = `Bearer ${client.apiKey}`;
+    } else if (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY.startsWith('sk-or-')) {
+      requestHeaders['Authorization'] = `Bearer ${process.env.OPENROUTER_API_KEY}`;
+    }
   } else {
-    requestHeaders['Authorization'] = `Bearer ${client.apiKey}`;
+    if (client.apiKey) {
+      requestHeaders['Authorization'] = `Bearer ${client.apiKey}`;
+    }
   }
 
   const url = provider === 'anthropic' ? `${endpoint}/messages` : `${endpoint}/chat/completions`;
@@ -536,16 +663,31 @@ function normalizeJsonSchema(schema: any): any {
 
     const is429 = response.status === 429 || (typeof errorMsg === 'string' && (errorMsg.includes('429') || errorMsg.includes('Rate limit') || errorMsg.includes('TPM')));
 
-    if (is429 && attempt < maxRetries) {
-      attempt++;
-      let delayMs = attempt * 3000;
-      const match = typeof errorMsg === 'string' && errorMsg.match(/try again in ([\d\.]+)s/i);
-      if (match && match[1]) {
-        delayMs = Math.ceil(parseFloat(match[1]) * 1000) + 500;
+    if (is429) {
+      if (provider !== 'openrouter') {
+        const openRouterKey = (client.apiKey && client.apiKey.startsWith('sk-or-'))
+          ? client.apiKey
+          : (process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY.startsWith('sk-or-') ? process.env.OPENROUTER_API_KEY : '');
+
+        if (openRouterKey) {
+          console.warn(`[AIProviderService] ${provider.toUpperCase()} 429 rate limit hit. Attempting OpenRouter failover for model ${client.model}...`);
+          try {
+            const openRouterClient: ResolvedAIClient = {
+              provider: 'openrouter',
+              model: client.model,
+              apiKey: openRouterKey,
+              zeroDataRetention: client.zeroDataRetention,
+              piiRedaction: client.piiRedaction,
+              isBYOK: false
+            };
+            return await executeAICompletion(openRouterClient, params);
+          } catch (failoverErr: any) {
+            console.warn('[AIProviderService] OpenRouter failover error:', failoverErr.message);
+          }
+        }
       }
-      console.warn(`[AIProviderService] ${provider.toUpperCase()} 429 rate limit hit. Auto-retrying in ${(delayMs / 1000).toFixed(1)}s (Attempt ${attempt}/${maxRetries})...`);
-      await new Promise(r => setTimeout(r, delayMs));
-      continue;
+
+      throw new Error(`${provider.toUpperCase()} rate limit reached for model ${client.model}. Please wait 15 seconds or enter your own BYOK API key in Settings > AI Services for unlimited requests.`);
     }
 
     throw new Error(`[${provider.toUpperCase()} API Error ${response.status}]: ${errorMsg}`);

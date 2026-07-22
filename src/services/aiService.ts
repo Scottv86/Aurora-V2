@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Module, ModuleField } from "../types/platform";
 import { createFormulaContext } from "../lib/formulaEngine";
+import { API_BASE_URL } from "../config";
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -9,12 +10,93 @@ const getAI = () => {
   
   const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) {
-    console.warn('Gemini API Key (VITE_GEMINI_API_KEY) is missing. AI features will not work.');
+    console.warn('[Security Warning] VITE_GEMINI_API_KEY is missing on client. AI service requests are routed through server endpoints (/api/ai/completion).');
     return null;
   }
   
   aiInstance = new GoogleGenAI({ apiKey });
   return aiInstance;
+};
+
+// In-Memory Request Deduplication & Cache Map
+const pendingRequests = new Map<string, Promise<string>>();
+const responseCache = new Map<string, { timestamp: number; text: string }>();
+const CACHE_TTL_MS = 10000; // 10 seconds TTL cache for identical requests
+
+const executeServerCompletion = async (
+  prompt: string,
+  systemInstruction?: string,
+  responseMimeType?: string
+): Promise<string> => {
+  const cacheKey = `${prompt}__${systemInstruction || ''}__${responseMimeType || ''}`;
+
+  // 1. Check Cache
+  const cached = responseCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.text;
+  }
+
+  // 2. Deduplicate In-Flight Requests (React Double-Render & Concurrency Protection)
+  if (pendingRequests.has(cacheKey)) {
+    return pendingRequests.get(cacheKey)!;
+  }
+
+  const executionPromise = (async () => {
+    try {
+      const tenantId = localStorage.getItem('aurora_tenant_id') || 'default-tenant';
+      const authDataStr = localStorage.getItem('aurora_auth');
+      let token = '';
+      if (authDataStr) {
+        try {
+          const authData = JSON.parse(authDataStr);
+          token = authData?.access_token || authData?.token || '';
+        } catch (e) {}
+      }
+
+      const res = await fetch(`${API_BASE_URL}/api/ai/completion`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({
+          prompt,
+          systemInstruction,
+          responseMimeType
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        const standardError = errJson.error || {
+          code: 'HTTP_ERROR',
+          title: 'AI Request Failed',
+          message: `Server returned status ${res.status}`,
+          technical_details: JSON.stringify(errJson)
+        };
+        
+        // Throw structured error object for AuroraToast consumption
+        const customErr: any = new Error(standardError.message || standardError.title);
+        customErr.structuredError = standardError;
+        throw customErr;
+      }
+
+      const data = await res.json();
+      const text = data.text || '';
+      
+      responseCache.set(cacheKey, { timestamp: Date.now(), text });
+      return text;
+    } catch (err: any) {
+      console.warn('[aiService] Backend AI completion execution error:', err.message);
+      throw err;
+    } finally {
+      pendingRequests.delete(cacheKey);
+    }
+  })();
+
+  pendingRequests.set(cacheKey, executionPromise);
+  return executionPromise;
 };
 
 export interface AISolution {
@@ -46,155 +128,25 @@ export interface AIDocumentTemplate {
  * Generates a complete business solution based on a prompt.
  */
 export const generateSolution = async (prompt: string): Promise<AISolution> => {
-  const ai = getAI();
-  if (!ai) throw new Error("AI service not initialized");
+  const systemInstruction = `You are Aurora AI, the architect for a business operating platform. 
+A user wants to build a solution for: "${prompt}".
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
-    contents: `You are Aurora AI, the architect for a business operating platform. 
-    A user wants to build a solution for: "${prompt}".
-    
-    Design a comprehensive solution including:
-    1. Modules to enable. Choose from pre-built modules or define entirely new custom modules.
-    2. For each module, define a set of tabs (e.g., "General", "Details", "Settings") to organize the data.
-    3. For each module, define the visual layout organized into rows and columns.
-    4. Use appropriate field types.
-    5. For each module, suggest a "Module Type" based on its function: "RECORD" (for data entries like Licences), "WORK_ITEM" (for actionable items like Applications), "REGISTRY" (for reference data), "LOG" (for audit/event data), or "FINANCIAL" (for monetary tracking).
-    6. Workflows with specific steps bound to a module.
-    7. Automations bound to a module.
-    
-    Provide your response in a structured JSON format.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          modules: {
-            type: Type.ARRAY,
-            items: { 
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                name: { type: Type.STRING },
-                description: { type: Type.STRING },
-                category: { type: Type.STRING },
-                isCustom: { type: Type.BOOLEAN },
-                iconName: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] },
-                tabs: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      label: { type: Type.STRING }
-                    },
-                    required: ["id", "label"]
-                  }
-                },
-                layout: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      columnCount: { type: Type.INTEGER },
-                      tabId: { type: Type.STRING },
-                      columns: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            id: { type: Type.STRING },
-                            fields: {
-                              type: Type.ARRAY,
-                              items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                  id: { type: Type.STRING },
-                                  name: { type: Type.STRING },
-                                  label: { type: Type.STRING },
-                                  type: { type: Type.STRING, enum: ['text', 'longText', 'number', 'checkbox', 'currency', 'email', 'phone', 'address', 'lookup', 'user', 'calculation', 'ai_summary', 'date', 'select'] },
-                                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                  required: { type: Type.BOOLEAN },
-                                  placeholder: { type: Type.STRING },
-                                  helperText: { type: Type.STRING }
-                                },
-                                required: ["id", "name", "label", "type", "required"]
-                              }
-                            }
-                          },
-                          required: ["id", "fields"]
-                        }
-                      }
-                    },
-                    required: ["id", "columnCount", "columns"]
-                  }
-                }
-              },
-              required: ["id", "name", "description", "category", "isCustom", "iconName", "type", "layout"]
-            }
-          },
-          workflows: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                description: { type: Type.STRING },
-                targetModuleId: { type: Type.STRING },
-                nodes: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      type: { type: Type.STRING, enum: ['STATUS', 'DECISION', 'ACTION', 'DELAY', 'START', 'END'] },
-                      name: { type: Type.STRING },
-                      config: { type: Type.OBJECT }
-                    },
-                    required: ["id", "type", "name"]
-                  }
-                },
-                edges: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      source: { type: Type.STRING },
-                      target: { type: Type.STRING },
-                      condition: { type: Type.STRING }
-                    },
-                    required: ["id", "source", "target"]
-                  }
-                }
-              },
-              required: ["name", "description", "targetModuleId", "nodes", "edges"]
-            }
-          },
-          automations: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                trigger: { type: Type.STRING },
-                action: { type: Type.STRING },
-                description: { type: Type.STRING },
-                targetModuleId: { type: Type.STRING }
-              },
-              required: ["trigger", "action", "description", "targetModuleId"]
-            }
-          },
-          reasoning: { type: Type.STRING }
-        },
-        required: ["modules", "workflows", "automations", "reasoning"]
-      } as any
-    }
-  });
+Design a comprehensive solution including:
+1. Modules to enable. Choose from pre-built modules or define entirely new custom modules.
+2. For each module, define a set of tabs (e.g., "General", "Details", "Settings") to organize the data.
+3. For each module, define the visual layout organized into rows and columns.
+4. Use appropriate field types.
+5. For each module, suggest a "Module Type" based on its function: "RECORD" (for data entries like Licences), "WORK_ITEM" (for actionable items like Applications), "REGISTRY" (for reference data), "LOG" (for audit/event data), or "FINANCIAL" (for monetary tracking).
+6. Workflows with specific steps bound to a module.
+7. Automations bound to a module.
+
+Provide your response in a structured JSON format matching AISolution.`;
+
+  const text = await executeServerCompletion(prompt, systemInstruction, 'application/json');
 
   try {
-    return JSON.parse(response.text) as AISolution;
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr) as AISolution;
   } catch (error) {
     console.error("Failed to parse AI solution JSON:", error);
     throw new Error("Invalid response from AI service.");
@@ -205,35 +157,19 @@ export const generateSolution = async (prompt: string): Promise<AISolution> => {
  * Generates a document template based on a prompt.
  */
 export const generateDocumentTemplate = async (prompt: string, moduleId?: string): Promise<AIDocumentTemplate> => {
-  const ai = getAI();
-  if (!ai) throw new Error("AI service not initialized");
+  const systemInstruction = `You are Aurora AI, an expert in business document automation. 
+A user wants to create a document template for: "${prompt}".
+${moduleId ? `This template is for the module: "${moduleId}".` : ""}
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
-    contents: `You are Aurora AI, an expert in business document automation. 
-    A user wants to create a document template for: "${prompt}".
-    ${moduleId ? `This template is for the module: "${moduleId}".` : ""}
-    
-    Design a professional document template in HTML format with placeholders like {{field_name}}.
-    
-    Provide your response in a structured JSON format.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          content: { type: Type.STRING },
-          description: { type: Type.STRING },
-          suggestedFields: { type: Type.ARRAY, items: { type: Type.STRING } }
-        },
-        required: ["name", "content", "description", "suggestedFields"]
-      } as any
-    }
-  });
+Design a professional document template in HTML format with placeholders like {{field_name}}.
+
+Provide your response in a structured JSON format matching { name, content, description, suggestedFields }.`;
+
+  const text = await executeServerCompletion(prompt, systemInstruction, 'application/json');
 
   try {
-    return JSON.parse(response.text) as AIDocumentTemplate;
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr) as AIDocumentTemplate;
   } catch (error) {
     console.error("Failed to parse AI document template JSON:", error);
     throw new Error("Invalid response from AI service.");
@@ -245,7 +181,6 @@ export const generateDocumentTemplate = async (prompt: string, moduleId?: string
  */
 export const generateAISummary = async (data: any, fields: any[]): Promise<string> => {
   try {
-    const ai = getAI();
     const dataString = JSON.stringify(data, null, 2);
     const fieldsString = JSON.stringify(fields.map((f: ModuleField) => ({ id: f.id, label: f.label, type: f.type })), null, 2);
     
@@ -256,13 +191,8 @@ Associations: ${JSON.stringify(data.associations || [])}
 Fields: ${fieldsString}
 Data: ${dataString}`;
 
-    // FIXED: Use a valid model name
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-    
-    return response.text || "Summary could not be generated.";
+    const text = await executeServerCompletion(prompt);
+    return text || "Summary could not be generated.";
   } catch (error) {
     console.error("Error generating AI summary:", error);
     return "Error generating summary.";
@@ -274,46 +204,41 @@ Data: ${dataString}`;
  */
 export const generateExpression = async (prompt: string, fields: any[], functions: any[]): Promise<string> => {
   try {
-    const ai = getAI();
-    if (!ai) return "// Gemini API Key missing. Please check your .env file.";
-
     const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, key: f.name || f.id, type: f.type })), null, 2);
     const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `You are an expert logic architect for the Aurora Platform. 
-      Your task is to convert a natural language request into a valid Aurora Expression.
+    const systemInstruction = `You are an expert logic architect for the Aurora Platform. 
+Your task is to convert a natural language request into a valid Aurora Expression.
 
-      USER REQUEST: "${prompt}"
+USER REQUEST: "${prompt}"
 
-      AVAILABLE FIELDS (Always wrap the Field Key (Slug) from the 'key' property in curly braces, e.g., {price}. Do NOT use the Field Label. Special system fields: {Record Key}):
-      ${fieldsString}
+AVAILABLE FIELDS (Always wrap the Field Key (Slug) from the 'key' property in curly braces, e.g., {price}. Do NOT use the Field Label. Special system fields: {Record Key}):
+${fieldsString}
 
-      AVAILABLE FUNCTIONS:
-      ${functionsString}
+AVAILABLE FUNCTIONS:
+${functionsString}
 
-      EXTENDED FUNCTIONS (Implemented):
-      - POW(base, exp)
-      - FIND(needle, haystack, [start])
-      - TIMESPAN(unit, d1, d2)
-      - ADD_TIME(date, span)
-      - SUB_TIME(date, span)
-      - VLOOKUP(val, list, searchCol, returnCol)
+EXTENDED FUNCTIONS (Implemented):
+- POW(base, exp)
+- FIND(needle, haystack, [start])
+- TIMESPAN(unit, d1, d2)
+- ADD_TIME(date, span)
+- SUB_TIME(date, span)
+- VLOOKUP(val, list, searchCol, returnCol)
 
-      STRICT RULES:
-      1. Return ONLY the expression string. No markdown, no comments, no intro.
-      2. If you don't understand the request, return a helpful comment starting with "// AI: " explaining why.
-      3. Use single quotes for strings: 'Value'.
-      4. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.
-      5. Correctly handle singular vs plural requests (e.g. "first letter" = 1, "first 3 letters" = 3).
-      6. For collection operations (SUM, AVG, COUNT), ensure the field is a list or repeatable group.`,
-    });
+STRICT RULES:
+1. Return ONLY the expression string. No markdown, no comments, no intro.
+2. If you don't understand the request, return a helpful comment starting with "// AI: " explaining why.
+3. Use single quotes for strings: 'Value'.
+4. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.
+5. Correctly handle singular vs plural requests (e.g. "first letter" = 1, "first 3 letters" = 3).
+6. For collection operations (SUM, AVG, COUNT), ensure the field is a list or repeatable group.`;
 
-    return response.text.trim().replace(/^```[a-z]*\n|```$/gi, '');
+    const text = await executeServerCompletion(prompt, systemInstruction);
+    return text.trim().replace(/^```[a-z]*\n|```$/gi, '');
   } catch (error) {
     console.error("Error generating AI expression:", error);
-    return "// Error connecting to Gemini. Please try again.";
+    return "// Error connecting to AI service. Please try again.";
   }
 };
 
@@ -322,37 +247,32 @@ export const generateExpression = async (prompt: string, fields: any[], function
  */
 export const fixExpression = async (expression: string, errors: any[], fields: any[], functions: any[]): Promise<string> => {
   try {
-    const ai = getAI();
-    if (!ai) return expression;
-
     const fieldsString = JSON.stringify(fields.map(f => ({ label: f.label, key: f.name || f.id, type: f.type })), null, 2);
     const functionsString = JSON.stringify(functions.map(f => ({ name: f.name, template: f.template, description: f.description })), null, 2);
     const errorsString = JSON.stringify(errors, null, 2);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `You are an expert logic architect for the Aurora Platform. 
-      The user has an expression with errors, and you need to fix it.
+    const systemInstruction = `You are an expert logic architect for the Aurora Platform. 
+The user has an expression with errors, and you need to fix it.
 
-      CURRENT EXPRESSION: "${expression}"
-      ERRORS: ${errorsString}
+CURRENT EXPRESSION: "${expression}"
+ERRORS: ${errorsString}
 
-      AVAILABLE FIELDS (Always wrap the Field Key (Slug) from the 'key' property in curly braces, e.g., {price}. Do NOT use the Field Label. Special system fields: {Record Key}):
-      ${fieldsString}
+AVAILABLE FIELDS (Always wrap the Field Key (Slug) from the 'key' property in curly braces, e.g., {price}. Do NOT use the Field Label. Special system fields: {Record Key}):
+${fieldsString}
 
-      AVAILABLE FUNCTIONS:
-      ${functionsString}
+AVAILABLE FUNCTIONS:
+${functionsString}
 
-      STRICT RULES:
-      1. Return ONLY the fixed expression string. No markdown, no comments, no intro.
-      2. If you can't fix it, return the original expression.
-      3. Ensure all Field Keys (Slugs) are wrapped in curly braces {}. Do NOT use the Field Label.
-      4. Fix common syntax errors like missing commas, unbalanced parentheses, or wrong parameter counts.
-      5. Correct Field Keys if they are slightly misspelled (fuzzy match against the 'key' property).
-      6. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.`,
-    });
+STRICT RULES:
+1. Return ONLY the fixed expression string. No markdown, no comments, no intro.
+2. If you can't fix it, return the original expression.
+3. Ensure all Field Keys (Slugs) are wrapped in curly braces {}. Do NOT use the Field Label.
+4. Fix common syntax errors like missing commas, unbalanced parentheses, or wrong parameter counts.
+5. Correct Field Keys if they are slightly misspelled (fuzzy match against the 'key' property).
+6. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.`;
 
-    return response.text.trim().replace(/^```[a-z]*\n|```$/gi, '');
+    const text = await executeServerCompletion(`Fix expression: ${expression}`, systemInstruction);
+    return text.trim().replace(/^```[a-z]*\n|```$/gi, '');
   } catch (error) {
     console.error("Error fixing AI expression:", error);
     return expression;

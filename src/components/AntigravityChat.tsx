@@ -18,6 +18,7 @@ import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
+import { showAuroraToast } from './UI/AuroraToast';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/antigravity';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
@@ -126,7 +127,7 @@ const PROVIDER_QUICK_KEY_CONFIGS: Record<string, ProviderQuickKeyConfig> = {
 };
 
 const resolveProviderFromModelName = (modelNameStr: string): string => {
-  if (!modelNameStr) return 'google';
+  if (!modelNameStr) return 'openrouter';
   const lower = modelNameStr.toLowerCase();
   if (lower.includes('gpt') || lower.includes('o1') || lower.includes('o3')) return 'openai';
   if (lower.includes('claude')) return 'anthropic';
@@ -137,14 +138,15 @@ const resolveProviderFromModelName = (modelNameStr: string): string => {
   if (lower.includes('azure')) return 'azure_openai';
   if (lower.includes('bedrock')) return 'aws_bedrock';
   if (lower.includes('ollama') || lower.includes('local')) return 'ollama';
-  return 'google';
+  if (lower.includes('gemini')) return 'google';
+  return 'openrouter';
 };
 
 const getModelDisplayName = (modelNameStr: string): string => {
-  if (!modelNameStr || modelNameStr === 'default') return 'Gemini 2.0 Flash';
-  if (modelNameStr === 'low') return 'Low Tier Model';
-  if (modelNameStr === 'medium') return 'Medium Tier Model';
-  if (modelNameStr === 'high') return 'High Tier Model';
+  if (!modelNameStr || modelNameStr === 'default') return 'Gemini 3.1 Flash-Lite (Free Tier)';
+  if (modelNameStr === 'low') return 'Gemini 3.1 Flash-Lite';
+  if (modelNameStr === 'medium') return 'Claude 3.5 Sonnet';
+  if (modelNameStr === 'high') return 'GPT-4o';
   return modelNameStr;
 };
 
@@ -153,6 +155,8 @@ interface ChatMessage {
   role: 'user' | 'model' | 'system';
   content: string;
   steps?: any;
+  promptTokens?: number;
+  completionTokens?: number;
   createdAt: string;
 }
 
@@ -539,20 +543,70 @@ export const AntigravityChat = () => {
   const [modelName, setModelName] = useState(() => localStorage.getItem('aurora_selected_ai_model') || 'default');
   const [showModelMenu, setShowModelMenu] = useState(false);
 
-  // Click-outside listener for model menu
+  // Telemetry & Rolling Limits State
+  const [showTelemetryDetails, setShowTelemetryDetails] = useState(false);
+  const telemetryRef = useRef<HTMLDivElement>(null);
+  const [telemetry, setTelemetry] = useState<{
+    fiveHour: { tokensUsed: number; tokenBudget: number; percentage: number };
+    sevenDay: { tokensUsed: number; tokenBudget: number; percentage: number };
+    totalRequests: number;
+    totalTokens: number;
+    estimatedCostUSD: number;
+  }>({
+    fiveHour: { tokensUsed: 0, tokenBudget: 250000, percentage: 0 },
+    sevenDay: { tokensUsed: 0, tokenBudget: 5000000, percentage: 0 },
+    totalRequests: 0,
+    totalTokens: 0,
+    estimatedCostUSD: 0
+  });
+
+  const fetchTelemetry = async () => {
+    try {
+      const token = authSession?.access_token;
+      const res = await fetch('http://localhost:3001/api/ai/usage', {
+        headers: {
+          'Authorization': `Bearer ${token || ''}`,
+          'x-tenant-id': tenant?.id || 'default-tenant'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.rollingLimits) {
+          setTelemetry({
+            fiveHour: data.rollingLimits.fiveHour,
+            sevenDay: data.rollingLimits.sevenDay,
+            totalRequests: data.summary?.totalRequests || 0,
+            totalTokens: data.summary?.totalTokens || 0,
+            estimatedCostUSD: data.summary?.estimatedCostUSD || 0
+          });
+        }
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 15000);
+    return () => clearInterval(interval);
+  }, [tenant?.id, authSession?.access_token]);
+
+  // Click-outside listener for model menu & telemetry popover
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
         setShowModelMenu(false);
       }
+      if (telemetryRef.current && !telemetryRef.current.contains(event.target as Node)) {
+        setShowTelemetryDetails(false);
+      }
     };
-    if (showModelMenu) {
+    if (showModelMenu || showTelemetryDetails) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showModelMenu]);
+  }, [showModelMenu, showTelemetryDetails]);
 
   const handleSelectModel = (name: string) => {
     setModelName(name);
@@ -613,7 +667,7 @@ export const AntigravityChat = () => {
   // Resizable left sidebar state
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebarWidth');
-    return saved ? parseInt(saved, 10) : 256;
+    return saved ? parseInt(saved, 10) : 290;
   });
   const isResizingRef = useRef(false);
 
@@ -762,10 +816,11 @@ export const AntigravityChat = () => {
     }
   }, [messages, agentThought, agentTrace, streamingText]);
 
-  const fetchSessions = async () => {
+  const fetchSessions = async (isSilent = false) => {
     if (!tenant?.id || !authSession?.access_token) return;
+    const shouldShowSkeleton = !isSilent && sessions.length === 0;
     try {
-      setSessionsLoading(true);
+      if (shouldShowSkeleton) setSessionsLoading(true);
       const token = authSession.access_token;
       const res = await fetch(`${API_BASE_URL}/sessions`, {
         headers: {
@@ -779,14 +834,15 @@ export const AntigravityChat = () => {
     } catch (error) {
       console.error(error);
     } finally {
-      setSessionsLoading(false);
+      if (shouldShowSkeleton) setSessionsLoading(false);
     }
   };
 
-  const loadSession = async (id: string) => {
+  const loadSession = async (id: string, isSilent = false) => {
     if (!tenant?.id || !authSession?.access_token) return;
+    const shouldShowSkeleton = !isSilent && (messages.length === 0 || activeSession?.id !== id);
     try {
-      setMessagesLoading(true);
+      if (shouldShowSkeleton) setMessagesLoading(true);
       const token = authSession.access_token;
       const res = await fetch(`${API_BASE_URL}/sessions/${id}`, {
         headers: {
@@ -818,7 +874,7 @@ export const AntigravityChat = () => {
       console.error("[loadSession Error]", error);
       toast.error("Failed to load conversation history.");
     } finally {
-      setMessagesLoading(false);
+      if (shouldShowSkeleton) setMessagesLoading(false);
     }
   };
 
@@ -1031,7 +1087,14 @@ export const AntigravityChat = () => {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        const errObj: any = new Error(errData.error || "Failed to process request");
+        const structuredError = errData.error || {
+          code: 'CHAT_ERROR',
+          title: 'AI Request Failed',
+          message: `Server returned status ${res.status}`,
+          technical_details: JSON.stringify(errData, null, 2)
+        };
+        const errObj: any = new Error(structuredError.message || structuredError.title || "Failed to process request");
+        errObj.structuredError = structuredError;
         errObj.provider = errData.provider;
         errObj.model = errData.model;
         throw errObj;
@@ -1048,30 +1111,39 @@ export const AntigravityChat = () => {
           role: 'model',
           content: data.text,
           steps: data.steps,
+          promptTokens: data.promptTokens,
+          completionTokens: data.completionTokens,
           createdAt: new Date().toISOString()
         }
       ]);
       
       // Refresh session plan metadata
-      fetchSessions();
-      if (activeSessionId) loadSession(activeSessionId);
+      fetchSessions(true);
+      if (activeSessionId) loadSession(activeSessionId, true);
 
     } catch (error: any) {
-      const msg = error?.message || "Agent loop failed to complete.";
-      if (msg.includes('rate limit') || msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+      if (error?.structuredError) {
+        showAuroraToast.error(error.structuredError);
+      } else {
+        const msg = error?.message || "Agent loop failed to complete.";
+        toast.error(msg);
+      }
+
+      const errStr = JSON.stringify(error);
+      if (errStr.includes('rate limit') || errStr.includes('429') || errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED')) {
         const detectedProvider = error?.provider || resolveProviderFromModelName(modelName);
         const detectedModel = error?.model || getModelDisplayName(modelName);
         setQuickKeyProvider(detectedProvider);
         setQuickKeyModel(detectedModel);
         setShowQuickKeyModal(true);
       }
-      toast.error(msg);
     } finally {
       setLoading(false);
       setAgentThought(null);
       setAgentTrace([]);
       setStreamingText('');
       setAttachments([]);
+      fetchTelemetry();
     }
   };
 
@@ -1106,8 +1178,8 @@ export const AntigravityChat = () => {
       }
 
       // Refresh session
-      loadSession(sessionId);
-      fetchSessions();
+      loadSession(sessionId, true);
+      fetchSessions(true);
 
     } catch (err: any) {
       const msg = err?.message || "Failed to submit action approval";
@@ -1540,7 +1612,12 @@ export const AntigravityChat = () => {
             className="flex-1 bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-900 dark:text-white outline-none"
           />
         ) : (
-          <span className="text-xs font-medium flex-1 text-left truncate">{s.title || 'Untitled Session'}</span>
+          <span 
+            className="text-xs font-semibold flex-1 text-left truncate tracking-tight text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white"
+            title={s.title || 'Untitled Session'}
+          >
+            {s.title || 'Untitled Session'}
+          </span>
         )}
         
         {!isEditing && (
@@ -1867,10 +1944,10 @@ export const AntigravityChat = () => {
       <div className="flex-1 flex flex-col min-w-0 bg-transparent border-r border-zinc-200/50 dark:border-zinc-800/40">
         {/* Top Header telemetry */}
         <div className="h-12 border-b border-zinc-200/50 dark:border-zinc-800/40 px-6 flex items-center justify-between flex-shrink-0 bg-white/70 dark:bg-zinc-950/50 backdrop-blur-xl z-10">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 max-w-2xl flex-1 mr-4">
             {activeSession && (
               <>
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                 {editingSessionId === activeSession.id ? (
                   <input 
                     type="text"
@@ -1882,17 +1959,17 @@ export const AntigravityChat = () => {
                     }}
                     onBlur={() => handleRenameSession(activeSession.id, editingSessionTitle)}
                     autoFocus
-                    className="bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-2 py-0.5 text-xs text-zinc-900 dark:text-white font-semibold outline-none"
+                    className="bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-2 py-0.5 text-xs text-zinc-900 dark:text-white font-semibold outline-none w-full"
                   />
                 ) : (
-                  <div className="flex items-center gap-1.5 group">
+                  <div className="flex items-center gap-1.5 group min-w-0 flex-1">
                     <span 
                       onClick={() => {
                         setEditingSessionId(activeSession.id);
                         setEditingSessionTitle(activeSession.title || '');
                       }}
-                      className="font-semibold text-xs text-zinc-800 dark:text-zinc-200 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                      title="Click to rename conversation"
+                      className="font-semibold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors truncate max-w-xl"
+                      title={activeSession.title}
                     >
                       {activeSession.title}
                     </span>
@@ -1901,7 +1978,7 @@ export const AntigravityChat = () => {
                         setEditingSessionId(activeSession.id);
                         setEditingSessionTitle(activeSession.title || '');
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer shrink-0"
                       title="Rename Conversation"
                     >
                       <Edit2 className="h-3 w-3" />
@@ -1918,11 +1995,76 @@ export const AntigravityChat = () => {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {/* Real-Time Rolling Gauge Indicator */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-300 shadow-sm" title="Real-time rolling capacity limits (5-hour and 7-day windows)">
-              <span className="text-amber-500">⚡ 5h: 0%</span>
-              <span className="text-zinc-400">|</span>
-              <span className="text-purple-400">7d: 0%</span>
+            {/* Real-Time Token Telemetry & Rolling Quota Indicator */}
+            <div className="relative" ref={telemetryRef}>
+              <button 
+                onClick={() => setShowTelemetryDetails(!showTelemetryDetails)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer" 
+                title="Click to view real-time token telemetry & quota details"
+              >
+                <span className={telemetry.fiveHour.percentage > 80 ? "text-red-400" : "text-amber-500"}>
+                  ⚡ 5h: {telemetry.fiveHour.percentage}%
+                </span>
+                <span className="text-zinc-400">|</span>
+                <span className={telemetry.sevenDay.percentage > 80 ? "text-red-400" : "text-purple-400"}>
+                  7d: {telemetry.sevenDay.percentage}%
+                </span>
+              </button>
+
+              {showTelemetryDetails && (
+                <div className="absolute top-full right-0 mt-2 w-80 backdrop-blur-2xl bg-white/95 dark:bg-zinc-950/95 border border-zinc-200 dark:border-zinc-800/90 rounded-2xl shadow-2xl p-4 z-50 space-y-3 font-sans">
+                  <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800 pb-2">
+                    <h4 className="text-xs font-black uppercase text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                      <Zap size={14} className="text-amber-500" /> Token Quota Telemetry
+                    </h4>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                      Live Telemetry
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* 5 Hour Window */}
+                    <div>
+                      <div className="flex justify-between text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                        <span>5-Hour Rolling Limit</span>
+                        <span className="font-mono text-zinc-400">{telemetry.fiveHour.tokensUsed.toLocaleString()} / {(telemetry.fiveHour.tokenBudget / 1000).toFixed(0)}k</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+                          style={{ width: `${Math.min(100, telemetry.fiveHour.percentage)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 7 Day Window */}
+                    <div>
+                      <div className="flex justify-between text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                        <span>7-Day Rolling Limit</span>
+                        <span className="font-mono text-zinc-400">{telemetry.sevenDay.tokensUsed.toLocaleString()} / {(telemetry.sevenDay.tokenBudget / 1000000).toFixed(1)}M</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-300"
+                          style={{ width: `${Math.min(100, telemetry.sevenDay.percentage)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Aggregate Stats */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-200/80 dark:border-zinc-800">
+                    <div className="p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-800/80">
+                      <span className="text-[9px] font-bold uppercase text-zinc-400 block">Total Tokens</span>
+                      <span className="text-xs font-mono font-black text-indigo-500 dark:text-indigo-400">{telemetry.totalTokens.toLocaleString()}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-800/80">
+                      <span className="text-[9px] font-bold uppercase text-zinc-400 block">Total Requests</span>
+                      <span className="text-xs font-mono font-black text-emerald-500 dark:text-emerald-400">{telemetry.totalRequests.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button 
@@ -2207,6 +2349,47 @@ export const AntigravityChat = () => {
                         </button>
                         <button className="hover:text-zinc-755 dark:hover:text-zinc-350">👍</button>
                         <button className="hover:text-zinc-755 dark:hover:text-zinc-350">👎</button>
+
+                        {/* Subtle Token Breakdown Badge */}
+                        {(() => {
+                          const pTokens = m.promptTokens || Math.max(120, Math.ceil((m.steps ? JSON.stringify(m.steps).length : 600) / 4));
+                          const cTokens = m.completionTokens || Math.max(80, Math.ceil((m.content || '').length / 4));
+                          const totalTok = pTokens + cTokens;
+
+                          return (
+                            <div className="relative group/token ml-1">
+                              <div 
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-mono text-zinc-500 dark:text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400 hover:border-amber-500/40 cursor-help transition-all shadow-2xs"
+                                title="Hover to view prompt & response token breakdown"
+                              >
+                                <Zap size={11} className="text-amber-500" />
+                                <span>{totalTok.toLocaleString()} tok</span>
+                              </div>
+
+                              {/* Hover Popup Card */}
+                              <div className="absolute bottom-full left-0 mb-2 hidden group-hover/token:flex flex-col w-52 p-3 rounded-xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 text-white text-[11px] shadow-2xl z-50 font-sans space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                                <div className="flex items-center justify-between font-bold border-b border-zinc-800/80 pb-1 text-[10px] uppercase tracking-wider text-zinc-400">
+                                  <span className="flex items-center gap-1.5"><Zap size={12} className="text-amber-500" /> Token Metrics</span>
+                                  <span className="font-mono text-indigo-400">{totalTok.toLocaleString()}</span>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex justify-between font-mono text-[10px] text-zinc-300">
+                                    <span className="text-zinc-400">Prompt (Input):</span>
+                                    <span className="font-bold text-zinc-200">{pTokens.toLocaleString()} tok</span>
+                                  </div>
+                                  <div className="flex justify-between font-mono text-[10px] text-zinc-300">
+                                    <span className="text-zinc-400">Response (Output):</span>
+                                    <span className="font-bold text-zinc-200">{cTokens.toLocaleString()} tok</span>
+                                  </div>
+                                </div>
+                                <div className="pt-1.5 border-t border-zinc-800/80 flex justify-between text-[9.5px] font-mono text-emerald-400">
+                                  <span>Quota Impact:</span>
+                                  <span>~{((totalTok / 250000) * 100).toFixed(2)}% of 5h limit</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                       <span className="font-mono text-[9px]">
                         {m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -2383,69 +2566,81 @@ export const AntigravityChat = () => {
                 <div className="relative" ref={modelMenuRef}>
                   <button 
                     onClick={() => setShowModelMenu(!showModelMenu)}
-                    className="flex items-center gap-1.5 px-3 py-1 text-[11px] bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-lg transition-all font-bold shadow-sm"
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs bg-zinc-100 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-xl transition-all font-bold shadow-sm"
                   >
-                    <Sparkles className="h-3 w-3 text-indigo-500" />
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                     <span>
-                      {modelName === 'default' ? 'Default (Gemini 2.0 Flash)' : 
-                       modelName === 'low' ? 'Low Tier (Fast)' : 
-                       modelName === 'medium' ? 'Medium Tier (Balanced)' : 
-                       modelName === 'high' ? 'High Tier (Pro)' : modelName}
+                      {modelName === 'default' ? 'Gemini 3.1 Flash-Lite (Default)' : 
+                       modelName === 'low' ? 'Gemini 3.1 Flash-Lite (Low Tier)' : 
+                       modelName === 'medium' ? 'Claude 3.5 Sonnet (Medium Tier)' : 
+                       modelName === 'high' ? 'GPT-4o (High Tier)' : modelName}
                     </span>
-                    <span className="text-[8px] text-zinc-400">▲</span>
+                    <ChevronDown className={cn("h-3 w-3 text-zinc-400 transition-transform duration-200", showModelMenu && "rotate-180")} />
                   </button>
                   {showModelMenu && (
-                    <div className="absolute bottom-full left-0 mb-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-2 z-50 space-y-2.5">
+                    <div className="absolute bottom-full left-0 mb-2 w-80 backdrop-blur-2xl bg-white/95 dark:bg-zinc-950/95 border border-zinc-200 dark:border-zinc-800/90 rounded-2xl shadow-2xl p-3 z-50 space-y-3">
                       {/* Platform Default Section */}
                       <div>
-                        <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2.5 py-1">Platform Default Model</div>
+                        <div className="text-[10px] font-black text-zinc-400 uppercase tracking-wider px-1 mb-1.5 flex items-center justify-between">
+                          <span>Platform Default Model</span>
+                          <span className="text-[9px] text-emerald-400 font-mono font-bold">Free Tier</span>
+                        </div>
                         <button
                           onClick={() => handleSelectModel('default')}
                           className={cn(
-                            "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all text-left border",
+                            "w-full flex items-start justify-between p-3 rounded-xl text-xs font-semibold transition-all text-left border",
                             modelName === 'default'
-                              ? "bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300"
-                              : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200/60 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-300 shadow-sm"
+                              : "bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
                           )}
                         >
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-indigo-500 shrink-0" />
+                          <div className="flex items-start gap-2.5">
+                            <Sparkles className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
                             <div>
-                              <div className="font-bold flex items-center gap-1.5">
-                                Gemini 2.0 Flash
-                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 font-extrabold uppercase">Free Default</span>
+                              <div className="font-extrabold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                                Gemini 3.1 Flash-Lite
+                                <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 font-bold uppercase">
+                                  Native Free Tier
+                                </span>
                               </div>
-                              <div className="text-[9.5px] text-zinc-400 font-normal">Built-in Aurora platform default</div>
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal mt-0.5 leading-snug">
+                                Fast, zero-configuration baseline model powered by Google AI Studio.
+                              </p>
                             </div>
                           </div>
-                          {modelName === 'default' && <Check className="h-4 w-4 text-indigo-500 shrink-0" />}
+                          {modelName === 'default' && <Check className="h-4 w-4 text-indigo-500 dark:text-indigo-400 shrink-0 ml-2 mt-0.5" />}
                         </button>
                       </div>
 
-                      {/* Presets */}
-                      <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-2">
-                        <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2.5 py-1">Preset Capability Tiers</div>
-                        <div className="space-y-0.5">
+                      {/* Capability Tiers */}
+                      <div className="border-t border-zinc-200/60 dark:border-zinc-800/80 pt-2.5">
+                        <div className="text-[10px] font-black text-zinc-400 uppercase tracking-wider px-1 mb-1.5">
+                          Preset Capability Tiers
+                        </div>
+                        <div className="space-y-1">
                           {[
-                            { id: 'low', label: 'Low (Fast / Budget)', icon: Zap, color: 'text-green-500' },
-                            { id: 'medium', label: 'Medium (Balanced Workhorse)', icon: Cpu, color: 'text-blue-500' },
-                            { id: 'high', label: 'High (Pro Reasoning)', icon: Sparkles, color: 'text-purple-500' },
+                            { id: 'low', label: 'Low Tier', sub: 'Gemini 3.1 Flash-Lite (Fast / Budget)', icon: Zap, color: 'text-emerald-500' },
+                            { id: 'medium', label: 'Medium Tier', sub: 'Claude 3.5 Sonnet (Balanced)', icon: Cpu, color: 'text-blue-500' },
+                            { id: 'high', label: 'High Tier', sub: 'GPT-4o / DeepSeek (Pro Reasoning)', icon: Sparkles, color: 'text-purple-500' },
                           ].map(t => (
                             <button
                               key={t.id}
                               onClick={() => handleSelectModel(t.id)}
                               className={cn(
-                                "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-left",
+                                "w-full flex items-center justify-between p-2.5 rounded-xl text-xs transition-all text-left border",
                                 modelName === t.id
-                                  ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300"
-                                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                  ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-300 font-bold"
+                                  : "border-transparent text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
                               )}
                             >
-                              <span className="flex items-center gap-2">
-                                <t.icon className={cn("h-3.5 w-3.5", t.color)} />
-                                {t.label}
-                              </span>
-                              {modelName === t.id && <Check className="h-3.5 w-3.5 text-indigo-500" />}
+                              <div className="flex items-center gap-2.5">
+                                <t.icon className={cn("h-4 w-4 shrink-0", t.color)} />
+                                <div>
+                                  <span className="font-bold text-zinc-900 dark:text-zinc-200">{t.label}</span>
+                                  <span className="block text-[10px] text-zinc-500 dark:text-zinc-400">{t.sub}</span>
+                                </div>
+                              </div>
+                              {modelName === t.id && <Check className="h-4 w-4 text-indigo-500 dark:text-indigo-400 shrink-0" />}
                             </button>
                           ))}
                         </div>

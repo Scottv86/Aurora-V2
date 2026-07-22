@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { PlatformProvider } from './context/PlatformContext';
+import { AIContextProvider } from './context/AIContextProvider';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { StackedModalManager } from './components/UI/StackedModal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -169,7 +170,8 @@ const App = () => {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-        <PlatformProvider>
+          <AIContextProvider>
+            <PlatformProvider>
           <ModalStackProvider>
             <Router>
               <Toaster position="top-right" expand={false} richColors />
@@ -331,7 +333,8 @@ const App = () => {
             </Router>
           </ModalStackProvider>
         </PlatformProvider>
-        </AuthProvider>
+      </AIContextProvider>
+      </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );
