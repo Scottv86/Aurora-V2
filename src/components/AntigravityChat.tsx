@@ -1146,6 +1146,10 @@ export const AntigravityChat = () => {
       setMessages(sanitizedMessages);
       setAgentTrace([]);
       setAgentThought(null);
+      if (sanitizedMessages.some((m: any) => m.role === 'model')) {
+        setLoading(false);
+        setStreamingText('');
+      }
     } catch (error) {
       console.error("[loadSession Error]", error);
       toast.error("Failed to load conversation history.");

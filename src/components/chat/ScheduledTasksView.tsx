@@ -37,6 +37,15 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
 
   const activeRunningCount = tasks.filter(t => t.status === 'running' || runningTaskId === t.id).length;
 
+  React.useEffect(() => {
+    if (runningTaskId) {
+      const currentTask = tasks.find(t => t.id === runningTaskId);
+      if (currentTask && currentTask.status !== 'running') {
+        setRunningTaskId(null);
+      }
+    }
+  }, [tasks, runningTaskId]);
+
   const handleRun = async (taskId: string) => {
     try {
       setRunningTaskId(taskId);
