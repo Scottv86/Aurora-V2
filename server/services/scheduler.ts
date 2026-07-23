@@ -502,16 +502,18 @@ export class AutomationScheduler {
 
     const isOnceTask = task.frequency === 'Once' || task.scheduleType === 'Once';
 
-    runAgentLoop(
-      task.tenantId,
-      effectiveUserId,
-      session.id,
-      task.prompt,
-      undefined,
-      undefined,
-      targetModel,
-      []
-    ).then(async () => {
+    try {
+      await runAgentLoop(
+        task.tenantId,
+        effectiveUserId,
+        session.id,
+        task.prompt,
+        undefined,
+        undefined,
+        targetModel,
+        []
+      );
+
       await (globalPrisma as any).antigravityScheduledTask.update({
         where: { id: taskId },
         data: {
@@ -527,7 +529,7 @@ export class AutomationScheduler {
         status: 'idle',
         result: isOnceTask ? 'Once off task completed' : 'Execution completed successfully'
       });
-    }).catch(async (e: any) => {
+    } catch (e: any) {
       console.error(`[Scheduler] Scheduled task ${taskId} execution failed:`, e);
       await (globalPrisma as any).antigravityScheduledTask.update({
         where: { id: taskId },
@@ -540,7 +542,7 @@ export class AutomationScheduler {
         status: 'failed',
         result: e?.message || 'Execution failed'
       });
-    });
+    }
 
     return session.id;
   }

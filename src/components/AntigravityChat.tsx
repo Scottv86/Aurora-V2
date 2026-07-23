@@ -1059,6 +1059,18 @@ export const AntigravityChat = () => {
     };
   }, [tenant?.id, authSession?.access_token]);
 
+  // Auto-poll scheduled tasks whenever any task is running
+  useEffect(() => {
+    const hasRunningTask = scheduledTasks.some(t => t.status === 'running');
+    if (!hasRunningTask) return;
+
+    const interval = setInterval(() => {
+      fetchScheduledTasks();
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [scheduledTasks]);
+
   // Load session details when URL sessionId changes
   useEffect(() => {
     if (sessionId && tenant?.id && authSession?.access_token) {
