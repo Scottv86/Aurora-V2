@@ -802,22 +802,27 @@ CORE GUIDELINES:
     });
   }
 
-  const initialParts: any[] = [{ text: userMessage }];
-  if (attachments && attachments.length > 0) {
-    attachments.forEach(att => {
-      initialParts.push({
-        inlineData: {
-          mimeType: att.type,
-          data: att.base64
-        }
+  const lastMsg = recentMessages[recentMessages.length - 1];
+  const userMsgAlreadySaved = Boolean(lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage);
+
+  if (!userMsgAlreadySaved) {
+    const initialParts: any[] = [{ text: userMessage }];
+    if (attachments && attachments.length > 0) {
+      attachments.forEach(att => {
+        initialParts.push({
+          inlineData: {
+            mimeType: att.type,
+            data: att.base64
+          }
+        });
       });
+    }
+
+    contents.push({
+      role: 'user',
+      parts: initialParts
     });
   }
-
-  contents.push({
-    role: 'user',
-    parts: initialParts
-  });
 
   let loopCount = 0;
   const maxLoops = 15;
@@ -1003,13 +1008,15 @@ CORE GUIDELINES:
       const fileNamesList = (attachments || []).map(a => `[Attached File: ${a.name} (${a.type})]`).join('\n');
       const savedUserMessage = fileNamesList ? `${userMessage}\n\n${fileNamesList}` : userMessage;
 
-      await db.antigravityMessage.create({
-        data: {
-          sessionId,
-          role: 'user',
-          content: savedUserMessage
-        }
-      });
+      if (!userMsgAlreadySaved) {
+        await db.antigravityMessage.create({
+          data: {
+            sessionId,
+            role: 'user',
+            content: savedUserMessage
+          }
+        });
+      }
 
       const keyHint = client.apiKey && client.apiKey.length > 4 ? `...${client.apiKey.slice(-4)}` : 'Default Key';
 

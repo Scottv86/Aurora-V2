@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { runAgentLoop, executeAgentTool, resumeAgentLoop } from '../services/antigravityAgent';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
+import { AutomationScheduler } from '../services/scheduler';
 
 const router = Router();
 
@@ -386,20 +387,27 @@ router.post('/scheduled-tasks', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { name, project, scheduleType, scheduleTime, cronExpression, prompt, model } = req.body;
+    const { name, project, frequency, scheduleType, scheduleTime, cronExpression, runDate, startDate, endDate, prompt, model } = req.body;
 
     if (!name || !prompt) {
       return res.status(400).json({ error: 'Name and prompt are required' });
     }
 
+    const userId = req.user?.uid || null;
+
     const newTask = await (db as any).antigravityScheduledTask.create({
       data: {
         tenantId,
+        userId,
         name,
         project: project || 'aurora',
+        frequency: frequency || 'Recurring',
         scheduleType: scheduleType || 'Daily',
         scheduleTime: scheduleTime || '9:00 AM',
         cronExpression: cronExpression || null,
+        runDate: runDate || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
         prompt,
         model: model || 'Flash',
         isActive: true,
@@ -441,63 +449,12 @@ router.patch('/scheduled-tasks/:id', async (req: TenantRequest, res) => {
 // POST trigger manual run for a scheduled task
 router.post('/scheduled-tasks/:id/run', async (req: TenantRequest, res) => {
   try {
-    const db = req.db!;
-    const tenantId = req.tenantId!;
-    const userId = (req as any).user?.id || 'system';
+    const userId = req.user?.uid || (req as any).user?.id || 'system';
     const { id } = req.params;
 
-    const task = await (db as any).antigravityScheduledTask.findUnique({ where: { id } });
-    if (!task) {
-      return res.status(404).json({ error: 'Scheduled task not found' });
-    }
+    const sessionId = await AutomationScheduler.executeAntigravityScheduledTask(id, userId);
 
-    // Update status to running
-    await (db as any).antigravityScheduledTask.update({
-      where: { id },
-      data: { status: 'running', lastRunAt: new Date() }
-    });
-
-    // Create a new session for executing this task
-    const session = await db.antigravitySession.create({
-      data: {
-        tenantId,
-        title: `[Scheduled Task] ${task.name}`,
-        metadata: {
-          scheduledTaskId: task.id,
-          project: task.project,
-          isScheduledRun: true
-        }
-      }
-    });
-
-    const modelKey = (task.model || 'Default').toLowerCase();
-    const targetModel = modelKey === 'medium' ? 'openrouter/anthropic/claude-3.5-sonnet' :
-                       modelKey === 'high' ? 'openrouter/openai/gpt-4o' :
-                       'gemini-3.1-flash-lite';
-
-    // Run agent loop asynchronously or return session ID
-    runAgentLoop(
-      tenantId,
-      userId,
-      session.id,
-      [{ role: 'user', parts: [{ text: task.prompt }] }],
-      [],
-      undefined,
-      targetModel,
-      { scheduledTaskId: task.id }
-    ).then(async () => {
-      await (db as any).antigravityScheduledTask.update({
-        where: { id },
-        data: { status: 'idle', lastResult: 'Execution completed successfully' }
-      });
-    }).catch(async (e: any) => {
-      await (db as any).antigravityScheduledTask.update({
-        where: { id },
-        data: { status: 'failed', lastResult: e?.message || 'Execution failed' }
-      });
-    });
-
-    res.json({ success: true, sessionId: session.id, message: `Scheduled task '${task.name}' triggered.` });
+    res.json({ success: true, sessionId, message: `Scheduled task triggered.` });
   } catch (err: any) {
     console.error('[AntigravityRoutes] POST /scheduled-tasks/:id/run Error:', err);
     res.status(500).json({ error: err.message || 'Failed to run scheduled task' });

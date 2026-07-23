@@ -784,11 +784,16 @@ model AntigravityMessage {
 model AntigravityScheduledTask {
   id             String    @id @default(cuid())
   tenantId       String    @map("tenant_id")
+  userId         String?   @map("user_id")
   name           String
   project        String    @default("aurora")
+  frequency      String    @default("Recurring")
   scheduleType   String    @default("Daily") @map("schedule_type")
   scheduleTime   String    @default("9:00 AM") @map("schedule_time")
   cronExpression String?   @map("cron_expression")
+  runDate        String?   @map("run_date")
+  startDate      String?   @map("start_date")
+  endDate        String?   @map("end_date")
   prompt         String
   model          String    @default("Flash")
   isActive       Boolean   @default(true) @map("is_active")

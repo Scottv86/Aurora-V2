@@ -78,6 +78,7 @@ export const initSocket = (httpServer: HttpServer) => {
     });
   });
 
+  (global as any).io = io;
   return io;
 };
 
@@ -85,5 +86,6 @@ export const initSocket = (httpServer: HttpServer) => {
 export const emitTenantUpdate = (tenantId: string, event: string, payload: any) => {
   if (io) {
     io.to(`tenant_${tenantId}`).emit(event, payload);
+    io.emit(event, payload);
   }
 };

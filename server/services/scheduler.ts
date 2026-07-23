@@ -1,6 +1,7 @@
 import { globalPrisma } from '../lib/prisma';
 import { AutomationEngine } from './automationEngine';
 import { WorkflowState } from './workflowEngine';
+import { emitTenantUpdate } from '../socket';
 
 export class AutomationScheduler {
   private static intervalId: NodeJS.Timeout | null = null;
@@ -39,6 +40,29 @@ export class AutomationScheduler {
     
     // Check SLA warning and breach deadlines
     await this.checkSLAs();
+
+    // Fetch and execute active Antigravity scheduled tasks
+    try {
+      const chatScheduledTasks = await (globalPrisma as any).antigravityScheduledTask.findMany({
+        where: { isActive: true }
+      });
+
+      for (const task of chatScheduledTasks) {
+        if (this.matchesScheduledTaskTime(task, now)) {
+          // Prevent duplicate execution if triggered within the last 55 seconds
+          if (task.lastRunAt && (now.getTime() - new Date(task.lastRunAt).getTime() < 55000)) {
+            continue;
+          }
+
+          console.log(`[Scheduler] AntigravityScheduledTask matched: "${task.name}" (${task.id})`);
+          this.executeAntigravityScheduledTask(task.id, task.userId || 'system').catch(err => {
+            console.error(`[Scheduler] Error running AntigravityScheduledTask ${task.id}:`, err);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Scheduler] Error fetching Antigravity scheduled tasks:', err);
+    }
 
     // Fetch and execute active scheduled jobs
     try {
@@ -335,5 +359,182 @@ export class AutomationScheduler {
     } catch (err: any) {
       return `DAILY STANDUP MEMO: Tenant Workspace Active.`;
     }
+  }
+
+  /**
+   * Helper to check if an AntigravityScheduledTask should execute right now.
+   */
+  public static matchesScheduledTaskTime(task: any, date: Date): boolean {
+    const isOnce = task.frequency === 'Once' || task.scheduleType === 'Once';
+
+    // Format current date as YYYY-MM-DD
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    if (isOnce) {
+      if (task.runDate && task.runDate !== todayStr) {
+        return false;
+      }
+    } else {
+      // Recurring mode: check startDate and endDate
+      if (task.startDate && todayStr < task.startDate) {
+        return false;
+      }
+      if (task.endDate && todayStr > task.endDate) {
+        // Expired recurring task
+        (globalPrisma as any).antigravityScheduledTask.update({
+          where: { id: task.id },
+          data: { isActive: false, status: 'expired', lastResult: 'Task recurring end date reached' }
+        }).catch(() => {});
+        return false;
+      }
+    }
+
+    if (task.cronExpression) {
+      return this.matchesCron(task.cronExpression, date);
+    }
+
+    const scheduleType = (task.scheduleType || 'Daily').toLowerCase();
+    const timeStr = (task.scheduleTime || '9:00 AM').trim();
+
+    // Parse time string e.g. "9:00 AM", "09:05", "2:35 PM", "14:35"
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return false;
+
+    let targetHour = parseInt(match[1], 10);
+    const targetMinute = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : null;
+
+    if (ampm === 'PM' && targetHour < 12) {
+      targetHour += 12;
+    } else if (ampm === 'AM' && targetHour === 12) {
+      targetHour = 0;
+    }
+
+    const currentHour = date.getHours();
+    const currentMinute = date.getMinutes();
+
+    if (currentMinute !== targetMinute) return false;
+
+    if (scheduleType === 'hourly') {
+      return true;
+    } else if (scheduleType === 'daily' || isOnce) {
+      return currentHour === targetHour;
+    } else if (scheduleType === 'weekly') {
+      return date.getDay() === 1 && currentHour === targetHour;
+    }
+
+    return currentHour === targetHour;
+  }
+
+  /**
+   * Triggers and executes an AntigravityScheduledTask, creating a session and running the agent loop.
+   */
+  public static async executeAntigravityScheduledTask(taskId: string, userId: string = 'system'): Promise<string> {
+    const task = await (globalPrisma as any).antigravityScheduledTask.findUnique({
+      where: { id: taskId }
+    });
+
+    if (!task) {
+      throw new Error(`Scheduled task ${taskId} not found`);
+    }
+
+    // Update status to running
+    await (globalPrisma as any).antigravityScheduledTask.update({
+      where: { id: taskId },
+      data: { status: 'running', lastRunAt: new Date() }
+    });
+
+    // Create session
+    const session = await globalPrisma.antigravitySession.create({
+      data: {
+        tenantId: task.tenantId,
+        title: `[Scheduled Task] ${task.name}`,
+        metadata: {
+          scheduledTaskId: task.id,
+          project: task.project,
+          isScheduledRun: true
+        }
+      }
+    });
+
+    // Save initial user message immediately so session loading contains prompt
+    await globalPrisma.antigravityMessage.create({
+      data: {
+        sessionId: session.id,
+        role: 'user',
+        content: task.prompt
+      }
+    });
+
+    emitTenantUpdate(task.tenantId, 'scheduled_task_triggered', {
+      taskId: task.id,
+      taskName: task.name,
+      sessionId: session.id
+    });
+
+    let effectiveUserId = (userId && userId !== 'system') ? userId : (task.userId || 'system');
+    if (effectiveUserId === 'system' && task.tenantId) {
+      const firstMember = await globalPrisma.userTenantMembership.findFirst({
+        where: { tenantId: task.tenantId }
+      });
+      if (firstMember?.userId) {
+        effectiveUserId = firstMember.userId;
+      }
+    }
+
+    const modelKey = (task.model || 'Default').toLowerCase();
+    const targetModel = modelKey.includes('medium') || modelKey.includes('claude') ? 'openrouter/anthropic/claude-3.5-sonnet' :
+                       modelKey.includes('high') || modelKey.includes('gpt') ? 'openrouter/openai/gpt-4o' :
+                       'gemini-3.1-flash-lite';
+
+    // Import runAgentLoop dynamically to prevent circular dependencies
+    const { runAgentLoop } = await import('./antigravityAgent');
+
+    const isOnceTask = task.frequency === 'Once' || task.scheduleType === 'Once';
+
+    runAgentLoop(
+      task.tenantId,
+      effectiveUserId,
+      session.id,
+      task.prompt,
+      undefined,
+      undefined,
+      targetModel,
+      []
+    ).then(async () => {
+      await (globalPrisma as any).antigravityScheduledTask.update({
+        where: { id: taskId },
+        data: {
+          status: 'idle',
+          isActive: isOnceTask ? false : task.isActive,
+          lastResult: isOnceTask ? 'Once off task completed' : 'Execution completed successfully'
+        }
+      });
+      emitTenantUpdate(task.tenantId, 'scheduled_task_completed', {
+        taskId: task.id,
+        taskName: task.name,
+        sessionId: session.id,
+        status: 'idle',
+        result: isOnceTask ? 'Once off task completed' : 'Execution completed successfully'
+      });
+    }).catch(async (e: any) => {
+      console.error(`[Scheduler] Scheduled task ${taskId} execution failed:`, e);
+      await (globalPrisma as any).antigravityScheduledTask.update({
+        where: { id: taskId },
+        data: { status: 'failed', lastResult: e?.message || 'Execution failed' }
+      });
+      emitTenantUpdate(task.tenantId, 'scheduled_task_completed', {
+        taskId: task.id,
+        taskName: task.name,
+        sessionId: session.id,
+        status: 'failed',
+        result: e?.message || 'Execution failed'
+      });
+    });
+
+    return session.id;
   }
 }

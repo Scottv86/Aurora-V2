@@ -708,11 +708,36 @@ export const AntigravityChat = () => {
         toast.success(`Triggered scheduled task.`);
         if (data.sessionId) {
           fetchSessions(true);
-          loadSession(data.sessionId);
+          await loadSession(data.sessionId);
           setActiveMainView('chat');
+
+          // Poll for completion to update chat as soon as model finishes responding
+          let attempts = 0;
+          const pollInterval = setInterval(async () => {
+            attempts++;
+            try {
+              const refreshed = await fetch(`${API_BASE_URL}/sessions/${data.sessionId}`, {
+                headers: {
+                  'Authorization': `Bearer ${token || ''}`,
+                  'x-tenant-id': tenant?.id || ''
+                }
+              });
+              if (refreshed.ok) {
+                const sessionData = await refreshed.json();
+                const msgs = sessionData.messages || [];
+                const hasModelReply = msgs.some((m: any) => m.role === 'model');
+                if (hasModelReply || attempts >= 20) {
+                  clearInterval(pollInterval);
+                  loadSession(data.sessionId, true);
+                }
+              }
+            } catch {
+              if (attempts >= 20) clearInterval(pollInterval);
+            }
+          }, 1500);
         }
       } else {
-        toast.success("Task execution started.");
+        toast.error("Failed to run scheduled task");
       }
     } catch (err: any) {
       console.error(err);
@@ -969,6 +994,30 @@ export const AntigravityChat = () => {
       } else if (step.type === 'approval_required') {
         setLoading(false);
         setAgentThought(null);
+      }
+    });
+
+    socket.on('scheduled_task_triggered', (data: any) => {
+      toast.info(`⚡ Scheduled Task "${data.taskName || 'Job'}" started executing...`);
+      fetchSessions(true);
+      fetchScheduledTasks();
+      if (data.sessionId) {
+        navigate(`/workspace/aurora-vibe/${data.sessionId}`);
+        loadSession(data.sessionId);
+        setActiveMainView('chat');
+      }
+    });
+
+    socket.on('scheduled_task_completed', (data: any) => {
+      if (data.status === 'failed') {
+        toast.error(`Scheduled Task "${data.taskName || 'Job'}" execution failed.`);
+      } else {
+        toast.success(`✓ Scheduled Task "${data.taskName || 'Job'}" completed successfully.`);
+      }
+      fetchSessions(true);
+      fetchScheduledTasks();
+      if (data.sessionId) {
+        loadSession(data.sessionId, true);
       }
     });
 
@@ -1755,7 +1804,7 @@ export const AntigravityChat = () => {
       <div 
         key={s.id}
         onClick={() => !isEditing && navigate(`/workspace/aurora-vibe/${s.id}`)}
-        className={`group relative w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all border ${
+        className={`group relative w-full flex items-center px-2.5 py-1.5 rounded-lg cursor-pointer transition-all border overflow-hidden ${
           s.id === sessionId 
             ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
             : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
@@ -1773,11 +1822,11 @@ export const AntigravityChat = () => {
             }}
             onBlur={() => handleRenameSession(s.id, editingSessionTitle)}
             autoFocus
-            className="flex-1 bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-900 dark:text-white outline-none"
+            className="w-full bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-900 dark:text-white outline-none z-20"
           />
         ) : (
           <span 
-            className="text-xs font-semibold flex-1 text-left truncate tracking-tight text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white"
+            className="text-xs font-semibold w-full text-left truncate tracking-tight text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white pr-1 transition-colors"
             title={s.title || 'Untitled Session'}
           >
             {s.title || 'Untitled Session'}
@@ -1785,7 +1834,13 @@ export const AntigravityChat = () => {
         )}
         
         {!isEditing && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div 
+            className={`absolute right-0 top-0 bottom-0 flex items-center gap-0.5 pl-12 pr-1.5 rounded-r-lg opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 ${
+              s.id === sessionId
+                ? 'bg-gradient-to-l from-zinc-200 via-zinc-200 via-75% to-transparent dark:from-[#27272a] dark:via-[#27272a] dark:via-75% dark:to-transparent'
+                : 'bg-gradient-to-l from-zinc-100 via-zinc-100 via-75% to-transparent dark:from-[#141417] dark:via-[#141417] dark:via-75% dark:to-transparent'
+            }`}
+          >
             {/* Rename Session */}
             <button 
               onClick={(e) => {
@@ -1793,7 +1848,7 @@ export const AntigravityChat = () => {
                 setEditingSessionId(s.id);
                 setEditingSessionTitle(s.title || '');
               }}
-              className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+              className="p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
               title="Rename Conversation"
             >
               <Edit2 className="h-3 w-3" />
@@ -1803,7 +1858,7 @@ export const AntigravityChat = () => {
             <button 
               onClick={(e) => handleTogglePinSession(s, e)}
               className={cn(
-                "p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer",
+                "p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 transition-all cursor-pointer",
                 isPinned ? "text-amber-500 opacity-100" : "text-zinc-400 hover:text-amber-500"
               )}
               title={isPinned ? "Unpin Conversation" : "Pin Conversation"}
@@ -1818,7 +1873,7 @@ export const AntigravityChat = () => {
                   e.stopPropagation();
                   setMovingSessionId(movingSessionId === s.id ? null : s.id);
                 }}
-                className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
+                className="p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
                 title="Move to Folder"
               >
                 <FolderPlus className="h-3 w-3" />
@@ -1826,7 +1881,7 @@ export const AntigravityChat = () => {
               {movingSessionId === s.id && (
                 <div 
                   onClick={(e) => e.stopPropagation()} 
-                  className="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 z-50 text-xs"
+                  className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 z-50 text-xs"
                 >
                   <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Move to Folder</div>
                   {folders.map(f => (
@@ -1849,7 +1904,7 @@ export const AntigravityChat = () => {
             {/* Delete Session */}
             <button 
               onClick={(e) => deleteSession(s.id, e)}
-              className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
+              className="p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
               title="Delete Session"
             >
               <Trash2 className="h-3 w-3" />
