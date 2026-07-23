@@ -1005,10 +1005,43 @@ export const AntigravityChat = () => {
         navigate(`/workspace/aurora-vibe/${data.sessionId}`);
         loadSession(data.sessionId);
         setActiveMainView('chat');
+        setLoading(true);
+
+        // Poll for model response until task finishes
+        let attempts = 0;
+        const intervalId = setInterval(async () => {
+          attempts++;
+          try {
+            const token = authSession?.access_token;
+            const res = await fetch(`${API_BASE_URL}/sessions/${data.sessionId}`, {
+              headers: {
+                'Authorization': `Bearer ${token || ''}`,
+                'x-tenant-id': tenant?.id || ''
+              }
+            });
+            if (res.ok) {
+              const sData = await res.json();
+              const msgs = sData.messages || [];
+              const hasModel = msgs.some((m: any) => m.role === 'model');
+              if (hasModel || attempts >= 30) {
+                clearInterval(intervalId);
+                setLoading(false);
+                loadSession(data.sessionId, true);
+              }
+            }
+          } catch {
+            if (attempts >= 30) {
+              clearInterval(intervalId);
+              setLoading(false);
+            }
+          }
+        }, 1500);
       }
     });
 
     socket.on('scheduled_task_completed', (data: any) => {
+      setLoading(false);
+      setStreamingText('');
       if (data.status === 'failed') {
         toast.error(`Scheduled Task "${data.taskName || 'Job'}" execution failed.`);
       } else {

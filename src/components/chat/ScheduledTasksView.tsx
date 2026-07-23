@@ -41,7 +41,7 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
     try {
       setRunningTaskId(taskId);
       await onRunTaskNow(taskId);
-    } finally {
+    } catch {
       setRunningTaskId(null);
     }
   };
