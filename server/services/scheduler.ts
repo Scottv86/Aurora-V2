@@ -13,6 +13,13 @@ export class AutomationScheduler {
     if (this.intervalId) return;
     
     console.log('[Scheduler] Starting Automation Scheduler Daemon...');
+
+    // Reset any stale 'running' task statuses from previous server restarts
+    (globalPrisma as any).antigravityScheduledTask.updateMany({
+      where: { status: 'running' },
+      data: { status: 'idle' }
+    }).catch((err: any) => console.error('[Scheduler] Error resetting stale running tasks on startup:', err));
+
     // Run immediately on start, then poll every 60 seconds
     this.pollAndRun().catch(err => console.error('[Scheduler] Poll failed:', err));
     

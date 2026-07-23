@@ -370,6 +370,17 @@ router.get('/scheduled-tasks', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
 
+    // Auto-heal stale running statuses older than 2 minutes
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+    await (db as any).antigravityScheduledTask.updateMany({
+      where: {
+        tenantId,
+        status: 'running',
+        lastRunAt: { lt: twoMinutesAgo }
+      },
+      data: { status: 'idle' }
+    });
+
     const tasks = await (db as any).antigravityScheduledTask.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' }
