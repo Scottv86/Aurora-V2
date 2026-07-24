@@ -2411,10 +2411,15 @@ export const AntigravityChat = () => {
 
             <button 
               onClick={() => setShowRightPanel(!showRightPanel)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-650 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all font-semibold shadow-sm"
+              className={cn(
+                "p-2 transition-all duration-300 rounded-lg relative flex items-center justify-center cursor-pointer",
+                showRightPanel 
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+              )}
+              title={showRightPanel ? 'Hide Workspace Previews' : 'Show Workspace Previews'}
             >
-              <Layout className="h-3.5 w-3.5" /> 
-              {showRightPanel ? 'Hide Workspace Previews' : 'Show Workspace Previews'}
+              <Layout size={20} />
             </button>
           </div>
         </div>
