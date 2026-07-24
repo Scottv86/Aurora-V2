@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Clock, Play, Edit2, Trash2, Folder, Sparkles, Loader2, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import { Search, Plus, Clock, Play, Edit2, Trash2, Folder, Sparkles, Loader2, CheckCircle2, AlertCircle, Calendar, History, ExternalLink, X } from 'lucide-react';
 import { ScheduledTaskData, AVAILABLE_SCHEDULE_MODELS } from './NewScheduledTaskModal';
 
 interface ScheduledTasksViewProps {
@@ -9,6 +9,7 @@ interface ScheduledTasksViewProps {
   onDeleteTask: (taskId: string) => Promise<void>;
   onToggleTaskActive: (taskId: string, isActive: boolean) => Promise<void>;
   onRunTaskNow: (taskId: string) => Promise<void>;
+  onSelectSession?: (sessionId: string) => void;
   isLoading?: boolean;
 }
 
@@ -19,10 +20,14 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
   onDeleteTask,
   onToggleTaskActive,
   onRunTaskNow,
+  onSelectSession,
   isLoading = false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [historyModalTask, setHistoryModalTask] = useState<ScheduledTaskData | null>(null);
+  const [historySessions, setHistorySessions] = useState<any[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const filteredTasks = tasks.filter((t) => {
     const q = searchQuery.toLowerCase().trim();
@@ -55,6 +60,26 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
     }
   };
 
+  const openHistoryModal = async (task: ScheduledTaskData) => {
+    if (!task.id) return;
+    setHistoryModalTask(task);
+    setIsHistoryLoading(true);
+    try {
+      const token = localStorage.getItem('supabase.auth.token') || '';
+      const res = await fetch(`/api/scheduled-tasks/${task.id}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistorySessions(data || []);
+      } else {
+        setHistorySessions([]);
+      }
+    } catch {
+      setHistorySessions([]);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
   const getModelLabel = (modelId: string) => {
     const match = AVAILABLE_SCHEDULE_MODELS.find(
       m => m.id.toLowerCase() === (modelId || '').toLowerCase() || m.value.toLowerCase() === (modelId || '').toLowerCase()
@@ -70,9 +95,6 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
         <div className="flex items-center gap-3 min-w-0 flex-1 mr-4">
           <span className="font-semibold text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 truncate min-w-0 select-none tracking-tight">
             Scheduled Tasks
-          </span>
-          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 backdrop-blur-md">
-            <Sparkles className="h-3 w-3" /> Autonomous Cron
           </span>
           {activeRunningCount > 0 && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-semibold animate-pulse shadow-sm shadow-purple-500/20">
@@ -235,6 +257,15 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
                         />
                       </button>
 
+                      {/* View Run History Button */}
+                      <button
+                        onClick={() => openHistoryModal(task)}
+                        className="p-2 rounded-xl bg-white/60 dark:bg-zinc-800/60 hover:bg-indigo-600 hover:text-white text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60 backdrop-blur-md transition-all duration-200 cursor-pointer shadow-sm hover:shadow-indigo-500/30"
+                        title="View Execution History"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </button>
+
                       {/* Run Now Glass Button */}
                       <button
                         onClick={() => task.id && handleRun(task.id)}
@@ -274,6 +305,94 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Run History Modal */}
+      {historyModalTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/50">
+              <div className="flex items-center gap-2.5">
+                <History className="h-5 w-5 text-indigo-400" />
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100">Task Run History</h3>
+                  <p className="text-xs text-zinc-400 truncate max-w-xs">{historyModalTask.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setHistoryModalTask(null)}
+                className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Content / Sessions List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3 scrollbar-thin">
+              {isHistoryLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 text-zinc-500 gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+                  <span className="text-xs">Fetching execution history...</span>
+                </div>
+              ) : historySessions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500 gap-2">
+                  <Clock className="h-8 w-8 text-zinc-600 stroke-[1.5]" />
+                  <p className="text-xs">No execution history recorded yet for this task.</p>
+                </div>
+              ) : (
+                historySessions.map((session, idx) => {
+                  const runNum = session.metadata?.runNumber || (historySessions.length - idx);
+                  const isRunSuccess = session.title && !session.title.includes('failed');
+                  return (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between p-3.5 bg-zinc-800/50 hover:bg-zinc-800/80 border border-zinc-700/50 rounded-xl transition-all group"
+                    >
+                      <div className="space-y-1 min-w-0 flex-1 mr-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-semibold text-zinc-200 truncate">
+                            {session.title || `Execution #${runNum}`}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold border border-indigo-500/30">
+                            Run #{runNum}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 flex items-center gap-2">
+                          <Clock className="h-3 w-3 text-zinc-500" />
+                          <span>{new Date(session.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        </p>
+                      </div>
+
+                      {onSelectSession && (
+                        <button
+                          onClick={() => {
+                            onSelectSession(session.id);
+                            setHistoryModalTask(null);
+                          }}
+                          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all cursor-pointer shadow-sm shrink-0"
+                        >
+                          <span>Open Chat</span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-950/50 flex justify-end">
+              <button
+                onClick={() => setHistoryModalTask(null)}
+                className="px-4 py-1.5 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

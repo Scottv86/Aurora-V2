@@ -657,12 +657,43 @@ router.post('/scheduled-tasks/:id/run', async (req: TenantRequest, res) => {
     const userId = req.user?.uid || (req as any).user?.id || 'system';
     const { id } = req.params;
 
-    const sessionId = await AutomationScheduler.executeAntigravityScheduledTask(id, userId, tenantId);
+// GET run history for a scheduled task
+router.get('/scheduled-tasks/:id/history', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
 
-    res.json({ success: true, sessionId, message: `Scheduled task triggered.` });
+    const existing = await (db as any).antigravityScheduledTask.findFirst({
+      where: { id, tenantId }
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Scheduled task not found' });
+    }
+
+    const sessions = await db.antigravitySession.findMany({
+      where: {
+        tenantId,
+        metadata: {
+          path: ['scheduledTaskId'],
+          equals: id
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        title: true,
+        metadata: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    res.json(sessions);
   } catch (err: any) {
-    console.error('[AntigravityRoutes] POST /scheduled-tasks/:id/run Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to run scheduled task' });
+    console.error('[AntigravityRoutes] GET /scheduled-tasks/:id/history Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch task run history' });
   }
 });
 

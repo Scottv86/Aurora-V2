@@ -487,13 +487,27 @@ export class AutomationScheduler {
       data: { status: 'running', lastRunAt: new Date() }
     });
 
-    // Create session
+    // Calculate run count for this scheduled task
+    const existingSessionsCount = await globalPrisma.antigravitySession.count({
+      where: {
+        tenantId: task.tenantId,
+        metadata: {
+          path: ['scheduledTaskId'],
+          equals: task.id
+        }
+      }
+    }).catch(() => 0);
+
+    const runNumber = existingSessionsCount + 1;
+
+    // Create session with run number in title
     const session = await globalPrisma.antigravitySession.create({
       data: {
         tenantId: task.tenantId,
-        title: `[Scheduled Task] ${task.name}`,
+        title: `[Scheduled Task] ${task.name} (Run #${runNumber})`,
         metadata: {
           scheduledTaskId: task.id,
+          runNumber,
           project: task.project,
           isScheduledRun: true
         }

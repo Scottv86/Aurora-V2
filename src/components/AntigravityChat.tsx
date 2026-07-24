@@ -671,7 +671,7 @@ export const AntigravityChat = () => {
   };
 
   useEffect(() => {
-    if (activeMainView === 'scheduled_tasks') {
+    if (tenant?.id && authSession?.access_token) {
       fetchScheduledTasks(scheduledTasks.length > 0);
     }
   }, [activeMainView, tenant?.id, authSession?.access_token]);
@@ -2118,28 +2118,23 @@ export const AntigravityChat = () => {
           {/* Core Explorer Items */}
           <div className="space-y-1">
             <div 
-              onClick={() => setActiveMainView('chat')}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all",
-                activeMainView === 'chat' 
-                  ? "bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-900 dark:text-white font-semibold" 
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
-              )}
-            >
-              <History size={18} className="shrink-0 text-zinc-400 dark:text-zinc-500" />
-              <span>Conversation History</span>
-            </div>
-            <div 
               onClick={() => setActiveMainView('scheduled_tasks')}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all",
+                "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all",
                 activeMainView === 'scheduled_tasks' 
                   ? "bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-900 dark:text-white font-semibold" 
                   : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
               )}
             >
-              <Calendar size={18} className="shrink-0 text-zinc-400 dark:text-zinc-500" />
-              <span>Scheduled Tasks</span>
+              <div className="flex items-center gap-3 min-w-0">
+                <Calendar size={18} className="shrink-0 text-zinc-400 dark:text-zinc-500" />
+                <span className="truncate">Scheduled Tasks</span>
+              </div>
+              {scheduledTasks.filter(t => t.isActive !== false).length > 0 && (
+                <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 backdrop-blur-md shadow-sm">
+                  {scheduledTasks.filter(t => t.isActive !== false).length}
+                </span>
+              )}
             </div>
           </div>
 
@@ -2306,6 +2301,10 @@ export const AntigravityChat = () => {
           onDeleteTask={handleDeleteScheduledTask}
           onToggleTaskActive={handleToggleScheduledTaskActive}
           onRunTaskNow={handleRunScheduledTaskNow}
+          onSelectSession={(sessId) => {
+            loadSession(sessId);
+            setActiveMainView('chat');
+          }}
         />
       ) : (
         <>
