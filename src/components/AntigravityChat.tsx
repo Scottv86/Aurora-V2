@@ -2361,13 +2361,13 @@ export const AntigravityChat = () => {
               <button 
                 onClick={() => setShowTelemetryDetails(!showTelemetryDetails)}
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-300 shadow-sm hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all cursor-pointer" 
-                title="Click to view real-time token telemetry & quota details"
+                title="Click to view AI usage & quota details"
               >
-                <span className={telemetry.fiveHour.percentage > 80 ? "text-red-400" : "text-amber-500"}>
+                <span className={telemetry.fiveHour.percentage > 90 ? "text-rose-500 dark:text-rose-400" : "text-zinc-600 dark:text-zinc-300"}>
                   ⚡ 5h: {telemetry.fiveHour.percentage}%
                 </span>
-                <span className="text-zinc-400">|</span>
-                <span className={telemetry.sevenDay.percentage > 80 ? "text-red-400" : "text-purple-400"}>
+                <span className="text-zinc-300 dark:text-zinc-700">|</span>
+                <span className={telemetry.sevenDay.percentage > 90 ? "text-rose-500 dark:text-rose-400" : "text-zinc-600 dark:text-zinc-300"}>
                   7d: {telemetry.sevenDay.percentage}%
                 </span>
               </button>
@@ -2376,10 +2376,10 @@ export const AntigravityChat = () => {
                 <div className="absolute top-full right-0 mt-2 w-80 backdrop-blur-2xl bg-white/95 dark:bg-zinc-950/95 border border-zinc-200 dark:border-zinc-800/90 rounded-2xl shadow-2xl p-4 z-50 space-y-3 font-sans">
                   <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800 pb-2">
                     <h4 className="text-xs font-black uppercase text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
-                      <Zap size={14} className="text-amber-500" /> Token Quota Telemetry
+                      <Zap size={14} className="text-amber-500" /> AI Usage & Quota
                     </h4>
                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                      Live Telemetry
+                      Live Usage
                     </span>
                   </div>
 

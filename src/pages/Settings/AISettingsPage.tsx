@@ -297,7 +297,7 @@ export const AISettingsPage = () => {
   const tabs = [
     { id: 'keys', label: 'API Keys & Providers', icon: Key },
     { id: 'routing', label: 'Model Tiers & Routing', icon: Sliders },
-    { id: 'telemetry', label: 'Usage & Telemetry', icon: BarChart3 },
+    { id: 'telemetry', label: 'Usage & Quotas', icon: BarChart3 },
     { id: 'privacy', label: 'Data Privacy & Governance', icon: ShieldCheck }
   ];
 
