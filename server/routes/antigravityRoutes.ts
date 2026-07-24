@@ -385,11 +385,29 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
+    // Ensure session exists in database to satisfy foreign key constraints
+    const db = req.db!;
+    let sessionRecord = await db.antigravitySession.findUnique({ where: { id } });
+    if (!sessionRecord) {
+      try {
+        await db.antigravitySession.create({
+          data: {
+            id,
+            tenantId,
+            userId,
+            title: typeof message === 'string' ? (message.length > 40 ? message.slice(0, 40) + '...' : message) : 'New Conversation',
+            metadata: {}
+          }
+        });
+      } catch (err: any) {
+        console.warn(`[AntigravityRoutes] Auto-create session ${id} warning:`, err?.message || err);
+      }
+    }
+
     // Run the agent loop asynchronously. The socket emits intermediate thoughts/results
     const result = await runAgentLoop(tenantId, userId, id, message, socketId, context, model, attachments);
 
     // Update session title if default, initial message, or legacy truncated snippet
-    const db = req.db!;
     const session = await db.antigravitySession.findUnique({
       where: { id },
       include: { messages: true }

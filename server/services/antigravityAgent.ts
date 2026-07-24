@@ -703,12 +703,34 @@ export const runAgentLoop = async (
   const client = await resolveTenantAIClient(tenantId, modelName);
   const db = globalPrisma;
 
-  const session = await db.antigravitySession.findUnique({
+  let session = await db.antigravitySession.findUnique({
     where: { id: sessionId },
     include: { messages: { orderBy: { createdAt: 'asc' } } }
   });
 
-  if (!session) throw new Error("Session not found");
+  if (!session) {
+    try {
+      session = await db.antigravitySession.create({
+        data: {
+          id: sessionId,
+          tenantId,
+          userId,
+          title: userMessage ? (userMessage.length > 40 ? userMessage.slice(0, 40) + '...' : userMessage) : 'New Conversation',
+          metadata: {}
+        },
+        include: { messages: { orderBy: { createdAt: 'asc' } } }
+      });
+    } catch (createSessionErr) {
+      console.warn(`[AgentLoop] Session ${sessionId} auto-create attempt:`, createSessionErr);
+      session = await db.antigravitySession.findUnique({
+        where: { id: sessionId },
+        include: { messages: { orderBy: { createdAt: 'asc' } } }
+      });
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found and could not be initialized.`);
+      }
+    }
+  }
 
   const modules = await db.module.findMany({ where: { tenantId } });
   const schemaOverview = modules.map(m => ({

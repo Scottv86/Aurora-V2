@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Plus, Clock, Play, Edit2, Trash2, Folder, Sparkles, Loader2, CheckCircle2, AlertCircle, Calendar, History, ExternalLink, X } from 'lucide-react';
 import { ScheduledTaskData, AVAILABLE_SCHEDULE_MODELS } from './NewScheduledTaskModal';
+import { cn } from '../../lib/utils';
 
 interface ScheduledTasksViewProps {
   tasks: ScheduledTaskData[];
@@ -66,7 +67,9 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
     setIsHistoryLoading(true);
     try {
       const token = localStorage.getItem('supabase.auth.token') || '';
-      const res = await fetch(`/api/scheduled-tasks/${task.id}/history`);
+      const res = await fetch(`/api/scheduled-tasks/${task.id}/history`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setHistorySessions(data || []);
@@ -353,8 +356,13 @@ export const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
                           <span className="text-xs font-semibold text-zinc-200 truncate">
                             {session.title || `Execution #${runNum}`}
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold border border-indigo-500/30">
-                            Run #{runNum}
+                          <span className={cn(
+                            "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border",
+                            isRunSuccess 
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" 
+                              : "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                          )}>
+                            {isRunSuccess ? 'Success' : 'Failed'} • Run #{runNum}
                           </span>
                         </div>
                         <p className="text-[11px] text-zinc-400 flex items-center gap-2">

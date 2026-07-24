@@ -12,7 +12,7 @@ import {
   Copy, Table, Compass, Layers, X,
   Code, Globe, Plug, Paperclip, ChevronDown, ChevronRight, MoreVertical,
   Layout, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
-  History, Calendar, Folder, Settings, Clock, Share2, Building, Users, Lock, User
+  Calendar, Folder, Settings, Clock, Share2, Building, Users, Lock, User
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
@@ -159,10 +159,67 @@ const getModelDisplayName = (modelNameStr: string): string => {
   if (m.includes('claude')) return 'Claude 3.5 Sonnet';
   if (m.includes('llama')) return 'Groq Llama 3.3 70B';
   if (m.includes('deepseek')) return 'DeepSeek V3';
-  return modelNameStr;
+};
+
+const generateDynamicGreeting = (userName: string, previousGreeting?: string): string => {
+  const date = new Date();
+  const hour = date.getHours();
+  
+  let timeGreeting = "Hey";
+  let timeVibe = "what's the move";
+  
+  if (hour >= 5 && hour < 12) {
+    timeGreeting = "Good morning";
+    timeVibe = "ready to start strong";
+  } else if (hour >= 12 && hour < 17) {
+    timeGreeting = "Good afternoon";
+    timeVibe = "ready to keep the momentum going";
+  } else if (hour >= 17 && hour < 22) {
+    timeGreeting = "Good evening";
+    timeVibe = "what's the evening play";
+  } else {
+    timeGreeting = "Hey night owl";
+    timeVibe = "working on late-night magic";
+  }
+
+  const GREETING_PATTERNS = [
+    `Hi ${userName}, what's the move?`,
+    `Hey ${userName}, what are we building today?`,
+    `Welcome back ${userName}! What's on the launchpad?`,
+    `${timeGreeting} ${userName}, ${timeVibe}?`,
+    `Hi ${userName}, what mission are we launching today?`,
+    `Hey ${userName}, what's the play for today?`,
+    `Hi ${userName}, ready to make magic happen?`,
+    `Hey ${userName}, what problem are we solving today?`,
+    `What's cooking, ${userName}? Let's dive in.`,
+    `Hi ${userName}, what big move are we making today?`,
+    `Hey ${userName}, ready to supercharge your stack?`,
+    `Hi ${userName}, what enterprise workflow are we automating?`,
+    `Welcome back, ${userName}! What's the master plan?`,
+    `Hi ${userName}, what idea are we executing today?`,
+    `Hey ${userName}, what's top of mind for you right now?`,
+    `Hi ${userName}, ready to conquer the backlog?`,
+    `Hey ${userName}, how can Aurora level up your day?`,
+    `Hi ${userName}, what's the next big milestone?`,
+    `Hey ${userName}, ready to turn vision into code?`,
+    `Hi ${userName}, what are we architecting today?`,
+    `Welcome back ${userName}, where should we focus first?`,
+    `Hey ${userName}, what's on your dev radar today?`,
+    `Hi ${userName}, ready to unleash the AI?`,
+    `Hey ${userName}, what's the headline for today?`,
+    `Good to see you, ${userName}! What's the main focus?`,
+    `Hi ${userName}, what APIs or data are we connecting today?`,
+    `Hey ${userName}, let's build something epic today.`,
+    `Hi ${userName}, what process are we automating next?`
+  ];
+
+  const available = GREETING_PATTERNS.filter(g => g !== previousGreeting);
+  const randomIndex = Math.floor(Math.random() * available.length);
+  return available[randomIndex] || GREETING_PATTERNS[0];
 };
 
 interface ChatMessage {
+
   id: string;
   role: 'user' | 'model' | 'system';
   content: string;
@@ -433,6 +490,59 @@ export const AntigravityChat = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [menuTargetSession, setMenuTargetSession] = useState<ChatSession | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [dynamicGreeting, setDynamicGreeting] = useState<string>('');
+  const [quickStartCategory, setQuickStartCategory] = useState<string>('all');
+
+  const quickStartItems = [
+    {
+      category: 'build',
+      badge: 'Module Architect',
+      title: 'Build New Enterprise Module',
+      desc: 'Draft dynamic database schemas, UI forms, and multi-step task workflows for a new module',
+      prompt: 'Build a new enterprise module for Inventory Management including database schema, UI forms, and workflow rules.',
+      actionText: 'Build Module'
+    },
+    {
+      category: 'reports',
+      badge: 'Tailored Briefing',
+      title: 'Generate Executive Briefing',
+      desc: `Produce a tailored daily briefing for ${userName} on platform health, open lead scores, and active tasks`,
+      prompt: `Generate a tailored executive briefing for ${userName} covering current system telemetry, lead scoring updates, and scheduled task statuses.`,
+      actionText: 'Generate Briefing'
+    },
+    {
+      category: 'connectors',
+      badge: 'API Integration',
+      title: 'Australian Business Register API',
+      desc: 'Create an automated ABN lookup connector for company verification and lead enrichment',
+      prompt: 'Create a lookup connector to the Australian Business Register API for enterprise lead enrichment.',
+      actionText: 'Connect API'
+    },
+    {
+      category: 'workflows',
+      badge: 'Automation Flow',
+      title: 'Customer Onboarding Workflow',
+      desc: 'Build an automated multi-step verification pipeline with instant triage rules',
+      prompt: 'Build an automated customer onboarding verification workflow with multi-step triage and notification triggers.',
+      actionText: 'Create Workflow'
+    },
+    {
+      category: 'reports',
+      badge: 'Lead Analytics',
+      title: 'Audit & Score Open Leads',
+      desc: 'Query top 10 viable open leads, audit metrics, and summarize high-value opportunities',
+      prompt: 'Find the 10 most viable open leads in the system, audit their metrics, and summarize high-value opportunities.',
+      actionText: 'Run Audit'
+    },
+    {
+      category: 'build',
+      badge: 'Schema Architect',
+      title: 'Platform Architecture Plan',
+      desc: 'Draft a dynamic schema & task checklist for an automated work queue module',
+      prompt: 'Draft a dynamic module schema, architecture plan, and task checklist for an automated Work Queue module.',
+      actionText: 'Draft Schema'
+    }
+  ];
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -675,6 +785,56 @@ export const AntigravityChat = () => {
       fetchScheduledTasks(scheduledTasks.length > 0);
     }
   }, [activeMainView, tenant?.id, authSession?.access_token]);
+
+  const handleCreateScheduledTaskFromSession = async (targetSession: ChatSession) => {
+    setMenuTargetSession(null);
+    const folderMatch = folders.find(f => f.id === targetSession.metadata?.folderId);
+    const projectName = folderMatch ? folderMatch.name : (folders[0]?.name || 'aurora');
+
+    let actualPrompt = '';
+
+    // 1. Check if it's the currently active session
+    if (activeSession?.id === targetSession.id && messages.length > 0) {
+      const userMsg = messages.find(m => m.role === 'user');
+      if (userMsg) actualPrompt = userMsg.content;
+    }
+
+    // 2. Otherwise fetch session messages from API
+    if (!actualPrompt && tenant?.id && authSession?.access_token) {
+      try {
+        const token = authSession.access_token;
+        const res = await fetch(`${API_BASE_URL}/sessions/${targetSession.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const userMsg = (data.messages || []).find((m: any) => m.role === 'user');
+          if (userMsg) actualPrompt = userMsg.content;
+        }
+      } catch (err) {
+        console.error("Failed to fetch session prompt for scheduled task", err);
+      }
+    }
+
+    // Fallback to session title if no user prompt was found
+    if (!actualPrompt) {
+      actualPrompt = targetSession.title || '';
+    }
+
+    setEditingScheduledTask({
+      name: targetSession.title || 'Scheduled Task',
+      project: projectName,
+      scheduleType: 'Daily',
+      scheduleTime: '9:00 AM',
+      prompt: actualPrompt,
+      model: 'Default',
+      isActive: true
+    });
+    setIsNewScheduledTaskModalOpen(true);
+  };
 
   const handleSaveScheduledTask = async (taskData: ScheduledTaskData) => {
     try {
@@ -1160,12 +1320,16 @@ export const AntigravityChat = () => {
       setMessages([]);
       setActiveSession(null);
       setAgentTrace([]);
+      setDynamicGreeting(prev => generateDynamicGreeting(userName, prev));
+      if (messageAreaRef.current) {
+        messageAreaRef.current.scrollTop = 0;
+      }
     }
-  }, [sessionId, tenant?.id, authSession?.access_token]);
+  }, [sessionId, tenant?.id, authSession?.access_token, userName]);
 
-  // Scroll to bottom on new message
+  // Scroll to bottom on new message (only when active messages or streaming exist)
   useEffect(() => {
-    if (messageAreaRef.current) {
+    if ((messages.length > 0 || streamingText || agentTrace.length > 0) && messageAreaRef.current) {
       messageAreaRef.current.scrollTo({
         top: messageAreaRef.current.scrollHeight,
         behavior: 'smooth'
@@ -1378,8 +1542,9 @@ export const AntigravityChat = () => {
     }
   };
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim()) return;
+  const sendMessage = async (overridePrompt?: string) => {
+    const userMsg = (overridePrompt !== undefined ? overridePrompt : inputMessage).trim();
+    if (!userMsg) return;
 
     let activeSessionId = sessionId;
 
@@ -1408,7 +1573,6 @@ export const AntigravityChat = () => {
       }
     }
     
-    const userMsg = inputMessage;
     const userAttachments = [...attachments];
     setInputMessage('');
     setAttachments([]);
@@ -2452,42 +2616,72 @@ export const AntigravityChat = () => {
               <div className="h-12 w-1/2 ml-auto bg-zinc-200/50 dark:bg-zinc-800/40 animate-pulse rounded-2xl" />
             </div>
           ) : !sessionId && messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-2xl mx-auto p-6 space-y-8 animate-in fade-in zoom-in-95 duration-500">
-              <div className="space-y-3">
+            <div className="flex flex-col items-center justify-center text-center max-w-3xl mx-auto px-4 py-6 space-y-6 animate-in fade-in zoom-in-95 duration-500 w-full min-h-[calc(100vh-160px)]">
+              <div className="space-y-3 max-w-xl mx-auto">
                 <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100 font-sans">
-                  Hi {userName}, what's the move?
+                  {dynamicGreeting || generateDynamicGreeting(userName)}
                 </h1>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium max-w-md mx-auto">
-                  Ask Aurora to build database modules, automate workflows, connect APIs, or analyze enterprise data.
+                  Ask Aurora to build database modules, generate executive briefings, automate workflows, or connect APIs.
                 </p>
               </div>
 
-              {/* Quick Start Prompt Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl text-left">
+              {/* Category Filter Pills */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1 w-full max-w-3xl mx-auto">
                 {[
-                  { title: "Australian Business Register API", desc: "Create an ABN lookup connector for lead enrichment", prompt: "Create a lookup to the Australian Business Register API" },
-                  { title: "Audit & Score Open Leads", desc: "Query top 10 viable leads and summarize high-value opportunities", prompt: "Find the 10 most viable open leads and summarize them" },
-                  { title: "Customer Onboarding Workflow", desc: "Build an automated multi-step verification pipeline", prompt: "Build an automated customer onboarding verification workflow" },
-                  { title: "Platform Architecture Plan", desc: "Draft a dynamic schema & task checklist for a new module", prompt: "Draft a dynamic module schema and architecture plan for Inventory Management" }
-                ].map((item, idx) => (
+                  { id: 'all', label: '⚡ All Actions' },
+                  { id: 'build', label: '🏗️ Build Modules' },
+                  { id: 'reports', label: '📊 Tailored Reports' },
+                  { id: 'connectors', label: '🔌 APIs & Connectors' },
+                  { id: 'workflows', label: '🤖 Automations' }
+                ].map(cat => (
                   <button
-                    key={idx}
-                    onClick={() => {
-                      setInputMessage(item.prompt);
-                      if (textareaRef.current) textareaRef.current.focus();
-                    }}
-                    className="p-4 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-zinc-200/70 dark:border-zinc-800 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all text-left group shadow-sm flex flex-col justify-between cursor-pointer"
+                    key={cat.id}
+                    onClick={() => setQuickStartCategory(cat.id)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
+                      quickStartCategory === cat.id
+                        ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/25 ring-2 ring-indigo-500/30"
+                        : "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-800"
+                    )}
                   >
-                    <div>
-                      <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                        {item.title}
-                      </div>
-                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
-                        {item.desc}
-                      </div>
-                    </div>
+                    {cat.label}
                   </button>
                 ))}
+              </div>
+
+              {/* Quick Start Prompt Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full max-w-3xl text-left pt-1">
+                {quickStartItems
+                  .filter(item => quickStartCategory === 'all' || item.category === quickStartCategory)
+                  .map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        sendMessage(item.prompt);
+                      }}
+                      className="p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all text-left group shadow-xs flex flex-col justify-between cursor-pointer relative overflow-hidden"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-zinc-200/80 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-100/80 dark:bg-zinc-800/40 transition-colors">
+                            {item.badge}
+                          </span>
+                          <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 opacity-70 group-hover:opacity-100 transition-all flex items-center gap-0.5">
+                            {item.actionText} →
+                          </span>
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {item.title}
+                          </div>
+                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                            {item.desc}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
               </div>
             </div>
           ) : (
@@ -3445,6 +3639,19 @@ export const AntigravityChat = () => {
           >
             <Share2 className="h-4 w-4 text-zinc-400" />
             <span>Share conversation</span>
+          </button>
+
+          {/* Create scheduled task */}
+          <button
+            onClick={() => {
+              if (menuTargetSession) {
+                handleCreateScheduledTaskFromSession(menuTargetSession);
+              }
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 dark:hover:bg-zinc-800 text-zinc-200 transition-all text-left font-medium cursor-pointer"
+          >
+            <Clock className="h-4 w-4 text-indigo-400" />
+            <span>Create scheduled task</span>
           </button>
 
           {/* Pin / Unpin */}
