@@ -657,6 +657,15 @@ router.post('/scheduled-tasks/:id/run', async (req: TenantRequest, res) => {
     const userId = req.user?.uid || (req as any).user?.id || 'system';
     const { id } = req.params;
 
+    const sessionId = await AutomationScheduler.executeAntigravityScheduledTask(id, userId, tenantId);
+
+    res.json({ success: true, sessionId, message: `Scheduled task triggered.` });
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] POST /scheduled-tasks/:id/run Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to run scheduled task' });
+  }
+});
+
 // GET run history for a scheduled task
 router.get('/scheduled-tasks/:id/history', async (req: TenantRequest, res) => {
   try {
