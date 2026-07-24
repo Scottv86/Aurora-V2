@@ -623,10 +623,17 @@ router.post('/scheduled-tasks', async (req: TenantRequest, res) => {
 router.patch('/scheduled-tasks/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
 
-    const existing = await (db as any).antigravityScheduledTask.findUnique({ where: { id } });
+    // Prevent parameter tampering of tenantId or primary key
+    delete updateData.tenantId;
+    delete updateData.id;
+
+    const existing = await (db as any).antigravityScheduledTask.findFirst({
+      where: { id, tenantId }
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Scheduled task not found' });
     }
@@ -646,10 +653,11 @@ router.patch('/scheduled-tasks/:id', async (req: TenantRequest, res) => {
 // POST trigger manual run for a scheduled task
 router.post('/scheduled-tasks/:id/run', async (req: TenantRequest, res) => {
   try {
+    const tenantId = req.tenantId!;
     const userId = req.user?.uid || (req as any).user?.id || 'system';
     const { id } = req.params;
 
-    const sessionId = await AutomationScheduler.executeAntigravityScheduledTask(id, userId);
+    const sessionId = await AutomationScheduler.executeAntigravityScheduledTask(id, userId, tenantId);
 
     res.json({ success: true, sessionId, message: `Scheduled task triggered.` });
   } catch (err: any) {
@@ -662,7 +670,15 @@ router.post('/scheduled-tasks/:id/run', async (req: TenantRequest, res) => {
 router.delete('/scheduled-tasks/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
+
+    const existing = await (db as any).antigravityScheduledTask.findFirst({
+      where: { id, tenantId }
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Scheduled task not found' });
+    }
 
     await (db as any).antigravityScheduledTask.delete({
       where: { id }

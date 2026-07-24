@@ -102,6 +102,90 @@ async function fetchPageText(url: string): Promise<string> {
   }
 }
 
+/**
+ * Resolves session ownership, sharing scope, and shared participants list for shared chat context.
+ */
+export async function resolveSessionSharingContext(
+  db: any,
+  tenantId: string,
+  session: any,
+  currentUserId: string,
+  currentUserName: string
+) {
+  let sessionOwnerId = session?.userId || 'system';
+  let sessionOwnerName = 'System / Unassigned';
+  let sessionOwnerTitle = 'System';
+  let sessionOwnerEmail = '';
+
+  if (sessionOwnerId && sessionOwnerId !== 'system') {
+    try {
+      const ownerMember = await db.tenantMember.findFirst({
+        where: { tenantId, userId: sessionOwnerId },
+        include: { position: true }
+      });
+      if (ownerMember) {
+        const full = `${ownerMember.firstName || ''} ${ownerMember.familyName || ''}`.trim();
+        sessionOwnerName = full || ownerMember.workEmail || sessionOwnerId;
+        sessionOwnerTitle = ownerMember.position?.title || 'Team Member';
+        sessionOwnerEmail = ownerMember.workEmail || '';
+      } else {
+        const ownerUser = await db.user.findUnique({ where: { id: sessionOwnerId } });
+        if (ownerUser) {
+          sessionOwnerName = ownerUser.email || sessionOwnerId;
+          sessionOwnerEmail = ownerUser.email || '';
+        }
+      }
+    } catch (e) {
+      console.warn('[SessionSharing] Failed resolving session owner:', e);
+    }
+  }
+
+  const isSharedWithOrg = Boolean(session?.isSharedWithTenant);
+  let sharedWithIds: string[] = [];
+  if (Array.isArray(session?.sharedWithUserIds)) {
+    sharedWithIds = session.sharedWithUserIds;
+  } else if (typeof session?.sharedWithUserIds === 'string') {
+    try { sharedWithIds = JSON.parse(session.sharedWithUserIds); } catch (e) {}
+  }
+
+  const sharedUserNames: string[] = [];
+  if (sharedWithIds.length > 0) {
+    try {
+      const members = await db.tenantMember.findMany({
+        where: { tenantId, userId: { in: sharedWithIds } },
+        include: { position: true }
+      });
+      members.forEach((m: any) => {
+        const fullName = `${m.firstName || ''} ${m.familyName || ''}`.trim() || m.workEmail || m.userId;
+        const titleStr = m.position?.title ? ` (${m.position.title})` : '';
+        sharedUserNames.push(`${fullName}${titleStr}`);
+      });
+    } catch (e) {
+      console.warn('[SessionSharing] Failed resolving shared members:', e);
+    }
+  }
+
+  let sharingVisibilityStr = "Private Chat (Visible only to Session Owner)";
+  if (isSharedWithOrg) {
+    sharingVisibilityStr = "Shared with Entire Organization (All Tenant Members)";
+  } else if (sharedUserNames.length > 0) {
+    sharingVisibilityStr = `Shared with Specific Members: [${sharedUserNames.join(', ')}]`;
+  }
+
+  const isPrompterOwner = (sessionOwnerId === currentUserId);
+
+  return {
+    sessionOwnerId,
+    sessionOwnerName,
+    sessionOwnerTitle,
+    sessionOwnerEmail,
+    isSharedWithOrg,
+    sharedUserNames,
+    sharingVisibilityStr,
+    isPrompterOwner
+  };
+}
+
 // SQL query security validation
 const PHYSICAL_TABLES_WHITELIST = [
   'workspaces', 'modules', 'records', 'tenant_members',
@@ -661,10 +745,10 @@ export const runAgentLoop = async (
   const membership = user?.memberships?.[0];
   const licenceType = membership?.licenceType || (user?.isSuperAdmin ? 'Developer' : 'Standard');
   const role = user?.isSuperAdmin ? 'SUPERADMIN' : (membership?.roleId || 'USER');
-  const userFullName = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : (user?.email || 'Unknown User');
+  const userFullName = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : (userId === 'system' ? 'System Scheduler' : (user?.email || 'Unknown User'));
 
   const groupIds = membership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
-  const capabilities = user?.isSuperAdmin 
+  const capabilities = (user?.isSuperAdmin || userId === 'system')
     ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] 
     : await resolveCapabilities(groupIds, tenantId);
 
@@ -711,6 +795,9 @@ export const runAgentLoop = async (
 Use this information to ground your understanding. For example, if they ask to add a field, create an automation, or query data, they likely refer to the active module/page they are currently viewing listed above.\n`;
   }
 
+  // Resolve Chat Session Sharing & Prompter Context
+  const sharingCtx = await resolveSessionSharingContext(db, tenantId, session, userId, userFullName);
+
   const systemInstruction = `You are Aurora, the autonomous agentic co-pilot for the Aurora Business Platform.
 You assist both developers (building database modules, automations, public websites) and business users (querying records, auditing leads, writing communications).
 
@@ -719,16 +806,29 @@ CURRENT DATE & TIME CONTEXT:
   - Current Date & Time (Tenant Local): "${localTimeStr}"
   - Current Date & Time (UTC/ISO): "${serverTimeStr}"
 
-CURRENT LOGGED-IN USER CONTEXT:
-  - Name: "${userFullName}"
-  - User ID: "${userId}"
+SHARED CHAT & MULTI-USER COLLABORATION CONTEXT:
+  - Chat Session ID: "${sessionId}"
+  - Chat Session Title: "${session.title || 'Untitled Session'}"
+  - Session Owner / Creator: "${sharingCtx.sessionOwnerName}" (User ID: "${sharingCtx.sessionOwnerId}", Title: "${sharingCtx.sessionOwnerTitle}")
+  - Chat Sharing Visibility: "${sharingCtx.sharingVisibilityStr}"
+  - Shared Members List: ${sharingCtx.sharedUserNames.length > 0 ? JSON.stringify(sharingCtx.sharedUserNames) : (sharingCtx.isSharedWithOrg ? '"Entire Organization"' : '"None (Private)"')}
+
+CURRENT ACTIVE INTERACTOR / PROMPTER:
+  - Active Prompter Name: "${userFullName}"
+  - Active Prompter User ID: "${userId}"
   - Role: "${role}"
   - License Type: "${licenceType}"
-  - Permissions/Capabilities: ${JSON.stringify(capabilities)}
   - Company Position/Title: "${positionTitle}"
   - Department/Function: "${positionDept}"
   - Active Team: "${teamName}"
   - Manager Name: "${managerName}"
+  - Relation to Chat Session: ${sharingCtx.isPrompterOwner ? 'Session Owner / Creator' : `Shared Participant interacting with ${sharingCtx.sessionOwnerName}'s chat`}
+  - Permissions/Capabilities: ${JSON.stringify(capabilities)}
+
+SHARED CHAT DIRECTIVES & RESPONSE TAILORING:
+  - Be explicitly aware of WHO is sending the prompt (${userFullName}).
+  - Tailor your tone, perspective, and responses accordingly. If ${userFullName} is a shared participant, acknowledge their input respectfully while keeping full awareness of the chat owner (${sharingCtx.sessionOwnerName}) and organizational context.
+  - In message history below, user messages are tagged with [Prompted by Sender Name]. Distinguish between requests made by different participants in this thread.
 ${contextBlock}
 CURRENT TENANT CONTEXT:
   - Tenant ID: "${tenantId}"
@@ -796,17 +896,32 @@ CORE GUIDELINES:
   // Sliding window: keep last 8 messages for context to optimize prompt token consumption
   const recentMessages = (session.messages || []).slice(-8);
   for (const msg of recentMessages) {
-    contents.push({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
-    });
+    if (msg.role === 'user') {
+      let senderName = '';
+      if (Array.isArray(msg.steps) && msg.steps.length > 0) {
+        senderName = (msg.steps[0] as any)?.senderName || '';
+      } else if (msg.steps && (msg.steps as any).senderName) {
+        senderName = (msg.steps as any).senderName;
+      }
+      const attributedContent = senderName ? `[Prompted by ${senderName}]: ${msg.content}` : msg.content;
+      contents.push({
+        role: 'user',
+        parts: [{ text: attributedContent }]
+      });
+    } else {
+      contents.push({
+        role: 'model',
+        parts: [{ text: msg.content }]
+      });
+    }
   }
 
   const lastMsg = recentMessages[recentMessages.length - 1];
   const userMsgAlreadySaved = Boolean(lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage);
 
   if (!userMsgAlreadySaved) {
-    const initialParts: any[] = [{ text: userMessage }];
+    const attributedUserMsg = `[Prompted by ${userFullName}]: ${userMessage}`;
+    const initialParts: any[] = [{ text: attributedUserMsg }];
     if (attachments && attachments.length > 0) {
       attachments.forEach(att => {
         initialParts.push({
@@ -913,7 +1028,8 @@ CORE GUIDELINES:
               data: {
                 sessionId,
                 role: 'user',
-                content: savedUserMessage
+                content: savedUserMessage,
+                steps: [{ senderId: userId, senderName: userFullName, senderRole: role, senderTitle: positionTitle }] as any
               }
             });
           }
@@ -1013,7 +1129,8 @@ CORE GUIDELINES:
           data: {
             sessionId,
             role: 'user',
-            content: savedUserMessage
+            content: savedUserMessage,
+            steps: [{ senderId: userId, senderName: userFullName, senderRole: role, senderTitle: positionTitle }] as any
           }
         });
       }
@@ -2032,9 +2149,9 @@ export const resumeAgentLoop = async (
   const membership = user?.memberships?.[0];
   const licenceType = membership?.licenceType || (user?.isSuperAdmin ? 'Developer' : 'Standard');
   const role = user?.isSuperAdmin ? 'SUPERADMIN' : (membership?.roleId || 'USER');
-  const userFullName = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : (user?.email || 'Unknown User');
+  const userFullName = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : (userId === 'system' ? 'System Scheduler' : (user?.email || 'Unknown User'));
   const groupIds = membership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
-  const capabilities = user?.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : await resolveCapabilities(groupIds, tenantId);
+  const capabilities = (user?.isSuperAdmin || userId === 'system') ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : await resolveCapabilities(groupIds, tenantId);
 
   const modules = await db.module.findMany({ where: { tenantId } });
   const schemaOverview = modules.map(m => ({
@@ -2049,6 +2166,9 @@ export const resumeAgentLoop = async (
   const localTimeStr = new Date().toLocaleString('en-US', { timeZone: tenantTimezone });
   const serverTimeStr = new Date().toISOString();
 
+  const session = await db.antigravitySession.findUnique({ where: { id: sessionId } });
+  const sharingCtx = await resolveSessionSharingContext(db, tenantId, session, userId, userFullName);
+
   let contextBlock = "";
   const systemInstruction = `You are Aurora, the autonomous agentic co-pilot for the Aurora Business Platform.
 You assist both developers (building database modules, automations, public websites) and business users (querying records, auditing leads, writing communications).
@@ -2058,16 +2178,28 @@ CURRENT DATE & TIME CONTEXT:
   - Current Date & Time (Tenant Local): "${localTimeStr}"
   - Current Date & Time (UTC/ISO): "${serverTimeStr}"
 
-CURRENT LOGGED-IN USER CONTEXT:
-  - Name: "${userFullName}"
-  - User ID: "${userId}"
+SHARED CHAT & MULTI-USER COLLABORATION CONTEXT:
+  - Chat Session ID: "${sessionId}"
+  - Chat Session Title: "${session?.title || 'Untitled Session'}"
+  - Session Owner / Creator: "${sharingCtx.sessionOwnerName}" (User ID: "${sharingCtx.sessionOwnerId}", Title: "${sharingCtx.sessionOwnerTitle}")
+  - Chat Sharing Visibility: "${sharingCtx.sharingVisibilityStr}"
+  - Shared Members List: ${sharingCtx.sharedUserNames.length > 0 ? JSON.stringify(sharingCtx.sharedUserNames) : (sharingCtx.isSharedWithOrg ? '"Entire Organization"' : '"None (Private)"')}
+
+CURRENT ACTIVE INTERACTOR / PROMPTER:
+  - Active Prompter Name: "${userFullName}"
+  - Active Prompter User ID: "${userId}"
   - Role: "${role}"
   - License Type: "${licenceType}"
-  - Permissions/Capabilities: ${JSON.stringify(capabilities)}
   - Company Position/Title: "${membership?.position?.title || 'None'}"
   - Department/Function: "${membership?.position?.description || 'None'}"
   - Active Team: "${membership?.team?.name || 'None'}"
-  - Manager Name: "None"
+  - Relation to Chat Session: ${sharingCtx.isPrompterOwner ? 'Session Owner / Creator' : `Shared Participant interacting with ${sharingCtx.sessionOwnerName}'s chat`}
+  - Permissions/Capabilities: ${JSON.stringify(capabilities)}
+
+SHARED CHAT DIRECTIVES & RESPONSE TAILORING:
+  - Be explicitly aware of WHO is sending the prompt (${userFullName}).
+  - Tailor your tone, perspective, and responses accordingly. If ${userFullName} is a shared participant, acknowledge their input respectfully while keeping full awareness of the chat owner (${sharingCtx.sessionOwnerName}) and organizational context.
+  - In message history below, user messages are tagged with [Prompted by Sender Name]. Distinguish between requests made by different participants in this thread.
 CURRENT TENANT CONTEXT:
   - Tenant ID: "${tenantId}"
   - Subdomain: "${tenantDetails?.subdomain || 'None'}"

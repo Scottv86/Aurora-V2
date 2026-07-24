@@ -55,6 +55,10 @@ export class AutomationScheduler {
       });
 
       for (const task of chatScheduledTasks) {
+        if (task.status === 'running') {
+          continue;
+        }
+
         if (this.matchesScheduledTaskTime(task, now)) {
           // Prevent duplicate execution if triggered within the last 55 seconds
           if (task.lastRunAt && (now.getTime() - new Date(task.lastRunAt).getTime() < 55000)) {
@@ -62,7 +66,7 @@ export class AutomationScheduler {
           }
 
           console.log(`[Scheduler] AntigravityScheduledTask matched: "${task.name}" (${task.id})`);
-          this.executeAntigravityScheduledTask(task.id, task.userId || 'system').catch(err => {
+          this.executeAntigravityScheduledTask(task.id, task.userId || 'system', task.tenantId).catch(err => {
             console.error(`[Scheduler] Error running AntigravityScheduledTask ${task.id}:`, err);
           });
         }
@@ -437,7 +441,25 @@ export class AutomationScheduler {
     } else if (scheduleType === 'daily' || isOnce) {
       return currentHour === targetHour;
     } else if (scheduleType === 'weekly') {
-      return date.getDay() === 1 && currentHour === targetHour;
+      let targetDayOfWeek = 1; // Default Monday
+      const dateRefStr = task.startDate || task.runDate;
+      if (dateRefStr) {
+        const d = new Date(dateRefStr);
+        if (!isNaN(d.getTime())) {
+          targetDayOfWeek = d.getDay();
+        }
+      }
+      return date.getDay() === targetDayOfWeek && currentHour === targetHour;
+    } else if (scheduleType === 'monthly') {
+      let targetDayOfMonth = 1; // Default 1st of month
+      const dateRefStr = task.startDate || task.runDate;
+      if (dateRefStr) {
+        const d = new Date(dateRefStr);
+        if (!isNaN(d.getTime())) {
+          targetDayOfMonth = d.getDate();
+        }
+      }
+      return date.getDate() === targetDayOfMonth && currentHour === targetHour;
     }
 
     return currentHour === targetHour;
@@ -446,13 +468,17 @@ export class AutomationScheduler {
   /**
    * Triggers and executes an AntigravityScheduledTask, creating a session and running the agent loop.
    */
-  public static async executeAntigravityScheduledTask(taskId: string, userId: string = 'system'): Promise<string> {
+  public static async executeAntigravityScheduledTask(taskId: string, userId: string = 'system', expectedTenantId?: string): Promise<string> {
     const task = await (globalPrisma as any).antigravityScheduledTask.findUnique({
       where: { id: taskId }
     });
 
     if (!task) {
       throw new Error(`Scheduled task ${taskId} not found`);
+    }
+
+    if (expectedTenantId && task.tenantId !== expectedTenantId) {
+      throw new Error(`Unauthorized: Scheduled task ${taskId} does not belong to tenant ${expectedTenantId}`);
     }
 
     // Update status to running
@@ -490,26 +516,30 @@ export class AutomationScheduler {
     });
 
     let effectiveUserId = (userId && userId !== 'system') ? userId : (task.userId || 'system');
-    if (effectiveUserId === 'system' && task.tenantId) {
-      const firstMember = await globalPrisma.userTenantMembership.findFirst({
-        where: { tenantId: task.tenantId }
-      });
-      if (firstMember?.userId) {
-        effectiveUserId = firstMember.userId;
-      }
-    }
-
-    const modelKey = (task.model || 'Default').toLowerCase();
-    const targetModel = modelKey.includes('medium') || modelKey.includes('claude') ? 'openrouter/anthropic/claude-3.5-sonnet' :
-                       modelKey.includes('high') || modelKey.includes('gpt') ? 'openrouter/openai/gpt-4o' :
-                       'gemini-3.1-flash-lite';
-
-    // Import runAgentLoop dynamically to prevent circular dependencies
-    const { runAgentLoop } = await import('./antigravityAgent');
-
     const isOnceTask = task.frequency === 'Once' || task.scheduleType === 'Once';
 
     try {
+      if (effectiveUserId === 'system' && task.tenantId) {
+        try {
+          const firstMember = await globalPrisma.tenantMember.findFirst({
+            where: { tenantId: task.tenantId, userId: { not: null } }
+          });
+          if (firstMember?.userId) {
+            effectiveUserId = firstMember.userId;
+          }
+        } catch (memErr) {
+          console.warn('[Scheduler] Could not resolve tenant member for scheduled task:', memErr);
+        }
+      }
+
+      const modelKey = (task.model || 'Default').toLowerCase();
+      const targetModel = modelKey.includes('medium') || modelKey.includes('claude') ? 'openrouter/anthropic/claude-3.5-sonnet' :
+                         modelKey.includes('high') || modelKey.includes('gpt') ? 'openrouter/openai/gpt-4o' :
+                         'gemini-3.1-flash-lite';
+
+      // Import runAgentLoop dynamically to prevent circular dependencies
+      const { runAgentLoop } = await import('./antigravityAgent');
+
       await runAgentLoop(
         task.tenantId,
         effectiveUserId,
