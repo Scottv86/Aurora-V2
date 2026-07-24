@@ -1124,11 +1124,55 @@ router.delete('/records/:id', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const { id } = req.params;
 
+    // Fetch record first to back up into Recycling Bin before deletion
+    const existing = await db.record.findFirst({
+      where: { id },
+      include: { module: true }
+    });
+    if (existing) {
+      const recData = (existing.data || {}) as any;
+      const recordKey = recData._record_key || recData.recordKey || recData.key || recData.record_key || recData.code || `#${String(id).slice(-6)}`;
+      let title = recData.name || recData.title || recData.subject || recData.ticketNumber ||
+                  recData.applicationName || recData.application_name || recData.applicantName ||
+                  recData.companyName || recData.customerName || recData.summary;
+
+      if (!title) {
+        const stringVals = Object.values(recData).filter((v: any) => typeof v === 'string' && v.trim().length > 0 && !v.startsWith('http') && !v.startsWith('cmr') && v !== recordKey);
+        if (stringVals.length > 0) {
+          title = stringVals[0];
+        }
+      }
+
+      if (!title || title === id) {
+        title = recordKey;
+      }
+
+      const moduleName = (existing as any).module?.name || existing.moduleId;
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
+      if (trashModel) {
+        await trashModel.create({
+          data: {
+            tenantId,
+            itemType: 'RECORD',
+            itemId: id,
+            title: String(title),
+            subtitle: `Module: ${moduleName}`,
+            payload: { ...existing, _record_key: recordKey },
+            deletedBy: (req as any).user?.email || 'User',
+            deletedAt: new Date(),
+            expiresAt
+          }
+        }).catch((err: any) => console.warn('[DataRoutes] Recycling bin backup notice:', err.message));
+      }
+    }
+
     // RLS will ensure we can only delete if it belongs to current tenant
     const result = await db.record.deleteMany({ where: { id } });
 
     // Websocket emit
     emitTenantUpdate(tenantId, 'record_deleted', id);
+    emitTenantUpdate(tenantId, 'recycling_bin_updated', { action: 'add' });
 
     // Trigger Webhooks
     triggerWebhooks(tenantId, 'record.deleted', { id });

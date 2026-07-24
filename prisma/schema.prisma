@@ -48,6 +48,7 @@ model Tenant {
   aiKeys                 TenantAIKey[]
   aiMapping              TenantAIMapping?
   aiMetrics              AIUsageMetric[]
+  recyclingBinItems      RecyclingBinItem[]
 
   @@map("tenants")
 }
@@ -898,6 +899,24 @@ model AIUsageMetric {
   @@index([tenantId, timestamp])
   @@index([tenantId, provider])
   @@map("ai_usage_metrics")
+}
+
+model RecyclingBinItem {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  itemType    String   @map("item_type") // RECORD, MODULE, AUTOMATION, CONNECTOR, CHAT_SESSION, SCHEDULED_TASK
+  itemId      String   @map("item_id")
+  title       String
+  subtitle    String?
+  payload     Json
+  deletedBy   String?  @map("deleted_by")
+  deletedAt   DateTime @default(now()) @map("deleted_at")
+  expiresAt   DateTime @map("expires_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, deletedAt])
+  @@map("recycling_bin_items")
 }
 
 

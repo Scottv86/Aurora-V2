@@ -8,7 +8,8 @@ import {
   Mic,
   Bot,
   User as UserIcon,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -110,6 +111,15 @@ export const AIAssistant = () => {
                   : "bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 rounded-tl-none border border-zinc-200/50 dark:border-zinc-800/50"
               )}>
                 {msg.content}
+              </div>
+
+              <div className="flex items-center gap-1 text-[10px] text-zinc-400 dark:text-zinc-500 font-sans px-1 select-none">
+                <Clock size={10} className="text-zinc-400 dark:text-zinc-500" />
+                <span>
+                  {msg.timestamp 
+                    ? `${new Date(msg.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}, ${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                    : ''}
+                </span>
               </div>
 
               {msg.context && (

@@ -11,7 +11,9 @@ import {
   Settings as SettingsIcon,
   ChevronDown,
   MessageSquare,
-  LayoutGrid
+  LayoutGrid,
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -27,15 +29,22 @@ export const Navbar = () => {
     setEnvironment, 
     user: platformUser, 
     isDeveloper,
-    isAIAssistantOpen, 
     setIsAIAssistantOpen,
     isChatOpen,
     setIsChatOpen,
     isAppLauncherOpen,
     setIsAppLauncherOpen,
     isNotificationsOpen,
-    setIsNotificationsOpen
+    setIsNotificationsOpen,
+    isRecyclingBinOpen,
+    setIsRecyclingBinOpen,
+    unreadCount = 0,
+    runningTasks = []
   } = usePlatform();
+
+  const isDevUser = isDeveloper || platformUser?.licenceType === 'Developer';
+  const safeRunningTasks = isDevUser && Array.isArray(runningTasks) ? runningTasks : [];
+  const safeUnreadCount = typeof unreadCount === 'number' ? unreadCount : 0;
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
@@ -116,7 +125,7 @@ export const Navbar = () => {
             {isTenantBrandingEnabled ? (tenant?.name || 'Organization') : 'Aurora'}
           </span>
         </div>
-        <div className="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-2" />
+        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-2" />
         <div className="relative" ref={envMenuRef}>
           <button 
             onClick={() => setShowEnvMenu(!showEnvMenu)}
@@ -189,6 +198,7 @@ export const Navbar = () => {
               setIsChatOpen(false);
               setIsAIAssistantOpen(false);
               setIsNotificationsOpen(false);
+              setIsRecyclingBinOpen(false);
             }
           }}
           className={cn(
@@ -213,6 +223,7 @@ export const Navbar = () => {
                     setIsAIAssistantOpen(false);
                     setIsAppLauncherOpen(false);
                     setIsNotificationsOpen(false);
+                    setIsRecyclingBinOpen(false);
                   }
                 }}
                 className={cn(
@@ -232,27 +243,28 @@ export const Navbar = () => {
               </button>
             )}
 
-            {/* AI Assistant Icon */}
+            {/* Recycling Bin Icon */}
             <button 
               onClick={() => {
-                setIsAIAssistantOpen(!isAIAssistantOpen);
-                if (!isAIAssistantOpen) {
+                setIsRecyclingBinOpen(!isRecyclingBinOpen);
+                if (!isRecyclingBinOpen) {
                   setIsChatOpen(false);
+                  setIsAIAssistantOpen(false);
                   setIsAppLauncherOpen(false);
                   setIsNotificationsOpen(false);
                 }
               }}
               className={cn(
-                "p-2 transition-all duration-300 rounded-lg",
-                isAIAssistantOpen 
-                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                "p-2 transition-all duration-300 rounded-lg relative",
+                isRecyclingBinOpen
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10"
                   : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
               )}
-              title="AI Assistant"
+              title="Recycling Bin"
             >
-              <div className="relative">
-                <Sparkles size={20} />
-                {isAIAssistantOpen && (
+              <div className="relative flex items-center justify-center">
+                <Trash2 size={20} />
+                {isRecyclingBinOpen && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
                 )}
               </div>
@@ -269,20 +281,42 @@ export const Navbar = () => {
               setIsChatOpen(false);
               setIsAIAssistantOpen(false);
               setIsAppLauncherOpen(false);
+              setIsRecyclingBinOpen(false);
             }
           }}
           className={cn(
-            "p-2 transition-all duration-300 rounded-lg relative",
+            "p-2 transition-all duration-300 rounded-lg relative flex items-center gap-1.5",
             isNotificationsOpen
               ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10"
               : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
           )}
-          title="Notifications"
+          title={safeRunningTasks.length > 0 ? `${safeRunningTasks.length} Scheduled Task(s) Running...` : "Notifications"}
         >
-          <Bell size={20} />
-          {!isNotificationsOpen && <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full border-2 border-white dark:border-zinc-950" />}
+          <div className="relative flex items-center justify-center">
+            <Bell size={20} />
+            {safeRunningTasks.length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+              </span>
+            )}
+            {!isNotificationsOpen && safeUnreadCount > 0 && safeRunningTasks.length === 0 && (
+              <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 bg-indigo-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white dark:border-zinc-950">
+                {safeUnreadCount > 9 ? '9+' : safeUnreadCount}
+              </span>
+            )}
+          </div>
+          {safeRunningTasks.length > 0 && (
+            <span className="hidden md:flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+              <Loader2 size={10} className="animate-spin text-amber-500 shrink-0" />
+              <span>Task Running</span>
+            </span>
+          )}
         </button>
-        <div className="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800 relative shrink-0" ref={menuRef}>
+        {/* Divider */}
+        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+
+        <div className="flex items-center gap-3 relative shrink-0" ref={menuRef}>
           <div className="text-right hidden sm:block shrink-0">
             <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none whitespace-nowrap">{displayName}</p>
             <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter whitespace-nowrap">
@@ -371,13 +405,11 @@ export const Navbar = () => {
           )}
         </div>
 
-
-
         {/* Divider */}
-        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-1" />
+        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
 
         {/* 3-Way Icon-Only Experience Switcher */}
-        <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0 ml-1">
+        <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0">
           <Link
             to={lastPlatformPath}
             className={cn(

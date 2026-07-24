@@ -5,13 +5,14 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { io, Socket } from 'socket.io-client';
 import { Navbar } from './Navigation/Navbar';
+import { GlobalDrawers } from './Navigation/GlobalDrawers';
 import { 
   Sparkles, Bot, Terminal, Play, CheckCircle2, AlertCircle, 
   Loader2, Trash2, Send, Mic, MicOff, Plus, FileText, CheckSquare, 
   Copy, Table, Compass, Layers, X,
   Code, Globe, Plug, Paperclip, ChevronDown,
   Layout, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
-  History, Calendar, Folder, Settings
+  History, Calendar, Folder, Settings, Clock
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
@@ -364,6 +365,17 @@ export const AntigravityChat = () => {
   };
 
   const userName = getFirstName();
+
+  const formatMessageDateTime = (dateVal?: string | Date | number) => {
+    if (!dateVal) return '';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+
+    const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    return `${dateStr} at ${timeStr}`;
+  };
   
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -565,10 +577,12 @@ export const AntigravityChat = () => {
   const [isNewScheduledTaskModalOpen, setIsNewScheduledTaskModalOpen] = useState(false);
   const [editingScheduledTask, setEditingScheduledTask] = useState<ScheduledTaskData | null>(null);
 
-  const fetchScheduledTasks = async () => {
+  const fetchScheduledTasks = async (silent = false) => {
     if (!tenant?.id || !authSession?.access_token) return;
     try {
-      setIsScheduledTasksLoading(true);
+      if (!silent && scheduledTasks.length === 0) {
+        setIsScheduledTasksLoading(true);
+      }
       const token = authSession.access_token;
       const res = await fetch(`${API_BASE_URL}/scheduled-tasks`, {
         headers: {
@@ -584,13 +598,15 @@ export const AntigravityChat = () => {
     } catch (error) {
       console.warn('Failed to fetch scheduled tasks from server:', error);
     } finally {
-      setIsScheduledTasksLoading(false);
+      if (!silent) {
+        setIsScheduledTasksLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     if (activeMainView === 'scheduled_tasks') {
-      fetchScheduledTasks();
+      fetchScheduledTasks(scheduledTasks.length > 0);
     }
   }, [activeMainView, tenant?.id, authSession?.access_token]);
 
@@ -705,7 +721,6 @@ export const AntigravityChat = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        toast.success(`Triggered scheduled task.`);
         if (data.sessionId) {
           fetchSessions(true);
           await loadSession(data.sessionId);
@@ -998,16 +1013,12 @@ export const AntigravityChat = () => {
     });
 
     socket.on('scheduled_task_triggered', (data: any) => {
-      toast.info(`⚡ Scheduled Task "${data.taskName || 'Job'}" started executing...`);
       fetchSessions(true);
-      fetchScheduledTasks();
-      if (data.sessionId) {
-        navigate(`/workspace/aurora-vibe/${data.sessionId}`);
-        loadSession(data.sessionId);
-        setActiveMainView('chat');
+      fetchScheduledTasks(true);
+      // Silently update if user is currently viewing this exact session
+      if (data.sessionId && activeSession?.id === data.sessionId) {
         setLoading(true);
 
-        // Poll for model response until task finishes
         let attempts = 0;
         const intervalId = setInterval(async () => {
           attempts++;
@@ -1042,15 +1053,18 @@ export const AntigravityChat = () => {
     socket.on('scheduled_task_completed', (data: any) => {
       setLoading(false);
       setStreamingText('');
-      if (data.status === 'failed') {
-        toast.error(`Scheduled Task "${data.taskName || 'Job'}" execution failed.`);
-      } else {
-        toast.success(`✓ Scheduled Task "${data.taskName || 'Job'}" completed successfully.`);
-      }
       fetchSessions(true);
-      fetchScheduledTasks();
-      if (data.sessionId) {
+      fetchScheduledTasks(true);
+      if (data.sessionId && activeSession?.id === data.sessionId) {
         loadSession(data.sessionId, true);
+      }
+    });
+
+    socket.on('recycling_bin_updated', () => {
+      fetchSessions(true);
+      const currentSessionId = activeSession?.id || sessionId;
+      if (currentSessionId) {
+        loadSession(currentSessionId, true);
       }
     });
 
@@ -1065,7 +1079,7 @@ export const AntigravityChat = () => {
     if (!hasRunningTask) return;
 
     const interval = setInterval(() => {
-      fetchScheduledTasks();
+      fetchScheduledTasks(true);
     }, 2500);
 
     return () => clearInterval(interval);
@@ -1205,18 +1219,50 @@ export const AntigravityChat = () => {
       const res = await fetch(`${API_BASE_URL}/sessions/${deleteSessionId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant!.id
+          'Authorization': `Bearer ${token || ''}`,
+          'x-tenant-id': tenant?.id || ''
         }
       });
-      if (!res.ok) throw new Error("Failed to delete session");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to delete session");
+      }
       setSessions(prev => prev.filter(s => s.id !== deleteSessionId));
-      if (sessionId === deleteSessionId) navigate('/workspace/aurora-vibe');
-      toast.success("Session deleted successfully.");
-    } catch (error) {
-      toast.error("Could not delete session.");
+      const currentSessionId = activeSession?.id || sessionId;
+      if (currentSessionId === deleteSessionId) {
+        setActiveSession(null);
+        setMessages([]);
+        navigate('/workspace/aurora-vibe');
+      }
+      toast.success("Conversation moved to Recycling Bin.");
+    } catch (error: any) {
+      console.error('[AntigravityChat] Delete session error:', error);
+      toast.error(error.message || "Could not delete conversation.");
     } finally {
       setDeleteSessionId(null);
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    const currentSessionId = activeSession?.id || sessionId;
+    if (!currentSessionId) return;
+    try {
+      const token = authSession?.access_token;
+      const res = await fetch(`${API_BASE_URL}/sessions/${currentSessionId}/messages/${messageId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token || ''}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      });
+      if (res.ok) {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+        toast.success("Message moved to Recycling Bin.");
+      } else {
+        toast.error("Failed to delete message.");
+      }
+    } catch {
+      toast.error("Failed to delete message.");
     }
   };
 
@@ -2245,7 +2291,7 @@ export const AntigravityChat = () => {
         <>
           <div className="flex-1 flex flex-col min-w-0 bg-transparent border-r border-zinc-200/50 dark:border-zinc-800/40">
         {/* Top Header telemetry */}
-        <div className="h-12 border-b border-zinc-200/50 dark:border-zinc-800/40 px-6 flex items-center justify-between flex-shrink-0 bg-white/70 dark:bg-zinc-950/50 backdrop-blur-xl z-10">
+        <div className="h-10 border-b border-zinc-200 dark:border-zinc-800 px-6 flex items-center justify-between flex-shrink-0 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl z-10">
           <div className="flex items-center gap-3 min-w-0 flex-1 mr-4">
             {activeSession && (
               <>
@@ -2424,13 +2470,28 @@ export const AntigravityChat = () => {
             <div className="max-w-3xl mx-auto w-full space-y-8">
               {messages.map((m, idx) => {
                 if (m.role === 'user') {
+                  const timestampStr = formatMessageDateTime(m.createdAt || (m as any).timestamp || new Date());
                   return (
-                    <div key={m.id || idx} className="w-full flex justify-end animate-fade-in">
+                    <div key={m.id || idx} className="w-full flex flex-col items-end animate-fade-in space-y-1 group/usermsg">
                       <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-4 shadow-sm relative">
                         <div className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-sans">{m.content}</div>
-                        <span className="absolute bottom-2 right-3 text-[9px] text-zinc-400 font-mono">
-                          {m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10.5px] text-zinc-500 dark:text-zinc-400 font-sans pr-1 select-none">
+                        {timestampStr && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-zinc-400 dark:text-zinc-500" />
+                            <span>{timestampStr}</span>
+                          </div>
+                        )}
+                        {m.id && (
+                          <button
+                            onClick={() => deleteMessage(m.id)}
+                            className="opacity-0 group-hover/usermsg:opacity-100 p-0.5 hover:text-red-500 transition-all cursor-pointer"
+                            title="Move message to Recycling Bin"
+                          >
+                            <Trash2 className="h-3 w-3 text-zinc-400 hover:text-red-500" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -2645,6 +2706,15 @@ export const AntigravityChat = () => {
                         </button>
                         <button className="hover:text-zinc-755 dark:hover:text-zinc-350">👍</button>
                         <button className="hover:text-zinc-755 dark:hover:text-zinc-350">👎</button>
+                        {m.id && (
+                          <button 
+                            onClick={() => deleteMessage(m.id)}
+                            className="hover:text-red-500 transition-colors p-0.5 text-zinc-400 dark:text-zinc-500 cursor-pointer"
+                            title="Move message to Recycling Bin"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
 
                         {/* Subtle Token Breakdown Badge */}
                         {(() => {
@@ -2711,9 +2781,10 @@ export const AntigravityChat = () => {
                           );
                         })()}
                       </div>
-                      <span className="font-mono text-[9px]">
-                        {m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                      </span>
+                      <div className="flex items-center gap-1.5 text-[10.5px] text-zinc-500 dark:text-zinc-400 font-sans select-none ml-auto">
+                        <Clock className="h-3 w-3 text-zinc-400 dark:text-zinc-500" />
+                        <span>{formatMessageDateTime(m.createdAt || (m as any).timestamp || new Date())}</span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -3280,8 +3351,8 @@ export const AntigravityChat = () => {
         isOpen={deleteSessionId !== null}
         onClose={() => setDeleteSessionId(null)}
         onConfirm={confirmDeleteSession}
-        title="Delete Conversation"
-        description="Are you sure you want to delete this session? All message history will be permanently lost."
+        title="Move to Recycling Bin"
+        description="Are you sure you want to delete this conversation? It will be moved to the Recycling Bin where you can restore it anytime within 30 days."
       />
 
       {showQuickKeyModal && (() => {
@@ -3432,6 +3503,8 @@ export const AntigravityChat = () => {
         initialTask={editingScheduledTask}
         projects={folders.map(f => f.name).length > 0 ? folders.map(f => f.name) : ['aurora']}
       />
+
+      <GlobalDrawers />
 
       </div>
     </div>

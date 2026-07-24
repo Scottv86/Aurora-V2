@@ -30,12 +30,9 @@ import { Navbar } from '../Navigation/Navbar';
 import { Login } from '../Auth/Login';
 import { TopMegaMenu } from '../Navigation/TopMegaMenu';
 import { MenuSection, MenuItem } from '../../types/menu';
-import { AIAssistant } from '../AI/AIAssistant';
-import { ChatDrawer } from '../AI/ChatDrawer';
 import { AnimatePresence, motion } from 'motion/react';
 import { Breadcrumbs } from '../Navigation/Breadcrumbs';
-import { AppLauncher } from '../Navigation/AppLauncher';
-import { NotificationsDrawer } from '../Navigation/NotificationsDrawer';
+import { GlobalDrawers } from '../Navigation/GlobalDrawers';
 import { PageLoader } from '../UI/PageLoader';
 import { TransitionBar } from '../UI/TransitionBar';
 
@@ -227,10 +224,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const { 
     isLoading: platformLoading, 
     menuConfig, 
-    isAIAssistantOpen,
-    isChatOpen,
-    isAppLauncherOpen,
-    isNotificationsOpen,
     tenant,
     isDeveloper,
     modules
@@ -717,8 +710,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             !isResizing && "transition-all duration-300",
             layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
               ? "h-[calc(100vh-7rem)]" 
-              : "h-[calc(100vh-4rem)]",
-            (isAIAssistantOpen || isChatOpen || isAppLauncherOpen || isNotificationsOpen) && "mr-96"
+              : "h-[calc(100vh-4rem)]"
           )}
         >
           <div className={cn(
@@ -734,12 +726,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             {children}
           </div>
         </main>
-        <AnimatePresence mode="wait">
-          {isAIAssistantOpen && <AIAssistant key="ai-assistant" />}
-          {isChatOpen && <ChatDrawer key="chat-drawer" />}
-          {isAppLauncherOpen && <AppLauncher key="app-launcher" />}
-          {isNotificationsOpen && <NotificationsDrawer key="notifications-drawer" />}
-        </AnimatePresence>
+        <GlobalDrawers />
       </div>
     </div>
   );

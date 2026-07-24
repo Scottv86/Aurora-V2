@@ -7,7 +7,8 @@ import {
   Type, 
   Mic,
   MessageSquare,
-  User as UserIcon
+  User as UserIcon,
+  Clock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -55,13 +56,13 @@ export const ChatDrawer = () => {
       {/* Header */}
       <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/30 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center border border-emerald-500/20">
-            <MessageSquare size={18} className="text-emerald-600 dark:text-emerald-400" />
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center border border-indigo-500/20">
+            <MessageSquare size={18} className="text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Team Chat</h3>
             <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
               <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">3 Members Active</span>
             </div>
           </div>
@@ -88,7 +89,7 @@ export const ChatDrawer = () => {
               "w-8 h-8 rounded-full flex items-center justify-center shrink-0 border",
               msg.role === 'user' 
                 ? "bg-indigo-500 border-indigo-400 text-white" 
-                : "bg-emerald-500/10 dark:bg-emerald-500/20 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : "bg-indigo-500/10 dark:bg-indigo-500/20 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
             )}>
               {msg.role === 'user' ? <UserIcon size={14} /> : <MessageSquare size={14} />}
             </div>
@@ -105,8 +106,9 @@ export const ChatDrawer = () => {
               )}>
                 {msg.content}
               </div>
-              <span className="text-[10px] text-zinc-400 px-1">
-                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <span className="text-[10px] text-zinc-400 px-1 select-none flex items-center gap-1">
+                <Clock size={10} className="text-zinc-400" />
+                {msg.timestamp ? `${new Date(msg.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}, ${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}` : ''}
               </span>
             </div>
           </div>
@@ -120,20 +122,20 @@ export const ChatDrawer = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Send a message..."
-            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 resize-none min-h-[100px] transition-all"
+            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-4 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 resize-none min-h-[100px] transition-all"
           />
           
           <div className="absolute bottom-3 left-4 flex items-center gap-3 text-zinc-400">
-            <button className="hover:text-emerald-500 transition-colors"><Smile size={18} /></button>
-            <button className="hover:text-emerald-500 transition-colors"><ImageIcon size={18} /></button>
-            <button className="hover:text-emerald-500 transition-colors"><Type size={18} /></button>
+            <button className="hover:text-indigo-500 transition-colors"><Smile size={18} /></button>
+            <button className="hover:text-indigo-500 transition-colors"><ImageIcon size={18} /></button>
+            <button className="hover:text-indigo-500 transition-colors"><Type size={18} /></button>
           </div>
 
           <div className="absolute bottom-3 right-3 flex items-center gap-2">
-            <button className="p-2 text-zinc-400 hover:text-emerald-500 transition-colors">
+            <button className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors">
               <Mic size={18} />
             </button>
-            <button className="p-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20">
+            <button className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20">
               <Send size={18} />
             </button>
           </div>

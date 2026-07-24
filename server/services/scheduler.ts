@@ -338,6 +338,13 @@ export class AutomationScheduler {
             }
           });
 
+          emitTenantUpdate(record.tenantId, 'sla_status_changed', {
+            recordId: record.id,
+            moduleId: record.moduleId,
+            moduleName: record.module?.name || 'Triage',
+            slaStatus: newStatus
+          });
+
           // If breached, we can trigger custom escalation triggers (like sending emails or firing automation events)
           if (newStatus === 'BREACHED') {
             console.log(`[Scheduler] SLA Breach Escalation for record ${record.id}`);

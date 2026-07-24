@@ -3,6 +3,7 @@ import { TenantRequest } from '../middleware/tenantMiddleware';
 import { runAgentLoop, executeAgentTool, resumeAgentLoop } from '../services/antigravityAgent';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 import { AutomationScheduler } from '../services/scheduler';
+import { emitTenantUpdate } from '../socket';
 
 const router = Router();
 
@@ -36,14 +37,27 @@ async function generateSmartSessionTitle(message: string): Promise<string> {
   return fallback.charAt(0).toUpperCase() + fallback.slice(1);
 }
 
-// GET all sessions
+// GET all active sessions
 router.get('/sessions', async (req: TenantRequest, res) => {
   try {
-    const db = req.db!;
+    const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
 
-    const sessions = await db.antigravitySession.findMany({
-      where: { tenantId },
+    const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
+    let trashedSessionIds: string[] = [];
+    if (trashModel) {
+      const trashed = await trashModel.findMany({
+        where: { tenantId, itemType: 'CHAT_SESSION' },
+        select: { itemId: true }
+      }).catch(() => []);
+      trashedSessionIds = trashed.map((t: any) => t.itemId);
+    }
+
+    const sessions = await (db as any).antigravitySession.findMany({
+      where: {
+        tenantId,
+        ...(trashedSessionIds.length > 0 ? { id: { notIn: trashedSessionIds } } : {})
+      },
       orderBy: { updatedAt: 'desc' }
     });
 
@@ -59,7 +73,7 @@ router.get('/sessions', async (req: TenantRequest, res) => {
         const formatted = newTitle ? (newTitle.charAt(0).toUpperCase() + newTitle.slice(1)) : session.title;
         if (formatted && formatted !== session.title && formatted.length > 1) {
           session.title = formatted;
-          db.antigravitySession.update({ where: { id: session.id }, data: { title: formatted } }).catch(() => {});
+          (db as any).antigravitySession.update({ where: { id: session.id }, data: { title: formatted } }).catch(() => {});
         }
       }
     }
@@ -74,10 +88,21 @@ router.get('/sessions', async (req: TenantRequest, res) => {
 // GET session details (including messages)
 router.get('/sessions/:id', async (req: TenantRequest, res) => {
   try {
-    const db = req.db!;
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
 
-    const session = await db.antigravitySession.findUnique({
+    const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
+    if (trashModel) {
+      const isTrashed = await trashModel.findFirst({
+        where: { tenantId, itemId: id, itemType: 'CHAT_SESSION' }
+      }).catch(() => null);
+      if (isTrashed) {
+        return res.status(404).json({ error: 'Chat session is in recycling bin' });
+      }
+    }
+
+    const session = await (db as any).antigravitySession.findUnique({
       where: { id },
       include: {
         messages: {
@@ -90,18 +115,30 @@ router.get('/sessions/:id', async (req: TenantRequest, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
+    // Exclude any messages soft deleted in recycling bin
+    if (session.messages && trashModel) {
+      const trashedMsgItems = await trashModel.findMany({
+        where: { tenantId, itemType: 'CHAT_MESSAGE' },
+        select: { itemId: true }
+      }).catch(() => []);
+      const trashedMsgIds = new Set(trashedMsgItems.map((t: any) => t.itemId));
+      if (trashedMsgIds.size > 0) {
+        session.messages = session.messages.filter((m: any) => !trashedMsgIds.has(m.id));
+      }
+    }
+
     // Auto-heal truncated or default session title if messages exist
     if (session.messages.length > 0) {
       const isDefaultOrTruncated = session.title === 'New Vibe Chat' || 
                                     session.title.length <= 30 || 
                                     session.title.endsWith('...');
       if (isDefaultOrTruncated) {
-        const firstUserMsg = session.messages.find(m => m.role === 'user');
+        const firstUserMsg = session.messages.find((m: any) => m.role === 'user');
         if (firstUserMsg && firstUserMsg.content) {
           const smartTitle = await generateSmartSessionTitle(firstUserMsg.content);
           if (smartTitle && smartTitle !== session.title) {
             session.title = smartTitle;
-            await db.antigravitySession.update({
+            await (db as any).antigravitySession.update({
               where: { id: session.id },
               data: { title: smartTitle }
             }).catch(() => {});
@@ -170,20 +207,118 @@ router.patch('/sessions/:id', async (req: TenantRequest, res) => {
   }
 });
 
-// DELETE session
+// DELETE session (Soft-delete into Recycling Bin)
 router.delete('/sessions/:id', async (req: TenantRequest, res) => {
   try {
-    const db = req.db!;
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
 
-    await db.antigravitySession.delete({
+    const session = await (db as any).antigravitySession.findUnique({
+      where: { id },
+      include: { messages: true }
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
+    if (trashModel) {
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await trashModel.create({
+        data: {
+          tenantId,
+          itemType: 'CHAT_SESSION',
+          itemId: session.id,
+          title: session.title || 'Chat Conversation',
+          subtitle: `Chat Conversation • ${session.messages?.length || 0} messages`,
+          payload: {
+            id: session.id,
+            title: session.title,
+            metadata: session.metadata,
+            messages: session.messages || []
+          },
+          deletedBy: (req as any).user?.email || 'User',
+          deletedAt: new Date(),
+          expiresAt
+        }
+      }).catch((e: any) => console.warn('[AntigravityRoutes] Soft-delete warning:', e.message));
+      emitTenantUpdate(tenantId, 'recycling_bin_updated', { action: 'add', itemType: 'CHAT_SESSION', itemId: session.id });
+    }
+
+    // Delete messages first to satisfy foreign key constraints before deleting session
+    await (db as any).antigravityMessage.deleteMany({
+      where: { sessionId: id }
+    }).catch((e: any) => console.warn('[AntigravityRoutes] Message deletion warning:', e.message));
+
+    await (db as any).antigravitySession.delete({
       where: { id }
     });
 
-    res.json({ success: true });
+    res.json({ success: true, message: 'Chat conversation moved to recycling bin' });
   } catch (err: any) {
     console.error('[AntigravityRoutes] DELETE /sessions/:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to delete session' });
+  }
+});
+
+// DELETE individual message (Soft-delete into Recycling Bin)
+router.delete('/sessions/:id/messages/:messageId', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+    const { id, messageId } = req.params;
+
+    const message = await (db as any).antigravityMessage.findUnique({
+      where: { id: messageId }
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
+    if (trashModel) {
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const snippet = message.content ? (message.content.length > 50 ? message.content.slice(0, 50) + '...' : message.content) : 'Chat Message';
+      await trashModel.create({
+        data: {
+          tenantId,
+          itemType: 'CHAT_MESSAGE',
+          itemId: message.id,
+          title: snippet,
+          subtitle: `Chat Message`,
+          payload: {
+            id: message.id,
+            sessionId: id,
+            role: message.role,
+            content: message.content,
+            steps: message.steps,
+            promptTokens: message.promptTokens,
+            completionTokens: message.completionTokens,
+            model: message.model,
+            provider: message.provider,
+            isBYOK: message.isBYOK,
+            keyHint: message.keyHint,
+            createdAt: message.createdAt
+          },
+          deletedBy: (req as any).user?.email || 'User',
+          deletedAt: new Date(),
+          expiresAt
+        }
+      }).catch((e: any) => console.warn('[AntigravityRoutes] Soft-delete message warning:', e.message));
+      emitTenantUpdate(tenantId, 'recycling_bin_updated', { action: 'add', itemType: 'CHAT_MESSAGE', itemId: message.id });
+    }
+
+    await (db as any).antigravityMessage.delete({
+      where: { id: messageId }
+    });
+
+    res.json({ success: true, message: 'Message moved to recycling bin' });
+  } catch (err: any) {
+    console.error('[AntigravityRoutes] DELETE message Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete message' });
   }
 });
 

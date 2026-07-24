@@ -24,6 +24,7 @@ import queryExplorerRoutes from './routes/queryExplorerRoutes';
 import reportRoutes from './routes/reportRoutes';
 import antigravityRoutes from './routes/antigravityRoutes';
 import aiSettingsRoutes from './routes/aiSettingsRoutes';
+import trashRoutes from './routes/trashRoutes';
 
 
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
@@ -117,6 +118,7 @@ app.use('/api/query-explorer', authenticate, requireTenantAccess, queryExplorerR
 app.use('/api/reports', authenticate, requireTenantAccess, reportRoutes);
 app.use('/api/antigravity', authenticate, requireTenantAccess, antigravityRoutes);
 app.use('/api/ai', authenticate, requireTenantAccess, aiSettingsRoutes);
+app.use('/api/trash', authenticate, requireTenantAccess, trashRoutes);
 
 
 
