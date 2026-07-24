@@ -37,11 +37,30 @@ async function generateSmartSessionTitle(message: string): Promise<string> {
   return fallback.charAt(0).toUpperCase() + fallback.slice(1);
 }
 
+function canUserAccessSession(session: any, userId?: string, isSuperAdmin?: boolean): boolean {
+  if (isSuperAdmin) return true;
+  if (!session) return false;
+  if (!session.userId) return true; // Legacy session with no owner
+  if (!userId) return true;
+  if (session.userId === userId) return true; // Creator/owner
+  if (session.isSharedWithTenant) return true; // Shared with whole tenancy
+
+  let sharedWith: string[] = [];
+  if (Array.isArray(session.sharedWithUserIds)) {
+    sharedWith = session.sharedWithUserIds;
+  } else if (typeof session.sharedWithUserIds === 'string') {
+    try { sharedWith = JSON.parse(session.sharedWithUserIds); } catch (e) {}
+  }
+  return sharedWith.includes(userId);
+}
+
 // GET all active sessions
 router.get('/sessions', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
+    const currentUserId = req.user?.uid;
+    const isSuperAdmin = req.user?.isSuperAdmin;
 
     const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
     let trashedSessionIds: string[] = [];
@@ -53,13 +72,18 @@ router.get('/sessions', async (req: TenantRequest, res) => {
       trashedSessionIds = trashed.map((t: any) => t.itemId);
     }
 
-    const sessions = await (db as any).antigravitySession.findMany({
+    let sessions = await (db as any).antigravitySession.findMany({
       where: {
         tenantId,
         ...(trashedSessionIds.length > 0 ? { id: { notIn: trashedSessionIds } } : {})
       },
       orderBy: { updatedAt: 'desc' }
     });
+
+    // Filter sessions to only those accessible by the user
+    if (!isSuperAdmin && currentUserId) {
+      sessions = sessions.filter((session: any) => canUserAccessSession(session, currentUserId, false));
+    }
 
     // Clean up legacy truncated/verbose session titles
     for (const session of sessions) {
@@ -90,6 +114,8 @@ router.get('/sessions/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
+    const currentUserId = req.user?.uid;
+    const isSuperAdmin = req.user?.isSuperAdmin;
     const { id } = req.params;
 
     const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
@@ -113,6 +139,10 @@ router.get('/sessions/:id', async (req: TenantRequest, res) => {
 
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (!canUserAccessSession(session, currentUserId, isSuperAdmin)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view this chat session' });
     }
 
     // Exclude any messages soft deleted in recycling bin
@@ -159,11 +189,15 @@ router.post('/sessions', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { title } = req.body;
+    const userId = req.user?.uid || null;
+    const { title, isSharedWithTenant, sharedWithUserIds } = req.body;
 
     const session = await db.antigravitySession.create({
       data: {
         tenantId,
+        userId,
+        isSharedWithTenant: Boolean(isSharedWithTenant),
+        sharedWithUserIds: Array.isArray(sharedWithUserIds) ? sharedWithUserIds : [],
         title: title || 'New Vibe Chat',
         metadata: {
           plan: "",
@@ -180,22 +214,32 @@ router.post('/sessions', async (req: TenantRequest, res) => {
   }
 });
 
-// PATCH update session title or metadata
+// PATCH update session title, metadata, or share settings
 router.patch('/sessions/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const { id } = req.params;
-    const { title, metadata } = req.body;
+    const currentUserId = req.user?.uid;
+    const isSuperAdmin = req.user?.isSuperAdmin;
+    const { title, metadata, isSharedWithTenant, sharedWithUserIds } = req.body;
 
     const existing = await db.antigravitySession.findUnique({ where: { id } });
     if (!existing) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
+    // Permission check: only owner or super admin (or legacy session owner) can modify sharing settings or session title
+    const isOwner = !existing.userId || existing.userId === currentUserId;
+    if (!isOwner && !isSuperAdmin) {
+      return res.status(403).json({ error: 'Only the chat owner can modify this chat session' });
+    }
+
     const updated = await db.antigravitySession.update({
       where: { id },
       data: {
         ...(title !== undefined ? { title } : {}),
+        ...(isSharedWithTenant !== undefined ? { isSharedWithTenant: Boolean(isSharedWithTenant) } : {}),
+        ...(sharedWithUserIds !== undefined ? { sharedWithUserIds } : {}),
         ...(metadata !== undefined ? { metadata: { ...((existing.metadata as object) || {}), ...metadata } } : {})
       }
     });
@@ -212,6 +256,8 @@ router.delete('/sessions/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
+    const currentUserId = req.user?.uid;
+    const isSuperAdmin = req.user?.isSuperAdmin;
     const { id } = req.params;
 
     const session = await (db as any).antigravitySession.findUnique({
@@ -221,6 +267,11 @@ router.delete('/sessions/:id', async (req: TenantRequest, res) => {
 
     if (!session) {
       return res.status(404).json({ error: 'Chat session not found' });
+    }
+
+    const isOwner = !session.userId || session.userId === currentUserId;
+    if (!isOwner && !isSuperAdmin) {
+      return res.status(403).json({ error: 'Only the chat owner can delete this session' });
     }
 
     const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;

@@ -10,14 +10,10 @@ const router = express.Router();
 // GET all members
 router.get('/', async (req: TenantRequest, res) => {
   try {
-    const db = req.db!;
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+
     const members = await db.tenantMember.findMany({
-      where: {
-        OR: [
-          { isSynthetic: true },
-          { user: { isSuperAdmin: false } }
-        ]
-      },
       include: {
         user: true,
         agent: true,
@@ -27,21 +23,43 @@ router.get('/', async (req: TenantRequest, res) => {
     });
 
     // Format for frontend
-    const formatted = members.map(m => ({
+    let formatted = members.map(m => ({
       id: m.id,
-      name: m.isSynthetic ? m.agent?.name : (m.firstName && m.familyName ? `${m.firstName} ${m.familyName}` : (m.user?.email.split('@')[0] || 'Unknown')),
-      email: m.isSynthetic ? 'Agent' : (m.user?.email || ''),
+      userId: m.userId || m.user?.id || m.id,
+      name: m.isSynthetic ? m.agent?.name : (m.firstName && m.familyName ? `${m.firstName} ${m.familyName}` : (m.user?.email ? m.user.email.split('@')[0] : 'Member')),
+      email: m.isSynthetic ? 'Agent' : (m.user?.email || m.personalEmail || ''),
       role: m.roleId,
       team: m.team?.name || 'Unassigned',
       teamId: m.teamId,
       status: m.status,
       isSynthetic: m.isSynthetic,
       position: m.position?.title || 'Undesignated',
-      avatarUrl: m.avatarUrl || (m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || 'U')}&background=random`),
+      avatarUrl: m.avatarUrl || (m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || m.firstName || 'U')}&background=random`),
       lastActive: m.isSynthetic ? 'Now' : 'Recent',
       isContractor: m.isContractor,
       licenceType: m.licenceType
     }));
+
+    // If no tenant members exist in tenantMember table, return registered users from User model
+    if (formatted.length === 0) {
+      const users = await (globalPrisma as any).user.findMany().catch(() => []);
+      formatted = users.map((u: any) => ({
+        id: u.id,
+        userId: u.id,
+        name: u.email ? u.email.split('@')[0] : 'User',
+        email: u.email || '',
+        role: u.isSuperAdmin ? 'Admin' : 'Standard',
+        team: 'Unassigned',
+        teamId: null,
+        status: 'Active',
+        isSynthetic: false,
+        position: 'Member',
+        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.email || 'U')}&background=random`,
+        lastActive: 'Recent',
+        isContractor: false,
+        licenceType: 'Standard'
+      }));
+    }
 
     res.json(formatted);
   } catch (err: any) {

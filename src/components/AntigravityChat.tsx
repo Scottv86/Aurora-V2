@@ -10,9 +10,9 @@ import {
   Sparkles, Bot, Terminal, Play, CheckCircle2, AlertCircle, 
   Loader2, Trash2, Send, Mic, MicOff, Plus, FileText, CheckSquare, 
   Copy, Table, Compass, Layers, X,
-  Code, Globe, Plug, Paperclip, ChevronDown,
+  Code, Globe, Plug, Paperclip, ChevronDown, ChevronRight, MoreVertical,
   Layout, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
-  History, Calendar, Folder, Settings, Clock
+  History, Calendar, Folder, Settings, Clock, Share2, Building, Users, Lock, User
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
@@ -22,6 +22,7 @@ import { DeleteConfirmationModal } from './Common/DeleteConfirmationModal';
 import { showAuroraToast } from './UI/AuroraToast';
 import { ScheduledTasksView } from './chat/ScheduledTasksView';
 import { NewScheduledTaskModal, ScheduledTaskData } from './chat/NewScheduledTaskModal';
+import { ShareChatModal } from './chat/ShareChatModal';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/antigravity';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
@@ -178,6 +179,9 @@ interface ChatMessage {
 interface ChatSession {
   id: string;
   title: string;
+  userId?: string | null;
+  isSharedWithTenant?: boolean;
+  sharedWithUserIds?: string[] | any;
   metadata: any;
   createdAt: string;
   updatedAt: string;
@@ -345,7 +349,7 @@ export const AntigravityChat = () => {
   if (lastPlatformPath.includes('/settings')) {
     lastPlatformPath = '/workspace';
   }
-  const { tenant, user: platformUser } = usePlatform();
+  const { tenant, user: platformUser, members: platformMembers } = usePlatform();
   const { session: authSession, user: authUser } = useAuth();
   
   const getFirstName = (): string => {
@@ -362,6 +366,36 @@ export const AntigravityChat = () => {
       return nameParts[0].charAt(0).toUpperCase() + nameParts[0].slice(1);
     }
     return 'Kenny';
+  };
+
+  const getAuthorName = (m: any): string => {
+    if (m?.authorName || m?.userName) return m.authorName || m.userName;
+
+    const targetUserId = m?.userId || activeSession?.userId;
+
+    if (targetUserId && Array.isArray(platformMembers)) {
+      const memberMatch = platformMembers.find((mem: any) => mem.userId === targetUserId || mem.id === targetUserId);
+      if (memberMatch) {
+        const name = (memberMatch as any).name || `${(memberMatch as any).firstName || ''} ${(memberMatch as any).lastName || ''}`.trim();
+        if (name) return name;
+      }
+    }
+
+    const platformName = (platformUser as any)?.name || `${(platformUser as any)?.firstName || ''} ${(platformUser as any)?.lastName || ''}`.trim();
+    if (platformName) return platformName;
+
+    const authFullName = authUser?.user_metadata?.full_name || authUser?.user_metadata?.name;
+    if (authFullName) return authFullName;
+
+    const emailPrefix = authUser?.email?.split('@')[0] || '';
+    if (emailPrefix) {
+      const parts = emailPrefix.split(/[._-]/).filter(Boolean);
+      if (parts.length > 0) {
+        return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+      }
+    }
+
+    return 'Kenny Powers';
   };
 
   const userName = getFirstName();
@@ -396,11 +430,43 @@ export const AntigravityChat = () => {
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionTitle, setEditingSessionTitle] = useState('');
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [menuTargetSession, setMenuTargetSession] = useState<ChatSession | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const sessionMenuRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const handleClickOutsideSessionMenu = (e: MouseEvent) => {
+      if (sessionMenuRef.current && !sessionMenuRef.current.contains(e.target as Node)) {
+        setMenuTargetSession(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutsideSessionMenu);
+    return () => document.removeEventListener('mousedown', handleClickOutsideSessionMenu);
+  }, []);
+
+  const handleOpenSessionMenu = (s: ChatSession, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (menuTargetSession?.id === s.id) {
+      setMenuTargetSession(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 215;
+    const menuHeight = 220;
+
+    // Position directly below the 3-dots button, starting slightly to its left
+    const left = Math.min(Math.max(16, rect.left - 24), window.innerWidth - menuWidth - 16);
+    const top = Math.min(rect.bottom + 4, window.innerHeight - menuHeight - 16);
+
+    setMenuPosition({ top, left });
+    setMenuTargetSession(s);
+  };
 
   // Folder Management State
   const [folders, setFolders] = useState<{ id: string; name: string }[]>(() => {
@@ -1891,19 +1957,19 @@ export const AntigravityChat = () => {
   );
 
   const renderSessionItem = (s: ChatSession) => {
-    const isPinned = !!s.metadata?.isPinned;
-    const currentFolderId = s.metadata?.folderId || 'aurora';
     const isEditing = editingSessionId === s.id;
 
     return (
       <div 
         key={s.id}
         onClick={() => !isEditing && navigate(`/workspace/aurora-vibe/${s.id}`)}
-        className={`group relative w-full flex items-center px-2.5 py-1.5 rounded-lg cursor-pointer transition-all border overflow-hidden ${
+        className={cn(
+          "group relative w-full flex items-center px-2.5 py-1.5 rounded-lg cursor-pointer transition-all border",
+          menuTargetSession?.id === s.id ? "z-30" : "z-0",
           s.id === sessionId 
             ? 'bg-zinc-100 dark:bg-white/10 border-zinc-200/50 dark:border-zinc-800/40 shadow-sm text-zinc-900 dark:text-white font-semibold' 
             : 'bg-transparent border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/50 dark:hover:bg-white/5'
-        }`}
+        )}
       >
         {isEditing ? (
           <input 
@@ -1920,89 +1986,43 @@ export const AntigravityChat = () => {
             className="w-full bg-white dark:bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-900 dark:text-white outline-none z-20"
           />
         ) : (
-          <span 
-            className="text-xs font-semibold w-full text-left truncate tracking-tight text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white pr-1 transition-colors"
-            title={s.title || 'Untitled Session'}
-          >
-            {s.title || 'Untitled Session'}
-          </span>
+          <div className="flex items-center min-w-0 flex-1 pr-1 overflow-hidden">
+            {(s.isSharedWithTenant || (Array.isArray(s.sharedWithUserIds) && s.sharedWithUserIds.length > 0)) && (
+              <span 
+                className="shrink-0 mr-1.5" 
+                title={
+                  s.isSharedWithTenant
+                    ? "Shared with Organization"
+                    : `Shared with ${s.sharedWithUserIds.length} team member(s)`
+                }
+              >
+                {s.isSharedWithTenant ? (
+                  <Building className="h-3 w-3 text-indigo-500" />
+                ) : (
+                  <Users className="h-3 w-3 text-indigo-500" />
+                )}
+              </span>
+            )}
+            <span 
+              className="text-xs font-semibold w-full text-left truncate tracking-tight text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors"
+              title={s.title || 'Untitled Session'}
+            >
+              {s.title || 'Untitled Session'}
+            </span>
+          </div>
         )}
         
         {!isEditing && (
-          <div 
-            className={`absolute right-0 top-0 bottom-0 flex items-center gap-0.5 pl-12 pr-1.5 rounded-r-lg opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 ${
-              s.id === sessionId
-                ? 'bg-gradient-to-l from-zinc-200 via-zinc-200 via-75% to-transparent dark:from-[#27272a] dark:via-[#27272a] dark:via-75% dark:to-transparent'
-                : 'bg-gradient-to-l from-zinc-100 via-zinc-100 via-75% to-transparent dark:from-[#141417] dark:via-[#141417] dark:via-75% dark:to-transparent'
-            }`}
-          >
-            {/* Rename Session */}
+          <div className="shrink-0 ml-1">
             <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingSessionId(s.id);
-                setEditingSessionTitle(s.title || '');
-              }}
-              className="p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
-              title="Rename Conversation"
-            >
-              <Edit2 className="h-3 w-3" />
-            </button>
-
-            {/* Pin Toggle */}
-            <button 
-              onClick={(e) => handleTogglePinSession(s, e)}
+              onClick={(e) => handleOpenSessionMenu(s, e)}
               className={cn(
-                "p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 transition-all cursor-pointer",
-                isPinned ? "text-amber-500 opacity-100" : "text-zinc-400 hover:text-amber-500"
+                "p-1 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-all cursor-pointer",
+                menuTargetSession?.id === s.id ? "opacity-100 bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200" : "opacity-0 group-hover:opacity-100"
               )}
-              title={isPinned ? "Unpin Conversation" : "Pin Conversation"}
+              title="Conversation options"
             >
-              <Pin className={cn("h-3 w-3", isPinned && "fill-amber-500")} />
-            </button>
-
-            {/* Move to Folder */}
-            <div className="relative">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMovingSessionId(movingSessionId === s.id ? null : s.id);
-                }}
-                className="p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 text-zinc-400 hover:text-indigo-500 transition-all cursor-pointer"
-                title="Move to Folder"
-              >
-                <FolderPlus className="h-3 w-3" />
-              </button>
-              {movingSessionId === s.id && (
-                <div 
-                  onClick={(e) => e.stopPropagation()} 
-                  className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-1 z-50 text-xs"
-                >
-                  <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-1">Move to Folder</div>
-                  {folders.map(f => (
-                    <button
-                      key={f.id}
-                      onClick={() => handleMoveSessionToFolder(s.id, f.id)}
-                      className={cn(
-                        "w-full text-left px-2 py-1 rounded-md transition-all truncate flex items-center gap-1.5 cursor-pointer",
-                        currentFolderId === f.id ? "font-bold text-indigo-600 dark:text-indigo-400" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      )}
-                    >
-                      <Folder className="h-3 w-3" />
-                      <span className="truncate">{f.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Delete Session */}
-            <button 
-              onClick={(e) => deleteSession(s.id, e)}
-              className="p-1 rounded hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60 text-zinc-400 hover:text-red-500 transition-all cursor-pointer"
-              title="Delete Session"
-            >
-              <Trash2 className="h-3 w-3" />
+              <MoreVertical className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
@@ -2476,12 +2496,21 @@ export const AntigravityChat = () => {
               {messages.map((m, idx) => {
                 if (m.role === 'user') {
                   const timestampStr = formatMessageDateTime(m.createdAt || (m as any).timestamp || new Date());
+                  const authorName = getAuthorName(m);
+
                   return (
                     <div key={m.id || idx} className="w-full flex flex-col items-end animate-fade-in space-y-1 group/usermsg">
                       <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-4 shadow-sm relative">
                         <div className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-sans">{m.content}</div>
                       </div>
                       <div className="flex items-center gap-2 text-[10.5px] text-zinc-500 dark:text-zinc-400 font-sans pr-1 select-none">
+                        {authorName && (
+                          <div className="flex items-center gap-1 font-semibold text-zinc-700 dark:text-zinc-300">
+                            <User className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
+                            <span>{authorName}</span>
+                          </div>
+                        )}
+                        {authorName && timestampStr && <span className="text-zinc-300 dark:text-zinc-700">•</span>}
                         {timestampStr && (
                           <div className="flex items-center gap-1">
                             <Clock className="h-3 w-3 text-zinc-400 dark:text-zinc-500" />
@@ -3367,6 +3396,155 @@ export const AntigravityChat = () => {
         title="Move to Recycling Bin"
         description="Are you sure you want to delete this conversation? It will be moved to the Recycling Bin where you can restore it anytime within 30 days."
       />
+
+      <ShareChatModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        session={activeSession}
+        currentUserId={authUser?.id}
+        onUpdateSession={(updated) => {
+          setActiveSession(prev => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+          setSessions(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
+        }}
+      />
+
+      {menuTargetSession && menuPosition && createPortal(
+        <div
+          ref={sessionMenuRef}
+          onClick={(e) => e.stopPropagation()}
+          style={{ top: `${menuPosition.top}px`, left: `${menuPosition.left}px` }}
+          className="fixed w-56 bg-[#1e1f20] dark:bg-zinc-900 border border-zinc-700/60 dark:border-zinc-800/90 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-1.5 z-[9999] text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 text-zinc-200 backdrop-blur-xl"
+        >
+          {/* Access Privacy Status Header */}
+          <div className="px-3 py-2 mb-1 rounded-xl bg-zinc-800/40 border border-zinc-700/30 flex items-center gap-2 text-[11px] text-zinc-300">
+            {menuTargetSession.isSharedWithTenant ? (
+              <>
+                <Building className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate"><strong>Shared:</strong> Shared with organisation</span>
+              </>
+            ) : (Array.isArray(menuTargetSession.sharedWithUserIds) && menuTargetSession.sharedWithUserIds.length > 0) ? (
+              <>
+                <Users className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate"><strong>Shared:</strong> Shared with {menuTargetSession.sharedWithUserIds.length} member(s)</span>
+              </>
+            ) : (
+              <>
+                <Lock className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <span className="truncate"><strong>Private:</strong> Only you can see this</span>
+              </>
+            )}
+          </div>
+          {/* Share conversation */}
+          <button
+            onClick={() => {
+              const target = menuTargetSession;
+              setMenuTargetSession(null);
+              setActiveSession(target);
+              setShowShareModal(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 dark:hover:bg-zinc-800 text-zinc-200 transition-all text-left font-medium cursor-pointer"
+          >
+            <Share2 className="h-4 w-4 text-zinc-400" />
+            <span>Share conversation</span>
+          </button>
+
+          {/* Pin / Unpin */}
+          <button
+            onClick={(e) => {
+              const target = menuTargetSession;
+              setMenuTargetSession(null);
+              handleTogglePinSession(target, e);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 dark:hover:bg-zinc-800 text-zinc-200 transition-all text-left font-medium cursor-pointer"
+          >
+            <Pin className={cn("h-4 w-4", menuTargetSession.metadata?.isPinned ? "text-amber-500 fill-amber-500" : "text-zinc-400")} />
+            <span>{menuTargetSession.metadata?.isPinned ? "Unpin" : "Pin"}</span>
+          </button>
+
+          {/* Rename */}
+          <button
+            onClick={() => {
+              const target = menuTargetSession;
+              setMenuTargetSession(null);
+              setEditingSessionId(target.id);
+              setEditingSessionTitle(target.title || '');
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 dark:hover:bg-zinc-800 text-zinc-200 transition-all text-left font-medium cursor-pointer"
+          >
+            <Edit2 className="h-4 w-4 text-zinc-400" />
+            <span>Rename</span>
+          </button>
+
+          {/* Move to folder (Mega Menu Flyout to the Right) */}
+          <div className="relative group/folder">
+            <button
+              type="button"
+              onClick={() => {
+                setMovingSessionId(movingSessionId === menuTargetSession.id ? null : menuTargetSession.id);
+              }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/10 dark:hover:bg-zinc-800 text-zinc-200 transition-all text-left font-medium cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <Folder className="h-4 w-4 text-zinc-400" />
+                <span>Move to folder</span>
+              </div>
+              <ChevronRight className="h-3.5 w-3.5 text-zinc-400 group-hover/folder:translate-x-0.5 transition-transform" />
+            </button>
+
+            {/* Submenu Flyout to the Right (Hover Only) */}
+            <div 
+              className="hidden group-hover/folder:block absolute left-full top-0 ml-1.5 w-48 bg-[#1e1f20] dark:bg-zinc-900 border border-zinc-700/60 dark:border-zinc-800/90 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] p-1.5 z-50 text-xs space-y-0.5 animate-in fade-in duration-150 backdrop-blur-xl"
+            >
+              <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2.5 py-1 flex items-center gap-1.5 border-b border-zinc-800/60 mb-1">
+                <Folder size={11} className="text-indigo-400" /> Select Folder
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-0.5 pr-0.5">
+                {folders.map(f => {
+                  const isCurrent = (menuTargetSession.metadata?.folderId || 'aurora') === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        handleMoveSessionToFolder(menuTargetSession.id, f.id);
+                        setMenuTargetSession(null);
+                        setMovingSessionId(null);
+                      }}
+                      className={cn(
+                        "w-full text-left px-2.5 py-1.5 rounded-xl transition-all truncate flex items-center justify-between gap-2 cursor-pointer text-xs font-medium",
+                        isCurrent 
+                          ? "font-bold text-indigo-400 bg-indigo-500/20 border border-indigo-500/30" 
+                          : "text-zinc-200 hover:bg-white/10 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Folder className={cn("h-3.5 w-3.5 shrink-0", isCurrent ? "text-indigo-400" : "text-zinc-400")} />
+                        <span className="truncate">{f.name}</span>
+                      </div>
+                      {isCurrent && <Check className="h-3 w-3 text-indigo-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="h-px bg-zinc-800/80 my-1" />
+
+          {/* Delete */}
+          <button
+            onClick={(e) => {
+              const targetId = menuTargetSession.id;
+              setMenuTargetSession(null);
+              deleteSession(targetId, e);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-red-500/20 text-red-400 transition-all text-left font-medium cursor-pointer"
+          >
+            <Trash2 className="h-4 w-4 text-red-400" />
+            <span>Delete</span>
+          </button>
+        </div>,
+        document.body
+      )}
 
       {showQuickKeyModal && (() => {
         const config = PROVIDER_QUICK_KEY_CONFIGS[quickKeyProvider] || PROVIDER_QUICK_KEY_CONFIGS.google;

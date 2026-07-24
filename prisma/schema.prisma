@@ -756,16 +756,20 @@ model Report {
 }
 
 model AntigravitySession {
-  id        String               @id @default(cuid())
-  tenantId  String               @map("tenant_id")
-  title     String
-  metadata  Json?                @default("{}")
-  createdAt DateTime             @default(now()) @map("created_at")
-  updatedAt DateTime             @updatedAt @map("updated_at")
-  messages  AntigravityMessage[]
-  tenant    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                 String               @id @default(cuid())
+  tenantId           String               @map("tenant_id")
+  userId             String?              @map("user_id")
+  isSharedWithTenant Boolean              @default(false) @map("is_shared_with_tenant")
+  sharedWithUserIds  Json?                @default("[]") @map("shared_with_user_ids")
+  title              String
+  metadata           Json?                @default("{}")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  messages           AntigravityMessage[]
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([tenantId, userId])
   @@map("antigravity_sessions")
 }
 
