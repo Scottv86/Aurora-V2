@@ -3084,8 +3084,15 @@ export const AntigravityChat = () => {
       </div>
 
       {/* 3. Right Panel: Artifacts & Previews */}
-      {showRightPanel && (
-        <div className="w-[500px] bg-white/70 dark:bg-zinc-900/60 border-l border-zinc-200/50 dark:border-zinc-800/40 backdrop-blur-xl flex flex-col flex-shrink-0 overflow-hidden">
+      <AnimatePresence>
+        {showRightPanel && (
+          <motion.aside
+            initial={{ x: 400, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 400, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="w-[500px] bg-white/70 dark:bg-zinc-900/60 border-l border-zinc-200/50 dark:border-zinc-800/40 backdrop-blur-xl flex flex-col flex-shrink-0 overflow-hidden"
+          >
         {/* Tabs header */}
         <div className="flex border-b border-zinc-200/50 dark:border-zinc-800/40 bg-zinc-50/50 dark:bg-zinc-950/40 p-1 flex-shrink-0 overflow-x-auto">
           {[
@@ -3347,8 +3354,9 @@ export const AntigravityChat = () => {
           )}
 
         </div>
-      </div>
+      </motion.aside>
       )}
+      </AnimatePresence>
         </>
       )}
       
