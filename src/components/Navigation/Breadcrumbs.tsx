@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
+import { DriveService } from '../../services/driveService';
 import { cn } from '../../lib/utils';
 
 const PATH_MAP: Record<string, string> = {
@@ -14,7 +15,9 @@ const PATH_MAP: Record<string, string> = {
   usage: 'Model Usage',
   subscription: 'Subscription',
   'platform-modules': 'Platform Modules',
-  apps: 'App Catalog',
+  apps: 'Apps',
+  docs: 'Documents',
+  drive: 'Drive',
   messaging: 'Messaging',
   database: 'Database',
   lists: 'Lists',
@@ -59,8 +62,13 @@ export const Breadcrumbs = () => {
     // 1. Check for context-driven overrides first (e.g. from RecordDetailView)
     if (breadcrumbOverrides[segment]) return breadcrumbOverrides[segment];
 
-    // 2. Check static PATH_MAP mapping next
+    // 2. Check DriveService for files/documents or folders
+    const driveItem = DriveService.getItemById(segment);
+    if (driveItem) return driveItem.name;
+
+    // 3. Check static PATH_MAP mapping next
     if (PATH_MAP[segment]) return PATH_MAP[segment];
+
 
     // 3. Check modules or queues
     if (
@@ -124,8 +132,9 @@ export const Breadcrumbs = () => {
     };
   }).filter((item) => {
     if (isSettings && item.segment === 'workspace') return false;
-    return !['records', 'sub', 'member', 'teams', 'positions', 'pages', 'page'].includes(item.segment);
+    return !['records', 'sub', 'member', 'teams', 'positions', 'pages', 'page', 'apps'].includes(item.segment);
   });
+
 
   const searchParams = new URLSearchParams(location.search);
   const isReportBuilder = location.pathname.includes('/report-management') && searchParams.get('mode') === 'builder';

@@ -82,7 +82,11 @@ import { QueryExplorer } from './pages/Settings/QueryExplorer';
 import { RecordsManagement } from './pages/Platform/RecordsManagement';
 import { RecordsManagementSettings } from './pages/Settings/PlatformModules/RecordsManagementSettings';
 import { ReportManagementSettings } from './pages/Settings/PlatformModules/ReportManagementSettings';
+import { DriveApp } from './pages/Apps/DriveApp';
+import { DocsApp } from './pages/Apps/DocsApp';
+import { DocEditor } from './pages/Apps/DocEditor';
 import { slugify } from './lib/utils';
+
 
 
 
@@ -174,7 +178,7 @@ const App = () => {
             <PlatformProvider>
           <ModalStackProvider>
             <Router>
-              <Toaster position="top-right" expand={false} richColors />
+              <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
               <StackedModalManager />
               <Routes>
               {/* Login & Root Redirect */}
@@ -239,7 +243,13 @@ const App = () => {
                 <Route path="platform/api" element={<APISettings />} />
                 <Route path="platform/finance" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
                 <Route path="platform/records-management" element={<RecordsManagement />} />
+                
+                {/* Aurora Utility Apps */}
+                <Route path="apps/drive" element={<DriveApp />} />
+                <Route path="apps/docs" element={<DocsApp />} />
+                <Route path="apps/docs/:documentId" element={<DocEditor />} />
               </Route>
+
               
               {/* Settings & Workforce (Developer Only) */}
               <Route 

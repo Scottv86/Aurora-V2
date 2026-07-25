@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
 import { LayoutGrid, Search, ExternalLink, X } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -16,8 +17,8 @@ interface AppItem {
 
 const APPS: AppItem[] = [
   { id: 'inbox', label: 'Inbox', iconName: 'Inbox', description: 'Unified communication hub', color: 'text-blue-500' },
-  { id: 'docs', label: 'Docs', iconName: 'FileText', description: 'Collaborative documents', color: 'text-indigo-500' },
-  { id: 'drive', label: 'Drive', iconName: 'Folder', description: 'Secure cloud storage', color: 'text-amber-500' },
+  { id: 'docs', label: 'Documents', iconName: 'FileText', description: 'Collaborative documents & merge fields', color: 'text-indigo-500', to: '/workspace/apps/docs' },
+  { id: 'drive', label: 'Drive', iconName: 'Folder', description: 'Personal & tenant shared storage', color: 'text-amber-500', to: '/workspace/apps/drive' },
   { id: 'chat', label: 'Chat', iconName: 'MessageSquare', description: 'Real-time team messaging', color: 'text-emerald-500' },
   { id: 'meet', label: 'Meet', iconName: 'Video', description: 'Video conferencing', color: 'text-rose-500' },
   { id: 'calendar', label: 'Calendar', iconName: 'Calendar', description: 'Schedule and events', color: 'text-blue-600' },
@@ -33,6 +34,7 @@ const APPS: AppItem[] = [
 ];
 
 export const AppLauncher = () => {
+  const navigate = useNavigate();
   const { tenant, setIsAppLauncherOpen } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -95,8 +97,14 @@ export const AppLauncher = () => {
               <button
                 key={app.id}
                 disabled={!app.to}
+                onClick={() => {
+                  if (app.to) {
+                    setIsAppLauncherOpen(false);
+                    navigate(app.to);
+                  }
+                }}
                 className={cn(
-                  "flex flex-col items-center justify-center p-4 rounded-xl transition-all duration-200 relative group/app",
+                  "flex flex-col items-center justify-center p-4 rounded-xl transition-all duration-200 relative group/app cursor-pointer",
                   app.to
                     ? "hover:bg-zinc-100 dark:hover:bg-white/5 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
                     : "opacity-60 cursor-not-allowed grayscale-[0.5]"
@@ -109,7 +117,7 @@ export const AppLauncher = () => {
                 )}>
                   <Icon size={24} />
                 </div>
-                <span className="text-[11px] font-bold text-zinc-900 dark:text-white mb-0.5">{app.label}</span>
+                <span className="text-[11px] font-bold text-zinc-900 dark:text-white mb-0.5 text-center leading-tight">{app.label}</span>
                 {!app.to && (
                   <span className="text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-tighter">Soon</span>
                 )}
@@ -121,8 +129,8 @@ export const AppLauncher = () => {
                   {!app.to ? (
                     <span className="mt-2 text-[8px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase">Coming Soon</span>
                   ) : (
-                    <div className="mt-2 text-indigo-600 dark:text-indigo-400">
-                      <ExternalLink size={12} />
+                    <div className="mt-2 text-indigo-600 dark:text-indigo-400 flex items-center gap-1 text-[9px] font-bold">
+                      Open <ExternalLink size={10} />
                     </div>
                   )}
                 </div>
@@ -134,13 +142,23 @@ export const AppLauncher = () => {
 
       {/* Footer */}
       <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-center justify-between">
-        <button className="text-[10px] font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest">
+        <button 
+          onClick={() => {
+            setIsAppLauncherOpen(false);
+            navigate('/workspace/settings/apps');
+          }}
+          className="text-[10px] font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest cursor-pointer"
+        >
           Manage Apps
         </button>
-        <button className="text-[10px] font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest">
+        <button 
+          onClick={() => alert('App Request submitted to workspace administrator.')}
+          className="text-[10px] font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest cursor-pointer"
+        >
           Request App
         </button>
       </div>
     </motion.aside>
   );
 };
+

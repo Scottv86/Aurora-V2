@@ -19,7 +19,9 @@ import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
+import { DriveService } from '../../services/driveService';
 import { toast } from 'sonner';
+
 
 export interface TrashItem {
   id: string;
@@ -123,6 +125,8 @@ export const RecyclingBinDrawer = () => {
   const handleRestore = async (id: string, title: string) => {
     try {
       const token = session?.access_token;
+      const targetItem = items.find(i => i.id === id);
+
       const res = await fetch(`${API_BASE_URL}/api/trash/${id}/restore`, {
         method: 'POST',
         headers: {
@@ -131,6 +135,9 @@ export const RecyclingBinDrawer = () => {
         }
       });
       if (res.ok) {
+        if (targetItem?.itemId) {
+          DriveService.restoreItem(targetItem.itemId);
+        }
         toast.success(`✓ Restored "${title}" successfully`);
         setItems(prev => prev.filter(i => i.id !== id));
       } else {
@@ -140,6 +147,7 @@ export const RecyclingBinDrawer = () => {
       toast.error(err.message || 'Error restoring item');
     }
   };
+
 
   const handleDeletePermanently = async (id: string, title: string) => {
     try {
@@ -190,6 +198,9 @@ export const RecyclingBinDrawer = () => {
 
   const getItemIcon = (itemType: string) => {
     switch (itemType) {
+      case 'DOCUMENT':
+      case 'DRIVE_ITEM': return <FileText size={16} className="text-indigo-500" />;
+      case 'FOLDER': return <Folder size={16} className="text-amber-500" />;
       case 'RECORD': return <FileText size={16} className="text-blue-500" />;
       case 'MODULE': return <Folder size={16} className="text-amber-500" />;
       case 'AUTOMATION': return <Zap size={16} className="text-purple-500" />;
@@ -230,20 +241,18 @@ export const RecyclingBinDrawer = () => {
       {/* Header */}
       <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 backdrop-blur-md">
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center border border-indigo-500/20">
-              <Trash2 size={18} className="text-indigo-600 dark:text-indigo-400" />
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+              <Trash2 size={18} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                 Recycling Bin
-                <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold px-1.5 py-0.5 rounded-full border border-indigo-500/20">
+                <span className="px-2 py-0.5 text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-500/20">
                   {items.length}
                 </span>
-              </h3>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
-                Items sit for 30 days before permanent deletion
-              </p>
+              </h2>
+              <p className="text-[10px] text-zinc-400">Items sit for 30 days before permanent deletion</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -277,7 +286,7 @@ export const RecyclingBinDrawer = () => {
 
         {/* Tabs */}
         <div className="flex items-center gap-1 mt-3 overflow-x-auto scrollbar-none pb-0.5">
-          {['ALL', 'CHAT_SESSION', 'CHAT_MESSAGE', 'RECORD', 'MODULE', 'AUTOMATION', 'CONNECTOR'].map(tab => (
+          {['ALL', 'DOCUMENT', 'CHAT_SESSION', 'RECORD', 'MODULE', 'AUTOMATION', 'CONNECTOR'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -288,7 +297,7 @@ export const RecyclingBinDrawer = () => {
                   : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
               )}
             >
-              {tab === 'ALL' ? 'All' : tab.replace('_', ' ')}
+              {tab === 'ALL' ? 'All' : tab === 'DOCUMENT' ? 'Documents' : tab.replace('_', ' ')}
             </button>
           ))}
         </div>

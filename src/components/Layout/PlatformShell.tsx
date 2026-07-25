@@ -514,7 +514,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   }, [menuConfig, modules]);
 
   if (authLoading || platformLoading) {
-    return <PageLoader label="Initializing Aurora" />;
+    return <PageLoader label="Loading your workspace..." />;
   }
 
   if (!user) {

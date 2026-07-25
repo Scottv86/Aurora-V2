@@ -911,7 +911,17 @@ CORE GUIDELINES:
      - records.data is a JSONB column containing fields. (e.g., data->>'status' = 'Open').
 4. If testing third-party APIs, write a node/javascript snippet and execute it via "execute_scratch_script".
 5. Run searches using "search_web" to look up API structures or code formats.
-6. Keep chat responses concise. Rely heavily on the right-hand panel artifacts for large layouts, plans, and charts.`;
+6. VISUALISATION & WIDGET DIRECTIVES:
+   - Visualisations (charts, maps, data grids) render directly INLINE inside the user's chat message stream. Do NOT tell the user that charts or maps are rendered in the side panel.
+   - When generating data charts, output a \`\`\`chart JSON code block:
+     \`\`\`chart
+     { "title": "Chart Title", "type": "bar", "xAxisKey": "name", "data": [{ "name": "Item A", "value": 10 }], "dataKeys": [{ "key": "value", "name": "Metric" }] }
+     \`\`\`
+   - When generating geospatial maps, output a \`\`\`map JSON code block:
+     \`\`\`map
+     { "title": "Map Title", "center": [-33.8688, 151.2093], "zoom": 12, "markers": [{ "lat": -33.8688, "lng": 151.2093, "label": "Location Name" }] }
+     \`\`\`
+7. Keep chat responses concise. Rely heavily on right-hand panel artifacts ONLY for large code implementation plans and document drafts.`;
 
   const contents: any[] = [];
   
@@ -968,7 +978,7 @@ CORE GUIDELINES:
   let turnCompletionTokens = 0;
   const turnStartTime = Date.now();
 
-  emitStep(socketId, { type: 'thought', content: "Initializing Aurora..." });
+  emitStep(socketId, { type: 'thought', content: "Getting things ready..." });
 
   let activeMetadata = (session.metadata as any) || {};
 
@@ -2281,7 +2291,17 @@ CORE GUIDELINES:
      - records.data is a JSONB column containing fields. (e.g., data->>'status' = 'Open').
 4. If testing third-party APIs, write a node/javascript snippet and execute it via "execute_scratch_script".
 5. Run searches using "search_web" to look up API structures or code formats.
-6. Keep chat responses concise. Rely heavily on the right-hand panel artifacts for large layouts, plans, and charts.`;
+6. VISUALISATION & WIDGET DIRECTIVES:
+   - Visualisations (charts, maps, data grids) render directly INLINE inside the user's chat message stream. Do NOT tell the user that charts or maps are rendered in the side panel.
+   - When generating data charts, output a \`\`\`chart JSON code block:
+     \`\`\`chart
+     { "title": "Chart Title", "type": "bar", "xAxisKey": "name", "data": [{ "name": "Item A", "value": 10 }], "dataKeys": [{ "key": "value", "name": "Metric" }] }
+     \`\`\`
+   - When generating geospatial maps, output a \`\`\`map JSON code block:
+     \`\`\`map
+     { "title": "Map Title", "center": [-33.8688, 151.2093], "zoom": 12, "markers": [{ "lat": -33.8688, "lng": 151.2093, "label": "Location Name" }] }
+     \`\`\`
+7. Keep chat responses concise. Rely heavily on right-hand panel artifacts ONLY for large code implementation plans and document drafts.`;
 
   let loopCount = 0;
   const maxLoops = 15;

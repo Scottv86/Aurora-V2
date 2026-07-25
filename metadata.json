@@ -1,5 +1,5 @@
 {
-  "name": "Aurora Module Builder",
+  "name": "AuroraOS",
   "description": "Professional-grade AI-native module builder with grid-based layout and real-time configuration.",
   "requestFramePermissions": [
     "camera",

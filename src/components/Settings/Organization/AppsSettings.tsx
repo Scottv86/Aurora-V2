@@ -28,8 +28,9 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const AVAILABLE_APPS = [
   { id: 'inbox', label: 'Inbox', icon: Inbox, description: 'Unified communication hub for all your channels.', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { id: 'docs', label: 'Docs', icon: FileText, description: 'Collaborative document editing and management.', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-  { id: 'drive', label: 'Drive', icon: Folder, description: 'Secure cloud storage for all your business files.', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  { id: 'docs', label: 'Documents', icon: FileText, description: 'Collaborative document editor with module merge fields.', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+  { id: 'drive', label: 'Drive', icon: Folder, description: 'Personal & tenant shared storage with records governance.', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+
   { id: 'chat', label: 'Chat', icon: MessageSquare, description: 'Real-time team messaging and collaboration.', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   { id: 'meet', label: 'Meet', icon: Video, description: 'High-quality video conferencing and meetings.', color: 'text-rose-500', bg: 'bg-rose-500/10' },
   { id: 'calendar', label: 'Calendar', icon: Calendar, description: 'Advanced scheduling and event management.', color: 'text-blue-600', bg: 'bg-blue-600/10' },

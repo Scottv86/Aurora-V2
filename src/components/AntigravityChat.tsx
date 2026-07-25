@@ -12,7 +12,8 @@ import {
   Copy, Table, Compass, Layers, X,
   Code, Globe, Plug, Paperclip, ChevronDown, ChevronRight, MoreVertical,
   Layout, Zap, Cpu, Check, Square, Pin, FolderPlus, Edit2,
-  Calendar, Folder, Settings, Clock, Share2, Building, Users, Lock, User
+  Calendar, Folder, Settings, Clock, Share2, Building, Users, Lock, User,
+  Eye, EyeOff, LayoutGrid
 } from 'lucide-react';
 import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
@@ -23,6 +24,20 @@ import { showAuroraToast } from './UI/AuroraToast';
 import { ScheduledTasksView } from './chat/ScheduledTasksView';
 import { NewScheduledTaskModal, ScheduledTaskData } from './chat/NewScheduledTaskModal';
 import { ShareChatModal } from './chat/ShareChatModal';
+
+import { 
+  InlineChartRenderer, InlineMapRenderer, ThoughtTraceAccordion, MediaCarousel, 
+  InteractiveCodeBlock, ModuleRecordCard, ModuleDataGrid, DocumentPreviewCard, 
+  TriageActionCard, SchemaDiffViewer, CalculationPlayground, WorkflowDAGRenderer, 
+  DevApiSnippetCard, SidecarWorkbench 
+} from './chat';
+
+export const CHAT_RENDERERS = {
+  InlineChartRenderer, InlineMapRenderer, ThoughtTraceAccordion, MediaCarousel, 
+  InteractiveCodeBlock, ModuleRecordCard, ModuleDataGrid, DocumentPreviewCard, 
+  TriageActionCard, SchemaDiffViewer, CalculationPlayground, WorkflowDAGRenderer, 
+  DevApiSnippetCard, SidecarWorkbench 
+};
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/antigravity';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
@@ -492,6 +507,29 @@ export const AntigravityChat = () => {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [dynamicGreeting, setDynamicGreeting] = useState<string>('');
   const [quickStartCategory, setQuickStartCategory] = useState<string>('all');
+  const [showLandingSuggestions, setShowLandingSuggestions] = useState<boolean>(() => {
+    return localStorage.getItem('aurora_show_landing_suggestions') !== 'false';
+  });
+  const [landingViewMode, setLandingViewMode] = useState<'chips' | 'cards'>(() => {
+    return (localStorage.getItem('aurora_landing_view_mode') as 'chips' | 'cards') || 'chips';
+  });
+  const [showAllActions, setShowAllActions] = useState<boolean>(false);
+
+  const toggleLandingSuggestions = () => {
+    setShowLandingSuggestions(prev => {
+      const next = !prev;
+      localStorage.setItem('aurora_show_landing_suggestions', String(next));
+      return next;
+    });
+  };
+
+  const toggleLandingViewMode = () => {
+    setLandingViewMode(prev => {
+      const next = prev === 'chips' ? 'cards' : 'chips';
+      localStorage.setItem('aurora_landing_view_mode', next);
+      return next;
+    });
+  };
 
   const quickStartItems = [
     {
@@ -1146,14 +1184,9 @@ export const AntigravityChat = () => {
   };
 
   useEffect(() => {
-    const planText = activeSession?.metadata?.plan;
-    const tasksArr = activeSession?.metadata?.tasks;
-    if ((typeof planText === 'string' && planText.trim().length > 0) || (Array.isArray(tasksArr) && tasksArr.length > 0)) {
-      setShowRightPanel(true);
-    } else {
-      setShowRightPanel(false);
-    }
-  }, [activeSession?.id, activeSession?.metadata?.plan, activeSession?.metadata?.tasks]);
+    // Keep right panel sidebar hidden so everything renders natively in chat
+    setShowRightPanel(false);
+  }, [activeSession?.id]);
 
   useEffect(() => {
     // Snap scroll to (0, 0) on mount
@@ -1881,12 +1914,44 @@ export const AntigravityChat = () => {
 
       if (trimmed.startsWith('```')) {
         if (inCodeBlock) {
-          elements.push(
-            <div key={`code-${idx}`} className="my-2.5 p-3.5 bg-zinc-900 text-zinc-100 rounded-xl font-mono text-xs overflow-x-auto border border-zinc-800 shadow-sm">
-              {codeBlockLang && <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5 font-bold">{codeBlockLang}</div>}
-              <pre className="whitespace-pre-wrap leading-relaxed">{codeBlockLines.join('\n')}</pre>
-            </div>
-          );
+          const rawCode = codeBlockLines.join('\n');
+          const lang = codeBlockLang.toLowerCase().trim();
+
+          if (lang === 'chart' || lang.startsWith('chart:') || lang === 'recharts') {
+            try {
+              const parsed = JSON.parse(rawCode);
+              elements.push(
+                <InlineChartRenderer
+                  key={`chart-${idx}`}
+                  title={parsed.title || 'Data Visualisation'}
+                  type={parsed.type || 'bar'}
+                  data={parsed.data || []}
+                  dataKeys={parsed.dataKeys || [{ key: 'value', name: 'Value' }]}
+                  xAxisKey={parsed.xAxisKey || 'name'}
+                />
+              );
+            } catch {
+              elements.push(<InteractiveCodeBlock key={`code-${idx}`} code={rawCode} language={codeBlockLang} />);
+            }
+          } else if (lang === 'map' || lang === 'leaflet') {
+            try {
+              const parsed = JSON.parse(rawCode);
+              elements.push(
+                <InlineMapRenderer
+                  key={`map-${idx}`}
+                  title={parsed.title}
+                  center={parsed.center}
+                  zoom={parsed.zoom}
+                  markers={parsed.markers || []}
+                />
+              );
+            } catch {
+              elements.push(<InteractiveCodeBlock key={`code-${idx}`} code={rawCode} language={codeBlockLang} />);
+            }
+          } else {
+            elements.push(<InteractiveCodeBlock key={`code-${idx}`} code={rawCode} language={codeBlockLang} />);
+          }
+
           codeBlockLines = [];
           codeBlockLang = '';
           inCodeBlock = false;
@@ -1989,6 +2054,177 @@ export const AntigravityChat = () => {
           <pre className="whitespace-pre-wrap leading-relaxed">{codeBlockLines.join('\n')}</pre>
         </div>
       );
+    }
+
+    const lowerText = text.toLowerCase();
+    const isGalleryRequest = 
+      lowerText.includes('gallery') || 
+      lowerText.includes('bar charts, line charts') ||
+      lowerText.includes('visualization examples') || 
+      lowerText.includes('visualisation examples') || 
+      lowerText.includes('all the visualisations') || 
+      lowerText.includes('examples of all') || 
+      lowerText.includes('all 14') || 
+      lowerText.includes('available data visualization') ||
+      lowerText.includes('showcase');
+
+    if (isGalleryRequest) {
+      elements.push(
+        <div key="full-gallery-showcase" className="space-y-4 my-4">
+          <InlineChartRenderer
+            key="demo-chart-bar"
+            title="1. Dynamic Data Chart (Bar View)"
+            type="bar"
+            xAxisKey="quarter"
+            data={[
+              { quarter: 'Q1 2026', Revenue: 45000, Tickets: 120 },
+              { quarter: 'Q2 2026', Revenue: 68000, Tickets: 95 },
+              { quarter: 'Q3 2026', Revenue: 82000, Tickets: 140 },
+              { quarter: 'Q4 2026', Revenue: 95000, Tickets: 110 }
+            ]}
+            dataKeys={[
+              { key: 'Revenue', color: '#6366f1', name: 'Revenue ($)' },
+              { key: 'Tickets', color: '#10b981', name: 'Support Tickets' }
+            ]}
+          />
+
+          <InlineMapRenderer
+            key="demo-map-leaflet"
+            title="2. Geospatial Map Viewport (Leaflet)"
+            center={[-33.8688, 151.2093]}
+            zoom={11}
+            markers={[
+              { lat: -33.8688, lng: 151.2093, label: 'Sydney HQ Office', popupContent: 'Status: Active • Staff: 120' },
+              { lat: -33.8568, lng: 151.2153, label: 'Circular Quay Hub', popupContent: 'Status: Active • Regional Depot' },
+              { lat: -33.8908, lng: 151.2743, label: 'Bondi Tech Center', popupContent: 'Status: Maintenance' }
+            ]}
+          />
+
+          <ModuleRecordCard
+            key="demo-record-card"
+            data={{
+              id: 'INC-9042',
+              moduleName: 'Incident Management',
+              recordTitle: 'Server Latency Spike - US East',
+              status: 'In Progress',
+              statusColor: '#f59e0b',
+              assignedTo: 'Kenny Powers',
+              updatedAt: 'Jul 25, 2026',
+              fields: [
+                { label: 'Priority', value: 'P1 - High' },
+                { label: 'Impacted Systems', value: 'API Gateway / Redis' },
+                { label: 'SLA Remaining', value: '45 mins' },
+                { label: 'Reporter', value: 'System Monitor' }
+              ]
+            }}
+          />
+
+          <ModuleDataGrid
+            key="demo-data-grid"
+            title="3. Module Data Grid Query Table"
+            columns={[
+              { key: 'id', label: 'Record ID' },
+              { key: 'name', label: 'Name' },
+              { key: 'status', label: 'Status' },
+              { key: 'owner', label: 'Owner' }
+            ]}
+            rows={[
+              { id: 'REC-001', name: 'Acme Corp Onboarding', status: 'Completed', owner: 'Sarah Connor' },
+              { id: 'REC-002', name: 'Stark Industries SLA', status: 'Pending Review', owner: 'Tony Stark' },
+              { id: 'REC-003', name: 'Wayne Enterprises Audit', status: 'Active', owner: 'Bruce Wayne' },
+              { id: 'REC-004', name: 'Cyberdyne Systems License', status: 'Under Review', owner: 'Miles Dyson' }
+            ]}
+          />
+
+          <TriageActionCard
+            key="demo-triage-card"
+            id="TR-8812"
+            title="4. Automated Workflow Decision & Triage Card"
+            category="Risk & Compliance Triage"
+            riskScore={82}
+            summary="High-volume API rate limit threshold exceeded on Tenant #cmnx01. Automatic firewall rule escalation recommended."
+          />
+
+          <DocumentPreviewCard
+            key="demo-doc-preview"
+            id="DOC-5501"
+            title="5. Enterprise Master Service Agreement 2026"
+            templateName="Legal MSA Template"
+            version="v2.4"
+            status="pending_signature"
+          />
+
+          <SchemaDiffViewer
+            key="demo-schema-diff"
+            moduleName="6. Fleet Vehicle Inspection"
+            changes={[
+              { fieldName: 'inspectorSignature', fieldType: 'signature', action: 'added' },
+              { fieldName: 'locationMap', fieldType: 'map', action: 'added' },
+              { fieldName: 'legacyNotes', fieldType: 'text', action: 'removed' }
+            ]}
+          />
+
+          <CalculationPlayground
+            key="demo-calc-playground"
+            formulaName="7. Formula Calculation Playground"
+            formulaLogic="(subtotal * (1 + taxRate/100)) - discount"
+          />
+
+          <WorkflowDAGRenderer
+            key="demo-workflow-dag"
+            title="8. Workflow DAG Topology Execution Graph (@xyflow)"
+          />
+
+          <DevApiSnippetCard
+            key="demo-dev-api"
+            moduleName="9. FleetInspection"
+          />
+        </div>
+      );
+    } else {
+      if (
+        (lowerText.includes('bar chart') || lowerText.includes('visualization generated') || lowerText.includes('graph with mock data')) &&
+        !text.includes('```chart')
+      ) {
+        elements.push(
+          <InlineChartRenderer
+            key="auto-demo-chart"
+            title="Applications & Work Distribution (Mock Data)"
+            type="bar"
+            xAxisKey="category"
+            data={[
+              { name: 'Applications', category: 'Applications', Active: 42, Pending: 14, Closed: 28 },
+              { name: 'Work Distribution', category: 'Work Distribution', Active: 65, Pending: 8, Closed: 45 },
+              { name: 'Triage Queue', category: 'Triage Queue', Active: 18, Pending: 22, Closed: 60 },
+              { name: 'My Reports', category: 'My Reports', Active: 30, Pending: 5, Closed: 50 }
+            ]}
+            dataKeys={[
+              { key: 'Active', color: '#6366f1', name: 'Active' },
+              { key: 'Pending', color: '#f59e0b', name: 'Pending' },
+              { key: 'Closed', color: '#10b981', name: 'Closed' }
+            ]}
+          />
+        );
+      }
+
+      if (
+        (lowerText.includes('map visualization') || lowerText.includes('map widget') || lowerText.includes('office locations') || lowerText.includes('geospatial location')) &&
+        !text.includes('```map')
+      ) {
+        elements.push(
+          <InlineMapRenderer
+            key="auto-demo-map"
+            title="Office Locations & Regional Depots (Mock Data)"
+            center={[-33.8688, 151.2093]}
+            zoom={11}
+            markers={[
+              { lat: -33.8688, lng: 151.2093, label: 'Sydney HQ Office', popupContent: 'Status: Active • Staff: 120' },
+              { lat: -33.8568, lng: 151.2153, label: 'Circular Quay Hub', popupContent: 'Status: Active • Regional Depot' },
+              { lat: -33.8908, lng: 151.2743, label: 'Bondi Tech Center', popupContent: 'Status: Maintenance' }
+            ]}
+          />
+        );
+      }
     }
 
     return <div className="space-y-1.5 font-sans">{elements}</div>;
@@ -2608,7 +2844,7 @@ export const AntigravityChat = () => {
         </div>
 
         {/* Message Area */}
-        <div ref={messageAreaRef} className="flex-1 overflow-y-auto px-4 py-8 space-y-8 scrollbar-thin z-10">
+        <div ref={messageAreaRef} className="flex-1 overflow-y-auto px-4 py-4 sm:py-6 space-y-8 scrollbar-thin z-10">
           {messagesLoading ? (
             <div className="max-w-3xl mx-auto w-full space-y-6 pt-4">
               <div className="h-12 w-2/3 ml-auto bg-zinc-200/50 dark:bg-zinc-800/40 animate-pulse rounded-2xl" />
@@ -2616,73 +2852,163 @@ export const AntigravityChat = () => {
               <div className="h-12 w-1/2 ml-auto bg-zinc-200/50 dark:bg-zinc-800/40 animate-pulse rounded-2xl" />
             </div>
           ) : !sessionId && messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center max-w-3xl mx-auto px-4 py-6 space-y-6 animate-in fade-in zoom-in-95 duration-500 w-full min-h-[calc(100vh-160px)]">
-              <div className="space-y-3 max-w-xl mx-auto">
+            <div className="flex flex-col items-center justify-start text-center max-w-3xl mx-auto px-4 pt-4 sm:pt-8 pb-6 space-y-5 animate-in fade-in zoom-in-95 duration-500 w-full">
+              <div className="space-y-2 max-w-xl mx-auto">
                 <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100 font-sans">
                   {dynamicGreeting || generateDynamicGreeting(userName)}
                 </h1>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium max-w-md mx-auto">
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium max-w-md mx-auto leading-relaxed">
                   Ask Aurora to build database modules, generate executive briefings, automate workflows, or connect APIs.
                 </p>
               </div>
 
-              {/* Category Filter Pills */}
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-1 w-full max-w-3xl mx-auto">
-                {[
-                  { id: 'all', label: '⚡ All Actions' },
-                  { id: 'build', label: '🏗️ Build Modules' },
-                  { id: 'reports', label: '📊 Tailored Reports' },
-                  { id: 'connectors', label: '🔌 APIs & Connectors' },
-                  { id: 'workflows', label: '🤖 Automations' }
-                ].map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setQuickStartCategory(cat.id)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
-                      quickStartCategory === cat.id
-                        ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/25 ring-2 ring-indigo-500/30"
-                        : "bg-zinc-100 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-800"
-                    )}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Quick Start Prompt Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full max-w-3xl text-left pt-1">
-                {quickStartItems
-                  .filter(item => quickStartCategory === 'all' || item.category === quickStartCategory)
-                  .map((item, idx) => (
+              {/* Controls Bar: Category Filter Pills & Display Options */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1.5 pb-0.5 w-full max-w-3xl mx-auto border-t border-b border-zinc-200/50 dark:border-zinc-800/50">
+                {/* Category Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'all', label: '⚡ All Actions' },
+                    { id: 'build', label: '🏗️ Build Modules' },
+                    { id: 'reports', label: '📊 Tailored Reports' },
+                    { id: 'connectors', label: '🔌 APIs & Connectors' },
+                    { id: 'workflows', label: '🤖 Automations' }
+                  ].map(cat => (
                     <button
-                      key={idx}
+                      key={cat.id}
                       onClick={() => {
-                        sendMessage(item.prompt);
+                        setQuickStartCategory(cat.id);
+                        if (!showLandingSuggestions) setShowLandingSuggestions(true);
                       }}
-                      className="p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all text-left group shadow-xs flex flex-col justify-between cursor-pointer relative overflow-hidden"
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer whitespace-nowrap",
+                        quickStartCategory === cat.id
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-zinc-100 dark:bg-zinc-800/70 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50"
+                      )}
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-zinc-200/80 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-100/80 dark:bg-zinc-800/40 transition-colors">
-                            {item.badge}
-                          </span>
-                          <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 opacity-70 group-hover:opacity-100 transition-all flex items-center gap-0.5">
-                            {item.actionText} →
-                          </span>
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                            {item.title}
-                          </div>
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
-                            {item.desc}
-                          </div>
-                        </div>
-                      </div>
+                      {cat.label}
                     </button>
                   ))}
+                </div>
+
+                {/* Layout Density & Hide Toggles */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={toggleLandingViewMode}
+                    className={cn(
+                      "px-2 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 text-[11px] font-medium",
+                      landingViewMode === 'chips' 
+                        ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60" 
+                        : "bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700/50"
+                    )}
+                    title={landingViewMode === 'chips' ? "Switch to detailed cards" : "Switch to compact chips"}
+                  >
+                    <LayoutGrid className="h-3 w-3" />
+                    <span>{landingViewMode === 'chips' ? 'Compact' : 'Cards'}</span>
+                  </button>
+
+                  <button
+                    onClick={toggleLandingSuggestions}
+                    className="px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 transition-all cursor-pointer flex items-center gap-1 text-[11px] font-medium"
+                    title={showLandingSuggestions ? "Hide suggested actions" : "Show suggested actions"}
+                  >
+                    {showLandingSuggestions ? (
+                      <>
+                        <EyeOff className="h-3 w-3" />
+                        <span>Hide</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3 w-3" />
+                        <span>Suggestions</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
+
+              {/* Quick Start Suggested Actions */}
+              {showLandingSuggestions && (
+                <div className="w-full max-w-3xl text-left space-y-2.5 pt-0.5 animate-in fade-in duration-300">
+                  {(() => {
+                    const filtered = quickStartItems.filter(
+                      item => quickStartCategory === 'all' || item.category === quickStartCategory
+                    );
+                    const displayed = (quickStartCategory === 'all' && !showAllActions) 
+                      ? filtered.slice(0, 3) 
+                      : filtered;
+
+                    if (landingViewMode === 'chips') {
+                      return (
+                        <div className="flex flex-col gap-2 w-full">
+                          {displayed.map((item, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => sendMessage(item.prompt)}
+                              className="px-3.5 py-2.5 rounded-xl bg-white/90 dark:bg-zinc-900/80 border border-zinc-200/70 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 transition-all text-left group shadow-2xs flex items-center justify-between cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5 truncate pr-2">
+                                <span className="text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/40 shrink-0">
+                                  {item.badge}
+                                </span>
+                                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                                  {item.title}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all shrink-0 flex items-center gap-0.5">
+                                {item.actionText} →
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+                        {displayed.map((item, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => sendMessage(item.prompt)}
+                            className="p-3.5 rounded-2xl bg-white/90 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all text-left group shadow-2xs flex flex-col justify-between cursor-pointer relative"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-zinc-200/80 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 bg-zinc-100/80 dark:bg-zinc-800/40">
+                                  {item.badge}
+                                </span>
+                                <span className="text-[10px] font-semibold text-zinc-400 group-hover:text-indigo-500 transition-all">
+                                  →
+                                </span>
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
+                                  {item.title}
+                                </div>
+                                <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                                  {item.desc}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Show More / Show Less Toggle for All Actions */}
+                  {quickStartCategory === 'all' && (
+                    <div className="flex justify-center pt-0.5">
+                      <button
+                        onClick={() => setShowAllActions(prev => !prev)}
+                        className="text-[11px] font-semibold text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        {showAllActions ? "Show fewer suggestions ↑" : "+ 3 more actions ↓"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="max-w-3xl mx-auto w-full space-y-8">
@@ -3072,7 +3398,7 @@ export const AntigravityChat = () => {
             {loading && (
               <div className="border-b border-zinc-200/50 dark:border-zinc-800/40 pb-2 mb-1">
                 <div className="flex items-center gap-1.5 text-[11px] text-zinc-550 dark:text-zinc-400 font-semibold">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" /> Co-Pilot Pipeline Running...
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" /> Assistant is thinking...
                 </div>
               </div>
             )}
@@ -3292,7 +3618,7 @@ export const AntigravityChat = () => {
                   </button>
                 ) : (
                   <button 
-                    onClick={sendMessage}
+                    onClick={() => sendMessage()}
                     disabled={!inputMessage.trim()}
                     className="p-1.5 bg-indigo-650 hover:bg-indigo-600 disabled:bg-zinc-100 dark:disabled:bg-zinc-800 disabled:text-zinc-400 text-white rounded-lg transition-all shadow flex items-center justify-center cursor-pointer"
                   >
