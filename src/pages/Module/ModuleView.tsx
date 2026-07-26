@@ -38,6 +38,7 @@ import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
+import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { useModalStack } from '../../context/ModalStackContext';
 
 const InlineAssigneeCell = ({
@@ -127,18 +128,12 @@ const InlineAssigneeCell = ({
     if (resolvedUser) {
       return (
         <div className="flex items-center gap-2">
-          <div className={cn(
-            "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
-            resolvedUser.isSynthetic 
-              ? "bg-indigo-50/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
-              : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
-          )}>
-            {resolvedUser.avatarUrl ? (
-              <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
-            ) : (
-              resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
-            )}
-          </div>
+          <UserAvatarWithPresence
+            avatarUrl={resolvedUser.avatarUrl}
+            name={resolvedUser.name}
+            status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
+            size="xs"
+          />
           <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
             {resolvedUser.name}
           </span>
@@ -172,18 +167,12 @@ const InlineAssigneeCell = ({
       >
         {resolvedUser ? (
           <>
-            <div className={cn(
-              "w-5 h-5 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
-              resolvedUser.isSynthetic 
-                ? "bg-indigo-50/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
-                : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
-            )}>
-              {resolvedUser.avatarUrl ? (
-                <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
-              ) : (
-                resolvedUser.isSynthetic ? <LucideIcons.Bot size={10} /> : <LucideIcons.User size={10} />
-              )}
-            </div>
+            <UserAvatarWithPresence
+              avatarUrl={resolvedUser.avatarUrl}
+              name={resolvedUser.name}
+              status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
+              size="xs"
+            />
             <span className="text-[11px] font-bold truncate max-w-[80px]">
               {resolvedUser.name}
             </span>
@@ -279,13 +268,12 @@ const InlineAssigneeCell = ({
                         )}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
-                          {member.avatarUrl ? (
-                            <img src={member.avatarUrl} alt={member.name} className="w-4 h-4 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-4 h-4 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center text-[8px] font-bold">
-                              {member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                            </div>
-                          )}
+                          <UserAvatarWithPresence
+                            avatarUrl={member.avatarUrl}
+                            name={member.name}
+                            status={(member as any).status || (member as any).presenceStatus}
+                            size="xs"
+                          />
                           <span className="truncate">{member.name}</span>
                         </div>
                         {isSelected && <LucideIcons.Check size={10} className="text-indigo-500 shrink-0 ml-1" />}
@@ -2711,13 +2699,12 @@ export const ModuleView = () => {
                   
                   {assignee ? (
                     <div className="flex items-center gap-1.5" title={`Assignee: ${assignee.name}`}>
-                      <div className="w-5 h-5 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 flex items-center justify-center text-[9px] font-bold">
-                        {assignee.avatarUrl ? (
-                          <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
-                        ) : (
-                          assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-                        )}
-                      </div>
+                      <UserAvatarWithPresence
+                        avatarUrl={assignee.avatarUrl}
+                        name={assignee.name}
+                        status={(assignee as any).status || (assignee as any).presenceStatus}
+                        size="xs"
+                      />
                     </div>
                   ) : (
                     <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400">
@@ -2932,13 +2919,12 @@ export const ModuleView = () => {
                     
                     {assignee ? (
                       <div className="flex items-center gap-1.5" title={`Assignee: ${assignee.name}`}>
-                        <div className="w-5 h-5 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 flex items-center justify-center text-[9px] font-bold">
-                          {assignee.avatarUrl ? (
-                            <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
-                          ) : (
-                            assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-                          )}
-                        </div>
+                        <UserAvatarWithPresence
+                          avatarUrl={assignee.avatarUrl}
+                          name={assignee.name}
+                          status={(assignee as any).status || (assignee as any).presenceStatus}
+                          size="xs"
+                        />
                       </div>
                     ) : (
                       <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400">
@@ -3025,15 +3011,12 @@ export const ModuleView = () => {
                   <div className="flex items-center gap-4">
                     {assignee && (
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-                        <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
-                          {assignee.avatarUrl ? (
-                            <img src={assignee.avatarUrl} alt={assignee.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full bg-indigo-600 text-white flex items-center justify-center text-[8px] font-bold">
-                              {assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                            </div>
-                          )}
-                        </div>
+                        <UserAvatarWithPresence
+                          avatarUrl={assignee.avatarUrl}
+                          name={assignee.name}
+                          status={(assignee as any).status || (assignee as any).presenceStatus}
+                          size="xs"
+                        />
                         <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-300">{assignee.name}</span>
                       </div>
                     )}
@@ -3360,18 +3343,12 @@ export const ModuleView = () => {
           if (resolvedUser) {
             return (
               <div className="flex items-center gap-2">
-                <div className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
-                  resolvedUser.isSynthetic 
-                    ? "bg-indigo-50/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
-                    : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
-                )}>
-                  {resolvedUser.avatarUrl ? (
-                    <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
-                  ) : (
-                    resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
-                  )}
-                </div>
+                <UserAvatarWithPresence
+                  avatarUrl={resolvedUser.avatarUrl}
+                  name={resolvedUser.name}
+                  status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
+                  size="xs"
+                />
                 <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                   {resolvedUser.name}
                 </span>
@@ -3469,18 +3446,12 @@ export const ModuleView = () => {
           if (resolvedUser) {
             return (
               <div className="flex items-center gap-2">
-                <div className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-800",
-                  resolvedUser.isSynthetic 
-                    ? "bg-indigo-50/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
-                    : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
-                )}>
-                  {resolvedUser.avatarUrl ? (
-                    <img src={resolvedUser.avatarUrl} alt={resolvedUser.name} className="w-full h-full object-cover" />
-                  ) : (
-                    resolvedUser.isSynthetic ? <LucideIcons.Bot size={12} /> : <LucideIcons.User size={12} />
-                  )}
-                </div>
+                <UserAvatarWithPresence
+                  avatarUrl={resolvedUser.avatarUrl}
+                  name={resolvedUser.name}
+                  status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
+                  size="xs"
+                />
                 <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                   {resolvedUser.name}
                 </span>

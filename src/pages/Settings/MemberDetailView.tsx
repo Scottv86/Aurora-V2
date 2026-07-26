@@ -48,6 +48,7 @@ import { OnboardingWizard } from '../../components/Settings/Workforce/Onboarding
 import { SignaturePad } from '../../components/Settings/Workforce/SignaturePad';
 import { CreateContractModal } from '../../components/Settings/Workforce/CreateContractModal';
 import { RequestLeaveModal } from '../../components/Settings/Workforce/RequestLeaveModal';
+import { UserPresenceBadge } from '../../components/Common/UserPresenceBadge';
 
 export const MemberDetailView = () => {
   const { id } = useParams();
@@ -411,6 +412,7 @@ export const MemberDetailView = () => {
           <div className="space-y-4">
              <div className="flex items-center gap-3">
                <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">{fullName}</h1>
+               <UserPresenceBadge status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'} showLabel={true} />
                 <Badge variant={member.isSynthetic ? "purple" : "blue"}>
                   {member.isSynthetic ? "AI Agent" : "Person"}
                 </Badge>

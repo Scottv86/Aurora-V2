@@ -21,6 +21,10 @@ import { useTheme } from '../../hooks/useTheme';
 import { cn } from '../../lib/utils';
 import { Environment } from '../../types/platform';
 import { LicenseGate } from '../Auth/LicenseGate';
+import { useDigitalTwin } from '../../context/DigitalTwinContext';
+import { DigitalTwinSettingsModal } from '../Twin/DigitalTwinSettingsModal';
+import { MorningHandoverModal } from '../Twin/MorningHandoverModal';
+import { AccountModal } from '../Settings/AccountModal';
 
 export const Navbar = () => {
   const { 
@@ -47,6 +51,14 @@ export const Navbar = () => {
   const safeUnreadCount = typeof unreadCount === 'number' ? unreadCount : 0;
   const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { 
+    presenceStatus, 
+    setPresenceStatus, 
+    setIsSettingsOpen, 
+    setIsHandoverOpen, 
+    drafts 
+  } = useDigitalTwin();
+  const pendingDraftsCount = drafts.filter(d => d.status === 'PENDING').length;
   const location = useLocation();
   const navigate = useNavigate();
   let lastPlatformPath = localStorage.getItem('lastPlatformPath') || '/workspace';
@@ -58,6 +70,7 @@ export const Navbar = () => {
   const isPlatform = !isAurora && !isSettings;
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showEnvMenu, setShowEnvMenu] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const envMenuRef = useRef<HTMLDivElement>(null);
   
@@ -92,7 +105,8 @@ export const Navbar = () => {
   const avatarUrl = platformUser?.avatarUrl || user?.user_metadata?.avatar_url;
 
   return (
-    <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
+    <>
+      <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4 flex-1">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-all"
@@ -326,36 +340,152 @@ export const Navbar = () => {
           <button 
             onClick={() => setShowUserMenu(!showUserMenu)}
             className={cn(
-              "flex items-center gap-2 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all",
+              "flex items-center gap-2 p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all relative",
               showUserMenu && "bg-zinc-100 dark:bg-zinc-800"
             )}
           >
-            <div className="w-8 h-8 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 dark:border-indigo-500/30 flex items-center justify-center overflow-hidden">
+            <div className="relative w-8 h-8 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 dark:border-indigo-500/30 flex items-center justify-center overflow-hidden">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <UserIcon size={16} className="text-indigo-600 dark:text-indigo-400" />
               )}
             </div>
+            {/* Presence Badge Indicator */}
+            <span className={cn(
+              "absolute bottom-0 right-5 w-3 h-3 rounded-full border-2 border-white dark:border-zinc-950 flex items-center justify-center text-[8px]",
+              presenceStatus === 'AVAILABLE' && "bg-emerald-500",
+              presenceStatus === 'AWAY_TWIN' && "bg-amber-500 shadow-sm shadow-amber-500/50",
+              presenceStatus === 'DND_INTERCEPT' && "bg-red-500",
+              presenceStatus === 'NIGHT_SHIFT' && "bg-purple-600"
+            )}>
+              {presenceStatus === 'AWAY_TWIN' && <Sparkles size={7} className="text-white animate-pulse" />}
+            </span>
             <ChevronDown size={14} className={cn("text-zinc-400 transition-transform duration-200", showUserMenu && "rotate-180")} />
           </button>
 
           {/* User Dropdown Menu */}
           {showUserMenu && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden py-1 z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden py-1 z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
                 <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{displayName}</p>
                 <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{user?.email}</p>
               </div>
               
-              <div className="p-1">
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
-                  onClick={() => setShowUserMenu(false)}
+              {/* Presence Status Selector (Teams Style) */}
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-950/20 space-y-0.5">
+                <div className="px-3 py-1 flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">Digital Twin</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPresenceStatus(presenceStatus === 'OFFLINE' ? 'AVAILABLE' : 'OFFLINE');
+                    }}
+                    className={cn(
+                      "text-[9px] font-bold px-2 py-0.5 rounded-full transition-all flex items-center gap-1",
+                      presenceStatus !== 'OFFLINE'
+                        ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/20"
+                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
+                    )}
+                  >
+                    {presenceStatus !== 'OFFLINE' ? 'ENABLED' : 'DISABLED'}
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => { setPresenceStatus('AVAILABLE'); setShowUserMenu(false); }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                    presenceStatus === 'AVAILABLE' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/5"
+                  )}
                 >
-                  <UserIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                  Profile
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Available
+                  </div>
+                  {presenceStatus === 'AVAILABLE' && <span className="text-[9px] font-bold">Active</span>}
                 </button>
+                <button
+                  onClick={() => { setPresenceStatus('AWAY_TWIN'); setShowUserMenu(false); }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                    presenceStatus === 'AWAY_TWIN' ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/5"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 flex items-center justify-center text-white">
+                      <Sparkles size={6} />
+                    </span>
+                    Away — Twin Active
+                  </div>
+                  {presenceStatus === 'AWAY_TWIN' && <span className="text-[9px] font-bold">Active</span>}
+                </button>
+                <button
+                  onClick={() => { setPresenceStatus('NIGHT_SHIFT'); setShowUserMenu(false); }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                    presenceStatus === 'NIGHT_SHIFT' ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold" : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/5"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-600" />
+                    Night Shift Mode
+                  </div>
+                  {presenceStatus === 'NIGHT_SHIFT' && <span className="text-[9px] font-bold">Active</span>}
+                </button>
+                <button
+                  onClick={() => { setPresenceStatus('OFFLINE'); setShowUserMenu(false); }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
+                    presenceStatus === 'OFFLINE' ? "bg-zinc-500/10 text-zinc-500 font-bold" : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/5"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-zinc-400" />
+                    Twin Disabled (Off)
+                  </div>
+                  {presenceStatus === 'OFFLINE' && <span className="text-[9px] font-bold">Off</span>}
+                </button>
+              </div>
+
+              {/* Digital Twin Studio & Handover Links */}
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800">
+                <button 
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors group"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setIsSettingsOpen(true);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={14} className="text-indigo-500 group-hover:rotate-12 transition-transform" />
+                    Aurora Twin Studio
+                  </div>
+                  <span className="text-[9px] bg-indigo-500/10 text-indigo-500 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                    Config
+                  </span>
+                </button>
+
+                <button 
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-lg transition-colors group"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setIsHandoverOpen(true);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Sun size={14} className="text-amber-500" />
+                    Morning Handover Digest
+                  </div>
+                  {pendingDraftsCount > 0 && (
+                    <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.2 rounded-full font-bold">
+                      {pendingDraftsCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <div className="p-1">
                 <button 
                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
                   onClick={(e) => {
@@ -378,12 +508,14 @@ export const Navbar = () => {
                 <LicenseGate>
                   <button 
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
-                    onClick={() => setShowUserMenu(false)}
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setIsAccountModalOpen(true);
+                    }}
                   >
                     <SettingsIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
                     Account
                   </button>
-
                 </LicenseGate>
               </div>
 
@@ -451,5 +583,14 @@ export const Navbar = () => {
         </div>
       </div>
     </header>
+
+      {/* Digital Twin Modals & Account Modal */}
+      <DigitalTwinSettingsModal />
+      <MorningHandoverModal />
+      <AccountModal 
+        isOpen={isAccountModalOpen} 
+        onClose={() => setIsAccountModalOpen(false)} 
+      />
+    </>
   );
 };

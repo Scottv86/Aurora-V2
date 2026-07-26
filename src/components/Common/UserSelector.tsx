@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
-import { Search, ChevronDown, Check, User as UserIcon, Users, Bot, ArrowRight } from 'lucide-react';
+import { Search, ChevronDown, Check, Users, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useUsers, TenantMember } from '../../hooks/useUsers';
 import { useTeams } from '../../hooks/useTeams';
+import { UserAvatarWithPresence } from './UserPresenceBadge';
 
 interface UserSelectorProps {
   value?: string;
@@ -143,23 +144,13 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
   };
 
   const UserAvatar = ({ user, size = 'sm' }: { user: TenantMember, size?: 'sm' | 'md' }) => {
-    const dimensions = size === 'sm' ? 'w-5 h-5' : 'w-8 h-8';
-    const iconSize = size === 'sm' ? 10 : 16;
-
     return (
-      <div className={cn(
-        dimensions,
-        "rounded-full flex items-center justify-center overflow-hidden shrink-0 transition-all",
-        user.isSynthetic 
-          ? "bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400" 
-          : "bg-zinc-100 text-zinc-600 dark:bg-white/10 dark:text-zinc-400"
-      )}>
-        {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-        ) : (
-          user.isSynthetic ? <Bot size={iconSize} /> : <UserIcon size={iconSize} />
-        )}
-      </div>
+      <UserAvatarWithPresence
+        avatarUrl={user.avatarUrl}
+        name={user.name}
+        status={(user as any).status || (user as any).presenceStatus || 'AVAILABLE'}
+        size={size === 'sm' ? 'xs' : 'sm'}
+      />
     );
   };
 

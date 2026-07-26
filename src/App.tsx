@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { PlatformProvider } from './context/PlatformContext';
+import { DigitalTwinProvider } from './context/DigitalTwinContext';
 import { AIContextProvider } from './context/AIContextProvider';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { StackedModalManager } from './components/UI/StackedModal';
@@ -176,11 +177,12 @@ const App = () => {
         <AuthProvider>
           <AIContextProvider>
             <PlatformProvider>
-          <ModalStackProvider>
-            <Router>
-              <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
-              <StackedModalManager />
-              <Routes>
+              <DigitalTwinProvider>
+                <ModalStackProvider>
+                  <Router>
+                    <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
+                    <StackedModalManager />
+                    <Routes>
               {/* Login & Root Redirect */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/workspace" replace />} />
@@ -335,16 +337,17 @@ const App = () => {
               <Route path="/onboarding" element={<Onboarding />} />
 
               {/* Redundant / Legacy Workforce Path support */}
-               <Route path="/dashboard/settings/workforce/*" element={<Navigate to="/workspace/settings/platform-modules/workforce-management" replace />} />
+              <Route path="/dashboard/settings/workforce/*" element={<Navigate to="/workspace/settings/platform-modules/workforce-management" replace />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/workspace" replace />} />
-            </Routes>
-            </Router>
-          </ModalStackProvider>
-        </PlatformProvider>
-      </AIContextProvider>
-      </AuthProvider>
+              </Routes>
+              </Router>
+            </ModalStackProvider>
+          </DigitalTwinProvider>
+            </PlatformProvider>
+          </AIContextProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

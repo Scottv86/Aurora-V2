@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriveItem, DriveType, MergeFieldToken, DocumentClassification } from '../../types/drive';
-import { DriveService, SYSTEM_MERGE_FIELDS, DEFAULT_DISPOSAL_SCHEDULES, sendToGlobalRecyclingBin } from '../../services/driveService';
+import { DriveService, SYSTEM_MERGE_FIELDS, DEFAULT_DISPOSAL_SCHEDULES, sendToGlobalRecyclingBin, convertMarkdownToDocumentHtml } from '../../services/driveService';
 import { DrivePickerModal } from '../../components/Drive/DrivePickerModal';
 import { DeleteConfirmModal } from '../../components/Drive/DeleteConfirmModal';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -67,7 +67,8 @@ export const DocEditor = () => {
     if (doc) {
       setDocumentItem(doc);
       setDocTitle(doc.name);
-      const initialHtml = doc.content || `<h1>${doc.name}</h1><p>Start typing document content...</p>`;
+      const rawHtml = doc.content || `<h1>${doc.name}</h1><p>Start typing document content...</p>`;
+      const initialHtml = convertMarkdownToDocumentHtml(rawHtml);
       setDocContent(initialHtml);
     } else {
       toast.error('Document not found');

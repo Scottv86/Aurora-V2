@@ -25,6 +25,7 @@ import reportRoutes from './routes/reportRoutes';
 import antigravityRoutes from './routes/antigravityRoutes';
 import aiSettingsRoutes from './routes/aiSettingsRoutes';
 import trashRoutes from './routes/trashRoutes';
+import digitalTwinRoutes from './routes/digitalTwin';
 
 
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
@@ -119,6 +120,7 @@ app.use('/api/reports', authenticate, requireTenantAccess, reportRoutes);
 app.use('/api/antigravity', authenticate, requireTenantAccess, antigravityRoutes);
 app.use('/api/ai', authenticate, requireTenantAccess, aiSettingsRoutes);
 app.use('/api/trash', authenticate, requireTenantAccess, trashRoutes);
+app.use('/api/digital-twin', digitalTwinRoutes);
 
 
 

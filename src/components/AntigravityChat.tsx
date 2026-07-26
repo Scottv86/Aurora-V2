@@ -24,6 +24,7 @@ import { showAuroraToast } from './UI/AuroraToast';
 import { ScheduledTasksView } from './chat/ScheduledTasksView';
 import { NewScheduledTaskModal, ScheduledTaskData } from './chat/NewScheduledTaskModal';
 import { ShareChatModal } from './chat/ShareChatModal';
+import { DriveService } from '../services/driveService';
 
 import { 
   InlineChartRenderer, InlineMapRenderer, ThoughtTraceAccordion, MediaCarousel, 
@@ -1432,6 +1433,16 @@ export const AntigravityChat = () => {
         };
       });
 
+      sanitizedMessages.forEach((m: any) => {
+        if (Array.isArray(m.steps)) {
+          m.steps.forEach((st: any) => {
+            if (st?.result?.driveItem) {
+              try { DriveService.syncDriveItem(st.result.driveItem); } catch (e) {}
+            }
+          });
+        }
+      });
+
       setMessages(sanitizedMessages);
       setAgentTrace([]);
       setAgentThought(null);
@@ -1723,6 +1734,15 @@ export const AntigravityChat = () => {
         }
       ]);
       
+      // Sync any generated drive items to client Drive store
+      if (Array.isArray(data.steps)) {
+        data.steps.forEach((st: any) => {
+          if (st?.result?.driveItem) {
+            try { DriveService.syncDriveItem(st.result.driveItem); } catch (e) {}
+          }
+        });
+      }
+
       // Refresh session plan metadata
       fetchSessions(true);
       if (activeSessionId) loadSession(activeSessionId, true);
@@ -3121,6 +3141,72 @@ export const AntigravityChat = () => {
                         );
                       }
                       return null;
+                    })()}
+
+                    {/* Render Aurora Document & Drive Artifact Cards */}
+                    {(() => {
+                      if (!Array.isArray(m.steps)) return null;
+                      const rawSteps = m.steps.filter((st: any) => 
+                        st.name === 'create_aurora_document' || 
+                        st.name === 'save_to_aurora_drive' || 
+                        st.name === 'render_generated_document'
+                      );
+                      if (rawSteps.length === 0) return null;
+
+                      const hasDocCreate = rawSteps.some((st: any) => st.name === 'create_aurora_document');
+                      const docSteps = hasDocCreate 
+                        ? rawSteps.filter((st: any) => st.name !== 'save_to_aurora_drive')
+                        : rawSteps;
+
+                      return (
+                        <div className="space-y-3 mt-3">
+                          {docSteps.map((st: any, sidx: number) => {
+                            const res = st.result || st.output || {};
+                            const driveItem = res.driveItem || {};
+                            const docId = res.documentId || res.itemId || driveItem.id || `doc_${sidx}`;
+                            const docName = res.name || driveItem.name || st.arguments?.name || 'Generated Document';
+                            const docContent = res.content || driveItem.content || st.arguments?.content || '';
+                            const driveType = res.driveType || driveItem.driveType || 'TENANT_SHARED';
+                            const parentId = res.parentId || driveItem.parentId || st.arguments?.parentId || null;
+                            const classification = driveItem.recordsMetadata?.classification || st.arguments?.classification || 'INTERNAL';
+
+                            if (driveItem.id && driveItem.name) {
+                              try {
+                                DriveService.syncDriveItem(driveItem);
+                              } catch (e) {
+                                console.warn('[AntigravityChat] Sync drive item warning:', e);
+                              }
+                            }
+
+                            return (
+                              <DocumentPreviewCard
+                                key={docId || sidx}
+                                id={docId}
+                                title={docName}
+                                templateName={st.name === 'create_aurora_document' ? 'Aurora Document' : 'Aurora Drive Artifact'}
+                                version="v1.0"
+                                status="completed"
+                                driveType={driveType}
+                                parentId={parentId}
+                                classification={classification}
+                                content={docContent}
+                                onOpenInDocs={(id) => navigate(`/workspace/apps/docs/${id}`)}
+                                onOpenInDrive={(id, dType, pId) => {
+                                  const targetTab = (dType === 'MY_DRIVE' || dType === 'PERSONAL') ? 'PERSONAL' : 'TENANT_SHARED';
+                                  const folderQuery = pId ? `&folderId=${pId}` : '';
+                                  navigate(`/workspace/apps/drive?tab=${targetTab}${folderQuery}&selectedId=${id}`);
+                                }}
+                                onLivePreview={(title, contentStr) => {
+                                  setShowRightPanel(true);
+                                  setActiveTab('scratchpad');
+                                  setScratchCode(contentStr || `<h1>${title}</h1>`);
+                                  toast.success(`Loaded "${title}" into Live Preview`);
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
                     })()}
 
                     {/* Action Approval Card */}

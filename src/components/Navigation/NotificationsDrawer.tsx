@@ -11,15 +11,18 @@ import {
   Clock,
   Loader2,
   ExternalLink,
-  Trash2
+  Trash2,
+  Sun
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useDigitalTwin } from '../../context/DigitalTwinContext';
 import { NotificationItem } from '../../context/PlatformContext';
 
 export const NotificationsDrawer = () => {
   const navigate = useNavigate();
+  const { setIsHandoverOpen } = useDigitalTwin();
   const { 
     user,
     isDeveloper,
@@ -40,7 +43,10 @@ export const NotificationsDrawer = () => {
   });
   const unreadCount = safeNotifications.filter(n => !n.isRead).length;
 
-  const getIcon = (type: NotificationItem['type'], status?: NotificationItem['status']) => {
+  const getIcon = (type: NotificationItem['type'], status?: NotificationItem['status'], title?: string) => {
+    if (title && (title.includes('Handover') || title.includes('Digital Twin'))) {
+      return <Sun size={16} className="text-amber-500 animate-pulse" />;
+    }
     if (type === 'scheduled_task') {
       if (status === 'running') return <Loader2 size={16} className="text-amber-500 animate-spin" />;
       if (status === 'completed') return <Check size={16} className="text-emerald-500" />;
@@ -121,7 +127,7 @@ export const NotificationsDrawer = () => {
                 
                 <div className="flex gap-4">
                   <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center shrink-0">
-                    {getIcon(n.type, n.status)}
+                    {getIcon(n.type, n.status, n.title)}
                   </div>
                   
                   <div className="flex-1 min-w-0">
@@ -167,6 +173,21 @@ export const NotificationsDrawer = () => {
                           </span>
                         )}
                       </div>
+
+                      {(n.title?.includes('Handover') || n.id?.includes('handover')) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markNotificationAsRead(n.id);
+                            setIsNotificationsOpen(false);
+                            setIsHandoverOpen(true);
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-md transition-all shadow-sm"
+                        >
+                          <span>Open Handover</span>
+                          <ExternalLink size={12} />
+                        </button>
+                      )}
 
                       {n.sessionId && (
                         <button

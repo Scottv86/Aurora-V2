@@ -20,6 +20,7 @@ import { useData } from '../hooks/useData';
 import { DocumentList } from './DocumentList';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
 import { Skeleton } from './UI/Skeleton';
+import { UserAvatarWithPresence } from './Common/UserPresenceBadge';
 
 export const WorkQueue = () => {
   const { tenant, user: platformUser, isLoading: platformLoading, members } = usePlatform();
@@ -289,13 +290,12 @@ export const WorkQueue = () => {
                       if (caseAssignee) {
                         return (
                           <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                            {caseAssignee.avatarUrl ? (
-                              <img src={caseAssignee.avatarUrl} alt={caseAssignee.name} className="w-4 h-4 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-4 h-4 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-[8px] font-black text-indigo-500">
-                                {caseAssignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                              </div>
-                            )}
+                            <UserAvatarWithPresence
+                              avatarUrl={caseAssignee.avatarUrl}
+                              name={caseAssignee.name}
+                              status={(caseAssignee as any).status || (caseAssignee as any).presenceStatus || 'AVAILABLE'}
+                              size="xs"
+                            />
                             <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300 max-w-[80px] truncate">{caseAssignee.name}</span>
                           </div>
                         );
@@ -398,13 +398,12 @@ export const WorkQueue = () => {
                           if (caseAssignee) {
                             return (
                               <span className="text-zinc-900 dark:text-white font-medium flex items-center gap-2">
-                                {caseAssignee.avatarUrl ? (
-                                  <img src={caseAssignee.avatarUrl} alt={caseAssignee.name} className="w-4 h-4 rounded-full object-cover" />
-                                ) : (
-                                  <div className="w-4 h-4 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-[8px] font-black text-indigo-500">
-                                    {caseAssignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                                  </div>
-                                )}
+                                <UserAvatarWithPresence
+                                  avatarUrl={caseAssignee.avatarUrl}
+                                  name={caseAssignee.name}
+                                  status={(caseAssignee as any).status || (caseAssignee as any).presenceStatus || 'AVAILABLE'}
+                                  size="xs"
+                                />
                                 {caseAssignee.name}
                               </span>
                             );

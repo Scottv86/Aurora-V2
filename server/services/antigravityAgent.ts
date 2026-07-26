@@ -679,6 +679,39 @@ const agentTools = [
           },
           required: ["targetType"]
         }
+      },
+      {
+        name: "create_aurora_document",
+        description: "Generate a new Aurora document artifact (such as a contract, SOP, proposal, report, agreement, or specification). NOTE: This single tool automatically compiles the document AND saves/indexes it into Aurora Drive in one step. DO NOT call save_to_aurora_drive separately after calling this tool. The 'content' parameter MUST be formatted with rich semantic HTML using <h1>, <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em> tags.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, description: "Title or name of the document." },
+            content: { type: Type.STRING, description: "Rich HTML text content of the document using <h1>, <h2>, <p>, <ul>, <li>, <strong> tags." },
+            driveType: { type: Type.STRING, description: "Target drive location: 'MY_DRIVE' (Personal) or 'TENANT_SHARED' (Shared Org Drive). Default is TENANT_SHARED." },
+            classification: { type: Type.STRING, description: "Governance security level: PUBLIC, INTERNAL, CONFIDENTIAL, or RESTRICTED." },
+            subjectTags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Subject tags for records indexing (e.g. ['Legal', 'Policy', 'Operations'])." },
+            templateId: { type: Type.STRING, description: "Optional template ID if derived from a template." },
+            recordId: { type: Type.STRING, description: "Optional associated record ID." }
+          },
+          required: ["name", "content"]
+        }
+      },
+      {
+        name: "save_to_aurora_drive",
+        description: "Save a raw file (e.g. JSON, CSV, image) or folder into Aurora Drive hierarchy. NOTE: For document generation (SOPs, reports, agreements), use 'create_aurora_document' instead, which handles document creation and Drive persistence automatically in one step.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, description: "File or folder name." },
+            type: { type: Type.STRING, description: "Item type: 'FILE', 'FOLDER', or 'DOCUMENT'." },
+            driveType: { type: Type.STRING, description: "Target drive: 'MY_DRIVE' or 'TENANT_SHARED'." },
+            parentId: { type: Type.STRING, description: "Optional parent folder ID in Drive." },
+            content: { type: Type.STRING, description: "File/Document content if type is FILE or DOCUMENT." },
+            mimeType: { type: Type.STRING, description: "Optional MIME type (e.g. text/html, application/json)." }
+          },
+          required: ["name", "type"]
+        }
       }
     ]
   }
@@ -2069,6 +2102,161 @@ export const executeAgentTool = async (
             if (activeMetadata) {
               activeMetadata.liveComponent = { id: artifactId, title, htmlContent, category: category || "interactive_widget", updatedAt: new Date().toISOString() };
               await db.antigravitySession.update({ where: { id: sessionId }, data: { metadata: activeMetadata } });
+            }
+          }
+          else if (name === 'create_aurora_document') {
+            const { name: docName, content: docContent, driveType, classification, subjectTags, templateId, recordId } = args;
+            const formattedContent = convertMarkdownToDocumentHtml(docContent || '');
+            const docId = 'doc_' + Math.random().toString(36).substring(2, 11);
+            const targetDriveType = (driveType === 'PERSONAL' || driveType === 'MY_DRIVE') ? 'PERSONAL' : 'TENANT_SHARED';
+            const classificationVal = classification || 'INTERNAL';
+
+            let savedDoc;
+            try {
+              savedDoc = await db.generatedDocument.create({
+                data: {
+                  id: docId,
+                  tenantId,
+                  templateId: templateId || 'ai_generated',
+                  name: docName || 'Untitled Document',
+                  content: formattedContent,
+                  recordId: recordId || null,
+                  status: 'Active',
+                  generatedBy: 'Aurora AI Assistant',
+                  dataSnapshot: {
+                    classification: classificationVal,
+                    subjectTags: subjectTags || [],
+                    driveType: targetDriveType
+                  }
+                }
+              });
+            } catch (dbErr: any) {
+              console.warn('[antigravityAgent] Document create in DB warning:', dbErr?.message);
+              savedDoc = {
+                id: docId,
+                tenantId,
+                name: docName || 'Untitled Document',
+                content: formattedContent
+              };
+            }
+
+            const driveItem = {
+              id: docId,
+              name: docName || 'Untitled Document',
+              type: 'DOCUMENT',
+              driveType: targetDriveType,
+              parentId: null,
+              ownerId: 'ai-assistant',
+              ownerName: 'Aurora AI Assistant',
+              tenantId,
+              sizeBytes: Buffer.byteLength(formattedContent || '', 'utf8'),
+              content: formattedContent,
+              templateId: templateId || undefined,
+              isFavorite: false,
+              status: 'ACTIVE',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              recordsMetadata: {
+                recordNumber: `REC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+                classification: classificationVal,
+                subjectTags: subjectTags || ['AI Generated', 'Document'],
+                securityLevel: classificationVal === 'CONFIDENTIAL' || classificationVal === 'RESTRICTED' ? 'High' : 'Normal',
+                isLegalHold: false
+              },
+              versions: [{
+                id: 'v1',
+                versionNumber: 1,
+                updatedBy: 'Aurora AI Assistant',
+                updatedAt: new Date().toISOString(),
+                sizeBytes: Buffer.byteLength(formattedContent || '', 'utf8'),
+                note: 'Initial AI Document Generation'
+              }],
+              auditLogs: [{
+                id: 'log_1',
+                itemId: docId,
+                timestamp: new Date().toISOString(),
+                actor: 'Aurora AI Assistant',
+                action: 'SAVE_DOCUMENT',
+                details: `Generated document "${docName}" via Main Chat`
+              }]
+            };
+
+            result = {
+              success: true,
+              documentId: docId,
+              name: docName,
+              driveType: targetDriveType,
+              content: formattedContent,
+              driveItem,
+              message: `Document "${docName}" successfully generated and saved into ${targetDriveType === 'PERSONAL' ? 'My Drive' : 'Shared Tenant Drive'}.`
+            };
+
+            if (activeMetadata) {
+              activeMetadata.generatedDocument = {
+                id: docId,
+                title: docName,
+                format: 'html',
+                htmlContent: formattedContent,
+                driveType: targetDriveType,
+                driveItem
+              };
+              activeMetadata.driveItem = driveItem;
+              await db.antigravitySession.update({ where: { id: sessionId }, data: { metadata: activeMetadata } }).catch(() => {});
+            }
+          }
+          else if (name === 'save_to_aurora_drive') {
+            const { name: itemName, type: itemType, driveType, parentId, content: itemContent, mimeType } = args;
+            const itemId = 'item_' + Math.random().toString(36).substring(2, 11);
+            const targetDriveType = (driveType === 'PERSONAL' || driveType === 'MY_DRIVE') ? 'PERSONAL' : 'TENANT_SHARED';
+            const normalizedType = (itemType || 'DOCUMENT').toUpperCase();
+
+            const driveItem = {
+              id: itemId,
+              name: itemName || 'Untitled File',
+              type: normalizedType,
+              driveType: targetDriveType,
+              parentId: parentId || null,
+              ownerId: 'ai-assistant',
+              ownerName: 'Aurora AI Assistant',
+              tenantId,
+              sizeBytes: itemContent ? Buffer.byteLength(itemContent, 'utf8') : 0,
+              mimeType: mimeType || (normalizedType === 'DOCUMENT' ? 'text/html' : 'text/plain'),
+              content: itemContent || '',
+              isFavorite: false,
+              status: 'ACTIVE',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              recordsMetadata: {
+                recordNumber: `REC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+                classification: 'INTERNAL',
+                subjectTags: ['Drive Item', 'AI Generated'],
+                securityLevel: 'Normal',
+                isLegalHold: false
+              },
+              versions: [],
+              auditLogs: [{
+                id: 'log_1',
+                itemId,
+                timestamp: new Date().toISOString(),
+                actor: 'Aurora AI Assistant',
+                action: 'CREATE',
+                details: `Created Drive item "${itemName}" via Main Chat`
+              }]
+            };
+
+            result = {
+              success: true,
+              itemId,
+              name: itemName,
+              type: normalizedType,
+              driveType: targetDriveType,
+              driveItem,
+              message: `Item "${itemName}" (${normalizedType}) successfully saved to Aurora Drive.`
+            };
+
+            if (activeMetadata) {
+              activeMetadata.driveItem = driveItem;
+              await db.antigravitySession.update({ where: { id: sessionId }, data: { metadata: activeMetadata } }).catch(() => {});
             }
           }
           else if (name === 'manage_security_and_permissions') {

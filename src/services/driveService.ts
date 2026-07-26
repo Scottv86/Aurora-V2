@@ -3,6 +3,68 @@ import { API_BASE_URL } from '../config';
 
 const STORAGE_KEY_ITEMS = 'aurora_drive_items_v1';
 
+export function convertMarkdownToDocumentHtml(input: string): string {
+  if (!input) return '';
+  let str = input.trim();
+
+  // If already contains structural HTML tags, return as is
+  if (/<(h[1-6]|p|ul|ol|table|blockquote)\b[^>]*>/i.test(str)) {
+    return str;
+  }
+
+  const blocks = str.split(/\n\s*\n/);
+  
+  const htmlBlocks = blocks.map(block => {
+    const lines = block.trim().split('\n');
+    if (lines.length === 0 || !lines[0]) return '';
+
+    // Heading 1 - 6
+    if (/^#{1-6}\s+/.test(lines[0])) {
+      const match = lines[0].match(/^(#{1-6})\s+(.*)$/);
+      if (match) {
+        const level = match[1].length;
+        const headingText = formatInlineMarkdown(match[2]);
+        const restLines = lines.slice(1).join(' ');
+        const restHtml = restLines ? `<p>${formatInlineMarkdown(restLines)}</p>` : '';
+        return `<h${level}>${headingText}</h${level}>${restHtml}`;
+      }
+    }
+
+    // Bullet list
+    if (lines.every(line => /^\s*[\-\*]\s+/.test(line))) {
+      const items = lines.map(line => {
+        const content = line.replace(/^\s*[\-\*]\s+/, '');
+        return `<li>${formatInlineMarkdown(content)}</li>`;
+      });
+      return `<ul>${items.join('')}</ul>`;
+    }
+
+    // Numbered list
+    if (lines.every(line => /^\s*\d+\.\s+/.test(line))) {
+      const items = lines.map(line => {
+        const content = line.replace(/^\s*\d+\.\s+/, '');
+        return `<li>${formatInlineMarkdown(content)}</li>`;
+      });
+      return `<ol>${items.join('')}</ol>`;
+    }
+
+    // Regular paragraph
+    const paragraphText = lines.map(line => formatInlineMarkdown(line)).join('<br/>');
+    return `<p>${paragraphText}</p>`;
+  });
+
+  return htmlBlocks.filter(Boolean).join('\n');
+}
+
+function formatInlineMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.*?)__/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>');
+}
+
 export async function sendToGlobalRecyclingBin(item: DriveItem, tenantId?: string, userEmail?: string, token?: string) {
   try {
     if (!tenantId) return;
@@ -238,11 +300,10 @@ export class DriveService {
   }
 
   static getChildren(parentId: string | null, driveType: DriveType): DriveItem[] {
-    return this.getItems().filter(item => 
-      item.driveType === driveType && 
-      item.parentId === parentId && 
-      item.status === 'ACTIVE'
-    );
+    return this.getItems().filter(item => {
+      const isMatchingDrive = item.driveType === driveType || (driveType === 'PERSONAL' && (item.driveType as string) === 'MY_DRIVE');
+      return isMatchingDrive && item.parentId === parentId && item.status === 'ACTIVE';
+    });
   }
 
   static getFavorites(): DriveItem[] {
@@ -397,6 +458,25 @@ export class DriveService {
     items.push(newDoc);
     this.saveItems(items);
     return newDoc;
+  }
+
+  static syncDriveItem(item: DriveItem): DriveItem {
+    const items = this.getItems();
+    const normalizedDriveType: DriveType = ((item.driveType as string) === 'MY_DRIVE' || item.driveType === 'PERSONAL') ? 'PERSONAL' : 'TENANT_SHARED';
+    const formattedContent = item.content ? convertMarkdownToDocumentHtml(item.content) : item.content;
+    const normalizedItem: DriveItem = {
+      ...item,
+      driveType: normalizedDriveType,
+      content: formattedContent
+    };
+    const existingIndex = items.findIndex(i => i.id === normalizedItem.id);
+    if (existingIndex !== -1) {
+      items[existingIndex] = { ...items[existingIndex], ...normalizedItem, updatedAt: new Date().toISOString() };
+    } else {
+      items.unshift(normalizedItem);
+    }
+    this.saveItems(items);
+    return normalizedItem;
   }
 
   static uploadFile(

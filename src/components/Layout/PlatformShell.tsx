@@ -35,6 +35,7 @@ import { Breadcrumbs } from '../Navigation/Breadcrumbs';
 import { GlobalDrawers } from '../Navigation/GlobalDrawers';
 import { PageLoader } from '../UI/PageLoader';
 import { TransitionBar } from '../UI/TransitionBar';
+import { ConnectionErrorPage } from '../Error/ConnectionErrorPage';
 
 
 const SidebarItemRenderer = ({ 
@@ -226,7 +227,11 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     menuConfig, 
     tenant,
     isDeveloper,
-    modules
+    modules,
+    connectionError,
+    connectionErrorMessage,
+    isOffline,
+    refetchContext
   } = usePlatform();
   
   const location = useLocation();
@@ -515,6 +520,16 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   if (authLoading || platformLoading) {
     return <PageLoader label="Loading your workspace..." />;
+  }
+
+  if (isOffline || connectionError) {
+    return (
+      <ConnectionErrorPage 
+        isOffline={isOffline}
+        errorMessage={connectionErrorMessage || undefined}
+        onRetry={refetchContext}
+      />
+    );
   }
 
   if (!user) {

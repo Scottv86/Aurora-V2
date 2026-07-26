@@ -77,6 +77,9 @@ interface PlatformContextType {
   deleteNotification: (id: string) => void;
   clearNotifications: () => void;
   unreadCount: number;
+  connectionError: boolean;
+  connectionErrorMessage: string | null;
+  isOffline: boolean;
 }
 
 export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
@@ -125,7 +128,10 @@ const fallbackContext: PlatformContextType = {
   markAllNotificationsAsRead: () => {},
   deleteNotification: () => {},
   clearNotifications: () => {},
-  unreadCount: 0
+  unreadCount: 0,
+  connectionError: false,
+  connectionErrorMessage: null,
+  isOffline: false
 };
 
 export const usePlatform = () => {
@@ -149,6 +155,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [environment, setEnvironment] = useState<Environment>('DEV');
   const [isLoading, setIsLoading] = useState(true);
   const [capabilities, setCapabilities] = useState<Set<string>>(new Set());
+  const [connectionError, setConnectionError] = useState(false);
+  const [connectionErrorMessage, setConnectionErrorMessage] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   
   const [modules, setModules] = useState<any[]>([]);
   const [modulesLoading, setModulesLoading] = useState(false);
@@ -722,6 +731,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const data = await response.json();
+      setConnectionError(false);
+      setConnectionErrorMessage(null);
       
       // Prevent redundant state updates if data hasn't changed
       // We check user and tenant separately to be more granular
@@ -762,6 +773,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       setTenant(null);
       setMenuConfig(null);
+      setConnectionError(true);
+      setConnectionErrorMessage(err.message || 'Failed to connect to backend server');
     } finally {
       setIsLoading(false);
     }
@@ -786,6 +799,24 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
     fetchContext();
   }, [supabaseUser, authLoading, fetchContext]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      if (supabaseUser) fetchContext();
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [supabaseUser, fetchContext]);
 
   useEffect(() => {
     console.log('[PlatformTrace] PlatformProvider Mounted', { 
@@ -851,14 +882,17 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       teams,
       teamsLoading,
       refreshTeams,
-      notifications,
-      runningTasks,
+      notifications: Array.isArray(notifications) ? notifications : [],
+      runningTasks: Array.isArray(runningTasks) ? runningTasks : [],
       addNotification,
       markNotificationAsRead,
       markAllNotificationsAsRead,
       deleteNotification,
       clearNotifications,
-      unreadCount
+      unreadCount,
+      connectionError,
+      connectionErrorMessage,
+      isOffline
     }}>
       {/* 
           IMPORTANT: We must always render children here. 

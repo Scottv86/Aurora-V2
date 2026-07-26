@@ -10,6 +10,7 @@ import { fetchRecords } from '../../services/dataService';
 import { checkCondition, getFieldValue, cn, flattenFields, slugify } from '../../lib/utils';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { Skeleton } from '../../components/UI/Skeleton';
+import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 
 export const QueueView = () => {
   const { queueId } = useParams<{ queueId: string }>();
@@ -287,13 +288,12 @@ export const QueueView = () => {
         if (userObj) {
           return (
             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              {userObj.avatarUrl ? (
-                <img src={userObj.avatarUrl} alt={userObj.name} className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800" />
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-[9px] font-black text-indigo-500">
-                  {userObj.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                </div>
-              )}
+              <UserAvatarWithPresence
+                avatarUrl={userObj.avatarUrl}
+                name={userObj.name}
+                status={(userObj as any).status || (userObj as any).presenceStatus}
+                size="xs"
+              />
               <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate max-w-[90px]">{userObj.name}</span>
               {isMe && (
                 <button

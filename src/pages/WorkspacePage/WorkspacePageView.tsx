@@ -357,12 +357,12 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
 
     case 'active-workflows':
       return (
-        <div className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm space-y-4">
-          <div className="flex items-center gap-2 border-b border-zinc-150 dark:border-zinc-800 pb-3">
+        <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
             <Workflow size={18} className="text-indigo-500" />
             <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Active Workflows'}</h3>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {[
               { name: 'Customer Onboarding', status: 'Running', health: 'Healthy', items: 42 },
               { name: 'Invoice Approval', status: 'Running', health: 'Healthy', items: 128 },
@@ -409,14 +409,14 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
 
     case 'rich-text':
       return (
-        <div className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm">
+        <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
           {widget.title && (
-            <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider mb-3 border-b border-zinc-150 dark:border-zinc-800 pb-2">
+            <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider mb-3 border-b border-zinc-150 dark:border-zinc-800 pb-2 shrink-0">
               {widget.title}
             </h3>
           )}
           <div 
-            className="prose dark:prose-invert max-w-none text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed"
+            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar prose dark:prose-invert max-w-none text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed"
             dangerouslySetInnerHTML={{ __html: widget.properties?.content || '<p className="italic text-zinc-400">No content configured.</p>' }}
           />
         </div>
@@ -473,8 +473,8 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
   }, [records, search]);
 
   return (
-    <div className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm space-y-4">
-      <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3">
+    <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
         <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Record List'}</h3>
         {moduleId && (
           <input
@@ -490,16 +490,16 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
       {!moduleId ? (
         <p className="text-xs text-zinc-400 italic">No module selected. Please configure in settings.</p>
       ) : loading ? (
-        <div className="space-y-2">
+        <div className="space-y-2 flex-1 overflow-hidden">
           {[1, 2, 3].map(i => <Skeleton key={i} height={40} className="rounded-xl" />)}
         </div>
       ) : filtered.length === 0 ? (
         <p className="text-xs text-zinc-400 italic py-4 text-center">No records found.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
           <table className="w-full text-xs text-left border-collapse">
-            <thead>
-              <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-400 font-bold uppercase tracking-wider">
+            <thead className="sticky top-0 bg-zinc-100/80 dark:bg-white/5 backdrop-blur-md z-10 border-b border-zinc-200 dark:border-zinc-800">
+              <tr className="text-zinc-400 font-bold uppercase tracking-wider">
                 <th className="py-2 pl-2">Record ID</th>
                 <th className="py-2">Summary</th>
                 <th className="py-2">Created At</th>
@@ -617,15 +617,15 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
   };
 
   return (
-    <div className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm space-y-4">
-      <div className="border-b border-zinc-150 dark:border-zinc-800 pb-3">
+    <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
+      <div className="border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
         <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Submit New Item'}</h3>
       </div>
 
       {!moduleId ? (
         <p className="text-xs text-zinc-400 italic">No module selected. Please configure in settings.</p>
       ) : loading ? (
-        <div className="space-y-3">
+        <div className="space-y-3 flex-1 overflow-hidden">
           <Skeleton height={35} className="rounded-xl" />
           <Skeleton height={35} className="rounded-xl" />
           <Skeleton height={45} className="rounded-xl animate-pulse" />
@@ -633,7 +633,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
       ) : fields.length === 0 ? (
         <p className="text-xs text-zinc-400 italic text-center">Module has no fields to input.</p>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto space-y-4 text-xs pr-1 custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {fields.map((field) => {
               const val = formData[field.name] || '';
@@ -746,21 +746,21 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
   }, [moduleId, tenant?.id, session?.access_token]);
 
   return (
-    <div className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm space-y-4">
-      <div className="border-b border-zinc-150 dark:border-zinc-800 pb-3">
+    <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
+      <div className="border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
         <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Volume Chart'}</h3>
       </div>
 
       {!moduleId ? (
         <p className="text-xs text-zinc-400 italic">No module selected for chart. Please configure in settings.</p>
       ) : loading ? (
-        <div className="h-48 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center min-h-0">
           <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
         </div>
       ) : chartData.length === 0 ? (
         <p className="text-xs text-zinc-400 italic py-10 text-center">No record data found to display.</p>
       ) : (
-        <div className="h-48 w-full text-xs">
+        <div className="flex-1 min-h-0 w-full text-xs">
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'line' ? (
               <LineChart data={chartData}>

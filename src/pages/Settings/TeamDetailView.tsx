@@ -11,6 +11,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { Button, Input, Badge } from '../../components/UI/Primitives';
 import { Tabs } from '../../components/UI/TabsAndModal';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { AvatarUpload } from '../../components/Common/AvatarUpload';
 import { Table } from '../../components/UI/Table';
 
@@ -204,7 +205,12 @@ export const TeamDetailView = () => {
                      header: 'Member Name',
                      sortable: true,
                      sortKey: 'name',
-                     accessor: (m) => <div className="font-semibold text-zinc-900 dark:text-zinc-100">{m.name}</div>
+                     accessor: (m) => (
+                       <div className="flex items-center gap-3 font-semibold text-zinc-900 dark:text-zinc-100">
+                         <UserAvatarWithPresence avatarUrl={m.avatarUrl} name={m.name} status={m.status || m.presenceStatus || 'AVAILABLE'} size="xs" />
+                         {m.name}
+                       </div>
+                     )
                    },
                    {
                      header: 'Role / Type',

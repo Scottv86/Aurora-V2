@@ -19,6 +19,7 @@ import { cn } from '../../lib/utils';
 import { PendingApprovals } from '../../components/Platform/PendingApprovals';
 import { Table } from '../../components/UI/Table';
 import { CreatePartyModal } from '../../components/Platform/CreatePartyModal';
+import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 
 export const PeopleOrgDirectory = () => {
   const navigate = useNavigate();
@@ -293,13 +294,18 @@ export const PeopleOrgDirectory = () => {
                         sortKey: 'displayName',
                         accessor: (entity: any) => (
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-all ${
-                              entity.partyType === 'PERSON' 
-                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' 
-                                : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600'
-                            }`}>
-                              {entity.partyType === 'PERSON' ? <User size={16} /> : <Building2 size={16} />}
-                            </div>
+                            {entity.partyType === 'PERSON' ? (
+                              <UserAvatarWithPresence
+                                name={entity.displayName}
+                                avatarUrl={entity.person?.avatarUrl}
+                                status={entity.status || entity.presenceStatus || 'AVAILABLE'}
+                                size="sm"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 flex items-center justify-center">
+                                <Building2 size={16} />
+                              </div>
+                            )}
                             <div>
                               <p className="text-xs font-bold text-zinc-900 dark:text-white">
                                 {entity.displayName}

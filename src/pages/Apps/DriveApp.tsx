@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Folder, 
   FileText, 
@@ -36,16 +36,62 @@ type NavTab = 'PERSONAL' | 'TENANT_SHARED' | 'STARRED' | 'RECENT' | 'GOVERNANCE'
 
 export const DriveApp = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { tenant } = usePlatform();
   const { user, session } = useAuth();
-  const [activeNav, setActiveNav] = useState<NavTab>('TENANT_SHARED');
 
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [activeNav, setActiveNav] = useState<NavTab>(() => {
+    const selectedId = searchParams.get('selectedId');
+    if (selectedId) {
+      const item = DriveService.getItemById(selectedId);
+      if (item) return (item.driveType as string) === 'MY_DRIVE' || item.driveType === 'PERSONAL' ? 'PERSONAL' : 'TENANT_SHARED';
+    }
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['PERSONAL', 'TENANT_SHARED', 'STARRED', 'RECENT', 'GOVERNANCE', 'TRASH'].includes(tabParam)) {
+      return tabParam as NavTab;
+    }
+    return 'TENANT_SHARED';
+  });
+
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(() => {
+    const selectedId = searchParams.get('selectedId');
+    if (selectedId) {
+      const item = DriveService.getItemById(selectedId);
+      if (item) return item.parentId || null;
+    }
+    return searchParams.get('folderId') || null;
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(() => searchParams.get('selectedId') || null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [inspectorTab, setInspectorTab] = useState<'details' | 'records' | 'versions' | 'audit'>('details');
+
+  useEffect(() => {
+    const selectedId = searchParams.get('selectedId');
+    const tabParam = searchParams.get('tab');
+    const folderIdParam = searchParams.get('folderId');
+
+    if (selectedId) {
+      const item = DriveService.getItemById(selectedId);
+      if (item) {
+        setActiveNav((item.driveType as string) === 'MY_DRIVE' || item.driveType === 'PERSONAL' ? 'PERSONAL' : 'TENANT_SHARED');
+        setCurrentFolderId(item.parentId || null);
+        setSelectedItemId(item.id);
+        setIsInspectorOpen(true);
+        return;
+      }
+      setSelectedItemId(selectedId);
+      setIsInspectorOpen(true);
+    }
+    if (tabParam && ['PERSONAL', 'TENANT_SHARED', 'STARRED', 'RECENT', 'GOVERNANCE', 'TRASH'].includes(tabParam)) {
+      setActiveNav(tabParam as NavTab);
+    }
+    if (folderIdParam !== null) {
+      setCurrentFolderId(folderIdParam || null);
+    }
+  }, [searchParams]);
 
   // Modals state
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);

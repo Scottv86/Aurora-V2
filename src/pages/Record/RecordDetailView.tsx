@@ -28,6 +28,7 @@ import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
+import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
@@ -2688,13 +2689,12 @@ export const RecordDetailView = ({
             >
               {currentAssignee ? (
                 <>
-                  {currentAssignee.avatarUrl ? (
-                    <img src={currentAssignee.avatarUrl} alt={currentAssignee.name} className="w-5 h-5 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
-                      {currentAssignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                    </div>
-                  )}
+                  <UserAvatarWithPresence
+                    avatarUrl={currentAssignee.avatarUrl}
+                    name={currentAssignee.name}
+                    status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
+                    size="xs"
+                  />
                   <span className="text-zinc-700 dark:text-zinc-300 max-w-[100px] truncate">{currentAssignee.name}</span>
                 </>
               ) : (
@@ -2773,13 +2773,12 @@ export const RecordDetailView = ({
                             )}
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              {member.avatarUrl ? (
-                                <img src={member.avatarUrl} alt={member.name} className="w-5 h-5 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center text-[9px] font-bold">
-                                  {member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                                </div>
-                              )}
+                              <UserAvatarWithPresence
+                                avatarUrl={member.avatarUrl}
+                                name={member.name}
+                                status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
+                                size="xs"
+                              />
                               <div className="min-w-0">
                                 <p className="truncate leading-none">{member.name}</p>
                                 <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
