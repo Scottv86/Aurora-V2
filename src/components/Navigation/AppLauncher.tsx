@@ -31,6 +31,7 @@ const APPS: AppItem[] = [
   { id: 'whiteboard', label: 'Whiteboard', iconName: 'Presentation', description: 'Collaborative brainstorming', color: 'text-teal-500' },
   { id: 'calculator', label: 'Calculator', iconName: 'Calculator', description: 'Advanced calculation tool', color: 'text-slate-500' },
   { id: 'snipper', label: 'Snipping tool', iconName: 'Scissors', description: 'Capture your screen', color: 'text-violet-500' },
+  { id: 'flowchart', label: 'Flowchart', iconName: 'Workflow', description: 'Interactive visual process & diagram builder', color: 'text-cyan-600' },
 ];
 
 export const AppLauncher = () => {

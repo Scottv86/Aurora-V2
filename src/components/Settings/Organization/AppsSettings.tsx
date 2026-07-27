@@ -19,7 +19,8 @@ import {
   Palette,
   Presentation,
   Calculator,
-  Scissors
+  Scissors,
+  Workflow
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { cn } from '../../../lib/utils';
@@ -43,6 +44,7 @@ const AVAILABLE_APPS = [
   { id: 'whiteboard', label: 'Whiteboard', icon: Presentation, description: 'Real-time collaborative brainstorming space.', color: 'text-teal-500', bg: 'bg-teal-500/10' },
   { id: 'calculator', label: 'Calculator', icon: Calculator, description: 'Advanced tool for quick and complex calculations.', color: 'text-slate-500', bg: 'bg-slate-500/10' },
   { id: 'snipper', label: 'Snipping tool', icon: Scissors, description: 'Capture and annotate any part of your screen.', color: 'text-violet-500', bg: 'bg-violet-500/10' },
+  { id: 'flowchart', label: 'Flowchart', icon: Workflow, description: 'Interactive visual process and diagram builder.', color: 'text-cyan-600', bg: 'bg-cyan-600/10' },
 ];
 
 export const AppsSettings = () => {
