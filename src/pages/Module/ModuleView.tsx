@@ -2859,7 +2859,7 @@ export const ModuleView = () => {
 
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
-        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
+        <div className="flex items-center justify-between bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200 dark:border-white/10 rounded-3xl p-4 shadow-sm">
           <div className="flex items-center gap-4 flex-1 max-w-md">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
@@ -2885,7 +2885,7 @@ export const ModuleView = () => {
               <div 
                 key={record.id}
                 onClick={() => handleRecordClick(record.id)}
-                className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/[0.03] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
+                className="group relative bg-white/50 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.07] hover:border-indigo-500/50 dark:hover:border-indigo-500/40 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
               >
                 <div>
                   <div className="flex items-center justify-between">
@@ -2899,7 +2899,7 @@ export const ModuleView = () => {
                     {getRecordTitle(record)}
                   </h4>
 
-                  <div className="mt-4 space-y-1.5 border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                  <div className="mt-4 space-y-1.5 border-t border-zinc-200/80 dark:border-white/[0.06] pt-3">
                     {activeCardFields.map((f: any) => {
                       let val = record[f.id] || record[f.name];
                       if (f.id === 'createdBy' && record.createdBy) {
@@ -2924,7 +2924,7 @@ export const ModuleView = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-6 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                <div className="flex items-center justify-between mt-6 pt-3 border-t border-zinc-200/80 dark:border-white/[0.06]">
                   <span className="text-[9px] text-zinc-400 font-bold">{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
                   
                   {assignee ? (
