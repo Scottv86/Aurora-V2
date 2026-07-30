@@ -104,9 +104,12 @@ const Row = ({
   );
 };
 
+import { useNewModuleModal } from '../context/NewModuleModalContext';
+
 export const ModuleCatalog = () => {
   const { session } = useAuth();
   const { tenant, modules, refreshModules } = usePlatform();
+  const { openNewModuleModal } = useNewModuleModal();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'INSTALLED' | 'LIBRARY'>(
@@ -351,7 +354,7 @@ export const ModuleCatalog = () => {
           }
           actions={
             <button 
-              onClick={() => navigate('/workspace/settings/builder')}
+              onClick={() => openNewModuleModal()}
               className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg shadow-black/5"
             >
               <Plus size={14} />

@@ -20,7 +20,13 @@ import {
   Presentation,
   Calculator,
   Scissors,
-  Workflow
+  Workflow,
+  FileEdit,
+  EyeOff,
+  MonitorPlay,
+  Image,
+  Send,
+  Table
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { cn } from '../../../lib/utils';
@@ -45,6 +51,17 @@ const AVAILABLE_APPS = [
   { id: 'calculator', label: 'Calculator', icon: Calculator, description: 'Advanced tool for quick and complex calculations.', color: 'text-slate-500', bg: 'bg-slate-500/10' },
   { id: 'snipper', label: 'Snipping tool', icon: Scissors, description: 'Capture and annotate any part of your screen.', color: 'text-violet-500', bg: 'bg-violet-500/10' },
   { id: 'flowchart', label: 'Flowchart', icon: Workflow, description: 'Interactive visual process and diagram builder.', color: 'text-cyan-600', bg: 'bg-cyan-600/10' },
+  { id: 'pdf-editor', label: 'PDF Editor', icon: FileEdit, description: 'View, edit, and annotate PDF documents.', color: 'text-red-500', bg: 'bg-red-500/10' },
+  { id: 'redact', label: 'Redact', icon: EyeOff, description: 'Sanitize and obscure sensitive document data.', color: 'text-zinc-600', bg: 'bg-zinc-600/10' },
+  { id: 'slideshow', label: 'Slideshow', icon: MonitorPlay, description: 'Create, edit, and present interactive slide decks and pitch decks.', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  { id: 'graphics', label: 'Graphics', icon: Image, description: 'Design custom graphics, marketing visual assets, and social banners.', color: 'text-fuchsia-500', bg: 'bg-fuchsia-500/10' },
+  { id: 'campaigns', label: 'Campaigns', icon: Send, description: 'Create email campaigns, newsletters, and automated audience sequences.', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  { id: 'spreadsheet', label: 'Spreadsheet', icon: Table, description: 'Collaborative spreadsheets with formulas, pivot tables, and data analysis.', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+];
+
+const INITIAL_APP_IDS = [
+  'inbox', 'docs', 'drive', 'chat', 'meet', 'calendar', 'notes', 'reminders',
+  'reports', 'converter', 'feed', 'draw', 'whiteboard', 'calculator', 'snipper', 'flowchart'
 ];
 
 export const AppsSettings = () => {
@@ -52,8 +69,10 @@ export const AppsSettings = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [savingAppId, setSavingAppId] = useState<string | null>(null);
 
-  // Default to all apps enabled if the field doesn't exist yet
-  const enabledApps = tenant?.enabledApps || AVAILABLE_APPS.map(a => a.id);
+  // Default to all apps enabled if the field doesn't exist yet, ensuring newly introduced suite apps are enabled by default
+  const enabledApps = tenant?.enabledApps
+    ? AVAILABLE_APPS.map(a => a.id).filter(id => tenant.enabledApps!.includes(id) || !INITIAL_APP_IDS.includes(id))
+    : AVAILABLE_APPS.map(a => a.id);
 
   const handleToggleApp = async (e: React.MouseEvent, appId: string) => {
     e.stopPropagation();

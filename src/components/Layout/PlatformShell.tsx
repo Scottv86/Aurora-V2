@@ -570,7 +570,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       )}
 
       <div className="flex">
-        {layoutStyle !== 'top' && (
+        {!isModuleBuilder && layoutStyle !== 'top' && (
           <aside 
             onMouseEnter={() => {
               if (layoutStyle === 'slim') setIsSidebarHovered(true);
@@ -582,7 +582,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             className={cn(
               "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl z-45 overflow-y-auto overflow-x-hidden",
               (isModuleBuilder || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
-              !isResizing && "transition-all duration-300"
+              !isResizing && !isModuleBuilder && "transition-all duration-300"
             )}
           >
             <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "p-4" : "p-2")}>
@@ -722,7 +722,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           style={{ marginLeft: `${currentWidth}px` }}
           className={cn(
             "flex-1 flex flex-col overflow-y-auto",
-            !isResizing && "transition-all duration-300",
+            !isResizing && !isModuleBuilder && "transition-all duration-300",
             layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
               ? "h-[calc(100vh-7rem)]" 
               : "h-[calc(100vh-4rem)]"
@@ -732,7 +732,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             "mx-auto flex flex-col min-h-full",
             fullBleed ? "w-full flex-1" : "max-w-7xl w-full"
           )}>
-            {pathnames.length > 0 && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
+            {pathnames.length > 0 && !isModuleBuilder && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">
                 <Breadcrumbs />
                 {getContextualAction()}

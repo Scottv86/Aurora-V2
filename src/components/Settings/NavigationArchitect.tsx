@@ -458,7 +458,8 @@ const ItemCard = ({
       { id: 'currentUser.id', label: 'Current User: Member ID' },
       { id: 'status', label: 'Status' },
       { id: 'priority', label: 'Priority' },
-      { id: 'assigneeId', label: 'Assignee ID' }
+      { id: 'assigneeId', label: 'Assignee ID' },
+      { id: 'participantIds', label: 'Participants' }
     ];
 
     const targetModuleIds = editQueueItemType === 'single' 
@@ -490,6 +491,7 @@ const ItemCard = ({
       { id: 'status', label: 'Status', group: 'System' },
       { id: 'priority', label: 'Priority', group: 'System' },
       { id: 'assigneeId', label: 'Assignee', group: 'System' },
+      { id: 'participantIds', label: 'Participants', group: 'System' },
       { id: 'createdAt', label: 'Created At', group: 'System' },
       { id: 'updatedAt', label: 'Updated At', group: 'System' }
     ];

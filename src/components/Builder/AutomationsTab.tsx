@@ -815,6 +815,10 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       triggersPayload.push({
         type: 'ASSIGNEE_CHANGED'
       });
+    } else if (newType === 'PARTICIPANTS_CHANGED') {
+      triggersPayload.push({
+        type: 'PARTICIPANTS_CHANGED'
+      });
     } else if (newType === 'RELATION_LINKED') {
       triggersPayload.push({
         type: 'RELATION_LINKED',
@@ -933,6 +937,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       SEND_EMAIL: { to: '', subject: '', body: '' },
       SEND_INTERNAL_PING: { channel: 'general', message: '' },
       SET_ASSIGNEE: { targetType: 'TRIGGERING', recordId: '', assigneeId: '' },
+      ADD_PARTICIPANT: { targetType: 'TRIGGERING', recordId: '', participantId: '' },
+      REMOVE_PARTICIPANT: { targetType: 'TRIGGERING', recordId: '', participantId: '' },
       IF_CONDITION: { condition: '', thenSteps: [], elseSteps: [] },
       SWITCH_CASE: { switchValue: '', cases: {}, defaultSteps: [] },
       LOOP_FOREACH: { arrayPath: '', loopSteps: [] },
@@ -1063,10 +1069,10 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   }, [automations, searchQuery]);
 
   return (
-    <div className="flex h-full w-full bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
+    <div className="flex h-full w-full bg-transparent overflow-hidden">
       
       {/* COLUMN 1: Rules Directory Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">
+      <aside className="w-72 flex-shrink-0 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl border-r border-zinc-200 dark:border-zinc-800/80 p-6 flex flex-col gap-4">
         <div className="flex-shrink-0">
           <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Automations</h3>
         </div>
@@ -1169,7 +1175,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       {selectedRuleId !== null ? (
         <>
           {/* COLUMN 2: Triggers & Actions Palette */}
-          <aside className="w-60 flex-shrink-0 bg-zinc-55/35 dark:bg-zinc-950/20 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+          <aside className="w-60 flex-shrink-0 bg-white/30 dark:bg-zinc-950/30 backdrop-blur-xl border-r border-zinc-200 dark:border-zinc-800/80 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
             
             {/* Trigger Palette section */}
             <div className="space-y-3">
@@ -1180,6 +1186,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'RECORD_UPDATED', label: 'On Updated', desc: 'When record changes' },
                   { id: 'STATUS_CHANGED', label: 'Status Changed', desc: 'When status transitions' },
                   { id: 'ASSIGNEE_CHANGED', label: 'Assignee Changed', desc: 'When assignee updates' },
+                  { id: 'PARTICIPANTS_CHANGED', label: 'Participants Changed', desc: 'When participants update' },
                   { id: 'RELATION_LINKED', label: 'Relation Linked', desc: 'When records are linked' },
                   { id: 'USER_MENTIONED', label: 'User Mentioned', desc: 'Mentions in comments' },
                   { id: 'FORM_SUBMITTED', label: 'Form Submitted', desc: 'Public form ingestion' },
@@ -1216,6 +1223,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'UPDATE_RECORD', label: 'Update Record', desc: 'Update row parameters', icon: RefreshCw },
                   { id: 'GET_RECORD', label: 'Fetch Record', desc: 'Lookup rows', icon: ArrowRight },
                   { id: 'SET_ASSIGNEE', label: 'Set Assignee', desc: 'Assign row to user', icon: UserCheck },
+                  { id: 'ADD_PARTICIPANT', label: 'Add Participant', desc: 'Add team member', icon: UserCheck },
+                  { id: 'REMOVE_PARTICIPANT', label: 'Remove Participant', desc: 'Remove team member', icon: UserCheck },
                   { id: 'SEND_EMAIL', label: 'Send Email', desc: 'Dispatch SMTP alert', icon: Mail },
                   { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', desc: 'Log channel message', icon: MessageSquare },
                   { id: 'IF_CONDITION', label: 'Condition Branch', desc: 'If/Else step branching', icon: GitFork },
@@ -1250,7 +1259,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
           </aside>
 
           {/* COLUMN 3: Sequence Steps Canvas (The Biggest One) */}
-          <main className="flex-1 bg-zinc-50/20 dark:bg-zinc-950/10 p-8 overflow-y-auto custom-scrollbar flex flex-col gap-6 min-w-0">
+          <main className="flex-1 bg-transparent p-8 overflow-y-auto custom-scrollbar flex flex-col gap-6 min-w-0">
             
             {/* Header control center */}
             <div className="flex items-center justify-between flex-shrink-0 border-b border-zinc-200 dark:border-zinc-800/80 pb-5">
@@ -2050,7 +2059,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
           </main>
 
           {/* COLUMN 4: Properties Sidebar & Logs History */}
-          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+          <aside className="w-80 flex-shrink-0 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl border-l border-zinc-200 dark:border-zinc-800/80 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
             
             {/* Header Settings vs Runs History Tabs */}
             <div className="flex bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">

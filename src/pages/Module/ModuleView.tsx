@@ -293,6 +293,236 @@ const InlineAssigneeCell = ({
   );
 };
 
+const InlineParticipantCell = ({
+  record,
+  members = [],
+  platformUser,
+  updateMutation,
+  inlineEditEnabled
+}: {
+  record: any;
+  members?: any[];
+  platformUser?: any;
+  updateMutation: any;
+  inlineEditEnabled: boolean;
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const [search, setSearch] = useState('');
+  const [coords, setCoords] = useState<{ buttonTop: number; buttonBottom: number; left: number; width: number; openUpward: boolean; maxHeight: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const clickedInsideButton = menuRef.current && menuRef.current.contains(target);
+      const clickedInsideDropdown = dropdownRef.current && dropdownRef.current.contains(target);
+      if (!clickedInsideButton && !clickedInsideDropdown) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showMenu]);
+
+  useEffect(() => {
+    if (!showMenu || !buttonRef.current) return;
+
+    const updateCoords = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const headerHeight = 110;
+      const spaceBelow = window.innerHeight - rect.bottom - 16;
+      const spaceAbove = rect.top - headerHeight;
+      const dropdownHeight = 240;
+
+      let openUp = false;
+      let maxHeight = dropdownHeight;
+
+      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow && spaceAbove >= 120) {
+        openUp = true;
+        maxHeight = Math.min(dropdownHeight, spaceAbove - 10);
+      } else {
+        openUp = false;
+        maxHeight = Math.max(120, Math.min(dropdownHeight, spaceBelow - 10));
+      }
+      
+      setCoords({
+        buttonTop: rect.top,
+        buttonBottom: rect.bottom,
+        left: rect.left,
+        width: Math.max(rect.width, 224),
+        openUpward: openUp,
+        maxHeight
+      });
+    };
+
+    updateCoords();
+    window.addEventListener('scroll', updateCoords, true);
+    window.addEventListener('resize', updateCoords);
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [showMenu]);
+
+  const participantIds: string[] = Array.isArray(record.participantIds) ? record.participantIds : [];
+  const selectedMembers = members.filter(m => participantIds.includes(m.id));
+
+  if (!inlineEditEnabled) {
+    if (selectedMembers.length > 0) {
+      return (
+        <div className="flex items-center -space-x-1 overflow-hidden">
+          {selectedMembers.slice(0, 3).map(m => (
+            <UserAvatarWithPresence
+              key={m.id}
+              avatarUrl={m.avatarUrl}
+              name={m.name}
+              status={(m as any).status || (m as any).presenceStatus}
+              size="xs"
+            />
+          ))}
+          {selectedMembers.length > 3 && (
+            <span className="text-[9px] font-bold text-zinc-500 pl-1">+{selectedMembers.length - 3}</span>
+          )}
+        </div>
+      );
+    }
+    return <span className="text-zinc-400 dark:text-zinc-600">-</span>;
+  }
+
+  const handleToggle = (memberId: string) => {
+    const exists = participantIds.includes(memberId);
+    const newIds = exists ? participantIds.filter(id => id !== memberId) : [...participantIds, memberId];
+    updateMutation.mutate({
+      recordId: record.id,
+      data: { participantIds: newIds }
+    });
+  };
+
+  return (
+    <div className="relative inline-block text-left" ref={menuRef}>
+      <button
+        ref={buttonRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowMenu(!showMenu);
+        }}
+        className={cn(
+          "flex items-center gap-1.5 px-2 py-1 rounded-xl transition-all border text-left group",
+          showMenu 
+            ? "bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500/50 text-indigo-900 dark:text-indigo-100" 
+            : "bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900/50 dark:hover:bg-zinc-800 border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700 text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
+        )}
+      >
+        {selectedMembers.length > 0 ? (
+          <div className="flex items-center -space-x-1 overflow-hidden">
+            {selectedMembers.slice(0, 3).map(m => (
+              <UserAvatarWithPresence
+                key={m.id}
+                avatarUrl={m.avatarUrl}
+                name={m.name}
+                status={(m as any).status || (m as any).presenceStatus}
+                size="xs"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:border-indigo-500 transition-colors">
+            <LucideIcons.Users size={10} />
+          </div>
+        )}
+        <span className="text-[11px] font-bold">
+          {selectedMembers.length > 0 ? `${selectedMembers.length}` : 'Add'}
+        </span>
+        <LucideIcons.ChevronDown size={12} className="text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors shrink-0" />
+      </button>
+
+      {createPortal(
+        <AnimatePresence>
+          {showMenu && coords && (
+            <motion.div
+              ref={dropdownRef}
+              initial={{ opacity: 0, y: coords.openUpward ? -4 : 4, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: coords.openUpward ? -4 : 4, scale: 0.95 }}
+              transition={{ duration: 0.1 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                left: `${Math.max(16, Math.min(coords.left, window.innerWidth - coords.width - 16))}px`,
+                width: `${coords.width}px`,
+                zIndex: 99999,
+                maxHeight: `${coords.maxHeight}px`,
+                ...(coords.openUpward 
+                  ? { bottom: `${window.innerHeight - coords.buttonTop + 4}px` } 
+                  : { top: `${coords.buttonBottom + 4}px` })
+              }}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl overflow-hidden flex flex-col"
+            >
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 flex flex-col gap-0.5">
+                <button
+                  onClick={() => {
+                    const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
+                    if (me) handleToggle(me.id);
+                  }}
+                  className="w-full text-left px-2 py-1 rounded-lg text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-1.5"
+                >
+                  <LucideIcons.UserPlus size={10} />
+                  <span>Toggle myself</span>
+                </button>
+              </div>
+
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800 relative">
+                <LucideIcons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={10} />
+                <input
+                  type="text"
+                  placeholder="Search members..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-1 text-[10px] text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-1 space-y-0.5 max-h-36 scrollbar-thin">
+                {(members || [])
+                  .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(search.toLowerCase()))
+                  .map(member => {
+                    const isSelected = participantIds.includes(member.id);
+                    return (
+                      <button
+                        key={member.id}
+                        onClick={() => handleToggle(member.id)}
+                        className={cn(
+                          "w-full text-left px-2 py-1.5 rounded-lg text-[10px] font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
+                          isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <UserAvatarWithPresence
+                            avatarUrl={member.avatarUrl}
+                            name={member.name}
+                            status={(member as any).status || (member as any).presenceStatus}
+                            size="xs"
+                          />
+                          <span className="truncate">{member.name}</span>
+                        </div>
+                        {isSelected && <LucideIcons.Check size={10} className="text-indigo-500 shrink-0 ml-1" />}
+                      </button>
+                    );
+                  })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 export const ModuleView = () => {
   const { moduleId: moduleIdRaw } = useParams();
   const navigate = useNavigate();
@@ -3502,6 +3732,27 @@ export const ModuleView = () => {
           const inlineEditEnabled = colConfig?.inlineEdit === true;
           return (
             <InlineAssigneeCell
+              record={record}
+              members={members}
+              platformUser={platformUser}
+              updateMutation={updateMutation}
+              inlineEditEnabled={inlineEditEnabled}
+            />
+          );
+        }
+      },
+      participantIds: {
+        header: 'Participants',
+        sortable: false,
+        className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'participantIds')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'participantIds').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'participantIds').width}px` } 
+          : undefined,
+        accessor: (record: any) => {
+          const colConfig = interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'participantIds');
+          const inlineEditEnabled = colConfig?.inlineEdit === true;
+          return (
+            <InlineParticipantCell
               record={record}
               members={members}
               platformUser={platformUser}

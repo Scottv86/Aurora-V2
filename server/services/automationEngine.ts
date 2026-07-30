@@ -10,6 +10,8 @@ export interface AutomationAction {
     | 'SEND_EMAIL' 
     | 'SEND_INTERNAL_PING' 
     | 'SET_ASSIGNEE'
+    | 'ADD_PARTICIPANT'
+    | 'REMOVE_PARTICIPANT'
     | 'IF_CONDITION'
     | 'SWITCH_CASE'
     | 'LOOP_FOREACH'
@@ -65,6 +67,7 @@ export class AutomationEngine {
             return fromMatch && toMatch;
           }
           if (t.type === 'ASSIGNEE_CHANGED' && event.type === 'ASSIGNEE_CHANGED') return true;
+          if (t.type === 'PARTICIPANTS_CHANGED' && event.type === 'PARTICIPANTS_CHANGED') return true;
           if (t.type === 'RELATION_LINKED' && event.type === 'RELATION_LINKED') {
             return !t.linkedModuleId || t.linkedModuleId === event.metadata?.linkedModuleId;
           }
@@ -301,6 +304,44 @@ export class AutomationEngine {
             }
           });
           output = await this.getMappedRecord(updated, existing.moduleId, db);
+          break;
+        }
+
+        case 'ADD_PARTICIPANT': {
+          const targetType = action.config.targetType || 'TRIGGERING';
+          let targetRecordId = targetType === 'TRIGGERING' ? context.trigger.record?.id : this.interpolateString(action.config.recordId || '', context);
+          if (!targetRecordId) throw new Error('Could not resolve target record ID for ADD_PARTICIPANT');
+          const existing = await db.record.findUnique({ where: { id: targetRecordId } });
+          if (!existing) throw new Error(`Record with ID ${targetRecordId} not found`);
+          const participantId = this.interpolateString(action.config.participantId || action.config.assigneeId || '', context);
+          if (participantId) {
+            const mergedData = { ...(existing.data as Record<string, any> || {}) };
+            const currentP = Array.isArray(mergedData.participantIds) ? mergedData.participantIds : [];
+            if (!currentP.includes(participantId)) {
+              mergedData.participantIds = [...currentP, participantId];
+              const updated = await db.record.update({ where: { id: targetRecordId }, data: { data: mergedData } });
+              output = await this.getMappedRecord(updated, existing.moduleId, db);
+            } else {
+              output = await this.getMappedRecord(existing, existing.moduleId, db);
+            }
+          }
+          break;
+        }
+
+        case 'REMOVE_PARTICIPANT': {
+          const targetType = action.config.targetType || 'TRIGGERING';
+          let targetRecordId = targetType === 'TRIGGERING' ? context.trigger.record?.id : this.interpolateString(action.config.recordId || '', context);
+          if (!targetRecordId) throw new Error('Could not resolve target record ID for REMOVE_PARTICIPANT');
+          const existing = await db.record.findUnique({ where: { id: targetRecordId } });
+          if (!existing) throw new Error(`Record with ID ${targetRecordId} not found`);
+          const participantId = this.interpolateString(action.config.participantId || action.config.assigneeId || '', context);
+          if (participantId) {
+            const mergedData = { ...(existing.data as Record<string, any> || {}) };
+            const currentP = Array.isArray(mergedData.participantIds) ? mergedData.participantIds : [];
+            mergedData.participantIds = currentP.filter((id: string) => id !== participantId);
+            const updated = await db.record.update({ where: { id: targetRecordId }, data: { data: mergedData } });
+            output = await this.getMappedRecord(updated, existing.moduleId, db);
+          }
           break;
         }
 

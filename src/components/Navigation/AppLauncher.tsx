@@ -32,6 +32,17 @@ const APPS: AppItem[] = [
   { id: 'calculator', label: 'Calculator', iconName: 'Calculator', description: 'Advanced calculation tool', color: 'text-slate-500' },
   { id: 'snipper', label: 'Snipping tool', iconName: 'Scissors', description: 'Capture your screen', color: 'text-violet-500' },
   { id: 'flowchart', label: 'Flowchart', iconName: 'Workflow', description: 'Interactive visual process & diagram builder', color: 'text-cyan-600' },
+  { id: 'pdf-editor', label: 'PDF Editor', iconName: 'FileEdit', description: 'View, edit, and annotate PDF documents', color: 'text-red-500' },
+  { id: 'redact', label: 'Redact', iconName: 'EyeOff', description: 'Sanitize and obscure sensitive document data', color: 'text-zinc-600' },
+  { id: 'slideshow', label: 'Slideshow', iconName: 'MonitorPlay', description: 'Interactive slide decks & presentations', color: 'text-amber-500' },
+  { id: 'graphics', label: 'Graphics', iconName: 'Image', description: 'Graphic design & visual assets', color: 'text-fuchsia-500' },
+  { id: 'campaigns', label: 'Campaigns', iconName: 'Send', description: 'Email marketing & audience outreach', color: 'text-blue-500' },
+  { id: 'spreadsheet', label: 'Spreadsheet', iconName: 'Table', description: 'Data tables & financial models', color: 'text-emerald-500' },
+];
+
+const INITIAL_APP_IDS = [
+  'inbox', 'docs', 'drive', 'chat', 'meet', 'calendar', 'notes', 'reminders',
+  'reports', 'converter', 'feed', 'draw', 'whiteboard', 'calculator', 'snipper', 'flowchart'
 ];
 
 export const AppLauncher = () => {
@@ -39,8 +50,10 @@ export const AppLauncher = () => {
   const { tenant, setIsAppLauncherOpen } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Default to all apps if not specified
-  const enabledApps = tenant?.enabledApps || APPS.map(a => a.id);
+  // Default to all apps if not specified, ensuring newly introduced suite apps are visible by default
+  const enabledApps = tenant?.enabledApps
+    ? APPS.map(a => a.id).filter(id => tenant.enabledApps!.includes(id) || !INITIAL_APP_IDS.includes(id))
+    : APPS.map(a => a.id);
   const visibleApps = APPS.filter(app => enabledApps.includes(app.id));
 
   const filteredApps = visibleApps.filter(app => 

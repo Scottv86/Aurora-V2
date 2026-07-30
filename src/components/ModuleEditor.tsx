@@ -1573,7 +1573,7 @@ export const ModuleEditor = () => {
   const { groups: permissionGroups } = usePermissionGroups();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(id !== 'new');
   const [isRestricted, setIsRestricted] = useState(false);
   
   const [moduleSettings, setModuleSettings] = useState({
@@ -2293,9 +2293,10 @@ export const ModuleEditor = () => {
           setForms(normalizedForms);
         }
 
-        // Load automations for the module
+        // Load automations for the module (using actualModuleId or slug/name fallback)
+        const targetModuleId = data.id || id;
         try {
-          const autResponse = await fetch(`${API_BASE_URL}/api/automations?moduleId=${id}`, {
+          const autResponse = await fetch(`${API_BASE_URL}/api/automations?moduleId=${targetModuleId}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'x-tenant-id': tenant.id || ''
@@ -2303,7 +2304,27 @@ export const ModuleEditor = () => {
           });
           if (autResponse.ok) {
             const autData = await autResponse.json();
-            setLocalAutomations(autData);
+            if (Array.isArray(autData) && autData.length > 0) {
+              setLocalAutomations(autData);
+            } else {
+              // Fallback to fetch all tenant automations and match by UUID, slug, or module name
+              const fallbackRes = await fetch(`${API_BASE_URL}/api/automations`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'x-tenant-id': tenant.id || ''
+                }
+              });
+              if (fallbackRes.ok) {
+                const allAuts: any[] = await fallbackRes.json();
+                const matched = allAuts.filter((a: any) => 
+                  a.moduleId === targetModuleId || 
+                  a.moduleId === id || 
+                  (data.name && a.moduleId?.toLowerCase() === data.name.toLowerCase())
+                );
+                setLocalAutomations(matched);
+                setAllTenantAutomations(allAuts);
+              }
+            }
           }
         } catch (err) {
           console.error("Error loading automations:", err);
@@ -2571,7 +2592,8 @@ export const ModuleEditor = () => {
       { id: 'createdBy', label: 'Created By', type: 'user' },
       { id: 'updatedAt', label: 'Updated Date', type: 'date' },
       { id: 'status', label: 'Status', type: 'select' },
-      { id: 'assigneeId', label: 'Assignee', type: 'user' }
+      { id: 'assigneeId', label: 'Assignee', type: 'user' },
+      { id: 'participantIds', label: 'Participants', type: 'multi-user' }
     ];
     return systemFieldsDef.find(sf => sf.id === selectedId) || null;
   }, [selectedId, interfaceSettings.master.columns]);
@@ -2582,7 +2604,8 @@ export const ModuleEditor = () => {
       { id: 'createdBy', label: 'Created By', type: 'user' },
       { id: 'updatedAt', label: 'Updated Date', type: 'date' },
       { id: 'status', label: 'Status', type: 'select' },
-      { id: 'assigneeId', label: 'Assignee', type: 'user' }
+      { id: 'assigneeId', label: 'Assignee', type: 'user' },
+      { id: 'participantIds', label: 'Participants', type: 'multi-user' }
     ];
 
     const activeCustom = displayFields.filter(f => f.showInTable !== false);
@@ -3793,7 +3816,8 @@ export const ModuleEditor = () => {
             { id: 'createdBy', label: 'Created By', type: 'user' },
             { id: 'updatedAt', label: 'Updated Date', type: 'date' },
             { id: 'status', label: 'Status', type: 'select' },
-            { id: 'assigneeId', label: 'Assignee', type: 'user' }
+            { id: 'assigneeId', label: 'Assignee', type: 'user' },
+            { id: 'participantIds', label: 'Participants', type: 'multi-user' }
           ].find(sf => sf.id === cf.fieldId);
           return customField || systemField;
         }).filter(Boolean)
@@ -4648,11 +4672,11 @@ export const ModuleEditor = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-zinc-950 overflow-hidden">
+    <div className="h-full flex flex-col bg-transparent text-zinc-900 dark:text-zinc-100 overflow-hidden">
       {/* Sub-Header / Toolbar */}
-      <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 z-30">
+      <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/60 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <div className="flex items-center gap-1 bg-zinc-100/80 dark:bg-zinc-900/60 p-1 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 backdrop-blur-md">
             {(['details', 'builder', 'forms', 'workflow', 'validations', 'connectors', 'automation', 'security', 'deployment'] as const).map((tab) => (
               <button
                 key={tab}
@@ -4660,8 +4684,8 @@ export const ModuleEditor = () => {
                 className={cn(
                   "px-3 py-1 rounded-md text-[10px] font-bold transition-all uppercase tracking-widest",
                   activeTab === tab 
-                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm dark:shadow-lg" 
-                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    ? "bg-white dark:bg-zinc-800/90 text-zinc-900 dark:text-white shadow-sm border border-zinc-200/60 dark:border-zinc-700/60" 
+                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-white/40 dark:hover:bg-zinc-800/40"
                 )}
               >
                 {tab === 'connectors' ? 'integrations' : tab === 'builder' ? 'interface' : tab === 'details' ? 'setup' : tab}
@@ -4850,7 +4874,7 @@ export const ModuleEditor = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Discovery Panel */}
         {activeTab === 'builder' && (
-          <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
+          <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl flex flex-col overflow-hidden">
             <div className="h-[52px] px-4 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent flex items-center">
               <div className="relative w-full">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -4916,7 +4940,8 @@ export const ModuleEditor = () => {
                     { id: 'createdBy', label: 'Created By', type: 'user' },
                     { id: 'updatedAt', label: 'Updated Date', type: 'date' },
                     { id: 'status', label: 'Status', type: 'select' },
-                    { id: 'assigneeId', label: 'Assignee', type: 'user' }
+                    { id: 'assigneeId', label: 'Assignee', type: 'user' },
+                    { id: 'participantIds', label: 'Participants', type: 'multi-user' }
                   ].filter(sf => 
                     sf.label.toLowerCase().includes(sidebarSearch.toLowerCase()) && 
                     !displayFields.some(df => df.id === sf.id) // Avoid duplicates
@@ -5206,7 +5231,7 @@ export const ModuleEditor = () => {
 
 
         {/* Canvas / Preview */}
-        <main className="flex-1 relative flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+        <main className="flex-1 relative flex flex-col overflow-hidden bg-transparent">
           {/* Main Tab Content Area */}
           <div 
             className={cn(
@@ -5226,7 +5251,7 @@ export const ModuleEditor = () => {
           >
           {activeTab === 'builder' ? (
             activeViewMode === 'master' ? (
-              <div className="flex-1 flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 p-8 custom-scrollbar overflow-y-auto min-h-full">
+              <div className="flex-1 flex overflow-hidden bg-transparent p-8 custom-scrollbar overflow-y-auto min-h-full">
                 <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-300">
                   {/* Master View In-Canvas Title Header */}
                   <div className="border border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm px-8 py-5 flex items-center justify-between gap-4 z-20 relative select-none rounded-3xl shadow-sm">
@@ -5346,8 +5371,8 @@ export const ModuleEditor = () => {
                                     {/* Draggable Column Headers */}
                                     {activeColumns.map((col, idx) => {
                                       const isSelected = selectedId === col.id;
-                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId'].includes(col.id) ? 120 : 200);
-                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId'].includes(col.id);
+                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId', 'participantIds'].includes(col.id) ? 120 : 200);
+                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId', 'participantIds'].includes(col.id);
 
                                       return (
                                         <th 
@@ -5433,11 +5458,22 @@ export const ModuleEditor = () => {
                                     
                                     {/* Active columns data cells */}
                                     {activeColumns.map((col) => {
-                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId'].includes(col.id) ? 120 : 200);
+                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId', 'participantIds'].includes(col.id) ? 120 : 200);
                                       let cellValue = row[col.id] || row[col.name] || '-';
                                       
-                                      // Custom user display
-                                      if (col.type === 'user' || col.id === 'createdBy' || col.id === 'assigneeId') {
+                                      // Custom user / multi-user display
+                                      if (col.type === 'multi-user' || col.id === 'participantIds') {
+                                        cellValue = (
+                                          <div className="flex items-center -space-x-1.5 overflow-hidden">
+                                            <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 ring-2 ring-white dark:ring-zinc-900">
+                                              P1
+                                            </div>
+                                            <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-[9px] font-bold text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 ring-2 ring-white dark:ring-zinc-900">
+                                              P2
+                                            </div>
+                                          </div>
+                                        );
+                                      } else if (col.type === 'user' || col.id === 'createdBy' || col.id === 'assigneeId') {
                                         cellValue = (
                                           <div className="flex items-center gap-1.5">
                                             <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-500 border border-zinc-300 dark:border-zinc-700">
@@ -8682,7 +8718,7 @@ export const ModuleEditor = () => {
               </div>
           ) : activeTab === 'details' ? (
             <div className="flex h-full w-full overflow-hidden">
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Configuration</h3>
                 </div>
@@ -8699,7 +8735,7 @@ export const ModuleEditor = () => {
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
                       detailsTab === tab.id
-                        ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                        ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-sm"
                         : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
                     )}
                   >
@@ -8710,112 +8746,37 @@ export const ModuleEditor = () => {
               </aside>
 
               {/* Details Content */}
-              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
+              <div className="flex-1 flex flex-col overflow-hidden bg-transparent">
                 {detailsTab === 'general' && (
-                <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                  <div className="max-w-none mx-auto space-y-12 pb-20">
+                <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+                  <div className="max-w-5xl mx-auto space-y-6 pb-16">
                   <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Module Setup</h2>
-                    <p className="text-zinc-500 text-sm">Configure the core properties and identity of this module.</p>
+                    <h2 className="text-xl font-bold text-zinc-950 dark:text-white tracking-tight">Module Setup</h2>
+                    <p className="text-zinc-500 text-xs">Configure the core properties and identity of this module.</p>
                   </div>
                   
-                  <div className="grid gap-10">
-                    {/* Identity Section */}
-                    <section className="space-y-6">
-                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Module Identity</h3>
-                      </div>
+                  <div className="grid gap-5">
+                    {/* Unified Module Configuration Panel */}
+                    <section className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl space-y-6 shadow-sm backdrop-blur-xl">
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Name</label>
-                          <input 
-                            type="text" 
-                            value={moduleSettings.name}
-                            onChange={(e) => {
-                              const newName = e.target.value;
-                              setModuleSettings(prev => ({ ...prev, name: newName }));
-                              setBreadcrumbOverride(id, newName);
-                            }}
-                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                            placeholder="e.g. Grant Applications"
-                          />
+                      {/* Header & Module Type Selector */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-150 dark:border-zinc-800/80 pb-4">
+                        <div>
+                          <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Module Configuration</h3>
+                          <p className="text-[10px] text-zinc-400">Core identity, keying rules, and metadata</p>
                         </div>
                         
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Category</label>
-                          <div className="relative">
-                            <select 
-                              value={moduleSettings.category}
-                              onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
-                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
-                            >
-                              {MODULE_CATEGORIES.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))}
-                            </select>
-                            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Record Key Section */}
-                    <section className="space-y-6">
-                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Record Key Configuration</h3>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Key Prefix</label>
-                          <input 
-                            type="text" 
-                            value={moduleSettings.recordKeyPrefix || ''}
-                            onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeyPrefix: e.target.value.toUpperCase() }))}
-                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                            placeholder="e.g. TKT"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Key Suffix</label>
-                          <input 
-                            type="text" 
-                            value={moduleSettings.recordKeySuffix || ''}
-                            onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeySuffix: e.target.value.toUpperCase() }))}
-                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                            placeholder="e.g. A"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-zinc-500 px-1">
-                        Records will be generated as: <span className="text-indigo-500 font-bold">{moduleSettings.recordKeyPrefix || 'PREFIX'}-1001{moduleSettings.recordKeySuffix || ''}</span>
-                      </p>
-                    </section>
-
-
-                    {/* Classification Section */}
-                    <section className="space-y-6">
-                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Classification</h3>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Module Type</label>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {/* Compact Module Type Selector */}
+                        <div className="flex items-center gap-1 p-1 bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl shrink-0 self-start sm:self-auto overflow-x-auto no-scrollbar">
                           {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
                             <button
                               key={type}
                               onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
                               className={cn(
-                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold transition-all uppercase tracking-widest",
+                                "px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all uppercase tracking-wider whitespace-nowrap",
                                 moduleSettings.type === type
-                                  ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                                  ? "bg-indigo-600 text-white shadow-sm"
+                                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
                               )}
                             >
                               {type.replace('_', ' ')}
@@ -8823,28 +8784,89 @@ export const ModuleEditor = () => {
                           ))}
                         </div>
                       </div>
-                    </section>
 
-                    {/* Metadata Section */}
-                    <section className="space-y-6">
-                      <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                        <div className="w-1 h-3 bg-indigo-500 rounded-full" />
-                        <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Appearance & Description</h3>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 gap-6">
-                        <IconPicker 
-                          label="Module Icon"
-                          value={moduleSettings.iconName || 'Box'}
-                          onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
-                        />
+                      {/* Main Form Layout Grid */}
+                      <div className="space-y-4">
+                        {/* Row 1: Identity (3 equal columns) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Module Name</label>
+                            <input 
+                              type="text" 
+                              value={moduleSettings.name}
+                              onChange={(e) => {
+                                const newName = e.target.value;
+                                setModuleSettings(prev => ({ ...prev, name: newName }));
+                                setBreadcrumbOverride(id, newName);
+                              }}
+                              className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-zinc-300 dark:hover:border-white/20"
+                              placeholder="e.g. Grant Applications"
+                            />
+                          </div>
 
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Description</label>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Category</label>
+                            <div className="relative">
+                              <select 
+                                value={moduleSettings.category}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
+                                className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all appearance-none hover:border-zinc-300 dark:hover:border-white/20"
+                              >
+                                {MODULE_CATEGORIES.map(cat => (
+                                  <option key={cat} value={cat} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{cat}</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                            </div>
+                          </div>
+
+                          <IconPicker 
+                            label="Module Icon"
+                            value={moduleSettings.iconName || 'Box'}
+                            onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
+                          />
+                        </div>
+
+                        {/* Row 2: Record Keying & Format Preview (3 equal columns) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Key Prefix</label>
+                            <input 
+                              type="text" 
+                              value={moduleSettings.recordKeyPrefix || ''}
+                              onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeyPrefix: e.target.value.toUpperCase() }))}
+                              className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-zinc-300 dark:hover:border-white/20"
+                              placeholder="e.g. TKT"
+                            />
+                          </div>
+                          
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Key Suffix</label>
+                            <input 
+                              type="text" 
+                              value={moduleSettings.recordKeySuffix || ''}
+                              onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeySuffix: e.target.value.toUpperCase() }))}
+                              className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-zinc-300 dark:hover:border-white/20"
+                              placeholder="e.g. A"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Record Format Preview</label>
+                            <div className="h-[38px] bg-white/40 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-xl flex items-center justify-between px-3.5">
+                              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Format</span>
+                              <span className="text-xs font-black text-indigo-500 dark:text-indigo-400 font-mono">{moduleSettings.recordKeyPrefix || 'PREFIX'}-1001{moduleSettings.recordKeySuffix || ''}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Row 3: Description (Full Width) */}
+                        <div className="space-y-1.5 pt-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Description</label>
                           <textarea 
                             value={moduleSettings.description}
                             onChange={(e) => setModuleSettings(prev => ({ ...prev, description: e.target.value }))}
-                            className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all min-h-[120px] resize-none"
+                            className="w-full bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all min-h-[68px] resize-none hover:border-zinc-300 dark:hover:border-white/20"
                             placeholder="Brief description of what this module does..."
                           />
                         </div>
@@ -8858,7 +8880,7 @@ export const ModuleEditor = () => {
                   <div className="h-full w-full">
 <div className="flex h-full w-full">
               {/* Schema Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Data Model</h3>
                 </div>
@@ -8881,7 +8903,7 @@ export const ModuleEditor = () => {
               </aside>
 
               {/* Schema Content */}
-              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto bg-transparent p-12 custom-scrollbar">
                 <div className="max-w-none mx-auto space-y-8 pb-20">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
@@ -8953,7 +8975,7 @@ export const ModuleEditor = () => {
                 )}
                 {detailsTab === 'localization' && (
                   <div className="h-full w-full">
-<div className="flex h-full w-full bg-white dark:bg-zinc-950">
+<div className="flex h-full w-full bg-transparent">
               {/* Languages Sidebar */}
               <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/50 dark:bg-transparent">
                 <div className="p-8 pb-4">
@@ -9111,7 +9133,7 @@ export const ModuleEditor = () => {
                 )}
                 {detailsTab === 'assets' && (
                   <div className="h-full w-full">
-<div className="flex-1 overflow-y-auto p-12 bg-white dark:bg-zinc-950 custom-scrollbar">
+<div className="flex-1 overflow-y-auto p-12 bg-transparent custom-scrollbar">
               <div className="max-w-none mx-auto space-y-12">
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
@@ -9186,7 +9208,7 @@ export const ModuleEditor = () => {
           ) : activeTab === 'deployment' ? (
             <div className="flex h-full w-full overflow-hidden">
               {/* Deployment Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Release Management</h3>
                 </div>
@@ -9213,7 +9235,7 @@ export const ModuleEditor = () => {
               </aside>
 
               {/* Deployment Content */}
-              <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-12 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto bg-transparent p-12 custom-scrollbar">
                 <div className="max-w-none mx-auto space-y-12 pb-20">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
@@ -9331,9 +9353,9 @@ export const ModuleEditor = () => {
               />
             </div>
           ) : activeTab === 'security' ? (
-            <div className="flex h-full w-full bg-white dark:bg-zinc-950">
+            <div className="flex h-full w-full bg-transparent">
               {/* Roles Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2 flex flex-col">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Access Roles</h3>
                 </div>
@@ -9458,9 +9480,9 @@ export const ModuleEditor = () => {
               </div>
             </div>
           ) : activeTab === 'forms' ? (
-            <div className="flex h-full w-full bg-white dark:bg-zinc-950 overflow-hidden">
+            <div className="flex h-full w-full bg-transparent overflow-hidden">
                {/* Form Management Sidebar (Left) */}
-               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-2 flex flex-col">
+               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2 flex items-center justify-between">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Module Forms</h3>
                   <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
@@ -9547,7 +9569,7 @@ export const ModuleEditor = () => {
                  
                  return (
                    <>
-                      <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 bg-white dark:bg-zinc-950 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
+                      <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
                         <div className="space-y-4">
                            <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-2">Module Fields</h3>
                            <div className="space-y-2">
@@ -9645,15 +9667,10 @@ export const ModuleEditor = () => {
                      </aside>
 
                      {/* Builder Canvas (Center) */}
-                     <div className="flex-1 bg-zinc-50/50 dark:bg-zinc-950/50 overflow-y-auto custom-scrollbar p-12">
+                     <div className="flex-1 bg-transparent overflow-y-auto custom-scrollbar p-12">
                         <div className="max-w-3xl mx-auto space-y-12">
                            {/* Form Preview Header */}
                            <div className="space-y-4">
-                              <div className="flex items-center gap-4">
-                                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-                                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.3em]">Module Form Canvas</span>
-                                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-                              </div>
                               <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-indigo-500/5 space-y-8">
                                  {selectedForm.isMultistep && (
                                    <div className="space-y-6">
@@ -9828,17 +9845,12 @@ export const ModuleEditor = () => {
                                     {selectedForm.settings?.submitLabel || 'Submit'}
                                  </button>
                               </div>
-                              <div className="flex items-center gap-4">
-                                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-                                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-[0.3em]">Form Canvas Start</span>
-                                <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-                              </div>
                            </div>
                         </div>
                      </div>
 
                      {/* Inspector Sidebar (Right) */}
-                     <aside className="w-80 border-l border-zinc-100 dark:border-zinc-900 bg-white dark:bg-zinc-950 p-4 overflow-y-auto custom-scrollbar">
+                     <aside className="w-80 border-l border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-4 overflow-y-auto custom-scrollbar">
                         {selectedFieldInFormId ? (() => {
                             // Check if it's a Step selection
                             const selectedStep = selectedForm.isMultistep ? selectedForm.steps.find((s: any) => s.id === selectedFieldInFormId) : null;
@@ -11291,7 +11303,8 @@ export const ModuleEditor = () => {
                                 { id: 'createdBy', label: 'Created By' },
                                 { id: 'updatedAt', label: 'Updated Date' },
                                 { id: 'status', label: 'Status' },
-                                { id: 'assigneeId', label: 'Assignee' }
+                                { id: 'assigneeId', label: 'Assignee' },
+                                { id: 'participantIds', label: 'Participants' }
                               ]
                                 .filter(sf => {
                                   const cardFields = interfaceSettings.master.cardFields || [];
@@ -11325,7 +11338,8 @@ export const ModuleEditor = () => {
                                     { id: 'createdBy', label: 'Created By' },
                                     { id: 'updatedAt', label: 'Updated Date' },
                                     { id: 'status', label: 'Status' },
-                                    { id: 'assigneeId', label: 'Assignee' }
+                                    { id: 'assigneeId', label: 'Assignee' },
+                                    { id: 'participantIds', label: 'Participants' }
                                   ].find(sf => sf.id === cf.fieldId);
                                   
                                   const label = customField ? (customField.label || customField.name) : (systemField ? systemField.label : cf.fieldId);

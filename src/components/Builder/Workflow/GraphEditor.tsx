@@ -844,14 +844,14 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
   }, [workflow?.id]);
 
   return (
-    <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 flex flex-col relative overflow-hidden">
+    <div className="h-full w-full bg-transparent flex flex-col relative overflow-hidden">
 
       {/* 3-Column Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar: Node Library */}
-        <div className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
+        <div className="w-72 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl flex flex-col overflow-hidden">
           {/* Search Header - Exactly like Builder */}
-          <div className="p-6 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent">
+          <div className="p-6 border-b border-zinc-200/80 dark:border-white/5 bg-transparent">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input 
@@ -859,7 +859,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                 placeholder="Search nodes..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all"
+                className="w-full bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder-zinc-400"
               />
             </div>
           </div>
@@ -892,8 +892,8 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                 onDragStart={(event) => onDragStart(event, item.type)}
                 onClick={() => addNode(item.type as WorkflowNodeType)}
                 className={cn(
-                  "group flex flex-col gap-2 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 text-left transition-all hover:scale-[1.02] active:scale-[0.98]",
-                  "bg-white dark:bg-zinc-900/50 hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/5"
+                  "group flex flex-col gap-2 p-4 rounded-2xl border border-zinc-200/80 dark:border-white/5 text-left transition-all hover:scale-[1.02] active:scale-[0.98]",
+                  "bg-white/50 dark:bg-white/[0.02] hover:border-indigo-500/50 hover:bg-white/80 dark:hover:bg-white/[0.05] hover:shadow-xl hover:shadow-indigo-500/5"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -1013,7 +1013,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       </AnimatePresence>
 
 
-        <div className="flex-1 relative bg-zinc-50 dark:bg-[#09090b]" onDragOver={onDragOver} onDrop={onDrop}>
+        <div className="flex-1 relative bg-transparent" onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1088,7 +1088,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="w-96 h-full z-20 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col overflow-hidden"
+              className="w-96 h-full z-20 border-l border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl flex flex-col overflow-hidden"
             >
               {/* Tab Switcher */}
               <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 flex items-center p-1 bg-zinc-50/50 dark:bg-transparent">

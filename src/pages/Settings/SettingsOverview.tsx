@@ -117,6 +117,8 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
 ];
 
+import { useNewModuleModal } from '../../context/NewModuleModalContext';
+
 const CategoryIcon = ({ category }: { category: string }) => {
   switch (category) {
     case 'General': return <Settings2 className="w-4 h-4" />;
@@ -129,6 +131,7 @@ const CategoryIcon = ({ category }: { category: string }) => {
 
 export const SettingsOverview = () => {
   const navigate = useNavigate();
+  const { openNewModuleModal } = useNewModuleModal();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredItems = useMemo(() => {
@@ -216,7 +219,7 @@ export const SettingsOverview = () => {
           icon={<FilePlus size={24} />}
           title="New Module"
           description="Build custom modules and data models."
-          onClick={() => navigate('/workspace/settings/builder')}
+          onClick={() => openNewModuleModal()}
           color="teal"
         />
         <QuickActionCard 

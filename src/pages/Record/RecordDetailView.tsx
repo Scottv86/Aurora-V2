@@ -223,11 +223,14 @@ export const RecordDetailView = ({
 
   // Dropdown menus states and refs for toolbar
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
+  const [showParticipantMenu, setShowParticipantMenu] = useState(false);
   const [showTransitionsMenu, setShowTransitionsMenu] = useState(false);
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [participantSearch, setParticipantSearch] = useState('');
 
   const assigneeMenuRef = useRef<HTMLDivElement>(null);
+  const participantMenuRef = useRef<HTMLDivElement>(null);
   const transitionsMenuRef = useRef<HTMLDivElement>(null);
   const historyMenuRef = useRef<HTMLDivElement>(null);
 
@@ -237,6 +240,9 @@ export const RecordDetailView = ({
       const target = event.target as HTMLElement;
       if (assigneeMenuRef.current && !assigneeMenuRef.current.contains(target)) {
         setShowAssigneeMenu(false);
+      }
+      if (participantMenuRef.current && !participantMenuRef.current.contains(target)) {
+        setShowParticipantMenu(false);
       }
       if (transitionsMenuRef.current && !transitionsMenuRef.current.contains(target)) {
         setShowTransitionsMenu(false);
@@ -255,6 +261,12 @@ export const RecordDetailView = ({
     return (members || []).find(m => m.id === assigneeId) || null;
   }, [editData.assigneeId, record?.assigneeId, members]);
 
+  const currentParticipants = useMemo(() => {
+    const ids: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
+    if (!Array.isArray(ids)) return [];
+    return (members || []).filter(m => ids.includes(m.id));
+  }, [editData.participantIds, record?.participantIds, members]);
+
   const handleUpdateAssignee = async (newAssigneeId: string | null) => {
     if (!tenant?.id || !moduleId || !recordId) return;
 
@@ -270,6 +282,42 @@ export const RecordDetailView = ({
     } catch (error: any) {
       console.error("Assignee Update Error:", error);
       toast.error(error.message || "Failed to update assignee");
+    }
+  };
+
+  const handleToggleParticipant = async (memberId: string) => {
+    if (!tenant?.id || !moduleId || !recordId) return;
+
+    const currentIds: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
+    const exists = currentIds.includes(memberId);
+    const newIds = exists ? currentIds.filter(id => id !== memberId) : [...currentIds, memberId];
+
+    const updatedData = { ...editDataRef.current, participantIds: newIds };
+    setEditData(updatedData);
+    editDataRef.current = updatedData;
+
+    try {
+      await handleUpdateEntry(updatedData, 'participantIds', true);
+      toast.success(exists ? "Participant removed" : "Participant added");
+    } catch (error: any) {
+      console.error("Participant Update Error:", error);
+      toast.error(error.message || "Failed to update participants");
+    }
+  };
+
+  const handleClearParticipants = async () => {
+    if (!tenant?.id || !moduleId || !recordId) return;
+
+    const updatedData = { ...editDataRef.current, participantIds: [] as string[] };
+    setEditData(updatedData);
+    editDataRef.current = updatedData;
+
+    try {
+      await handleUpdateEntry(updatedData, 'participantIds', true);
+      toast.success("Participants cleared");
+    } catch (error: any) {
+      console.error("Participant Update Error:", error);
+      toast.error(error.message || "Failed to clear participants");
     }
   };
 
@@ -1249,6 +1297,15 @@ export const RecordDetailView = ({
           const oldVal = record?.assigneeId;
           if (newVal !== undefined && newVal !== oldVal) {
             payload.assigneeId = newVal;
+          }
+        }
+
+        // Also check if participantIds has changed
+        if (fieldIdBeingSaved !== 'participantIds') {
+          const newVal = currentData.participantIds;
+          const oldVal = record?.participantIds;
+          if (newVal !== undefined && newVal !== oldVal) {
+            payload.participantIds = newVal;
           }
         }
       } else {
@@ -2789,6 +2846,130 @@ export const RecordDetailView = ({
                         );
                       })}
                     {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
+                      <p className="text-[10px] text-zinc-400 text-center py-4 italic font-medium">No members found</p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Participants Picker */}
+          <div className="relative" ref={participantMenuRef}>
+            <button
+              onClick={() => setShowParticipantMenu(!showParticipantMenu)}
+              className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all flex items-center gap-2 group text-xs font-semibold shadow-sm"
+            >
+              {currentParticipants.length > 0 ? (
+                <>
+                  <div className="flex items-center -space-x-1.5 overflow-hidden">
+                    {currentParticipants.slice(0, 3).map(p => (
+                      <UserAvatarWithPresence
+                        key={p.id}
+                        avatarUrl={p.avatarUrl}
+                        name={p.name}
+                        status={(p as any).status || (p as any).presenceStatus || 'AVAILABLE'}
+                        size="xs"
+                      />
+                    ))}
+                  </div>
+                  <span className="text-zinc-700 dark:text-zinc-300">
+                    {currentParticipants.length} {currentParticipants.length === 1 ? 'Participant' : 'Participants'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:border-indigo-500 transition-colors">
+                    <LucideIcons.Users size={10} />
+                  </div>
+                  <span className="text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">Participants</span>
+                </>
+              )}
+              <LucideIcons.ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
+            </button>
+
+            <AnimatePresence>
+              {showParticipantMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
+                >
+                  {/* Actions */}
+                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-1">
+                    <button
+                      onClick={() => {
+                        const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
+                        if (me) handleToggleParticipant(me.id);
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
+                    >
+                      <LucideIcons.UserPlus size={12} />
+                      <span>Toggle myself</span>
+                    </button>
+                    {currentParticipants.length > 0 && (
+                      <button
+                        onClick={() => {
+                          handleClearParticipants();
+                          setShowParticipantMenu(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
+                      >
+                        <LucideIcons.UserMinus size={12} />
+                        <span>Clear Participants</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search */}
+                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 relative">
+                    <LucideIcons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={12} />
+                    <input
+                      type="text"
+                      placeholder="Search members..."
+                      value={participantSearch}
+                      onChange={(e) => setParticipantSearch(e.target.value)}
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Members List */}
+                  <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 max-h-48 scrollbar-thin">
+                    {(members || [])
+                      .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase()))
+                      .map(member => {
+                        const currentIds: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
+                        const isSelected = currentIds.includes(member.id);
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => {
+                              handleToggleParticipant(member.id);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
+                              isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <UserAvatarWithPresence
+                                avatarUrl={member.avatarUrl}
+                                name={member.name}
+                                status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
+                                size="xs"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate leading-none">{member.name}</p>
+                                <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
+                              </div>
+                            </div>
+                            {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
+                          </button>
+                        );
+                      })}
+                    {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase())).length === 0 && (
                       <p className="text-[10px] text-zinc-400 text-center py-4 italic font-medium">No members found</p>
                     )}
                   </div>

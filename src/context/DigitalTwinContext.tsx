@@ -135,6 +135,9 @@ export const DigitalTwinProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const fetchConfig = async () => {
     try {
       const res = await fetch(`${API_BASE}/config`);
+      if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) {
+        return;
+      }
       const data = await res.json();
       if (data.success && data.config) {
         setTwinConfig(data.config);
@@ -152,13 +155,14 @@ export const DigitalTwinProvider: React.FC<{ children: React.ReactNode }> = ({ c
         fetch(`${API_BASE}/drafts`),
         fetch(`${API_BASE}/handover`)
       ]);
-      const logsData = await logsRes.json();
-      const draftsData = await draftsRes.json();
-      const handoverData = await handoverRes.json();
 
-      if (logsData.success) setLogs(logsData.logs || []);
-      if (draftsData.success) setDrafts(draftsData.drafts || []);
-      if (handoverData.success) setDigest(handoverData.digest || null);
+      const logsData = logsRes.ok && logsRes.headers.get('content-type')?.includes('application/json') ? await logsRes.json() : null;
+      const draftsData = draftsRes.ok && draftsRes.headers.get('content-type')?.includes('application/json') ? await draftsRes.json() : null;
+      const handoverData = handoverRes.ok && handoverRes.headers.get('content-type')?.includes('application/json') ? await handoverRes.json() : null;
+
+      if (logsData?.success) setLogs(logsData.logs || []);
+      if (draftsData?.success) setDrafts(draftsData.drafts || []);
+      if (handoverData?.success) setDigest(handoverData.digest || null);
     } catch (err) {
       console.error('Failed to fetch logs/drafts:', err);
     }

@@ -188,7 +188,24 @@ router.get('/', async (req: TenantRequest, res) => {
 
     const whereClause: any = {};
     if (moduleId) {
-      whereClause.moduleId = moduleId;
+      const targetMod = await db.module.findFirst({
+        where: {
+          OR: [
+            { id: moduleId },
+            { name: { equals: moduleId, mode: 'insensitive' } }
+          ]
+        }
+      });
+
+      if (targetMod) {
+        whereClause.OR = [
+          { moduleId: targetMod.id },
+          { moduleId: targetMod.name },
+          { moduleId: moduleId }
+        ];
+      } else {
+        whereClause.moduleId = moduleId;
+      }
     }
 
     const automations = await db.automation.findMany({

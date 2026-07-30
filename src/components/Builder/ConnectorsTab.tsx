@@ -830,9 +830,9 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-white dark:bg-zinc-950">
+    <div className="flex h-full w-full overflow-hidden bg-transparent">
       {/* Left Panel: Connectors List */}
-      <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col h-full overflow-hidden">
+      <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl flex flex-col h-full overflow-hidden">
         {/* Search Header */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-900 space-y-3">
           <div className="flex items-center justify-between">

@@ -569,6 +569,10 @@ router.post('/records', async (req: TenantRequest, res) => {
       slaDeadline = new Date(Date.now() + parseFloat(config.slaConfig.breachHours) * 60 * 60 * 1000);
     }
 
+    if (!finalData.participantIds && (req as any).user?.memberId) {
+      finalData.participantIds = [(req as any).user.memberId];
+    }
+
     let record = await db.record.create({
       data: {
         tenantId, // still required by schema, but RLS will verify it matches app.current_tenant_id
@@ -853,6 +857,16 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       }, db).catch(err => console.error('[Automation: ASSIGNEE_CHANGED error]:', err));
     }
 
+    if (JSON.stringify(oldData.participantIds || []) !== JSON.stringify(newData.participantIds || [])) {
+      AutomationEngine.handleEvent({
+        type: 'PARTICIPANTS_CHANGED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { fromParticipants: oldData.participantIds, toParticipants: newData.participantIds }
+      }, db).catch(err => console.error('[Automation: PARTICIPANTS_CHANGED error]:', err));
+    }
+
     if (JSON.stringify(existing.associations) !== JSON.stringify(record.associations)) {
       AutomationEngine.handleEvent({
         type: 'RELATION_LINKED',
@@ -1081,6 +1095,16 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
         record: { id: record.id, ...newData },
         metadata: { fromAssigneeId: oldData.assigneeId, toAssigneeId: newData.assigneeId }
       }, db).catch(err => console.error('[Automation: ASSIGNEE_CHANGED error]:', err));
+    }
+
+    if (JSON.stringify(oldData.participantIds || []) !== JSON.stringify(newData.participantIds || [])) {
+      AutomationEngine.handleEvent({
+        type: 'PARTICIPANTS_CHANGED',
+        tenantId,
+        moduleId: record.moduleId,
+        record: { id: record.id, ...newData },
+        metadata: { fromParticipants: oldData.participantIds, toParticipants: newData.participantIds }
+      }, db).catch(err => console.error('[Automation: PARTICIPANTS_CHANGED error]:', err));
     }
 
     if (JSON.stringify(existing.associations) !== JSON.stringify(record.associations)) {

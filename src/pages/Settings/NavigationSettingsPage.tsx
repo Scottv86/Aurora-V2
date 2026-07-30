@@ -471,7 +471,9 @@ export const NavigationSettingsPage = () => {
     inbox: 'Inbox', docs: 'FileText', drive: 'Folder', chat: 'MessageSquare',
     meet: 'Video', calendar: 'Calendar', notes: 'StickyNote', reminders: 'Bell',
     reports: 'BarChart', converter: 'FileText', feed: 'Rss', draw: 'Palette',
-    whiteboard: 'Layout', calculator: 'Terminal', snipper: 'Scissors', flowchart: 'Workflow'
+    whiteboard: 'Layout', calculator: 'Terminal', snipper: 'Scissors', flowchart: 'Workflow',
+    'pdf-editor': 'FileEdit', redact: 'EyeOff', slideshow: 'MonitorPlay', graphics: 'Image',
+    campaigns: 'Send', spreadsheet: 'Table'
   };
 
   const enabledApps = tenant?.enabledApps || [];

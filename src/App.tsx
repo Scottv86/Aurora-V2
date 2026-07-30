@@ -8,6 +8,8 @@ import { PlatformProvider } from './context/PlatformContext';
 import { DigitalTwinProvider } from './context/DigitalTwinContext';
 import { AIContextProvider } from './context/AIContextProvider';
 import { ModalStackProvider } from './context/ModalStackContext';
+import { NewModuleModalProvider } from './context/NewModuleModalContext';
+import { NewModuleModal } from './components/Modals/NewModuleModal';
 import { StackedModalManager } from './components/UI/StackedModal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { usePlatform } from './hooks/usePlatform';
@@ -63,7 +65,6 @@ import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/Lic
 
 // Pages
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
-import { BuilderChoice } from './pages/Builder/BuilderChoice';
 import { ModuleView } from './pages/Module/ModuleView';
 import { QueueView } from './pages/Queue/QueueView';
 import { RecordDetailView } from './pages/Record/RecordDetailView';
@@ -179,10 +180,12 @@ const App = () => {
             <PlatformProvider>
               <DigitalTwinProvider>
                 <ModalStackProvider>
-                  <Router>
-                    <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
-                    <StackedModalManager />
-                    <Routes>
+                  <NewModuleModalProvider>
+                    <Router>
+                      <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
+                      <StackedModalManager />
+                      <NewModuleModal />
+                      <Routes>
               {/* Login & Root Redirect */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/workspace" replace />} />
@@ -270,7 +273,7 @@ const App = () => {
                 <Route path="usage" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 
                 {/* Module Builder */}
-                <Route path="builder" element={<BuilderChoice />} />
+                <Route path="builder" element={<Navigate to="/workspace/settings/platform-modules?newModule=true" replace />} />
                 <Route path="ai-builder" element={<AIBuilder />} />
                 <Route path="builder/:id" element={<ModuleEditor />} />
                 <Route path="builder/page/:id" element={<PageBuilder />} />
@@ -343,6 +346,7 @@ const App = () => {
               <Route path="*" element={<Navigate to="/workspace" replace />} />
               </Routes>
               </Router>
+              </NewModuleModalProvider>
             </ModalStackProvider>
           </DigitalTwinProvider>
             </PlatformProvider>

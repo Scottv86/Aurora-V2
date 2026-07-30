@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { ArrowLeft, Trash2, Plus, Loader2 } from 'lucide-react';
@@ -9,16 +9,26 @@ import { PLATFORM_MODULES } from '../../../config/platformModules';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { toast } from 'sonner';
+import { useNewModuleModal } from '../../../context/NewModuleModalContext';
 import { cn } from '../../../lib/utils';
+
 
 export const PlatformModulesSettings = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { openNewModuleModal } = useNewModuleModal();
   const { tenant, modules, refreshModules } = usePlatform();
   const { session } = useAuth();
   
   const [tab, setTab] = useState<'SYSTEM' | 'CUSTOM'>('SYSTEM');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('newModule') === 'true') {
+      openNewModuleModal();
+    }
+  }, [location.search, openNewModuleModal]);
 
   const isIndex = location.pathname === '/workspace/settings/platform-modules' || location.pathname === '/workspace/settings/platform-modules/';
 
@@ -81,7 +91,7 @@ export const PlatformModulesSettings = () => {
             title="Modules"
             description="Manage core platform features, prebuilt system directories, and tenant-specific custom data structures in one place."
             actions={
-              <Button onClick={() => navigate('/workspace/settings/builder')} className="gap-2 shadow-lg shadow-indigo-500/10">
+              <Button onClick={() => openNewModuleModal()} className="gap-2 shadow-lg shadow-indigo-500/10">
                 <Plus size={16} /> Create Module
               </Button>
             }
@@ -219,7 +229,7 @@ export const PlatformModulesSettings = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: displayCustomModules.length * 0.03 }}
-                    onClick={() => navigate('/workspace/settings/builder')}
+                    onClick={() => openNewModuleModal()}
                     className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[200px] transition-all text-center hover:bg-indigo-500/[0.01]"
                   >
                     <Plus size={32} className="text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3" />

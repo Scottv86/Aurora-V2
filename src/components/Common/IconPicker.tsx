@@ -37,27 +37,22 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, label }
   );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {label && (
-        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">
           {label}
         </label>
       )}
       
       <div 
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-4 p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:border-indigo-500 transition-all group"
+        className="flex items-center gap-2.5 px-3 h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl cursor-pointer hover:border-indigo-500/50 hover:bg-white dark:hover:bg-white/[0.06] transition-all group"
       >
-        <div className="w-10 h-10 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-500/10 transition-all">
-          <CurrentIcon size={20} />
+        <div className="w-5 h-5 rounded-md bg-zinc-100 dark:bg-white/5 flex items-center justify-center text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-400 transition-all shrink-0">
+          <CurrentIcon size={13} />
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-bold text-zinc-900 dark:text-white">{value || 'Select Icon'}</p>
-          <p className="text-[10px] text-zinc-500 uppercase tracking-tight">Click to change</p>
-        </div>
-        <div className="p-1.5 bg-zinc-50 dark:bg-zinc-800 rounded-lg text-zinc-400 group-hover:text-indigo-500 transition-colors">
-          <Sparkles size={14} />
-        </div>
+        <span className="text-xs font-bold text-zinc-950 dark:text-white truncate flex-1">{value || 'Select Icon'}</span>
+        <Sparkles size={12} className="text-zinc-400 group-hover:text-indigo-400 transition-colors shrink-0" />
       </div>
 
       <Modal

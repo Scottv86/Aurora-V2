@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './Primitives';
 
@@ -72,17 +73,19 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
     xl: 'max-w-5xl',
   };
 
-  return (
-    <AnimatePresence>
+  if (!isOpen) return null;
+
+  const modalNode = (
+    <AnimatePresence mode="wait">
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-zinc-950/40 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md"
           />
 
           {/* Modal Content */}
@@ -91,16 +94,16 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             className={cn(
-              'relative w-full overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800',
+              'relative z-10 w-full overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-zinc-800/80 dark:border dark:border-zinc-800',
               sizes[size]
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800/80">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">{title}</h3>
               <button
                 onClick={onClose}
-                className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                className="rounded-full p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -109,11 +112,11 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
             </div>
 
             {/* Body */}
-            <div className="max-h-[80vh] overflow-y-auto p-6">{children}</div>
+            <div className="max-h-[80vh] overflow-y-auto p-6 custom-scrollbar">{children}</div>
 
             {/* Footer */}
             {footer && (
-              <div className="flex items-center justify-end gap-3 border-t border-zinc-100 bg-zinc-50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <div className="flex items-center justify-end gap-3 border-t border-zinc-100 bg-zinc-50 px-6 py-4 dark:border-zinc-800/80 dark:bg-zinc-900/50">
                 {footer}
               </div>
             )}
@@ -122,4 +125,6 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
       )}
     </AnimatePresence>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : null;
 };
