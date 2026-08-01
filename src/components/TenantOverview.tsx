@@ -15,21 +15,17 @@ import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { usePlatform } from '../hooks/usePlatform';
 import { Table } from './UI/Table';
+import { PageHeader } from './UI/PageHeader';
 
 const API_BASE = 'http://localhost:3001/api/admin';
-
-// HUD Status Items
-const HUD_STATUS = [
-  { label: 'Latency', value: '3ms', status: 'optimal' },
-  { label: 'Node Status', value: 'Cluster-Primary', status: 'nominal' },
-  { label: 'Auth Sync', value: 'Synced', status: 'nominal' }
-];
 
 export const TenantOverview = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { setBreadcrumbOverride } = usePlatform();
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +42,9 @@ export const TenantOverview = () => {
         });
         const data = await res.json();
         setTenant(data);
+        if (data?.name && id) {
+          setBreadcrumbOverride(id, data.name);
+        }
       } catch (error) {
         toast.error('Mission Briefing Access Failed');
       } finally {
@@ -55,7 +54,7 @@ export const TenantOverview = () => {
     if (session?.access_token) {
       fetchTenant();
     }
-  }, [id, session?.access_token]);
+  }, [id, session?.access_token, setBreadcrumbOverride]);
 
   if (loading) {
     return (
@@ -81,41 +80,21 @@ export const TenantOverview = () => {
   }
 
   return (
-    <div className="space-y-10 pb-20">
-      {/* 🛡️ Mission Briefing Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+      <PageHeader 
+        title={`Tenant Details: ${tenant.name}`}
+        description="View database connection status, active members, workspace usage, and organization details."
+        icon={Globe}
+        actions={
           <button 
-            onClick={() => navigate('/admin')}
-            className="p-4 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:bg-zinc-200 dark:hover:border-zinc-700 transition-all group"
+            onClick={() => navigate('/admin/tenants')}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all border border-zinc-200 dark:border-zinc-700"
           >
-            <ArrowLeft className="text-zinc-500 group-hover:text-indigo-500" size={24} />
+            <ArrowLeft size={14} />
+            <span>Back to Tenants</span>
           </button>
-          <div>
-            <div className="flex items-center gap-3">
-               <h1 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">Instance Briefing: {tenant.name}</h1>
-               <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black text-indigo-500 uppercase rounded-lg shadow-sm">
-                 Active Tenancy
-               </span>
-            </div>
-            <p className="text-zinc-500 text-xs font-mono tracking-tighter mt-1 italic uppercase">UUID: {tenant.id} | Access: {tenant.subdomain}.aurora.app</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="hidden xl:flex items-center gap-8 px-6 py-2.5 bg-zinc-100/50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl backdrop-blur-xl">
-            {HUD_STATUS.map((item, i) => (
-              <div key={i} className="flex flex-col">
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">{item.label}</span>
-                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono">{item.value}</span>
-              </div>
-            ))}
-          </div>
-          <button className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/30">
-            Open Terminal
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* 🚀 Mission Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

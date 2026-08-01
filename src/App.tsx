@@ -13,6 +13,7 @@ import { NewModuleModal } from './components/Modals/NewModuleModal';
 import { StackedModalManager } from './components/UI/StackedModal';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { usePlatform } from './hooks/usePlatform';
+import { useAuth } from './hooks/useAuth';
 import { PageLoader } from './components/UI/PageLoader';
 
 const queryClient = new QueryClient({
@@ -32,7 +33,6 @@ import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { Login } from './components/Auth/Login';
 import { ComingSoon } from './components/Common/ComingSoon';
 import { AIBuilder } from './components/AIBuilder';
-import { SuperAdmin } from './components/SuperAdmin';
 import { Onboarding } from './components/Onboarding';
 import { WorkQueue } from './components/WorkQueue';
 import { ExternalPortal } from './components/ExternalPortal';
@@ -62,6 +62,23 @@ import { SubscriptionPage } from './pages/Settings/SubscriptionPage';
 import { OrganizationPage } from './pages/Settings/OrganizationPage';
 import { AISettingsPage } from './pages/Settings/AISettingsPage';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
+
+// Super Admin Suite Pages
+import { SuperAdminOverview } from './pages/SuperAdmin/SuperAdminOverview';
+import { TenantManagementPage } from './pages/SuperAdmin/TenantManagementPage';
+import { UserManagementPage } from './pages/SuperAdmin/UserManagementPage';
+import { RolesAccessPage } from './pages/SuperAdmin/RolesAccessPage';
+import { BillingSubscriptionsPage } from './pages/SuperAdmin/BillingSubscriptionsPage';
+import { RevenueAnalyticsPage } from './pages/SuperAdmin/RevenueAnalyticsPage';
+import { ProvisioningResourcesPage } from './pages/SuperAdmin/ProvisioningResourcesPage';
+import { ServerLoadsPage } from './pages/SuperAdmin/ServerLoadsPage';
+import { StorageManagementPage } from './pages/SuperAdmin/StorageManagementPage';
+import { AIMonitoringPage } from './pages/SuperAdmin/AIMonitoringPage';
+import { SystemMonitoringPage } from './pages/SuperAdmin/SystemMonitoringPage';
+import { SystemLogsAuditPage } from './pages/SuperAdmin/SystemLogsAuditPage';
+import { BugsSupportPage } from './pages/SuperAdmin/BugsSupportPage';
+import { DevelopmentPage } from './pages/SuperAdmin/DevelopmentPage';
+import { SuperAdminSettingsPage } from './pages/SuperAdmin/SuperAdminSettingsPage';
 
 // Pages
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
@@ -134,7 +151,13 @@ const WorkspaceLayout = () => {
 };
 
 const DashboardRouteWrapper = () => {
+  const { isSuperAdmin } = useAuth();
   const { modules, isLoading, tenant } = usePlatform();
+
+  if (isSuperAdmin) {
+    return <Navigate to="/admin" replace />;
+  }
+
   if (isLoading) return <PageLoader label="Loading Workspace..." />;
   
   // 1. Check if a default home page is explicitly configured in tenant workspaceSettings
@@ -193,13 +216,26 @@ const App = () => {
                 <Route path="/workspace/aurora-vibe" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
                 <Route path="/workspace/aurora-vibe/:sessionId" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
 
-               {/* Platform Operations & Administration (SuperAdmin Only) */}
-              <Route path="/admin" element={<ProtectedRoute requireAdmin><PlatformShell><SuperAdmin /></PlatformShell></ProtectedRoute>} />
+               {/* Platform Operations & Administration (SuperAdmin Suite) */}
+              <Route path="/admin" element={<ProtectedRoute requireAdmin><PlatformShell><SuperAdminOverview /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/tenants" element={<ProtectedRoute requireAdmin><PlatformShell><TenantManagementPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/tenants/:id" element={<ProtectedRoute requireAdmin><PlatformShell><TenantOverview /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute requireAdmin><PlatformShell><UserManagementPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/roles-access" element={<ProtectedRoute requireAdmin><PlatformShell><RolesAccessPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/subscriptions" element={<ProtectedRoute requireAdmin><PlatformShell><BillingSubscriptionsPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/revenue" element={<ProtectedRoute requireAdmin><PlatformShell><RevenueAnalyticsPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/provisioning" element={<ProtectedRoute requireAdmin><PlatformShell><ProvisioningResourcesPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/server-loads" element={<ProtectedRoute requireAdmin><PlatformShell><ServerLoadsPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/storage" element={<ProtectedRoute requireAdmin><PlatformShell><StorageManagementPage /></PlatformShell></ProtectedRoute>} />
               <Route path="/admin/health" element={<ProtectedRoute requireAdmin><PlatformShell><HealthMonitor /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/ai-monitoring" element={<ProtectedRoute requireAdmin><PlatformShell><AIMonitoringPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/system-monitoring" element={<ProtectedRoute requireAdmin><PlatformShell><SystemMonitoringPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/logs" element={<ProtectedRoute requireAdmin><PlatformShell><SystemLogsAuditPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/bugs" element={<ProtectedRoute requireAdmin><PlatformShell><BugsSupportPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/development" element={<ProtectedRoute requireAdmin><PlatformShell><DevelopmentPage /></PlatformShell></ProtectedRoute>} />
+              <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><PlatformShell><SuperAdminSettingsPage /></PlatformShell></ProtectedRoute>} />
               <Route path="/admin/fleet" element={<ProtectedRoute requireAdmin><PlatformShell><FleetManager /></PlatformShell></ProtectedRoute>} />
               <Route path="/admin/compute" element={<ProtectedRoute requireAdmin><PlatformShell><ComputeMatrix /></PlatformShell></ProtectedRoute>} />
-              <Route path="/admin/tenants/:id" element={<ProtectedRoute requireAdmin><PlatformShell><TenantOverview /></PlatformShell></ProtectedRoute>} />
-              <Route path="/admin/settings" element={<ProtectedRoute requireAdmin><PlatformShell><ComingSoon title="Platform Controls" description="Global organization settings, security policies, and administrative keys." /></PlatformShell></ProtectedRoute>} />
 
               {/* Workspace Routes (Authenticated Standard Users) */}
               <Route path="/workspace" element={<ProtectedRoute><WorkspaceLayout /></ProtectedRoute>}>

@@ -21,15 +21,11 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { PageHeader } from './UI/PageHeader';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
-// HUD Metrics
-const HUD_METRICS = [
-  { label: 'Fleet Sync', value: '100%', status: 'nominal' },
-  { label: 'Active Builds', value: '0', status: 'idle' },
-  { label: 'Rollout Nodes', value: '54', status: 'active' }
-];
+
 
 const COLORS = ['#6366f1', '#a855f7', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -91,40 +87,21 @@ export const FleetManager = () => {
   const pieData = Object.entries(fleet.distribution).map(([name, value]) => ({ name, value }));
 
   return (
-    <div className="space-y-10 pb-20">
-      {/* 🚀 Fleet Deployment Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <div className="p-4 bg-indigo-600 rounded-3xl shadow-2xl shadow-indigo-500/40 relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-50" />
-            <CloudUpload size={32} className="text-white relative z-10" />
-          </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">Fleet Manager</h1>
-              <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black text-indigo-500 uppercase rounded-lg shadow-sm">
-                Control Plane Active
-              </span>
-            </div>
-            <p className="text-zinc-500 text-xs font-mono tracking-tighter mt-1 italic uppercase underline decoration-indigo-500/30">Governance & Global Node Versioning</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="hidden xl:flex items-center gap-8 px-6 py-2.5 bg-zinc-100/50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl backdrop-blur-xl">
-             {HUD_METRICS.map((item, i) => (
-                <div key={i} className="flex flex-col">
-                  <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">{item.label}</span>
-                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono">{item.value}</span>
-                </div>
-             ))}
-          </div>
-          <button onClick={() => fetchFleet()} className="px-6 py-3 bg-zinc-900 text-white rounded-xl font-bold text-xs hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-900/10 border border-white/5 flex items-center gap-2 uppercase tracking-widest">
-            <RefreshCw size={14} className="hover:animate-spin" />
-            Check Updates
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+      <PageHeader 
+        title="Fleet Manager"
+        description="Global node versioning, fleet deployment governance, and release rollout orchestration."
+        icon={CloudUpload}
+        actions={
+          <button 
+            onClick={() => fetchFleet()}
+            className="px-6 py-2.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-all text-zinc-900 dark:text-white"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Re-sync Fleet</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* 🛰️ Deployment Matrix & Analytics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

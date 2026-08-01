@@ -108,7 +108,7 @@ const DEFAULT_DIGEST: HandoverDigest = {
 };
 
 export const DigitalTwinProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addNotification } = usePlatform();
+  const { user, tenant, addNotification } = usePlatform();
   const [twinConfig, setTwinConfig] = useState<DigitalTwinConfig>(DEFAULT_TWIN_CONFIG);
   const [presenceStatus, setPresenceStatusState] = useState<TwinPresenceStatus>('AVAILABLE');
   const [logs, setLogs] = useState<TwinActivityLog[]>(DEFAULT_DIGEST.logs);
@@ -120,9 +120,11 @@ export const DigitalTwinProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Automatically dispatch global notification when Morning Handover Digest is created
   useEffect(() => {
-    if (digest) {
+    if (digest && user?.id) {
       addNotification({
-        id: 'notif-handover-digest-ready',
+        id: `notif-handover-digest-${user.id}`,
+        userId: user.id,
+        tenantId: tenant?.id,
         type: 'system',
         title: '🌅 Morning Handover Digest Available',
         content: `Your Digital Twin triaged ${digest.totalPingsTriaged} items while away and prepared ${digest.pendingApprovalsCount} drafts for sign-off.`,
@@ -130,7 +132,7 @@ export const DigitalTwinProvider: React.FC<{ children: React.ReactNode }> = ({ c
         audience: 'all'
       });
     }
-  }, [digest, addNotification]);
+  }, [digest, user?.id, tenant?.id, addNotification]);
 
   const fetchConfig = async () => {
     try {

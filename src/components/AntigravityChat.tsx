@@ -617,15 +617,8 @@ export const AntigravityChat = () => {
     setMenuTargetSession(s);
   };
 
-  // Folder Management State
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>(() => {
-    try {
-      const saved = localStorage.getItem('aurora_chat_folders');
-      return saved ? JSON.parse(saved) : [{ id: 'aurora', name: 'aurora' }];
-    } catch {
-      return [{ id: 'aurora', name: 'aurora' }];
-    }
-  });
+  // Folder Management State (User & Tenant Scoped)
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
@@ -633,13 +626,31 @@ export const AntigravityChat = () => {
   const [movingSessionId, setMovingSessionId] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    const key = `aurora_chat_folders_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setFolders(parsed);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('[AntigravityChat] Error loading scoped folders:', e);
+    }
+    setFolders([{ id: 'aurora', name: 'aurora' }]);
+  }, [platformUser?.id, authUser?.id, tenant?.id]);
+
   const toggleFolderCollapse = (folderId: string) => {
     setCollapsedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
   };
 
   const saveFolders = (updatedFolders: { id: string; name: string }[]) => {
     setFolders(updatedFolders);
-    localStorage.setItem('aurora_chat_folders', JSON.stringify(updatedFolders));
+    const key = `aurora_chat_folders_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
+    localStorage.setItem(key, JSON.stringify(updatedFolders));
   };
 
   const handleCreateFolder = () => {
@@ -778,19 +789,26 @@ export const AntigravityChat = () => {
   const [agentTrace, setAgentTrace] = useState<any[]>([]);
   const [agentThought, setAgentThought] = useState<string | null>(null);
 
-  // Scheduled Tasks & Main View State
+  // Scheduled Tasks & Main View State (User & Tenant Scoped)
   const [activeMainView, setActiveMainView] = useState<'chat' | 'scheduled_tasks'>('chat');
-  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskData[]>(() => {
-    try {
-      const saved = localStorage.getItem('aurora_scheduled_tasks');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTaskData[]>([]);
   const [isScheduledTasksLoading, setIsScheduledTasksLoading] = useState(false);
   const [isNewScheduledTaskModalOpen, setIsNewScheduledTaskModalOpen] = useState(false);
   const [editingScheduledTask, setEditingScheduledTask] = useState<ScheduledTaskData | null>(null);
+
+  useEffect(() => {
+    const key = `aurora_scheduled_tasks_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        setScheduledTasks(JSON.parse(saved));
+      } else {
+        setScheduledTasks([]);
+      }
+    } catch {
+      setScheduledTasks([]);
+    }
+  }, [platformUser?.id, authUser?.id, tenant?.id]);
 
   const fetchScheduledTasks = async (silent = false) => {
     if (!tenant?.id || !authSession?.access_token) return;
@@ -808,7 +826,8 @@ export const AntigravityChat = () => {
       if (res.ok) {
         const data = await res.json();
         setScheduledTasks(data);
-        localStorage.setItem('aurora_scheduled_tasks', JSON.stringify(data));
+        const key = `aurora_scheduled_tasks_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
+        localStorage.setItem(key, JSON.stringify(data));
       }
     } catch (error) {
       console.warn('Failed to fetch scheduled tasks from server:', error);

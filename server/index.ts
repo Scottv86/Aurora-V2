@@ -40,7 +40,8 @@ dotenv.config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const app = express();
-const httpServer = http.createServer(app);
+// Increase maxHeaderSize to 32KB to handle large Supabase JWTs (default 16KB causes 431 errors)
+const httpServer = http.createServer({ maxHeaderSize: 32768 }, app);
 const PORT = 3001;
 
 // Middlewares
@@ -51,6 +52,8 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:4173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],

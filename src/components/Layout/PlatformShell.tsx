@@ -2,10 +2,6 @@ import { ReactNode, useState, useMemo, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
-  ShieldCheck, 
-  Activity, 
-  Cpu, 
-  CloudUpload, 
   ChevronLeft,
   ChevronRight,
   Settings2,
@@ -587,23 +583,95 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           >
             <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "p-4" : "p-2")}>
               <div className="flex-1 space-y-6">
-                {/* System Governance (Admin Mode Only) */}
+                {/* System Governance / Super Admin Mode */}
                 {isAdminPath && (
-                  <div>
+                  <div className="flex flex-col h-full space-y-6">
                     {isSidebarReallyOpen ? (
-                      <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] mb-4 px-3 flex items-center gap-2">
-                        <div className="w-1 h-1 bg-indigo-500 rounded-full animate-pulse" />
-                        System Governance
+                      <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+                        Super Admin Suite
                       </div>
                     ) : (
-                      <div className="h-px bg-zinc-200 dark:border-zinc-800 mb-4 mx-2" />
+                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 mb-4 mx-2" />
                     )}
-                    <nav className="space-y-1">
-                      <SidebarItem icon={ShieldCheck} label="Global Registry" to="/admin" active={isActive('/admin')} collapsed={collapsed} />
-                      <SidebarItem icon={Activity} label="Platform Health" to="/admin/health" active={isActive('/admin/health')} collapsed={collapsed} />
-                      <SidebarItem icon={Cpu} label="Compute Matrix" to="/admin/compute" active={isActive('/admin/compute')} collapsed={collapsed} />
-                      <SidebarItem icon={CloudUpload} label="Fleet Deploy" to="/admin/fleet" active={isActive('/admin/fleet')} collapsed={collapsed} />
-                    </nav>
+                    
+                    <div className="space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                      {[
+                        {
+                          category: 'Overview',
+                          items: [
+                            { label: 'Dashboard', icon: LucideIcons.LayoutDashboard, to: '/admin' },
+                          ]
+                        },
+                        {
+                          category: 'Tenants & Users',
+                          items: [
+                            { label: 'Tenants', icon: LucideIcons.Globe, to: '/admin/tenants' },
+                            { label: 'Users', icon: LucideIcons.Users, to: '/admin/users' },
+                            { label: 'Roles & Permissions', icon: LucideIcons.ShieldCheck, to: '/admin/roles-access' },
+                          ]
+                        },
+                        {
+                          category: 'Billing & Revenue',
+                          items: [
+                            { label: 'Subscriptions', icon: LucideIcons.CreditCard, to: '/admin/subscriptions' },
+                            { label: 'Revenue Analytics', icon: LucideIcons.TrendingUp, to: '/admin/revenue' },
+                          ]
+                        },
+                        {
+                          category: 'Infrastructure & Servers',
+                          items: [
+                            { label: 'Cloud Resources', icon: LucideIcons.Zap, to: '/admin/provisioning' },
+                            { label: 'Server Usage', icon: LucideIcons.Activity, to: '/admin/server-loads' },
+                            { label: 'Storage & Backups', icon: LucideIcons.Database, to: '/admin/storage' },
+                          ]
+                        },
+                        {
+                          category: 'Health & AI Monitoring',
+                          items: [
+                            { label: 'System Health', icon: LucideIcons.HeartPulse, to: '/admin/health' },
+                            { label: 'AI Usage & Costs', icon: LucideIcons.Sparkles, to: '/admin/ai-monitoring' },
+                            { label: 'Performance Metrics', icon: LucideIcons.Gauge, to: '/admin/system-monitoring' },
+                          ]
+                        },
+                        {
+                          category: 'Logs & Support',
+                          items: [
+                            { label: 'Audit Logs', icon: LucideIcons.FileText, to: '/admin/logs' },
+                            { label: 'Support Tickets', icon: LucideIcons.Bug, to: '/admin/bugs' },
+                            { label: 'Platform Updates', icon: LucideIcons.Code, to: '/admin/development' },
+                          ]
+                        },
+                        {
+                          category: 'Governance',
+                          items: [
+                            { label: 'Admin Settings', icon: LucideIcons.Settings2, to: '/admin/settings' },
+                          ]
+                        }
+                      ].map((group) => (
+                        <div key={group.category} className="space-y-1">
+                          {isSidebarReallyOpen ? (
+                            <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-3 pb-1">
+                              {group.category}
+                            </p>
+                          ) : (
+                            <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
+                          )}
+                          <nav className="space-y-0.5">
+                            {group.items.map((item) => (
+                              <SidebarItem
+                                key={item.to}
+                                icon={item.icon}
+                                label={item.label}
+                                to={item.to}
+                                active={isActive(item.to)}
+                                collapsed={collapsed}
+                              />
+                            ))}
+                          </nav>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -730,7 +798,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         >
           <div className={cn(
             "mx-auto flex flex-col min-h-full",
-            fullBleed ? "w-full flex-1" : "max-w-7xl w-full"
+            (fullBleed || isAdminPath) ? "w-full flex-1" : "max-w-7xl w-full"
           )}>
             {pathnames.length > 0 && !isModuleBuilder && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">

@@ -37,11 +37,10 @@ async function generateSmartSessionTitle(message: string): Promise<string> {
   return fallback.charAt(0).toUpperCase() + fallback.slice(1);
 }
 
-function canUserAccessSession(session: any, userId?: string, isSuperAdmin?: boolean): boolean {
-  if (isSuperAdmin) return true;
+function canUserAccessSession(session: any, userId?: string): boolean {
   if (!session) return false;
-  if (!session.userId) return true; // Legacy session with no owner
   if (!userId) return true;
+  if (!session.userId) return true; // Legacy session with no owner
   if (session.userId === userId) return true; // Creator/owner
   if (session.isSharedWithTenant) return true; // Shared with whole tenancy
 
@@ -60,7 +59,6 @@ router.get('/sessions', async (req: TenantRequest, res) => {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
     const currentUserId = req.user?.uid;
-    const isSuperAdmin = req.user?.isSuperAdmin;
 
     const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
     let trashedSessionIds: string[] = [];
@@ -80,9 +78,9 @@ router.get('/sessions', async (req: TenantRequest, res) => {
       orderBy: { updatedAt: 'desc' }
     });
 
-    // Filter sessions to only those accessible by the user
-    if (!isSuperAdmin && currentUserId) {
-      sessions = sessions.filter((session: any) => canUserAccessSession(session, currentUserId, false));
+    // Filter sessions to only those accessible by the user (owner or explicitly shared)
+    if (currentUserId) {
+      sessions = sessions.filter((session: any) => canUserAccessSession(session, currentUserId));
     }
 
     // Clean up legacy truncated/verbose session titles

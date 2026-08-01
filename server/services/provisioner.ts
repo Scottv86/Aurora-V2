@@ -5,6 +5,7 @@ export interface ProvisioningOptions {
   subdomain: string;
   adminEmail: string;
   plan?: string;
+  logoUrl?: string;
 }
 
 /**
@@ -12,7 +13,7 @@ export interface ProvisioningOptions {
  * This should be used for signups or superadmin onboarding.
  */
 export async function spawnTenant(options: ProvisioningOptions) {
-  const { name, subdomain, adminEmail, plan = 'standard' } = options;
+  const { name, subdomain, adminEmail, plan = 'standard', logoUrl } = options;
 
   return await globalPrisma.$transaction(async (tx) => {
     // 1. Create Tenant record in Global Registry
@@ -21,7 +22,8 @@ export async function spawnTenant(options: ProvisioningOptions) {
         name, 
         subdomain,
         planTier: plan,
-        status: 'active'
+        status: 'active',
+        branding: logoUrl ? { logoUrl: logoUrl.trim(), useTenantBranding: true } : undefined
       }
     });
 

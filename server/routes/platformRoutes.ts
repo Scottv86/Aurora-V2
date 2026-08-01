@@ -86,7 +86,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         isSuperAdmin: user.isSuperAdmin,
         role: user.isSuperAdmin ? 'SUPERADMIN' : (primaryMembership?.roleId || 'USER'),
         licenceType: primaryMembership?.licenceType || (user.isSuperAdmin ? 'Developer' : 'Standard'),
-        avatarUrl: primaryMembership?.avatarUrl,
+        avatarUrl: user.avatarUrl || primaryMembership?.avatarUrl || '',
         position: primaryMembership?.position?.title,
         positionId: primaryMembership?.positionId,
         teamId: primaryMembership?.teamId,
@@ -264,6 +264,44 @@ router.patch('/config', authenticate, async (req: AuthRequest, res: Response) =>
   } catch (error) {
     console.error('[PlatformAPI] Config update error:', error);
     res.status(500).json({ error: 'Failed to update organization configuration' });
+  }
+});
+
+/**
+ * PATCH /api/platform/profile
+ * Update user profile details (avatarUrl, names, etc.) in Prisma DB.
+ */
+router.patch('/profile', authenticate, async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Auth failed: User session missing' });
+  }
+
+  const { uid } = req.user;
+  const { firstName, lastName, avatarUrl } = req.body;
+
+  try {
+    const updatedUser = await globalPrisma.user.update({
+      where: { id: uid },
+      data: {
+        ...(avatarUrl !== undefined ? { avatarUrl } : {})
+      }
+    });
+
+    if (firstName || lastName || avatarUrl !== undefined) {
+      await globalPrisma.tenantMember.updateMany({
+        where: { userId: uid },
+        data: {
+          ...(firstName ? { firstName } : {}),
+          ...(lastName ? { familyName: lastName } : {}),
+          ...(avatarUrl !== undefined ? { avatarUrl } : {})
+        }
+      });
+    }
+
+    res.json({ status: 'success', user: updatedUser });
+  } catch (error: any) {
+    console.error('[PlatformAPI] Profile update error:', error);
+    res.status(500).json({ error: error.message || 'Failed to update profile' });
   }
 });
 

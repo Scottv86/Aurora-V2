@@ -104,14 +104,17 @@ export const Navbar = () => {
   // Prioritize persistent DB avatar from platform context over Supabase metadata
   const avatarUrl = platformUser?.avatarUrl || user?.user_metadata?.avatar_url;
 
+  const isAdminPath = location.pathname.startsWith('/admin');
+  const isSuperAdminUser = platformUser?.isSuperAdmin || (platformUser as any)?.role === 'SUPER_ADMIN' || user?.user_metadata?.isSuperAdmin || user?.email === 'superadmin@aurora.com';
+
   return (
     <>
       <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4 flex-1">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-all"
-          onClick={() => navigate('/workspace')}
-          title="Back to Workspace Home"
+          onClick={() => navigate(isAdminPath || isSuperAdminUser ? '/admin' : '/workspace')}
+          title={isAdminPath || isSuperAdminUser ? "Super Admin Dashboard" : "Back to Workspace Home"}
         >
           <div 
             className={cn(
@@ -204,27 +207,28 @@ export const Navbar = () => {
       </div>
 
       <div className="flex items-center gap-4 flex-1 justify-end">
-        
-        <button 
-          onClick={() => {
-            setIsAppLauncherOpen(!isAppLauncherOpen);
-            if (!isAppLauncherOpen) {
-              setIsChatOpen(false);
-              setIsAIAssistantOpen(false);
-              setIsNotificationsOpen(false);
-              setIsRecyclingBinOpen(false);
-            }
-          }}
-          className={cn(
-            "p-2 transition-all duration-300 rounded-lg group",
-            isAppLauncherOpen 
-              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
-              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-          )}
-          title="App Launcher"
-        >
-          <LayoutGrid size={20} />
-        </button>
+        {!isAdminPath && !isSuperAdminUser && (
+          <button 
+            onClick={() => {
+              setIsAppLauncherOpen(!isAppLauncherOpen);
+              if (!isAppLauncherOpen) {
+                setIsChatOpen(false);
+                setIsAIAssistantOpen(false);
+                setIsNotificationsOpen(false);
+                setIsRecyclingBinOpen(false);
+              }
+            }}
+            className={cn(
+              "p-2 transition-all duration-300 rounded-lg group",
+              isAppLauncherOpen 
+                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title="App Launcher"
+          >
+            <LayoutGrid size={20} />
+          </button>
+        )}
 
         {!location.pathname.startsWith('/admin') && (
           <>
@@ -543,14 +547,14 @@ export const Navbar = () => {
         {/* 3-Way Icon-Only Experience Switcher */}
         <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0">
           <Link
-            to={lastPlatformPath}
+            to={isAdminPath ? '/admin' : (platformUser?.isSuperAdmin ? '/admin' : lastPlatformPath)}
             className={cn(
               "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
-              isPlatform 
+              (isPlatform || isAdminPath) && !isAurora
                 ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
                 : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
             )}
-            title="Workspace"
+            title={platformUser?.isSuperAdmin ? "Super Admin Portal" : "Workspace"}
           >
             <LayoutGrid size={14} />
           </Link>
@@ -566,7 +570,7 @@ export const Navbar = () => {
           >
             <Sparkles size={14} className={isAurora ? "animate-pulse text-white" : ""} />
           </Link>
-          {isDeveloper && (
+          {isDeveloper && !isAdminPath && !isSuperAdminUser && (
             <Link
               to="/workspace/settings"
               className={cn(

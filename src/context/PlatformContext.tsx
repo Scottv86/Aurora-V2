@@ -23,6 +23,8 @@ export interface NotificationItem {
   sessionId?: string;
   link?: string;
   result?: string;
+  userId?: string;
+  tenantId?: string;
 }
 
 export interface RunningTask {
@@ -176,54 +178,69 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
 
-  // Global Notifications State
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+  // Global Notifications State (User & Tenant Scoped)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
+
+  // Sync notifications when user or tenant changes
+  useEffect(() => {
+    if (!user?.id) {
+      setNotifications([]);
+      return;
+    }
+    const storageKey = `aurora_notifications_${user.id}_${tenant?.id || 'global'}`;
     try {
-      const stored = localStorage.getItem('aurora_notifications');
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          return parsed.map((n: any) => ({
+          setNotifications(parsed.map((n: any) => ({
             ...n,
             timestamp: new Date(n.timestamp)
-          }));
+          })));
+          return;
         }
       }
     } catch (e) {
-      console.error('[PlatformContext] Error loading notifications from localStorage:', e);
+      console.error('[PlatformContext] Error loading scoped notifications:', e);
     }
-    return [
+    // Default welcome notification scoped for logged in user & tenant
+    setNotifications([
       {
-        id: 'notif-welcome',
+        id: `notif-welcome-${user.id}`,
+        userId: user.id,
+        tenantId: tenant?.id,
         type: 'system',
-        title: 'Welcome to Aurora Platform',
-        content: 'All agent workflows and scheduled task monitoring active.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 30),
+        title: `Welcome to Aurora Platform, ${user.firstName || user.email.split('@')[0]}`,
+        content: 'All workspace agent workflows and system monitoring active.',
+        timestamp: new Date(),
         isRead: false,
         priority: 'low'
       }
-    ];
-  });
-
-  const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
+    ]);
+  }, [user?.id, tenant?.id]);
 
   useEffect(() => {
+    if (!user?.id) return;
+    const storageKey = `aurora_notifications_${user.id}_${tenant?.id || 'global'}`;
     try {
-      localStorage.setItem('aurora_notifications', JSON.stringify(notifications));
+      localStorage.setItem(storageKey, JSON.stringify(notifications));
     } catch (e) {
       console.error('[PlatformContext] Error saving notifications to localStorage:', e);
     }
-  }, [notifications]);
+  }, [notifications, user?.id, tenant?.id]);
 
   const addNotification = useCallback((notif: Omit<NotificationItem, 'id' | 'timestamp' | 'isRead'> & { id?: string; timestamp?: Date; isRead?: boolean }) => {
     const newNotif: NotificationItem = {
       id: notif.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       timestamp: notif.timestamp || new Date(),
       isRead: notif.isRead ?? false,
+      userId: notif.userId || user?.id,
+      tenantId: notif.tenantId || tenant?.id,
       ...notif
     };
     setNotifications(prev => [newNotif, ...prev.filter(n => n.id !== newNotif.id)]);
-  }, []);
+  }, [user?.id, tenant?.id]);
 
   const markNotificationAsRead = useCallback((id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));

@@ -31,13 +31,12 @@ export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRout
     return <Navigate to="/workspace" replace />;
   }
 
-  // If standard user dashboard access is requested but user is superadmin (and we want to restrict them, per prompt)
-  // Actually, the prompt says: "If is_superadmin == true, grant access to the /admin portal routes. 
-  // If is_superadmin == false, restrict access to the /dashboard portal routes."
-  // Wait, if I'm a superadmin, should I be restricted from the dashboard? 
-  // The phrasing "If is_superadmin == false, restrict access to the /dashboard portal routes" is still ambiguous.
-  // I'll assume standard users get dashboard and superadmins get admin (and maybe dashboard too, unless explicitly told otherwise).
-  // But I'll follow the "restrict" logic if I can map it.
-  
+  // If user is superadmin (and not currently impersonating a tenant), redirect away from /workspace to /admin (except for AI Chat mode)
+  const isImpersonating = typeof window !== 'undefined' && !!sessionStorage.getItem('impersonatingTenantId');
+  const isChatRoute = location.pathname.startsWith('/workspace/aurora-vibe');
+  if (isSuperAdmin && !isImpersonating && !location.pathname.startsWith('/admin') && !isChatRoute) {
+    return <Navigate to="/admin" replace />;
+  }
+
   return <>{children}</>;
 };

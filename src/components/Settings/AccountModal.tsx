@@ -78,6 +78,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
   const activeLicence = platformUser?.licenceType || 'Developer';
 
   // Profile form state
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -86,6 +87,27 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
   const [bio, setBio] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image file size must be under 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setAvatarUrl(result);
+        setImgError(false);
+        toast.success('Image loaded! Click "Save Profile" to apply.');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Security / Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -142,19 +164,41 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
     setIsSavingProfile(true);
     try {
       const fullComputedName = `${firstName.trim()} ${lastName.trim()}`.trim() || displayName;
-      
+      const cleanAvatar = avatarUrl.trim();
+
+      // 1. Update Supabase Auth user metadata
       const { error } = await supabase.auth.updateUser({
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           full_name: fullComputedName,
           display_name: displayName || fullComputedName,
-          avatar_url: avatarUrl.trim(),
+          avatar_url: cleanAvatar,
           job_title: jobTitle,
           bio: bio
         }
       });
       if (error) throw error;
+
+      // 2. Persist to Prisma DB
+      const sess = await supabase.auth.getSession();
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || sess.data.session?.access_token;
+      if (token) {
+        await fetch('http://localhost:3001/api/platform/profile', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            displayName: displayName || fullComputedName,
+            avatarUrl: cleanAvatar,
+            jobTitle
+          })
+        });
+      }
 
       if (refetchContext) {
         await refetchContext();
@@ -162,6 +206,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
 
       toast.success('Profile updated successfully!');
     } catch (err: any) {
+      console.error('[AccountModal] Failed to save profile:', err);
       toast.error(err.message || 'Failed to update profile');
     } finally {
       setIsSavingProfile(false);
@@ -402,9 +447,21 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">Manage your identity, name, avatar, and job details</p>
                     </div>
 
+                    {/* Hidden File Input */}
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleFileSelect} 
+                    />
+
                     {/* Profile Header Card */}
                     <div className="flex items-center gap-4 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800">
-                      <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-500/20 overflow-hidden shrink-0">
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-500/20 overflow-hidden shrink-0 cursor-pointer group"
+                      >
                         {activeAvatar && !imgError ? (
                           <img 
                             src={activeAvatar} 
@@ -415,8 +472,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
                         ) : (
                           getInitials()
                         )}
-                        <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer text-white">
                           <Camera size={18} className="text-white" />
+                          <span className="text-[8px] font-bold uppercase mt-0.5">Upload</span>
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -474,23 +532,33 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
                         />
                       </div>
 
-                      {/* Profile Picture URL */}
+                      {/* Profile Picture URL / Upload */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">Profile Picture (Avatar URL)</label>
-                        <div className="relative">
-                          <input
-                            type="url"
-                            value={avatarUrl}
-                            onChange={(e) => {
-                              setAvatarUrl(e.target.value);
-                              setImgError(false);
-                            }}
-                            placeholder="https://images.unsplash.com/... or image link"
-                            className="w-full px-3 py-2 pr-10 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                          />
-                          <Camera size={14} className="absolute right-3 top-2.5 text-zinc-400" />
+                        <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1">Profile Picture (Avatar URL or File Upload)</label>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type="text"
+                              value={avatarUrl}
+                              onChange={(e) => {
+                                setAvatarUrl(e.target.value);
+                                setImgError(false);
+                              }}
+                              placeholder="https://... or click Upload Image"
+                              className="w-full px-3 py-2 pr-10 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            />
+                            <Camera size={14} className="absolute right-3 top-2.5 text-zinc-400" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+                          >
+                            <Camera size={14} />
+                            <span>Upload File</span>
+                          </button>
                         </div>
-                        <p className="text-[10px] text-zinc-400 mt-1">Paste a direct image URL (PNG, JPG, SVG) to set your custom profile photo.</p>
+                        <p className="text-[10px] text-zinc-400 mt-1">Upload a photo from your computer or paste an image URL.</p>
                       </div>
 
                       <div>

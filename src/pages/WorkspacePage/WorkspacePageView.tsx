@@ -149,7 +149,11 @@ export const WorkspacePageView = () => {
   // Fetch Page Config
   useEffect(() => {
     const getPageConfig = async () => {
-      if (!tenant?.id || !pageId) return;
+      if (!pageId) return;
+      if (!tenant?.id) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;

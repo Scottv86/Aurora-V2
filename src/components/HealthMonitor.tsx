@@ -17,6 +17,7 @@ import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { PageHeader } from './UI/PageHeader';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -79,36 +80,21 @@ export const HealthMonitor = () => {
   }
 
   return (
-    <div className="space-y-10 pb-20">
-      {/* 🚀 Infrastructure HUD Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative">
-        <div className="flex items-center gap-6">
-          <div className="p-4 bg-emerald-500 rounded-3xl shadow-2xl shadow-emerald-500/40 relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-50" />
-            <Activity size={32} className="text-white relative z-10" />
-          </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">Stability HUD</h1>
-              <span className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black text-emerald-500 uppercase rounded-lg flex items-center gap-1.5 shadow-[0_0_15px_-5px_rgba(16,185,129,0.5)]">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                Operational
-              </span>
-            </div>
-            <p className="text-zinc-500 text-xs font-mono tracking-tighter mt-1 italic uppercase">Last Engine Pulse: {lastSync.toLocaleTimeString()}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-           <button 
-             onClick={() => fetchHealth()}
-             className="px-6 py-2.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-all"
-           >
-             <RefreshCw size={14} className={cn("text-zinc-500", "hover:animate-spin")} />
-             Force Sync
-           </button>
-        </div>
-      </div>
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+      <PageHeader 
+        title="Stability & System Health HUD"
+        description={`Real-time platform heartbeat, microservice uptime, and engine telemetry • Last Pulse: ${lastSync.toLocaleTimeString()}`}
+        icon={Activity}
+        actions={
+          <button 
+            onClick={() => fetchHealth()}
+            className="px-6 py-2.5 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-zinc-200 dark:hover:bg-zinc-800/50 transition-all text-zinc-900 dark:text-white"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            <span>Pulse Re-sync</span>
+          </button>
+        }
+      />
 
       {/* 🛰️ Core Cluster Status */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

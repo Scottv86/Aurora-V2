@@ -14,6 +14,7 @@ import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { PageHeader } from './UI/PageHeader';
 
 const API_BASE = 'http://localhost:3001/api/admin';
 
@@ -74,41 +75,12 @@ export const ComputeMatrix = () => {
   }
 
   return (
-    <div className="space-y-10 pb-20">
-      {/* 🧬 AI Swarm Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <div className="p-4 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 rounded-3xl shadow-2xl relative overflow-hidden group">
-            <Cpu size={32} className="relative z-10" />
-          </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">Compute Matrix</h1>
-              <span className="px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black text-indigo-500 uppercase rounded-lg shadow-sm">
-                Swarm Active
-              </span>
-            </div>
-            <p className="text-zinc-500 text-xs font-mono tracking-tighter mt-1 italic uppercase">Global GPU Token Execution & Inference Nodes</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="hidden xl:flex items-center gap-8 px-6 py-2.5 bg-zinc-100/50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl backdrop-blur-xl">
-             <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Processed</span>
-                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono">{compute.globalMetrics.totalTokensProcessed}</span>
-             </div>
-             <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Kernels</span>
-                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono">{compute.globalMetrics.activeKernels}</span>
-             </div>
-             <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Avg Latency</span>
-                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono">{compute.globalMetrics.averageLatency}</span>
-             </div>
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+      <PageHeader 
+        title="Compute Matrix"
+        description="Global GPU token execution, inference node telemetry, and AI kernel workload balancing."
+        icon={Cpu}
+      />
 
       {/* 📡 GPU Cluster Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

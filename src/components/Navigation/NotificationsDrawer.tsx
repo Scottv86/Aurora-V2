@@ -25,6 +25,7 @@ export const NotificationsDrawer = () => {
   const { setIsHandoverOpen } = useDigitalTwin();
   const { 
     user,
+    tenant,
     isDeveloper,
     notifications = [], 
     markNotificationAsRead, 
@@ -37,6 +38,9 @@ export const NotificationsDrawer = () => {
   const isDevUser = isDeveloper || user?.licenceType === 'Developer';
   const safeNotifications = (Array.isArray(notifications) ? notifications : []).filter(n => {
     if (!n) return false;
+    if (n.userId && user?.id && n.userId !== user.id) return false;
+    if (n.tenantId && tenant?.id && n.tenantId !== tenant.id) return false;
+
     const aud = n.audience || (n.type === 'scheduled_task' ? 'developer' : 'all');
     if (aud === 'developer' && !isDevUser) return false;
     return true;
