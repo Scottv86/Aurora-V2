@@ -21,6 +21,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { PageHeader } from '../../components/UI/PageHeader';
 
 
 const TEMPLATES = [
@@ -110,40 +111,32 @@ export const DocsApp = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-zinc-50/50 dark:bg-zinc-950/50 overflow-hidden relative">
-      {/* Background Orbs */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
-
-      {/* App Header */}
-      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/60 backdrop-blur-xl flex items-center justify-between shrink-0 z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl border border-indigo-500/20 shadow-sm">
-            <FileText size={22} />
+      {/* Standardized App Header */}
+      <PageHeader 
+        title={
+          <span className="flex items-center gap-2">
+            Aurora Documents
+            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+              Workspace Suite
+            </span>
+          </span>
+        }
+        description="Create, edit, and collaborate on dynamic documents with automated module mail-merge fields and Drive storage"
+        icon={FileText}
+        iconClassName="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleCreateFromTemplate(TEMPLATES[0])}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
+            >
+              <Plus size={16} />
+              New Document
+            </button>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              Aurora Documents
-              <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                Workspace Suite
-              </span>
-            </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Create, edit, and collaborate on dynamic documents with automated module mail-merge fields and Drive storage
-            </p>
-          </div>
-        </div>
-
-        {/* Quick Action Buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleCreateFromTemplate(TEMPLATES[0])}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
-          >
-            <Plus size={16} />
-            New Document
-          </button>
-        </div>
-      </div>
+        }
+        className="mx-0 mt-0 mb-0"
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6 lg:p-12 space-y-10 custom-scrollbar relative z-10">

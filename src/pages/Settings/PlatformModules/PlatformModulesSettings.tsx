@@ -79,12 +79,8 @@ export const PlatformModulesSettings = () => {
   return (
     <div className={cn(
       "flex flex-col w-full relative min-h-0",
-      isBuilderActive ? "h-[calc(100vh-4rem)] p-0 overflow-hidden" : "px-6 lg:px-12 py-10"
+      isBuilderActive ? "h-[calc(100vh-4rem)] p-0 overflow-hidden" : "min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50"
     )}>
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
       {isIndex ? (
         <>
           <PageHeader 
@@ -97,7 +93,8 @@ export const PlatformModulesSettings = () => {
             }
           />
 
-          {/* Clean Pill Tab Switcher */}
+          <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10">
+            {/* Clean Pill Tab Switcher */}
           <div className="flex bg-zinc-100/30 dark:bg-white/[0.02] border border-zinc-250/20 dark:border-white/5 rounded-2xl p-1 mb-8 w-fit shrink-0 relative z-10">
             <button
               onClick={() => setTab('SYSTEM')}
@@ -239,7 +236,8 @@ export const PlatformModulesSettings = () => {
               )}
             </AnimatePresence>
           </div>
-        </>
+        </div>
+      </>
       ) : (
         <>
           {!isBuilderActive && (

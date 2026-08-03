@@ -10,6 +10,10 @@ const PATH_MAP: Record<string, string> = {
   admin: 'Administration',
   tenants: 'Tenants',
   users: 'Users',
+  organization: 'Organisation',
+  'ai-services': 'AI Services',
+  branding: 'Branding',
+  navigation: 'Navigation',
   'roles-access': 'Roles & Permissions',
   subscriptions: 'Subscriptions',
   revenue: 'Revenue Analytics',
@@ -34,6 +38,7 @@ const PATH_MAP: Record<string, string> = {
   apps: 'Apps',
   docs: 'Documents',
   drive: 'Drive',
+  query: 'Query',
   messaging: 'Messaging',
   database: 'Database',
   lists: 'Lists',
@@ -58,7 +63,7 @@ const PATH_MAP: Record<string, string> = {
   'workforce-management': 'Workforce Management',
   'integration-management': 'Integration Management',
   'automation-management': 'Automation Management',
-  'document-generation': 'Document generation',
+  'document-generation': 'Document Generation',
   'report-management': 'Report Management',
   'api-management': 'API Management',
   'financial-management': 'Financial Management',
@@ -85,8 +90,7 @@ export const Breadcrumbs = () => {
     // 3. Check static PATH_MAP mapping next
     if (PATH_MAP[segment]) return PATH_MAP[segment];
 
-
-    // 3. Check modules or queues
+    // 4. Check modules or queues
     if (
       pathnames[index - 1] === 'page' ||
       pathnames[index - 1] === 'pages' ||
@@ -124,18 +128,17 @@ export const Breadcrumbs = () => {
       if (mod) return mod.name;
     }
     
-    // 4. Handle technical IDs that haven't been overridden yet
-    // Technical IDs are typically long alphanumeric strings without spaces
+    // 5. Handle technical IDs that haven't been overridden yet
     const looksLikeId = segment.length > 15 && /^[a-z0-9-]+$/i.test(segment) && !segment.includes(' ');
     if (looksLikeId) return '...';
 
-    // 5. Default to formatted segment
+    // 6. Default to formatted segment
     return segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
-  const isSettings = pathnames[1] === 'settings';
+  const isSettings = pathnames.includes('settings');
 
-  const breadcrumbItems = pathnames.map((segment, index) => {
+  let breadcrumbItems = pathnames.map((segment, index) => {
     let to = `/${pathnames.slice(0, index + 1).join('/')}`;
     // If it's a nested module segment following 'sub', link to the standalone module view instead
     if (index > 0 && pathnames[index - 1] === 'sub') {
@@ -150,6 +153,15 @@ export const Breadcrumbs = () => {
     if (isSettings && item.segment === 'workspace') return false;
     return !['records', 'sub', 'member', 'teams', 'positions', 'pages', 'page', 'apps'].includes(item.segment);
   });
+
+  // For /workspace/settings index route, display "Settings > Overview"
+  if (isSettings && breadcrumbItems.length === 1 && breadcrumbItems[0].segment === 'settings') {
+    breadcrumbItems.push({
+      segment: 'overview',
+      to: '/workspace/settings',
+      label: 'Overview'
+    });
+  }
 
 
   const searchParams = new URLSearchParams(location.search);

@@ -145,10 +145,7 @@ export const PagesManagementPage = () => {
   };
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
+    <div className="flex flex-col w-full min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 relative">
       <PageHeader 
         title="Workspace Pages"
         description="Design and manage responsive workspace dashboards, personal queues, or custom workflow tracking pages."
@@ -159,6 +156,8 @@ export const PagesManagementPage = () => {
           </Button>
         }
       />
+
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-8">
 
       {/* Home Page Selector Section */}
       <div className="mb-8 p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -293,6 +292,7 @@ export const PagesManagementPage = () => {
           <Plus size={32} className="text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3" />
           <span className="text-sm font-bold text-zinc-500 group-hover:text-indigo-500 transition-colors">Create Workspace Page</span>
         </motion.div>
+      </div>
       </div>
 
       {/* Creation Modal */}

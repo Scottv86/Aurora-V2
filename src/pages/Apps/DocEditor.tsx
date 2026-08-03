@@ -266,7 +266,7 @@ export const DocEditor = () => {
     <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-zinc-100 dark:bg-zinc-950 overflow-hidden relative">
 
       {/* Top Header Bar */}
-      <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl flex items-center justify-between shrink-0 z-20 shadow-sm">
+      <div className="px-6 lg:px-12 py-3.5 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md flex items-center justify-between shrink-0 z-20 shadow-sm">
         
         {/* Left: Back & Document Title */}
         <div className="flex items-center gap-3">

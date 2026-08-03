@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { cn } from '../../lib/utils';
-import { Tabs, Modal } from '../../components/UI/TabsAndModal';
+import { Modal } from '../../components/UI/TabsAndModal';
 import { 
   Network, 
   Globe, 
@@ -19,7 +17,7 @@ import {
   Eye
 } from 'lucide-react';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
-import { PageHeader } from '../../components/UI/PageHeader';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
 
 interface Site {
@@ -51,33 +49,46 @@ const INITIAL_SITES: Site[] = [
     metricValue: '1,240',
     lastUpdated: '2 hours ago'
   },
-
+  {
+    id: 'site-2',
+    name: 'Engineering Knowledge Base',
+    description: 'Technical documentation, architecture decision records (ADRs), API guidelines, and developer onboarding materials.',
+    category: 'internal',
+    type: 'Knowledge Base',
+    domain: 'docs.eng.aurora.internal',
+    status: 'active',
+    access: 'Restricted',
+    metricLabel: 'Articles Published',
+    metricValue: '348',
+    lastUpdated: '1 day ago'
+  },
   {
     id: 'site-3',
-    name: 'IT Support Wiki & Guides',
-    description: 'Technical manuals, systems architectures, standard configurations, and guides for internal hardware and software support.',
+    name: 'Operations Handbook',
+    description: 'Standard operating procedures, emergency protocols, infrastructure runbooks, and compliance checklists.',
     category: 'internal',
     type: 'Wiki',
-    domain: 'it-help.aurora.internal',
-    status: 'draft',
-    access: 'Restricted',
-    metricLabel: 'Contributors',
-    metricValue: '42',
+    domain: 'ops.aurora.internal',
+    status: 'active',
+    access: 'Authenticated',
+    metricLabel: 'Active Readers',
+    metricValue: '512',
     lastUpdated: '3 days ago'
   },
+
   // External Portals
   {
     id: 'site-4',
-    name: 'Customer Submission Portal',
-    description: 'Configure and review public-facing intake forms, application tracking steps, and feedback portals for active customer segments.',
+    name: 'Client Support Portal',
+    description: 'Customer ticket submission, live chat assistant, knowledge base search, and SLA status tracking dashboard.',
     category: 'external',
     type: 'Customer Portal',
-    domain: '/portal',
+    domain: 'support.aurora-app.com',
     status: 'active',
     access: 'Public',
-    metricLabel: 'Forms Published',
-    metricValue: '5',
-    lastUpdated: 'Just now'
+    metricLabel: 'Monthly Tickets',
+    metricValue: '4,120',
+    lastUpdated: '4 hours ago'
   },
   {
     id: 'site-5',
@@ -148,8 +159,6 @@ const INITIAL_SITES: Site[] = [
 ];
 
 export const SitesPage = () => {
-  const location = useLocation();
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const [activeTab, setActiveTab] = useState('internal');
   const [sites, setSites] = useState<Site[]>(INITIAL_SITES);
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,10 +175,10 @@ export const SitesPage = () => {
   const [newSiteAccess, setNewSiteAccess] = useState<'Public' | 'Authenticated' | 'Restricted' | 'Admin Only'>('Authenticated');
   const [newSiteStatus, setNewSiteStatus] = useState<'active' | 'draft' | 'offline'>('active');
 
-  const tabs = [
-    { id: 'internal', label: 'Internal Sites', icon: Network },
-    { id: 'external', label: 'External Portals', icon: Globe },
-    { id: 'public', label: 'Public Sites', icon: Laptop },
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'internal', label: 'Internal Sites', icon: Network, description: 'Intranet hubs & wikis' },
+    { id: 'external', label: 'External Portals', icon: Globe, description: 'Client submission portals' },
+    { id: 'public', label: 'Public Sites', icon: Laptop, description: 'Landing pages & microsites' },
   ];
 
   const handleCopyLink = (domain: string, id: string) => {
@@ -257,23 +266,24 @@ export const SitesPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className={cn("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10")}>
-        <PageHeader 
-          title={isSettingsMode ? "" : "Sites"}
-          description={isSettingsMode ? "" : "Manage your organization's internal hubs, client-facing submission portals, and public marketing microsites. Configure access control, custom domains, and templates."}
-          tabs={
-            <Tabs 
-              tabs={tabs} 
-              activeTab={activeTab} 
-              onChange={setActiveTab} 
-              className="border-none"
-              firstTabPadding={false}
-            />
-          }
-        />
-
+      <SettingsSubNavLayout
+        title="Sites & Portals"
+        description="Manage your organization's internal hubs, client-facing submission portals, and public marketing microsites."
+        icon={Network}
+        items={subNavItems}
+        activeId={activeTab}
+        onTabChange={setActiveTab}
+        actions={
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer"
+          >
+            <Plus size={16} /> Create Site
+          </button>
+        }
+      >
         {/* Content Area */}
-        <div className="flex-1 space-y-8 mt-6">
+        <div className="flex-1 space-y-8">
           
           {/* Stats Bar */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -473,7 +483,7 @@ export const SitesPage = () => {
           )}
 
         </div>
-      </div>
+      </SettingsSubNavLayout>
 
       {/* Create Site Modal */}
       <Modal

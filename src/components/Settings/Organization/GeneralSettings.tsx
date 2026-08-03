@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button, Input, Select } from '../../UI/Primitives';
-import { Save, Building2, Globe, Mail, Zap } from 'lucide-react';
+import { Input, Select } from '../../UI/Primitives';
+import { Building2, Globe, Mail, Zap } from 'lucide-react';
 
 interface GeneralSettingsProps {
   tenant: any;
@@ -8,7 +8,6 @@ interface GeneralSettingsProps {
 }
 
 export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
-  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: tenant?.name || '',
     subdomain: tenant?.subdomain || '',
@@ -19,26 +18,26 @@ export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      await onUpdate({
-        name: formData.name,
-        subdomain: formData.subdomain,
-        metadata: {
-          ...tenant?.metadata,
-          industry: formData.industry,
-          website: formData.website,
-          contactEmail: formData.contactEmail,
-        }
-      });
-    } finally {
-      setLoading(false);
-    }
+    await onUpdate({
+      name: formData.name,
+      subdomain: formData.subdomain,
+      metadata: {
+        ...tenant?.metadata,
+        industry: formData.industry,
+        website: formData.website,
+        contactEmail: formData.contactEmail,
+      }
+    });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      <div className="space-y-8">
+    <form id="org-settings-form" onSubmit={handleSubmit} className="w-full space-y-6">
+      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/5 rounded-3xl p-6 lg:p-8 shadow-xl shadow-black/5 dark:shadow-none space-y-8">
+        <div>
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono">Organization Profile & Identity</h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Configure company name, primary industry domain, and contact email.</p>
+        </div>
+
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           <div className="space-y-6">
             <Input 
@@ -57,7 +56,7 @@ export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
                   https://
                 </div>
                 <input 
-                  className="flex-1 h-11 border border-zinc-200 bg-white px-4 text-sm text-zinc-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 outline-none transition-all"
+                  className="flex-1 h-11 border border-zinc-200 bg-white px-4 text-sm text-zinc-900 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 outline-none transition-all"
                   placeholder="subdomain"
                   value={formData.subdomain}
                   onChange={(e) => setFormData(prev => ({ ...prev, subdomain: e.target.value }))}
@@ -103,28 +102,17 @@ export const GeneralSettings = ({ tenant, onUpdate }: GeneralSettingsProps) => {
               onChange={(e) => setFormData(prev => ({ ...prev, contactEmail: e.target.value }))}
             />
 
-            <div className="p-6 rounded-2xl bg-indigo-50/50 border border-indigo-100 dark:bg-blue-500/10 dark:backdrop-blur-xl dark:border-blue-500/20 shadow-lg shadow-blue-500/5">
+            <div className="p-6 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-xl shadow-lg shadow-indigo-500/5">
               <h4 className="flex items-center gap-2 text-sm font-bold text-indigo-900 dark:text-indigo-400">
-                <Zap size={16} className="fill-current" /> Identity & Access
+                <Zap size={16} className="fill-current text-indigo-500" /> Identity & Access
               </h4>
-              <p className="mt-2 text-xs text-indigo-700/70 dark:text-indigo-400/60 leading-relaxed">
+              <p className="mt-2 text-xs text-indigo-700/70 dark:text-indigo-300/70 leading-relaxed">
                 Updating your subdomain will redirect all existing workspace URLs. 
                 Ensure your team is notified before making this change.
               </p>
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="flex items-center justify-end pt-6 border-t border-zinc-200 dark:border-zinc-800">
-        <Button 
-          type="submit" 
-          variant="primary" 
-          loading={loading}
-          className="gap-2 px-8 font-bold shadow-lg shadow-blue-500/20"
-        >
-          <Save size={18} /> Save Identity Settings
-        </Button>
       </div>
     </form>
 

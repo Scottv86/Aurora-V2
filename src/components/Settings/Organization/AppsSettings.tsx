@@ -26,7 +26,8 @@ import {
   MonitorPlay,
   Image,
   Send,
-  Table
+  Table,
+  Database
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { cn } from '../../../lib/utils';
@@ -37,6 +38,7 @@ const AVAILABLE_APPS = [
   { id: 'inbox', label: 'Inbox', icon: Inbox, description: 'Unified communication hub for all your channels.', color: 'text-blue-500', bg: 'bg-blue-500/10' },
   { id: 'docs', label: 'Documents', icon: FileText, description: 'Collaborative document editor with module merge fields.', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
   { id: 'drive', label: 'Drive', icon: Folder, description: 'Personal & tenant shared storage with records governance.', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+  { id: 'query', label: 'Query', icon: Database, description: 'Database schema, SQL runner & data explorer.', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
 
   { id: 'chat', label: 'Chat', icon: MessageSquare, description: 'Real-time team messaging and collaboration.', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
   { id: 'meet', label: 'Meet', icon: Video, description: 'High-quality video conferencing and meetings.', color: 'text-rose-500', bg: 'bg-rose-500/10' },
@@ -96,16 +98,13 @@ export const AppsSettings = () => {
   );
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+    <div className="flex flex-col w-full min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 relative">
+      <PageHeader 
+        title="App Catalog"
+        description="Manage which utility applications are enabled and available across your organization workspaces."
+      />
 
-      <div className="relative z-10 space-y-8 flex flex-col flex-1">
-        <PageHeader 
-          title="App Catalog"
-          description="Manage which utility applications are enabled and available across your organization workspaces."
-        />
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-8">
 
         {/* Premium search bar */}
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">

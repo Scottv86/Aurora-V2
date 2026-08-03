@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Palette,
-  Save
+  Save,
+  Image,
+  Sliders
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
-import { Tabs } from '../../components/UI/TabsAndModal';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { BrandingSettings } from '../../components/Settings/Organization/BrandingSettings';
 import { API_BASE_URL } from '../../config';
 
@@ -31,9 +32,9 @@ export const BrandingSettingsPage = () => {
     useTenantBranding: false,
   });
 
-  const tabs = [
-    { id: 'branding', label: 'Branding' },
-    { id: 'themes', label: 'Themes' },
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'branding', label: 'Branding & Identity', icon: Image, description: 'Logo, colors & icons' },
+    { id: 'themes', label: 'Themes & Density', icon: Sliders, description: 'Typography & rounding' },
   ];
 
   // Initialize from tenant config if available
@@ -84,36 +85,30 @@ export const BrandingSettingsPage = () => {
   };
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10">
-      <PageHeader 
-        title="Branding" 
-        description="Configure the platform's visual identity, logo, and color theme."
-        tabs={
-          <Tabs 
-            tabs={tabs} 
-            activeTab={activeTab} 
-            onChange={setActiveTab} 
-            className="border-none" 
-            firstTabPadding={false}
-          />
-        }
-        actions={
-          <Button onClick={handleSave} loading={saving} className="gap-2">
-            <Save size={18} />
-            Save Changes
-          </Button>
-        }
-      />
-
+    <SettingsSubNavLayout
+      title="Branding & Themes"
+      description="Configure the platform's visual identity, logo, and color theme."
+      icon={Palette}
+      items={subNavItems}
+      activeId={activeTab}
+      onTabChange={setActiveTab}
+      actions={
+        <Button onClick={handleSave} loading={saving} className="gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-500/20">
+          <Save size={18} />
+          Save Changes
+        </Button>
+      }
+    >
       <div className="grid grid-cols-1 gap-8">
         <div className="space-y-10">
           <AnimatePresence mode="wait">
             {activeTab === 'branding' && (
               <motion.div
                 key="branding-tab"
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
               >
                 <BrandingSettings 
                   tenant={tenant} 
@@ -126,27 +121,27 @@ export const BrandingSettingsPage = () => {
             {activeTab === 'themes' && (
               <motion.div
                 key="themes-tab"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
                 className="space-y-10"
               >
-                <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
-                   <div className="p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-400">
+                <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md">
+                   <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                      <Palette size={32} />
                    </div>
                    <div className="space-y-1">
                      <h4 className="font-bold text-zinc-900 dark:text-white">Theme Customization</h4>
                      <p className="text-sm text-zinc-500 max-w-xs">Advanced typography, component rounding, and layout density settings.</p>
                    </div>
-                   <Button variant="secondary" className="text-xs">Coming Soon</Button>
+                   <Button variant="secondary" className="text-xs font-semibold">Coming Soon</Button>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       </div>
-    </div>
+    </SettingsSubNavLayout>
   );
 };

@@ -11,7 +11,6 @@ import {
   CreditCard,
   Layers,
   Terminal,
-  Database,
   Palette,
   Compass,
   LayoutGrid,
@@ -402,7 +401,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Data & Logic',
       icon: Terminal,
       items: [
-        { label: 'Data', icon: Database, to: '/workspace/settings/data' },
         { label: 'Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
       ]
     },

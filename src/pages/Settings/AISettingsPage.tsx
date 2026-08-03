@@ -15,8 +15,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { Button, Badge, cn } from '../../components/UI/Primitives';
-import { Tabs } from '../../components/UI/TabsAndModal';
-import { PageHeader } from '../../components/UI/PageHeader';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
+import { PageLoader } from '../../components/UI/PageLoader';
 import { toast } from 'sonner';
 
 interface TenantAIKey {
@@ -294,72 +294,67 @@ export const AISettingsPage = () => {
     }
   };
 
-  const tabs = [
-    { id: 'keys', label: 'API Keys & Providers', icon: Key },
-    { id: 'routing', label: 'Model Tiers & Routing', icon: Sliders },
-    { id: 'telemetry', label: 'Usage & Quotas', icon: BarChart3 },
-    { id: 'privacy', label: 'Data Privacy & Governance', icon: ShieldCheck }
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'keys', label: 'API Keys & Providers', icon: Key, description: 'BYOK Provider Keys' },
+    { id: 'routing', label: 'Model Tiers & Routing', icon: Sliders, description: 'Cost & performance' },
+    { id: 'telemetry', label: 'Usage & Quotas', icon: BarChart3, description: 'Token consumption' },
+    { id: 'privacy', label: 'Data Privacy & Governance', icon: ShieldCheck, description: 'Zero-retention rules' }
   ];
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-zinc-50 dark:bg-zinc-950 px-6 lg:px-12 py-8 text-zinc-900 dark:text-zinc-100">
-      <PageHeader 
-        title="AI Services & Model Keys (BYOK)" 
-        description="Bring your own API keys, set capability tiers, monitor model usage, and enforce zero-data-retention privacy policy."
-        actions={
-          <Button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20"
-          >
-            <Plus size={16} /> Add API Key
-          </Button>
-        }
-      />
-
-      {/* Tabs Bar */}
-      <div className="my-6">
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      </div>
-
+    <SettingsSubNavLayout
+      title="AI Services"
+      description="Bring your own API keys, set capability tiers, monitor model usage, and enforce zero-data-retention privacy policy."
+      icon={Sparkles}
+      items={subNavItems}
+      activeId={activeTab}
+      onTabChange={setActiveTab}
+      actions={
+        <Button 
+          onClick={() => setIsAddModalOpen(true)}
+          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 shadow-md shadow-indigo-500/20"
+        >
+          <Plus size={16} /> Add API Key
+        </Button>
+      }
+    >
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
-        </div>
+        <PageLoader label="Loading AI Services..." fullscreen={false} className="min-h-[400px]" />
       ) : (
         <>
           {/* TAB 1: API KEYS & PROVIDERS */}
           {activeTab === 'keys' && (
-            <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-purple-900/40 border border-blue-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+            <div className="w-full space-y-6">
+              <div className="p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-indigo-500/5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold border border-blue-500/30">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold border border-indigo-500/30">
                     <Sparkles size={20} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-extrabold text-sm text-zinc-100">Default Baseline Active Model</h4>
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      <h4 className="font-extrabold text-sm text-zinc-900 dark:text-zinc-100">Default Baseline Active Model</h4>
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40">
                         Zero-Config Baseline
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-300 mt-0.5 font-medium">
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-0.5 font-medium">
                       Powered by Gemini 3.1 Flash-Lite (Free Tier)
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-zinc-400">Rate Limit Protection: <strong className="text-emerald-400">5 RPM Intercept Active</strong></span>
+                  <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">Rate Limit Protection: <strong className="text-emerald-600 dark:text-emerald-400">5 RPM Intercept Active</strong></span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {PROVIDERS.map((prov) => {
                   const existingKeys = keys.filter(k => k.provider === prov.id);
                   const isConnected = existingKeys.length > 0;
                   const Icon = prov.icon;
 
                   return (
-                    <div key={prov.id} className="p-5 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                    <div key={prov.id} className="p-6 rounded-3xl bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-2xl transition-all flex flex-col justify-between space-y-4">
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md", prov.color)}>
@@ -904,6 +899,6 @@ export const AISettingsPage = () => {
           </div>
         </div>
       )}
-    </div>
+    </SettingsSubNavLayout>
   );
 };

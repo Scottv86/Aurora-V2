@@ -289,6 +289,7 @@ const App = () => {
                 <Route path="apps/drive" element={<DriveApp />} />
                 <Route path="apps/docs" element={<DocsApp />} />
                 <Route path="apps/docs/:documentId" element={<DocEditor />} />
+                <Route path="apps/query" element={<QueryExplorer />} />
               </Route>
 
               
@@ -351,7 +352,7 @@ const App = () => {
                  <Route path="api" element={<Navigate to="/workspace/settings/platform-modules/api-management" replace />} />
                  
                  {/* New Settings Placeholder Routes */}
-                 <Route path="data" element={<QueryExplorer />} />
+                 <Route path="data" element={<Navigate to="/workspace/apps/query" replace />} />
                  <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
                  <Route path="finance" element={<Navigate to="/workspace/settings/platform-modules/financial-management" replace />} />
                  <Route path="records-management" element={<Navigate to="/workspace/settings/platform-modules/records-management" replace />} />

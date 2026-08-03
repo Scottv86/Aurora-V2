@@ -23,31 +23,10 @@ import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
 import { Invoice } from '../../types/platform';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
-import { Tabs } from '../../components/UI/TabsAndModal';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
+import { PageLoader } from '../../components/UI/PageLoader';
 import { useUsers, TenantMember } from '../../hooks/useUsers';
 import { Table, Column } from '../../components/UI/Table';
-import { PageHeader } from '../../components/UI/PageHeader';
-
-
-
-const Switch = ({ checked, onChange }: { checked: boolean; onChange: (val: boolean) => void }) => {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-        checked ? "bg-blue-600" : "bg-zinc-200 dark:bg-white/5 dark:backdrop-blur-md"
-      )}
-    >
-      <span
-        className={cn(
-          "inline-block h-4 w-4 transform rounded-full transition-transform",
-          checked ? "translate-x-6 bg-white" : "translate-x-1 bg-white dark:bg-zinc-400"
-        )}
-      />
-    </button>
-  );
-};
 
 export const SubscriptionPage = () => {
   const { tenant, billingUsage, billingLoading, refreshBilling } = usePlatform();
@@ -58,9 +37,6 @@ export const SubscriptionPage = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Usage states
-  const [overagesEnabled, setOveragesEnabled] = useState(false);
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -89,23 +65,19 @@ export const SubscriptionPage = () => {
   }, [tenant?.id, session?.access_token]);
 
   if (billingLoading || !billingUsage) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-blue-600" />
-      </div>
-    );
+    return <PageLoader label="Loading Subscription..." fullscreen={false} className="min-h-[500px]" />;
   }
 
   const { plan, quota, usage } = billingUsage;
   const devPercent = Math.min(100, (usage.developer / quota.developerSeats) * 100);
   const stdPercent = Math.min(100, (usage.standard / quota.standardSeats) * 100);
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
-    { id: 'licenses', label: 'Licenses & Seats', icon: ShieldCheck },
-    { id: 'invoices', label: 'Invoices', icon: Receipt },
-    { id: 'payment', label: 'Payment Methods', icon: Wallet },
-    { id: 'activity', label: 'Recent Activity', icon: Activity },
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'overview', label: 'Overview', icon: BarChart3, description: 'Current plan & seats' },
+    { id: 'licenses', label: 'Licenses & Seats', icon: ShieldCheck, description: 'Member seat allocation' },
+    { id: 'invoices', label: 'Invoices', icon: Receipt, description: 'Payment & billing history' },
+    { id: 'payment', label: 'Payment Methods', icon: Wallet, description: 'Cards & billing info' },
+    { id: 'activity', label: 'Recent Activity', icon: Activity, description: 'Usage logs & events' },
   ];
 
   const handleLicenseChange = async (memberId: string, newType: string) => {
@@ -178,7 +150,7 @@ export const SubscriptionPage = () => {
             onClick={() => handleLicenseChange(member.id, 'Standard')}
             disabled={member.licenceType === 'Standard'}
             className={cn(
-              "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer",
               member.licenceType === 'Standard' 
               ? "bg-purple-500 text-white shadow-lg shadow-purple-500/20 cursor-default"
               : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-white/10 dark:border-zinc-800"
@@ -190,7 +162,7 @@ export const SubscriptionPage = () => {
             onClick={() => handleLicenseChange(member.id, 'Developer')}
             disabled={member.licenceType === 'Developer'}
             className={cn(
-              "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              "h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer",
               member.licenceType === 'Developer' 
               ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 cursor-default"
               : "bg-white border border-zinc-200 text-zinc-500 hover:border-blue-500 hover:text-blue-600 dark:bg-white/10 dark:border-zinc-800"
@@ -232,7 +204,7 @@ export const SubscriptionPage = () => {
       header: '',
       className: 'text-right',
       accessor: () => (
-        <button className="p-2 text-zinc-400 hover:text-blue-500 transition-colors">
+        <button className="p-2 text-zinc-400 hover:text-blue-500 transition-colors cursor-pointer">
           <Download size={18} />
         </button>
       )
@@ -241,32 +213,25 @@ export const SubscriptionPage = () => {
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <div className="flex flex-col w-full px-6 lg:px-12 py-10">
-        <PageHeader 
-          title="Subscription"
-          description="Manage your platform subscription software seats, seat licenses, payment methods, and invoice history."
-          tabs={
-            <Tabs 
-              tabs={tabs} 
-              activeTab={activeTab} 
-              onChange={setActiveTab} 
-              className="border-none"
-              firstTabPadding={false}
-            />
-          }
-        />
-
-        <div>
+      <SettingsSubNavLayout
+        title="Subscription & Seats"
+        description="Manage your platform subscription software seats, seat licenses, payment methods, and invoice history."
+        icon={CreditCard}
+        items={subNavItems}
+        activeId={activeTab}
+        onTabChange={setActiveTab}
+      >
+        <div className="w-full">
           {activeTab === 'overview' && (
-            <div className="space-y-10">
+            <div className="w-full space-y-10">
               {/* Plan Hero Card */}
-              <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40 dark:backdrop-blur-xl shadow-sm">
+              <div className="relative overflow-hidden rounded-3xl border border-zinc-200/80 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl shadow-xl shadow-black/5 dark:shadow-none">
                 <div className="relative flex flex-col md:flex-row items-stretch">
                   {/* Left Side: Current Plan */}
                   <div className="flex-1 p-8 space-y-8">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
-                        <Zap size={12} className="fill-current" /> Current Subscription
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400 font-mono">
+                        <Zap size={12} className="fill-current text-indigo-500" /> Current Subscription
                       </div>
                       <h2 className="text-3xl font-black tracking-tight text-zinc-900 dark:text-zinc-50 uppercase">
                         {plan} <span className="text-zinc-400 font-medium">Plan</span>
@@ -393,46 +358,6 @@ export const SubscriptionPage = () => {
             </div>
           )}
 
-          {activeTab === 'credits' && (
-            <div className="space-y-8">
-              <div className="space-y-1">
-                <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">Credits & Overages</h2>
-                <p className="text-sm text-zinc-500 font-medium">Manage supplementary compute credits and overflow policies.</p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-6 shadow-sm">
-                  <div className="flex items-start justify-between gap-8">
-                    <div className="space-y-3">
-                      <div className="h-12 w-12 rounded-2xl bg-blue-600/10 text-blue-600 flex items-center justify-center">
-                        <Zap size={24} />
-                      </div>
-                      <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Enable AI Credit Overages</h3>
-                      <p className="text-sm leading-relaxed text-zinc-500 font-medium">
-                        When toggled on, Aurora will use your AI credits to fulfill model requests once you're out of model quota. Aurora will always use your model quota first before using AI credits.
-                      </p>
-                    </div>
-                    <div className="pt-2">
-                      <Switch checked={overagesEnabled} onChange={setOveragesEnabled} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl shadow-blue-500/20 flex flex-col justify-between">
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Available AI Credits</p>
-                    <h3 className="text-4xl font-black tracking-tight">$0.00</h3>
-                  </div>
-                  <div className="pt-8">
-                    <Button className="w-full bg-white text-blue-600 hover:bg-zinc-100 font-black uppercase tracking-widest text-[11px] h-12 rounded-2xl">
-                      Top up Credits
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'licenses' && (
             <div className="space-y-8">
               {/* Seats Summary Bar */}
@@ -479,7 +404,7 @@ export const SubscriptionPage = () => {
                     placeholder="Search member name, email or licence..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-12 w-full max-w-md rounded-2xl border border-zinc-200 bg-white/80 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
+                    className="h-12 w-full max-w-md rounded-2xl border border-zinc-200 bg-white/80 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm text-zinc-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -554,7 +479,7 @@ export const SubscriptionPage = () => {
             </div>
           )}
         </div>
-      </div>
+      </SettingsSubNavLayout>
     </LicenseGate>
   );
 };

@@ -29,6 +29,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { PageHeader } from '../../components/UI/PageHeader';
 
 
 
@@ -237,65 +238,58 @@ export const DriveApp = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-zinc-50/50 dark:bg-zinc-950/50 overflow-hidden relative">
-      {/* Glow Orbs */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-amber-500/5 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none" />
+      {/* Standardized App Header */}
+      <PageHeader 
+        title={
+          <span className="flex items-center gap-2">
+            Aurora Drive
+            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              Workspace Suite
+            </span>
+          </span>
+        }
+        description="Enterprise file & folder records management with legal hold compliance"
+        icon={Folder}
+        iconClassName="bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const driveType = activeNav === 'PERSONAL' ? 'PERSONAL' : 'TENANT_SHARED';
+                const newDoc = DriveService.saveDocument(
+                  null,
+                  'Untitled Document',
+                  '<h1>Untitled Document</h1><p>Start writing document contents here...</p>',
+                  driveType,
+                  currentFolderId
+                );
+                navigate(`/workspace/apps/docs/${newDoc.id}`);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
+            >
+              <FilePlus size={16} />
+              New Document
+            </button>
+            
+            <button
+              onClick={() => setIsCreateFolderOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              <FolderPlus size={16} />
+              New Folder
+            </button>
 
-      {/* App Header */}
-      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/60 backdrop-blur-xl flex items-center justify-between shrink-0 z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl border border-amber-500/20 shadow-sm">
-            <Folder size={22} />
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              <Upload size={16} />
+              Upload File
+            </button>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              Aurora Drive
-              <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                Workspace Suite
-              </span>
-            </h1>
-
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Enterprise file & folder records management with legal hold compliance</p>
-          </div>
-        </div>
-
-        {/* Quick Action Buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              const driveType = activeNav === 'PERSONAL' ? 'PERSONAL' : 'TENANT_SHARED';
-              const newDoc = DriveService.saveDocument(
-                null,
-                'Untitled Document',
-                '<h1>Untitled Document</h1><p>Start writing document contents here...</p>',
-                driveType,
-                currentFolderId
-              );
-              navigate(`/workspace/apps/docs/${newDoc.id}`);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
-          >
-            <FilePlus size={16} />
-            New Document
-          </button>
-          
-          <button
-            onClick={() => setIsCreateFolderOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
-          >
-            <FolderPlus size={16} />
-            New Folder
-          </button>
-
-          <button
-            onClick={() => setIsUploadOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
-          >
-            <Upload size={16} />
-            Upload File
-          </button>
-        </div>
-      </div>
+        }
+        className="mx-0 mt-0 mb-0"
+      />
 
       {/* Main Body Layout */}
       <div className="flex flex-1 overflow-hidden relative z-10">

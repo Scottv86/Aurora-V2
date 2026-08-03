@@ -21,6 +21,7 @@ import { systemDefaultMenuConfig } from '../../config/menuDefaults';
 import { cn, flattenFields, slugify } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { PLATFORM_MODULES } from '../../config/platformModules';
+import { PageHeader } from '../../components/UI/PageHeader';
 
 // Types
 type LayoutStyle = 'sidebar' | 'slim' | 'top';
@@ -482,16 +483,16 @@ export const NavigationSettingsPage = () => {
 
   return (
     <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
-      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Navigation Builder</h1>
-          <p className="text-xs text-zinc-500">Configure global layout shell, horizontal/vertical shell styles, and custom overrides.</p>
-        </div>
-        <Button onClick={handleSave} loading={saving} className="gap-2 shadow-lg shadow-indigo-500/10">
-          <Save size={16} />
-          Save Settings
-        </Button>
-      </div>
+      <PageHeader 
+        title="Navigation Builder"
+        description="Configure global layout shell, horizontal/vertical shell styles, and custom overrides."
+        actions={
+          <Button onClick={handleSave} loading={saving} className="gap-2 shadow-lg shadow-indigo-500/10">
+            <Save size={16} />
+            Save Settings
+          </Button>
+        }
+      />
 
       {/* Main Two Column layout (Height constrained to avoid page scrolls) */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 lg:p-8 overflow-hidden min-h-0">

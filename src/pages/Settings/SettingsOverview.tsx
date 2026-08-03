@@ -4,7 +4,6 @@ import * as LucideIcons from 'lucide-react';
 import { 
   Search, 
   ArrowRight,
-  Sparkles,
   Layout,
   Settings2,
   Terminal,
@@ -98,15 +97,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
 
   // Data & Logic
   {
-    id: 'data',
-    label: 'Data',
-    description: 'Manage system data, database tables, and schema definitions.',
-    icon: 'Database',
-    to: '/workspace/settings/data',
-    category: 'Data & Logic',
-    tags: ['history', 'logs', 'entries']
-  },
-  {
     id: 'migration',
     label: 'Migration',
     description: 'Import and export data.',
@@ -128,6 +118,9 @@ const CategoryIcon = ({ category }: { category: string }) => {
     default: return <Activity className="w-4 h-4" />;
   }
 };
+
+import { PageHeader } from '../../components/UI/PageHeader';
+import { PageWrapper } from '../../components/Common/PageWrapper';
 
 export const SettingsOverview = () => {
   const navigate = useNavigate();
@@ -157,56 +150,27 @@ export const SettingsOverview = () => {
   }, [filteredItems]);
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
-      {/* Hero Section */}
-      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 pb-6 border-b border-zinc-200/50 dark:border-white/5">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="space-y-1"
-        >
-          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">
-            <Sparkles size={12} />
-            Command Center
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            Settings Overview
-          </h1>
-          <div className="flex items-center gap-4 pt-1.5">
-            <button className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] hover:text-indigo-500 transition-colors flex items-center gap-1.5">
-              <LucideIcons.BookOpen size={10} /> Documentation
-            </button>
-            <div className="w-1 h-1 bg-zinc-250 dark:bg-zinc-800 rounded-full" />
-            <button className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] hover:text-indigo-500 transition-colors flex items-center gap-1.5">
-              <LucideIcons.History size={10} /> Release Notes
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Premium search bar */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex-1 max-w-md w-full"
-        >
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
+    <PageWrapper className="flex flex-col w-full min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 relative">
+      {/* Standardized Page Header */}
+      <PageHeader 
+        title="Settings Overview"
+        description="Centralized platform configuration, organisation details, subscription seats, AI services, navigation, and custom modules."
+        actions={
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
             <input 
               type="text"
               placeholder="Search settings catalog..."
-              className="w-full bg-white/40 dark:bg-white/[0.02] border border-zinc-250/20 dark:border-white/5 rounded-2xl pl-11 pr-4 py-2.5 text-sm text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-500 backdrop-blur-xl"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-all shadow-sm"
             />
           </div>
-        </motion.div>
-      </div>
+        }
+      />
 
-      {/* Prominent Quick Actions */}
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-12">
+        {/* Prominent Quick Actions */}
       <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         <QuickActionCard 
           icon={<UserPlus size={24} />}
@@ -316,7 +280,8 @@ export const SettingsOverview = () => {
           Aurora Platform &copy; 2026 • Enterprise Governance Suite
         </p>
       </motion.div>
-    </div>
+      </div>
+    </PageWrapper>
   );
 };
 
