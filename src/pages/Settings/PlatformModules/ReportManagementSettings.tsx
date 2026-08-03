@@ -366,8 +366,8 @@ const ReportBuilderCanvas = ({
                       </table>
                     </div>
                   ) : (
-                    <div className="w-full h-full">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="w-full h-full min-h-0 min-w-0">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         {widget.type === 'bar' ? (
                           <ReBarChart 
                             data={aggData}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Columns,
   Rows,
@@ -9,8 +10,16 @@ import {
   Layout,
   Layers,
   Cpu,
+  Trash2,
+  ArrowLeft,
+  Compass,
+  Sliders,
+  Shield,
+  Settings,
+  Eye,
+  EyeOff,
   LayoutGrid,
-  Trash2
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
@@ -21,7 +30,6 @@ import { systemDefaultMenuConfig } from '../../config/menuDefaults';
 import { cn, flattenFields, slugify } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { PLATFORM_MODULES } from '../../config/platformModules';
-import { PageHeader } from '../../components/UI/PageHeader';
 
 // Types
 type LayoutStyle = 'sidebar' | 'slim' | 'top';
@@ -64,17 +72,28 @@ const COMMON_ICONS = [
 ];
 
 export const NavigationSettingsPage = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams } = usePlatform();
   const { session } = useAuth();
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
   const [showBreadcrumbs, setShowBreadcrumbs] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [positions, setPositions] = useState<any[]>([]);
+  const [navigationName, setNavigationName] = useState('');
+
+  // Selection state for Right Properties Panel
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
 
   // Target scope: default, role, team, position, user
-  const [activeScope, setActiveScope] = useState<{ type: 'default' | 'role' | 'team' | 'position' | 'user'; id: string }>({ type: 'default', id: '' });
-  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+  const initialScopeType = (searchParams.get('scopeType') as any) || 'default';
+  const initialScopeId = searchParams.get('scopeId') || '';
+  const [activeScope, setActiveScope] = useState<{ type: 'default' | 'role' | 'team' | 'position' | 'user'; id: string }>({ 
+    type: initialScopeType, 
+    id: initialScopeId 
+  });
 
   // Advanced Menu Config State
   const [menuConfigState, setMenuConfigState] = useState<AdvancedMenuConfig>({
@@ -85,8 +104,32 @@ export const NavigationSettingsPage = () => {
     users: {}
   });
 
+  // Synchronize navigation title based on active scope
+  useEffect(() => {
+    const { type, id } = activeScope;
+    if (type === 'default') {
+      setNavigationName((menuConfigState.default as any)?.title || 'Workspace Navigation');
+    } else if (type === 'role') {
+      setNavigationName((menuConfigState.roles?.[id] as any)?.title || `${id} Role Navigation`);
+    } else if (type === 'team') {
+      const t = teams.find(team => team.id === id);
+      const teamName = t ? t.name : id;
+      setNavigationName((menuConfigState.teams?.[id] as any)?.title || `${teamName} Team Navigation`);
+    } else if (type === 'position') {
+      const p = positions.find(pos => pos.id === id);
+      const posTitle = p ? p.title : id;
+      setNavigationName((menuConfigState.positions?.[id] as any)?.title || `${posTitle} Position Navigation`);
+    } else if (type === 'user') {
+      const m = members.find(mem => mem.id === id);
+      const userName = m ? m.name : id;
+      setNavigationName((menuConfigState.users?.[id] as any)?.title || `${userName} Navigation`);
+    }
+  }, [activeScope, menuConfigState, teams, positions, members]);
+
+  // Modal / Add tool states
+  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | null>(null);
+
   // Custom link form state
-  const [customItemType, setCustomItemType] = useState<'link' | 'subtitle'>('link');
   const [customLabel, setCustomLabel] = useState('');
   const [customPath, setCustomPath] = useState('');
   const [customIcon, setCustomIcon] = useState('Link2');
@@ -130,7 +173,8 @@ export const NavigationSettingsPage = () => {
 
   // Initialize from tenant branding and tenant.menuConfig
   useEffect(() => {
-    if (tenant && !initialized) {
+    let timer: NodeJS.Timeout;
+    if (tenant) {
       const tConfig = tenant.menuConfig as any;
       const advanced: AdvancedMenuConfig = {
         default: tConfig?.default || (tConfig?.sections ? tConfig : { sections: [] }),
@@ -140,7 +184,6 @@ export const NavigationSettingsPage = () => {
         users: tConfig?.users || {}
       };
 
-      // Ensure default has fallback sections
       if (!advanced.default.sections || advanced.default.sections.length === 0) {
         advanced.default = JSON.parse(JSON.stringify(systemDefaultMenuConfig));
       }
@@ -153,9 +196,15 @@ export const NavigationSettingsPage = () => {
         }
         setShowBreadcrumbs(tenant.branding.show_breadcrumbs !== false);
       }
-      setInitialized(true);
+
+      timer = setTimeout(() => {
+        setLoading(false);
+      }, 400);
     }
-  }, [tenant, initialized]);
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [tenant]);
 
   // Set default selected section once sections load
   const activeSections = useMemo(() => {
@@ -169,7 +218,7 @@ export const NavigationSettingsPage = () => {
   }, [menuConfigState, activeScope]);
 
   useEffect(() => {
-    if (activeSections.length > 0 && !selectedSectionId) {
+    if (activeSections.length > 0 && (!selectedSectionId || !activeSections.some(s => s.id === selectedSectionId))) {
       setSelectedSectionId(activeSections[0].id);
     }
   }, [activeSections, selectedSectionId]);
@@ -195,6 +244,61 @@ export const NavigationSettingsPage = () => {
     });
   };
 
+  const handleDropToolboxItem = (sectionId: string, toolData: any) => {
+    const { toolType } = toolData;
+    let newItem: MenuItem | null = null;
+
+    if (toolType === 'link') {
+      newItem = {
+        id: `link-${Date.now()}`,
+        label: 'Custom Link',
+        iconName: 'Link2',
+        to: '/workspace/custom-link',
+        isVisible: true
+      };
+    } else if (toolType === 'subtitle') {
+      newItem = {
+        id: `sub-${Date.now()}`,
+        label: 'SECTION LABEL',
+        iconName: 'Sliders',
+        isSubtitle: true,
+        isVisible: true
+      };
+    } else if (toolType === 'page') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('page');
+      return;
+    } else if (toolType === 'system') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('system');
+      return;
+    } else if (toolType === 'custom') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('custom');
+      return;
+    } else if (toolType === 'app') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('app');
+      return;
+    } else if (toolType === 'queue') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('queue');
+      return;
+    }
+
+    if (newItem) {
+      const updated = activeSections.map(sec => {
+        if (sec.id === sectionId) {
+          return { ...sec, items: [...sec.items, newItem!] };
+        }
+        return sec;
+      });
+      handleSectionsChange(updated);
+      setSelectedItemId(newItem.id);
+      toast.success(`Added "${newItem.label}" to section`);
+    }
+  };
+
   const handleResetOverride = () => {
     const { type, id } = activeScope;
     if (type === 'default') return;
@@ -216,7 +320,7 @@ export const NavigationSettingsPage = () => {
       }
       return updated;
     });
-    toast.success('Override reset. Target will now inherit the default navigation.');
+    toast.success('Override reset. Target will now inherit default navigation.');
   };
 
   const handleSave = async () => {
@@ -224,7 +328,6 @@ export const NavigationSettingsPage = () => {
     try {
       const promises: Promise<any>[] = [];
 
-      // 1. Only update tenant branding if layout style or breadcrumbs option actually changed
       const brandingLayoutChanged = tenant?.branding?.layout_style !== layoutStyle;
       const brandingBreadcrumbsChanged = (tenant?.branding?.show_breadcrumbs !== false) !== showBreadcrumbs;
 
@@ -238,11 +341,26 @@ export const NavigationSettingsPage = () => {
         }));
       }
 
-      // 2. Save advanced menu config
-      promises.push(updateMenuConfig(menuConfigState as any, 'tenant'));
+      const updatedConfig = { ...menuConfigState };
+      const { type, id } = activeScope;
+
+      if (type === 'default') {
+        updatedConfig.default = { ...updatedConfig.default, title: navigationName } as any;
+      } else if (type === 'role') {
+        updatedConfig.roles[id] = { ...(updatedConfig.roles[id] || { sections: [] }), title: navigationName } as any;
+      } else if (type === 'team') {
+        updatedConfig.teams[id] = { ...(updatedConfig.teams[id] || { sections: [] }), title: navigationName } as any;
+      } else if (type === 'position') {
+        updatedConfig.positions[id] = { ...(updatedConfig.positions[id] || { sections: [] }), title: navigationName } as any;
+      } else if (type === 'user') {
+        updatedConfig.users[id] = { ...(updatedConfig.users[id] || { sections: [] }), title: navigationName } as any;
+      }
+
+      promises.push(updateMenuConfig(updatedConfig as any, 'tenant'));
 
       await Promise.all(promises);
       await refetchContext();
+      toast.success('Navigation layout saved successfully!');
     } catch (error) {
       toast.error('Failed to update navigation settings');
     } finally {
@@ -250,7 +368,6 @@ export const NavigationSettingsPage = () => {
     }
   };
 
-  // Add Item to active sections helper
   const addItemToActiveSection = (item: MenuItem) => {
     if (activeSections.length === 0) {
       toast.error('Please create a section in the structure first.');
@@ -269,17 +386,17 @@ export const NavigationSettingsPage = () => {
 
     handleSectionsChange(updated);
     toast.success(`Added "${item.label}" to section "${updated[targetIndex].title}"`);
+    setSelectedItemId(item.id);
   };
 
-  const handleAddCustomItem = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddCustomItem = (type: 'link' | 'subtitle') => {
     if (!customLabel.trim()) {
       toast.error('Please enter a label.');
       return;
     }
 
     const icon = customIconInput.trim() || customIcon;
-    const isSubtitle = customItemType === 'subtitle';
+    const isSubtitle = type === 'subtitle';
 
     const newItem: MenuItem = {
       id: `custom:${Date.now()}`,
@@ -293,9 +410,9 @@ export const NavigationSettingsPage = () => {
     setCustomLabel('');
     setCustomPath('');
     setCustomIconInput('');
+    setActiveAddTool(null);
   };
 
-  // Active custom modules helper
   const activeCustomModules = useMemo(() => {
     return modules.filter((mod: any) => {
       if (mod.type === 'PAGE') return false;
@@ -307,7 +424,6 @@ export const NavigationSettingsPage = () => {
     });
   }, [modules]);
 
-  // Queue conditions available fields helper
   const queueAvailableFields = useMemo(() => {
     const list: { id: string; label: string; origin?: string }[] = [
       { id: 'currentUser.teamName', label: 'Current User: Team Name' },
@@ -340,7 +456,6 @@ export const NavigationSettingsPage = () => {
     return list;
   }, [queueItemType, queueModuleId, queueModuleIds, modules]);
 
-  // Queue display columns available fields helper
   const queueColumnOptions = useMemo(() => {
     const list: { id: string; label: string; group: string }[] = [
       { id: 'id', label: 'Record ID', group: 'System' },
@@ -374,7 +489,6 @@ export const NavigationSettingsPage = () => {
     return list;
   }, [queueItemType, queueModuleId, queueModuleIds, modules]);
 
-  // Add Queue Item Handler
   const handleAddQueueItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!queueLabel.trim()) {
@@ -413,7 +527,6 @@ export const NavigationSettingsPage = () => {
 
     if (!tenant?.id) return;
 
-    // Enforce label uniqueness (prevent duplicate slugs for queues)
     const newSlug = slugify(queueLabel);
     const getAllQueues = (items: any[]): any[] => {
       const q: any[] = [];
@@ -430,7 +543,7 @@ export const NavigationSettingsPage = () => {
     const existingQueues = getAllQueues(activeSections.flatMap(s => s.items || []));
     const isDuplicate = existingQueues.some(q => slugify(q.label) === newSlug);
     if (isDuplicate) {
-      toast.error(`A queue with the label "${queueLabel}" (slug: "${newSlug}") already exists. Please choose a unique label.`);
+      toast.error(`A queue with the label "${queueLabel}" (slug: "${newSlug}") already exists.`);
       return;
     }
 
@@ -458,16 +571,15 @@ export const NavigationSettingsPage = () => {
     addItemToActiveSection(newItem);
     setQueueLabel('');
     setQueueRules([{ fieldId: '', operator: 'equals', value: '' }]);
+    setActiveAddTool(null);
   };
 
-  // System modules
   const PLATFORM_MODULES_LIST = PLATFORM_MODULES.map(mod => ({
     label: mod.name,
     icon: mod.iconName,
     path: mod.path
   }));
 
-  // System Enabled Apps Mapping
   const appIconsMap: Record<string, string> = {
     inbox: 'Inbox', docs: 'FileText', drive: 'Folder', chat: 'MessageSquare',
     meet: 'Video', calendar: 'Calendar', notes: 'StickyNote', reminders: 'Bell',
@@ -478,623 +590,919 @@ export const NavigationSettingsPage = () => {
   };
 
   const enabledApps = tenant?.enabledApps || [];
-
   const isOverrideActive = activeScope.type !== 'default';
 
-  return (
-    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
-      <PageHeader 
-        title="Navigation Builder"
-        description="Configure global layout shell, horizontal/vertical shell styles, and custom overrides."
-        actions={
-          <Button onClick={handleSave} loading={saving} className="gap-2 shadow-lg shadow-indigo-500/10">
-            <Save size={16} />
-            Save Settings
-          </Button>
+  // Find currently selected item across sections & children
+  const selectedItemInfo = useMemo(() => {
+    if (!selectedItemId) return null;
+    for (const sec of activeSections) {
+      for (const item of sec.items || []) {
+        if (item.id === selectedItemId) return { item, sectionId: sec.id, isChild: false, parentId: null };
+        if (item.children) {
+          for (const child of item.children) {
+            if (child.id === selectedItemId) return { item: child, sectionId: sec.id, isChild: true, parentId: item.id };
+          }
         }
-      />
+      }
+    }
+    return null;
+  }, [selectedItemId, activeSections]);
 
-      {/* Main Two Column layout (Height constrained to avoid page scrolls) */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 lg:p-8 overflow-hidden min-h-0">
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 w-full h-full bg-white dark:bg-zinc-950">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <p className="text-zinc-500 text-sm font-medium">Loading visual builder...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col w-full h-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans select-none">
+      
+      {/* Top Header Bar (Unified Builder style) */}
+      <div className="px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-20 relative">
         
-        {/* Left Column - Scope, Layout, Toolbox (COLUMNS 5/12) */}
-        <div className="lg:col-span-5 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
+        {/* Left: Back, Icon, Title, Subtitle */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate('/workspace/settings/navigation')}
+            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+          >
+            <ArrowLeft size={16} />
+          </button>
           
-          {/* Target Scope Card */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-sm">
-            <div>
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Configuration Target</h3>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Edit navigation defaults or target roles, teams, positions, or specific users.</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <Compass className="text-indigo-500 shrink-0" size={18} />
+              <input
+                type="text"
+                placeholder="Enter Navigation Name..."
+                value={navigationName}
+                onChange={(e) => setNavigationName(e.target.value)}
+                className="text-lg font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1"
+              />
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ml-1 shrink-0",
+                isOverrideActive
+                  ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                  : "bg-indigo-500/10 text-indigo-500 border-indigo-500/30"
+              )}>
+                {activeScope.type === 'default' ? 'Default Layout' : `${activeScope.type}: ${activeScope.id}`}
+              </span>
             </div>
-            
-            <div className="flex flex-col gap-2">
-              <select
-                className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none"
-                value={`${activeScope.type}:${activeScope.id}`}
-                onChange={(e) => {
-                  const [type, id] = e.target.value.split(':');
-                  setActiveScope({ type: type as any, id });
-                }}
-              >
-                <option value="default:">Default (All Users)</option>
-                
-                <optgroup label="Roles">
-                  <option value="role:Admin">Role: Admin</option>
-                  <option value="role:Developer">Role: Developer</option>
-                  <option value="role:Standard">Role: Standard</option>
-                </optgroup>
-                
-                <optgroup label="Teams">
-                  {teams.map(t => (
-                    <option key={t.id} value={`team:${t.id}`}>Team: {t.name}</option>
-                  ))}
-                </optgroup>
+            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Navigation Builder</p>
+          </div>
+        </div>
 
-                <optgroup label="Positions">
-                  {positions.map(p => (
-                    <option key={p.id} value={`position:${p.id}`}>Position: {p.title}</option>
-                  ))}
-                </optgroup>
-                
-                <optgroup label="Users">
-                  {members.map(m => (
-                    <option key={m.id} value={`user:${m.id}`}>User: {m.name} ({m.email})</option>
-                  ))}
-                </optgroup>
-              </select>
-
-              {isOverrideActive && (
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                    Active Override
-                  </span>
-                  <button
-                    onClick={handleResetOverride}
-                    className="flex items-center gap-1 text-[10px] text-red-500 hover:text-red-600 font-bold uppercase transition-colors"
-                  >
-                    <RefreshCw size={10} />
-                    Reset Override
-                  </button>
-                </div>
-              )}
-            </div>
+        {/* Right Header Controls & Save Button */}
+        <div className="flex items-center gap-3">
+          
+          {/* Scope Selector */}
+          <div className="flex items-center gap-2 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs font-medium">
+            <Sliders size={13} className="text-zinc-400" />
+            <select
+              className="bg-transparent text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
+              value={`${activeScope.type}:${activeScope.id}`}
+              onChange={(e) => {
+                const [type, id] = e.target.value.split(':');
+                setActiveScope({ type: type as any, id });
+              }}
+            >
+              <option value="default:" className="bg-white dark:bg-zinc-900">Default (All Users)</option>
+              <optgroup label="Roles" className="bg-white dark:bg-zinc-900 font-bold">
+                <option value="role:Admin">Role: Admin</option>
+                <option value="role:Developer">Role: Developer</option>
+                <option value="role:Standard">Role: Standard</option>
+              </optgroup>
+              <optgroup label="Teams" className="bg-white dark:bg-zinc-900 font-bold">
+                {teams.map(t => (
+                  <option key={t.id} value={`team:${t.id}`}>Team: {t.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Positions" className="bg-white dark:bg-zinc-900 font-bold">
+                {positions.map(p => (
+                  <option key={p.id} value={`position:${p.id}`}>Position: {p.title}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Users" className="bg-white dark:bg-zinc-900 font-bold">
+                {members.map(m => (
+                  <option key={m.id} value={`user:${m.id}`}>User: {m.name}</option>
+                ))}
+              </optgroup>
+            </select>
           </div>
 
-          {/* Layout Picker (Only shown for Default scope) */}
+          {isOverrideActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResetOverride}
+              className="gap-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-bold"
+            >
+              <RefreshCw size={13} />
+              Reset Override
+            </Button>
+          )}
+
+          {/* Layout Presentation Toggle */}
           {!isOverrideActive && (
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-4 shadow-sm">
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Layout Presentation</h3>
-              
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => setLayoutStyle('sidebar')}
-                  className={cn(
-                    "flex flex-col items-center gap-2 p-3 rounded-xl border-2 text-center transition-all",
-                    layoutStyle === 'sidebar' 
-                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-600/5 text-indigo-600" 
-                      : "border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-500"
-                  )}
-                >
-                  <Rows size={18} />
-                  <span className="text-[10px] font-bold uppercase">Sidebar</span>
-                </button>
-
-                <button
-                  onClick={() => setLayoutStyle('slim')}
-                  className={cn(
-                    "flex flex-col items-center gap-2 p-3 rounded-xl border-2 text-center transition-all",
-                    layoutStyle === 'slim' 
-                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-600/5 text-indigo-600" 
-                      : "border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-500"
-                  )}
-                >
-                  <Layout size={18} />
-                  <span className="text-[10px] font-bold uppercase">Slim Hover</span>
-                </button>
-
-                <button
-                  onClick={() => setLayoutStyle('top')}
-                  className={cn(
-                    "flex flex-col items-center gap-2 p-3 rounded-xl border-2 text-center transition-all",
-                    layoutStyle === 'top' 
-                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-600/5 text-indigo-600" 
-                      : "border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-zinc-500"
-                  )}
-                >
-                  <Columns size={18} />
-                  <span className="text-[10px] font-bold uppercase">Top Menu</span>
-                </button>
-              </div>
-
-              <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-zinc-850 dark:text-zinc-200">Show Workspace Breadcrumbs</h4>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">Display page navigation hierarchies under the main header.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBreadcrumbs(prev => !prev)}
-                  className={cn(
-                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-0",
-                    showBreadcrumbs ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
-                      showBreadcrumbs ? "translate-x-4" : "translate-x-0"
-                    )}
-                  />
-                </button>
-              </div>
+            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl p-1 text-xs">
+              <button
+                onClick={() => setLayoutStyle('sidebar')}
+                className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'sidebar' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                title="Sidebar layout"
+              >
+                <Rows size={14} />
+              </button>
+              <button
+                onClick={() => setLayoutStyle('slim')}
+                className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'slim' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                title="Slim layout"
+              >
+                <Layout size={14} />
+              </button>
+              <button
+                onClick={() => setLayoutStyle('top')}
+                className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'top' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                title="Top Menu layout"
+              >
+                <Columns size={14} />
+              </button>
             </div>
           )}
 
-          {/* Add Elements toolbox */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-5 shadow-sm">
-            <div>
-              <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Element Toolbox</h3>
-              <p className="text-[11px] text-zinc-500">Insert custom elements, platform panels, custom modules, or apps.</p>
-            </div>
+          <Button onClick={handleSave} loading={saving} className="gap-2 shadow-lg shadow-indigo-500/10 font-bold">
+            <Save size={16} />
+            Save Layout
+          </Button>
+        </div>
+      </div>
 
-            {/* Custom Link/Subtitle Form */}
-            <form onSubmit={handleAddCustomItem} className="border border-zinc-100 dark:border-zinc-800 rounded-xl p-3.5 space-y-3 bg-zinc-50/50 dark:bg-zinc-950/20">
-              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <ListPlus size={12} /> Custom Link / Subtitle
-                </span>
-                <div className="flex gap-2 text-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => setCustomItemType('link')}
-                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", customItemType === 'link' ? "bg-indigo-600 text-white" : "text-zinc-400")}
-                  >
-                    Link
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCustomItemType('subtitle')}
-                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", customItemType === 'subtitle' ? "bg-indigo-600 text-white" : "text-zinc-400")}
-                  >
-                    Subtitle
-                  </button>
-                </div>
+      {/* Main Split Screen Workspace */}
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
+        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-500/[0.02] rounded-full blur-[100px] pointer-events-none" />
+
+        {/* LEFT SIDEBAR (Navigation Toolbox - Page Builder style) */}
+        <div className="w-72 border-r border-zinc-200/50 dark:border-white/10 p-4 bg-white/20 dark:bg-zinc-900/10 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
+          <div>
+            <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-250 uppercase tracking-widest">Navigation Toolbox</h3>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Click an item to add it to your navigation canvas.</p>
+          </div>
+
+          {/* Quick Add Cards */}
+          <div className="grid grid-cols-1 gap-2 text-xs">
+            
+            {/* Custom Route Link */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'link' }));
+              }}
+              onClick={() => setActiveAddTool('link')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <ListPlus size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Custom Link</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Drag to canvas or click to add custom URL.</p>
+              </div>
+            </button>
+
+            {/* Subtitle / Section Header */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'subtitle' }));
+              }}
+              onClick={() => setActiveAddTool('subtitle')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <Sliders size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Subtitle / Label</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Drag section headers inside menu categories.</p>
+              </div>
+            </button>
+
+            {/* Work Queue Builder */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'queue' }));
+              }}
+              onClick={() => setActiveAddTool('queue')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <Cpu size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Work Queue</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Build filtered single or unified queues.</p>
+              </div>
+            </button>
+
+            {/* Workspace Pages */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'page' }));
+              }}
+              onClick={() => setActiveAddTool('page')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <Layout size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Workspace Pages</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Embed published visual workspace pages.</p>
+              </div>
+            </button>
+
+            {/* Platform System Panels */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'system' }));
+              }}
+              onClick={() => setActiveAddTool('system')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <Shield size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Platform System Panels</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Add core system modules like Records Management.</p>
+              </div>
+            </button>
+
+            {/* Custom Modules */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'custom' }));
+              }}
+              onClick={() => setActiveAddTool('custom')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <Layers size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Custom Modules</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Link custom modules created in Module Builder.</p>
+              </div>
+            </button>
+
+            {/* Catalog Apps */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'app' }));
+              }}
+              onClick={() => setActiveAddTool('app')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <LayoutGrid size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Catalog Apps</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Add enabled apps from tenant catalog.</p>
+              </div>
+            </button>
+
+          </div>
+        </div>
+
+        {/* CENTER CANVAS AREA */}
+        <div 
+          className="flex-1 p-6 overflow-y-auto bg-zinc-50/10 dark:bg-white/[0.005] relative custom-scrollbar select-none z-10"
+          onClick={() => setSelectedItemId(null)}
+        >
+          {/* Tree Architect Canvas */}
+          <NavigationArchitect 
+            sections={activeSections} 
+            onChange={handleSectionsChange}
+            layout={layoutStyle}
+            modules={modules}
+            selectedItemId={selectedItemId}
+            onSelectItem={setSelectedItemId}
+            onDropToolboxItem={handleDropToolboxItem}
+          />
+        </div>
+
+        {/* RIGHT SIDEBAR (Properties Panel - Page Builder style) */}
+        <div className="w-80 border-l border-zinc-200/50 dark:border-white/10 p-5 bg-white/20 dark:bg-zinc-900/10 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
+          {selectedItemInfo ? (
+            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">
+                <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-widest flex items-center gap-1.5">
+                  <Settings size={14} className="text-indigo-500" />
+                  Item Properties
+                </h3>
+                <button 
+                  onClick={() => setSelectedItemId(null)}
+                  className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase"
+                >
+                  Deselect
+                </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-4 text-xs">
+                {/* Item Label */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-zinc-500 uppercase tracking-wider block">Item Label</label>
+                  <input
+                    type="text"
+                    value={selectedItemInfo.item.label}
+                    onChange={(e) => {
+                      const updatedLabel = e.target.value;
+                      handleSectionsChange(activeSections.map(sec => {
+                        if (sec.id !== selectedItemInfo.sectionId) return sec;
+                        return {
+                          ...sec,
+                          items: sec.items.map(it => {
+                            if (it.id === selectedItemInfo.item.id) return { ...it, label: updatedLabel };
+                            if (it.children) {
+                              return {
+                                ...it,
+                                children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, label: updatedLabel } : child)
+                              };
+                            }
+                            return it;
+                          })
+                        };
+                      }));
+                    }}
+                    className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
+                  />
+                </div>
+
+                {/* Route Path */}
+                {!selectedItemInfo.item.isSubtitle && (
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-zinc-500 uppercase tracking-wider block">Route Path</label>
+                    <input
+                      type="text"
+                      value={selectedItemInfo.item.to || ''}
+                      onChange={(e) => {
+                        const updatedTo = e.target.value;
+                        handleSectionsChange(activeSections.map(sec => {
+                          if (sec.id !== selectedItemInfo.sectionId) return sec;
+                          return {
+                            ...sec,
+                            items: sec.items.map(it => {
+                              if (it.id === selectedItemInfo.item.id) return { ...it, to: updatedTo };
+                              if (it.children) {
+                                return {
+                                  ...it,
+                                  children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, to: updatedTo } : child)
+                                };
+                              }
+                              return it;
+                            })
+                          };
+                        }));
+                      }}
+                      className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30 font-mono"
+                    />
+                  </div>
+                )}
+
+                {/* Icon Selection */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-zinc-500 uppercase tracking-wider block">Icon Name</label>
+                  <select
+                    value={selectedItemInfo.item.iconName}
+                    onChange={(e) => {
+                      const updatedIcon = e.target.value;
+                      handleSectionsChange(activeSections.map(sec => {
+                        if (sec.id !== selectedItemInfo.sectionId) return sec;
+                        return {
+                          ...sec,
+                          items: sec.items.map(it => {
+                            if (it.id === selectedItemInfo.item.id) return { ...it, iconName: updatedIcon };
+                            if (it.children) {
+                              return {
+                                ...it,
+                                children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, iconName: updatedIcon } : child)
+                              };
+                            }
+                            return it;
+                          })
+                        };
+                      }));
+                    }}
+                    className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                  >
+                    {COMMON_ICONS.map(i => (
+                      <option key={i} value={i} className="bg-white dark:bg-zinc-900">{i}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Visibility Toggle */}
+                <div className="flex items-center justify-between border-t border-zinc-200/50 dark:border-white/5 pt-3">
+                  <div>
+                    <span className="font-bold text-zinc-700 dark:text-zinc-300 block">Item Visibility</span>
+                    <span className="text-[10px] text-zinc-400">Show or hide this item in the sidebar navigation.</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newVis = selectedItemInfo.item.isVisible === false;
+                      handleSectionsChange(activeSections.map(sec => {
+                        if (sec.id !== selectedItemInfo.sectionId) return sec;
+                        return {
+                          ...sec,
+                          items: sec.items.map(it => {
+                            if (it.id === selectedItemInfo.item.id) return { ...it, isVisible: newVis };
+                            if (it.children) {
+                              return {
+                                ...it,
+                                children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, isVisible: newVis } : child)
+                              };
+                            }
+                            return it;
+                          })
+                        };
+                      }));
+                    }}
+                    className={cn(
+                      "p-2 rounded-xl border transition-all",
+                      selectedItemInfo.item.isVisible !== false ? "bg-indigo-500/10 text-indigo-500 border-indigo-500/30" : "bg-zinc-100 dark:bg-white/5 text-zinc-400 border-zinc-200 dark:border-white/10"
+                    )}
+                  >
+                    {selectedItemInfo.item.isVisible !== false ? <Eye size={16} /> : <EyeOff size={16} />}
+                  </button>
+                </div>
+
+                {/* Remove Item */}
+                <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      handleSectionsChange(activeSections.map(sec => {
+                        if (sec.id !== selectedItemInfo.sectionId) return sec;
+                        return {
+                          ...sec,
+                          items: sec.items.filter(it => it.id !== selectedItemInfo.item.id).map(it => ({
+                            ...it,
+                            children: it.children?.filter(c => c.id !== selectedItemInfo.item.id)
+                          }))
+                        };
+                      }));
+                      setSelectedItemId(null);
+                      toast.success(`Removed "${selectedItemInfo.item.label}"`);
+                    }}
+                    className="w-full gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 font-bold"
+                  >
+                    <Trash2 size={14} /> Remove Item
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
+              <Settings size={28} className="text-zinc-300 dark:text-zinc-650" />
+              <h4 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">No Item Selected</h4>
+              <p className="text-[10px] text-zinc-500 leading-normal">Click on any menu item on the canvas to configure its settings.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* QUICK ADD MODAL DRAWERS FOR TOOLBOX ITEMS */}
+      {activeAddTool === 'link' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <ListPlus size={18} className="text-indigo-500" /> Add Custom Link
+            </h3>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-zinc-500 uppercase block mb-1">Label</label>
                 <input
                   type="text"
-                  placeholder="Label / Text"
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
+                  placeholder="E.g., Client Portal"
                   value={customLabel}
                   onChange={(e) => setCustomLabel(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs outline-none focus:border-indigo-500"
                 />
-                
-                {customItemType === 'link' && (
-                  <input
-                    type="text"
-                    placeholder="Route Path (e.g. /workspace/custom)"
-                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
-                    value={customPath}
-                    onChange={(e) => setCustomPath(e.target.value)}
-                  />
-                )}
-
-                <div className="flex gap-2">
-                  <select
-                    className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
-                    value={customIcon}
-                    onChange={(e) => setCustomIcon(e.target.value)}
-                  >
-                    {COMMON_ICONS.map(i => (
-                      <option key={i} value={i}>{i}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="Custom Lucide Icon Name"
-                    className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
-                    value={customIconInput}
-                    onChange={(e) => setCustomIconInput(e.target.value)}
-                  />
-                </div>
               </div>
-
-              <Button type="submit" variant="secondary" size="sm" className="w-full text-xs gap-1">
-                <Plus size={12} /> Add to Menu
-              </Button>
-            </form>
-
-            {/* Queue Builder Form */}
-            <form onSubmit={handleAddQueueItem} className="border border-zinc-100 dark:border-zinc-800 rounded-xl p-3.5 space-y-3 bg-zinc-50/50 dark:bg-zinc-950/20">
-              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <Cpu size={12} /> Queue Builder
-                </span>
-                <div className="flex gap-2 text-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQueueItemType('single');
-                      setQueueColumns(['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']);
-                    }}
-                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", queueItemType === 'single' ? "bg-indigo-600 text-white" : "text-zinc-400")}
-                  >
-                    Single Module
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQueueItemType('unified');
-                    }}
-                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", queueItemType === 'unified' ? "bg-indigo-600 text-white" : "text-zinc-400")}
-                  >
-                    Unified Multi-Module
-                  </button>
-                </div>
+              <div>
+                <label className="font-bold text-zinc-500 uppercase block mb-1">Route Path</label>
+                <input
+                  type="text"
+                  placeholder="E.g., /workspace/custom"
+                  value={customPath}
+                  onChange={(e) => setCustomPath(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs outline-none focus:border-indigo-500 font-mono"
+                />
               </div>
+              <div>
+                <label className="font-bold text-zinc-500 uppercase block mb-1">Icon</label>
+                <select
+                  value={customIcon}
+                  onChange={(e) => setCustomIcon(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs outline-none"
+                >
+                  {COMMON_ICONS.map(i => (
+                    <option key={i} value={i} className="bg-white dark:bg-zinc-900">{i}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Cancel</Button>
+              <Button onClick={() => handleAddCustomItem('link')}>Add to Canvas</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="space-y-3">
-                {/* Module Selector */}
-                {queueItemType === 'single' ? (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase">Target Module</label>
-                    <select
-                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
-                      value={queueModuleId}
-                      onChange={(e) => setQueueModuleId(e.target.value)}
-                    >
-                      <option value="">Select a Module...</option>
-                      {activeCustomModules.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase block">Select Target Modules</label>
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 max-h-28 overflow-y-auto space-y-1 custom-scrollbar">
-                      {activeCustomModules.map(m => {
-                        const isChecked = queueModuleIds.includes(m.id);
-                        return (
-                          <label key={m.id} className="flex items-center gap-2 text-xs font-medium text-zinc-750 dark:text-zinc-350 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setQueueModuleIds([...queueModuleIds, m.id]);
-                                } else {
-                                  setQueueModuleIds(queueModuleIds.filter(id => id !== m.id));
-                                }
-                              }}
-                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span>{m.name}</span>
-                          </label>
-                        );
-                      })}
-                      {activeCustomModules.length === 0 && (
-                        <p className="text-[10px] text-zinc-400 italic">No active custom modules.</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+      {activeAddTool === 'subtitle' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Sliders size={18} className="text-indigo-500" /> Add Subtitle Header
+            </h3>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-zinc-500 uppercase block mb-1">Subtitle Text</label>
+                <input
+                  type="text"
+                  placeholder="E.g., MANAGEMENT PANELS"
+                  value={customLabel}
+                  onChange={(e) => setCustomLabel(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Cancel</Button>
+              <Button onClick={() => handleAddCustomItem('subtitle')}>Add Subtitle</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
-                {/* Queue Label */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Queue Name / Label</label>
-                  <input
-                    type="text"
-                    placeholder="E.g., Undergraduate Admissions"
-                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
-                    value={queueLabel}
-                    onChange={(e) => setQueueLabel(e.target.value)}
-                  />
-                </div>
+      {activeAddTool === 'queue' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleAddQueueItem} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Cpu size={18} className="text-indigo-500" /> Work Queue Builder
+            </h3>
+            
+            <div className="flex gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setQueueItemType('single')}
+                className={cn("flex-1 py-1.5 rounded-xl font-bold uppercase border transition-all", queueItemType === 'single' ? "bg-indigo-600 text-white border-indigo-600" : "border-zinc-200 dark:border-zinc-800 text-zinc-400")}
+              >
+                Single Module
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueItemType('unified')}
+                className={cn("flex-1 py-1.5 rounded-xl font-bold uppercase border transition-all", queueItemType === 'unified' ? "bg-indigo-600 text-white border-indigo-600" : "border-zinc-200 dark:border-zinc-800 text-zinc-400")}
+              >
+                Unified Multi-Module
+              </button>
+            </div>
 
-                {/* Queue Icon */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase">Queue Icon</label>
+            <div className="space-y-3 text-xs">
+              {queueItemType === 'single' ? (
+                <div>
+                  <label className="font-bold text-zinc-500 uppercase block mb-1">Target Module</label>
                   <select
-                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500/50"
-                    value={queueIcon}
-                    onChange={(e) => setQueueIcon(e.target.value)}
+                    value={queueModuleId}
+                    onChange={(e) => setQueueModuleId(e.target.value)}
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 outline-none"
                   >
-                    {COMMON_ICONS.map(i => (
-                      <option key={i} value={i}>{i}</option>
+                    <option value="">Select custom module...</option>
+                    {activeCustomModules.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
                 </div>
-
-                {/* Condition Builder Section */}
-                <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase block">Filtering Rules (AND)</label>
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
-                    {queueRules.map((rule, idx) => (
-                      <div key={idx} className="flex gap-1.5 items-center">
-                        <select
-                          className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1.5 py-1 text-[10px] outline-none"
-                          value={rule.fieldId}
-                          onChange={(e) => {
-                            const updated = [...queueRules];
-                            updated[idx].fieldId = e.target.value;
-                            setQueueRules(updated);
-                          }}
-                        >
-                          <option value="">Field...</option>
-                          {queueAvailableFields.map(f => (
-                            <option key={f.id} value={f.id}>{f.label}</option>
-                          ))}
-                        </select>
-
-                        <select
-                          className="w-18 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1 py-1 text-[10px] outline-none"
-                          value={rule.operator}
-                          onChange={(e) => {
-                            const updated = [...queueRules];
-                            updated[idx].operator = e.target.value;
-                            setQueueRules(updated);
-                          }}
-                        >
-                          <option value="equals">==</option>
-                          <option value="not_equals">!=</option>
-                          <option value="contains">contains</option>
-                          <option value="is_empty">empty</option>
-                          <option value="not_empty">not empty</option>
-                        </select>
-
-                        {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
+              ) : (
+                <div>
+                  <label className="font-bold text-zinc-500 uppercase block mb-1">Target Modules</label>
+                  <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                    {activeCustomModules.map(m => {
+                      const isChecked = queueModuleIds.includes(m.id);
+                      return (
+                        <label key={m.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
                           <input
-                            type="text"
-                            placeholder="Value"
-                            className="w-20 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-1.5 py-1 text-[10px] outline-none"
-                            value={rule.value}
+                            type="checkbox"
+                            checked={isChecked}
                             onChange={(e) => {
-                              const updated = [...queueRules];
-                              updated[idx].value = e.target.value;
-                              setQueueRules(updated);
+                              if (e.target.checked) setQueueModuleIds([...queueModuleIds, m.id]);
+                              else setQueueModuleIds(queueModuleIds.filter(id => id !== m.id));
                             }}
+                            className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600"
                           />
-                        )}
+                          <span>{m.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setQueueRules(queueRules.filter((_, i) => i !== idx));
+              <div>
+                <label className="font-bold text-zinc-500 uppercase block mb-1">Queue Name</label>
+                <input
+                  type="text"
+                  placeholder="E.g., Priority Admissions Inbox"
+                  value={queueLabel}
+                  onChange={(e) => setQueueLabel(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-zinc-500 uppercase block mb-1">Queue Icon</label>
+                <select
+                  value={queueIcon}
+                  onChange={(e) => setQueueIcon(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 outline-none"
+                >
+                  {COMMON_ICONS.map(i => (
+                    <option key={i} value={i}>{i}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtering Rules */}
+              <div className="border-t border-zinc-200/50 dark:border-white/10 pt-3 space-y-2">
+                <label className="font-bold text-zinc-500 uppercase block">Filter Rules (AND)</label>
+                <div className="space-y-2">
+                  {queueRules.map((rule, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select
+                        className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs outline-none"
+                        value={rule.fieldId}
+                        onChange={(e) => {
+                          const updated = [...queueRules];
+                          updated[idx].fieldId = e.target.value;
+                          setQueueRules(updated);
+                        }}
+                      >
+                        <option value="">Select Field...</option>
+                        {queueAvailableFields.map(f => (
+                          <option key={f.id} value={f.id}>{f.label}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="w-24 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs outline-none"
+                        value={rule.operator}
+                        onChange={(e) => {
+                          const updated = [...queueRules];
+                          updated[idx].operator = e.target.value;
+                          setQueueRules(updated);
+                        }}
+                      >
+                        <option value="equals">equals</option>
+                        <option value="not_equals">not equals</option>
+                        <option value="contains">contains</option>
+                        <option value="is_empty">is empty</option>
+                        <option value="not_empty">not empty</option>
+                      </select>
+
+                      {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          className="w-24 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs outline-none"
+                          value={rule.value}
+                          onChange={(e) => {
+                            const updated = [...queueRules];
+                            updated[idx].value = e.target.value;
+                            setQueueRules(updated);
                           }}
-                          disabled={queueRules.length === 1}
-                          className="text-zinc-400 hover:text-red-500 disabled:opacity-30"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        />
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setQueueRules(queueRules.filter((_, i) => i !== idx))}
+                        disabled={queueRules.length === 1}
+                        className="text-zinc-400 hover:text-red-500 disabled:opacity-30 p-1"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setQueueRules([...queueRules, { fieldId: '', operator: 'equals', value: '' }])}
+                  className="flex items-center gap-1 text-xs text-indigo-500 font-bold uppercase mt-1 hover:underline"
+                >
+                  <Plus size={12} /> Add Rule
+                </button>
+              </div>
+
+              {/* Display Columns Selection (Unified Queues) */}
+              {queueItemType === 'unified' && (
+                <div className="border-t border-zinc-200/50 dark:border-white/10 pt-3 space-y-2">
+                  <label className="font-bold text-zinc-500 uppercase block">Display Columns</label>
+                  <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
+                    {Array.from(new Set(queueColumnOptions.map(c => c.group))).map(groupName => (
+                      <div key={groupName} className="space-y-1">
+                        <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800 pb-0.5">
+                          {groupName} Fields
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 pl-1">
+                          {queueColumnOptions.filter(c => c.group === groupName).map(col => {
+                            const isChecked = queueColumns.includes(col.id);
+                            return (
+                              <label key={col.id} className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setQueueColumns([...queueColumns, col.id]);
+                                    } else {
+                                      setQueueColumns(queueColumns.filter(c => c !== col.id));
+                                    }
+                                  }}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                                />
+                                <span className="truncate">{col.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                     ))}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setQueueRules([...queueRules, { fieldId: '', operator: 'equals', value: '' }])}
-                    className="flex items-center gap-1 text-[10px] text-indigo-650 dark:text-indigo-400 font-bold uppercase mt-1 hover:underline"
-                  >
-                    <Plus size={10} /> Add Rule
-                  </button>
                 </div>
+              )}
 
-                {/* Columns Selection Section (Only for Unified Queues) */}
-                {queueItemType === 'unified' && (
-                  <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase block">Display Columns</label>
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
-                      {/* Grouped Columns */}
-                      {Array.from(new Set(queueColumnOptions.map(c => c.group))).map(groupName => (
-                        <div key={groupName} className="space-y-1">
-                          <div className="text-[9px] font-black text-zinc-400 dark:text-zinc-650 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-900 pb-0.5">
-                            {groupName} Fields
-                          </div>
-                          <div className="grid grid-cols-2 gap-1.5 pl-1">
-                            {queueColumnOptions.filter(c => c.group === groupName).map(col => {
-                              const isChecked = queueColumns.includes(col.id);
-                              return (
-                                <label key={col.id} className="flex items-center gap-1.5 text-[10px] text-zinc-700 dark:text-zinc-350 cursor-pointer select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setQueueColumns([...queueColumns, col.id]);
-                                      } else {
-                                        setQueueColumns(queueColumns.filter(c => c !== col.id));
-                                      }
-                                    }}
-                                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3 w-3"
-                                  />
-                                  <span className="truncate">{col.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Button type="submit" variant="secondary" size="sm" className="w-full text-xs gap-1 mt-2">
-                <Plus size={12} /> Create Workspace Queue
-              </Button>
-            </form>
-
-            {/* Workspace Pages list */}
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-1">
-                <Layout size={12} /> Workspace Pages
-              </h4>
-              {(() => {
-                const activePages = modules.filter((mod: any) => mod.type === 'PAGE' && (mod.status === 'ACTIVE' || mod.enabled));
-                if (activePages.length === 0) {
-                  return <p className="text-[10px] text-zinc-400 italic">No active workspace pages.</p>;
-                }
-                return (
-                  <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto custom-scrollbar">
-                    {activePages.map((page) => (
-                      <button
-                        key={page.id}
-                        onClick={() => addItemToActiveSection({
-                          id: `module:${page.id}`,
-                          label: page.name,
-                          iconName: (page as any).iconName || (page as any).icon || 'Layers',
-                          to: `/workspace/pages/${slugify(page.name)}`,
-                          isVisible: true
-                        })}
-                        className="flex items-center justify-between p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-left transition-colors"
-                      >
-                        <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">{page.name}</span>
-                        <Plus size={14} className="text-zinc-400 hover:text-indigo-500" />
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
 
-            {/* System Modules list */}
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-1">
-                <Cpu size={12} /> System Modules
-              </h4>
-              <div className="grid grid-cols-1 gap-1">
-                {PLATFORM_MODULES_LIST.map((mod) => (
-                  <button
-                    key={mod.path}
-                    onClick={() => addItemToActiveSection({
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-200/50 dark:border-white/10">
+              <Button type="button" variant="ghost" onClick={() => setActiveAddTool(null)}>Cancel</Button>
+              <Button type="submit">Create Queue Item</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {activeAddTool === 'page' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Layout size={18} className="text-indigo-500" /> Select Workspace Page
+            </h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {modules.filter((mod: any) => mod.type === 'PAGE' && (mod.status === 'ACTIVE' || mod.enabled)).map(page => (
+                <button
+                  key={page.id}
+                  onClick={() => {
+                    addItemToActiveSection({
+                      id: `module:${page.id}`,
+                      label: page.name,
+                      iconName: (page as any).iconName || (page as any).icon || 'Layers',
+                      to: `/workspace/pages/${slugify(page.name)}`,
+                      isVisible: true
+                    });
+                    setActiveAddTool(null);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
+                >
+                  <span className="font-bold text-xs">{page.name}</span>
+                  <Plus size={16} className="text-zinc-400 group-hover:text-indigo-500" />
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeAddTool === 'system' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Shield size={18} className="text-indigo-500" /> Select Platform Module
+            </h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {PLATFORM_MODULES_LIST.map(mod => (
+                <button
+                  key={mod.path}
+                  onClick={() => {
+                    addItemToActiveSection({
                       id: `platform-${mod.path.split('/').pop()}-${Date.now()}`,
                       label: mod.label,
                       iconName: mod.icon,
                       to: mod.path,
                       isVisible: true
-                    })}
-                    className="flex items-center justify-between p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-left transition-colors"
-                  >
-                    <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">{mod.label}</span>
-                    <Plus size={14} className="text-zinc-400 hover:text-indigo-500" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Modules list */}
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-1">
-                <Layers size={12} /> Custom Modules
-              </h4>
-              {(() => {
-                const activeCustomModules = modules.filter((mod: any) => {
-                  if (mod.type === 'PAGE') return false;
-                  if (mod.status !== 'ACTIVE' && !mod.enabled) return false;
-                  const isPlatform = PLATFORM_MODULES.some(pm => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId);
-                  if (isPlatform) return false;
-                  if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
-                  return true;
-                });
-                if (activeCustomModules.length === 0) {
-                  return <p className="text-[10px] text-zinc-400 italic">No active custom modules.</p>;
-                }
-                return (
-                  <div className="grid grid-cols-1 gap-1 max-h-36 overflow-y-auto custom-scrollbar">
-                    {activeCustomModules.map((mod) => (
-                      <button
-                        key={mod.id}
-                        onClick={() => addItemToActiveSection({
-                          id: `module:${mod.id}`,
-                          label: mod.name,
-                          iconName: mod.icon || 'Box',
-                          to: `/workspace/modules/${mod.id}`,
-                          isVisible: true
-                        })}
-                        className="flex items-center justify-between p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-left transition-colors"
-                      >
-                        <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">{mod.name}</span>
-                        <Plus size={14} className="text-zinc-400 hover:text-indigo-500" />
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Enabled apps list */}
-            <div className="space-y-2">
-              <h4 className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-800 pb-1">
-                <LayoutGrid size={12} /> Enabled Apps
-              </h4>
-              {enabledApps.length === 0 ? (
-                <p className="text-[10px] text-zinc-400 italic">No apps enabled in app catalog.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-1.5">
-                  {enabledApps.map((appId: string) => {
-                    const iconName = appIconsMap[appId] || 'Layout';
-                    const appLabel = appId.charAt(0).toUpperCase() + appId.slice(1);
-                    return (
-                      <button
-                        key={appId}
-                        onClick={() => addItemToActiveSection({
-                          id: `app:${appId}-${Date.now()}`,
-                          label: appLabel,
-                          iconName: iconName,
-                          to: `/workspace/apps/${appId}`,
-                          isVisible: true
-                        })}
-                        className="flex items-center justify-between p-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-left transition-colors"
-                      >
-                        <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium truncate pr-1">{appLabel}</span>
-                        <Plus size={12} className="text-zinc-400 shrink-0" />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
-
-        {/* Right Column - Navigation Architect (COLUMNS 7/12 - Full Height, Scroll constrained) */}
-        <div className="lg:col-span-7 flex flex-col h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
-          <div className="p-5 border-b border-zinc-100 dark:border-zinc-800 shrink-0 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-            <div>
-              <h2 className="text-sm font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Menu Structure</h2>
-              <p className="text-[11px] text-zinc-500">Edit sections and items. Element target additions will land in the selected section.</p>
-            </div>
-            
-            {activeSections.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-zinc-400 font-medium uppercase">Active Target Section:</span>
-                <select
-                  value={selectedSectionId}
-                  onChange={(e) => setSelectedSectionId(e.target.value)}
-                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-[11px] outline-none"
+                    });
+                    setActiveAddTool(null);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
                 >
-                  {activeSections.map(s => (
-                    <option key={s.id} value={s.id}>{s.title}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-            <NavigationArchitect 
-              sections={activeSections} 
-              onChange={handleSectionsChange}
-              layout={layoutStyle}
-              modules={modules}
-            />
+                  <span className="font-bold text-xs">{mod.label}</span>
+                  <Plus size={16} className="text-zinc-400 group-hover:text-indigo-500" />
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Close</Button>
+            </div>
           </div>
         </div>
+      )}
 
-      </div>
+      {activeAddTool === 'custom' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Layers size={18} className="text-indigo-500" /> Select Custom Module
+            </h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {activeCustomModules.map(mod => (
+                <button
+                  key={mod.id}
+                  onClick={() => {
+                    addItemToActiveSection({
+                      id: `module:${mod.id}`,
+                      label: mod.name,
+                      iconName: mod.icon || 'Box',
+                      to: `/workspace/modules/${mod.id}`,
+                      isVisible: true
+                    });
+                    setActiveAddTool(null);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
+                >
+                  <span className="font-bold text-xs">{mod.name}</span>
+                  <Plus size={16} className="text-zinc-400 group-hover:text-indigo-500" />
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeAddTool === 'app' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <LayoutGrid size={18} className="text-indigo-500" /> Select Catalog App
+            </h3>
+            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {enabledApps.map((appId: string) => {
+                const iconName = appIconsMap[appId] || 'Layout';
+                const appLabel = appId.charAt(0).toUpperCase() + appId.slice(1);
+                return (
+                  <button
+                    key={appId}
+                    onClick={() => {
+                      addItemToActiveSection({
+                        id: `app:${appId}-${Date.now()}`,
+                        label: appLabel,
+                        iconName: iconName,
+                        to: `/workspace/apps/${appId}`,
+                        isVisible: true
+                      });
+                      setActiveAddTool(null);
+                    }}
+                    className="flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
+                  >
+                    <span className="font-bold text-xs truncate">{appLabel}</span>
+                    <Plus size={14} className="text-zinc-400 group-hover:text-indigo-500 shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

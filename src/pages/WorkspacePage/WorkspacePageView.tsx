@@ -765,7 +765,7 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
         <p className="text-xs text-zinc-400 italic py-10 text-center">No record data found to display.</p>
       ) : (
         <div className="flex-1 min-h-0 w-full text-xs">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             {chartType === 'line' ? (
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
@@ -1221,8 +1221,8 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                       </table>
                     </div>
                   ) : (
-                    <div className="w-full h-full">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="w-full h-full min-h-0 min-w-0">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         {w.type === 'bar' ? (
                           <BarChart 
                             data={aggData}

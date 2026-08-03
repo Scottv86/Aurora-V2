@@ -153,7 +153,7 @@ export const SettingsOverview = () => {
     <PageWrapper className="flex flex-col w-full min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 relative">
       {/* Standardized Page Header */}
       <PageHeader 
-        title="Settings Overview"
+        title="Settings"
         description="Centralized platform configuration, organisation details, subscription seats, AI services, navigation, and custom modules."
         actions={
           <div className="relative w-full md:w-80">

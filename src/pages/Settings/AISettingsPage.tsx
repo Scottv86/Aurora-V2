@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
@@ -834,8 +835,8 @@ export const AISettingsPage = () => {
       )}
 
       {/* Add API Key Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      {isAddModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 shadow-2xl">
             <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-50">Configure {selectedProvider.toUpperCase()} Key</h3>
             
@@ -864,12 +865,12 @@ export const AISettingsPage = () => {
 
               {(selectedProvider === 'azure_openai' || selectedProvider === 'ollama' || selectedProvider === 'openrouter') && (
                 <div>
-                  <label className="block text-xs font-bold uppercase text-zinc-400 mb-1">Custom Base URL (Optional)</label>
+                  <label className="block text-xs font-bold uppercase text-zinc-400 mb-1">Custom Endpoint Base URL</label>
                   <input 
                     type="text" 
                     value={baseUrlInput}
                     onChange={(e) => setBaseUrlInput(e.target.value)}
-                    placeholder="https://..."
+                    placeholder="https://your-resource.openai.azure.com/"
                     className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-white/5 border border-zinc-300 dark:border-zinc-700 text-xs font-mono"
                   />
                 </div>
@@ -897,7 +898,8 @@ export const AISettingsPage = () => {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </SettingsSubNavLayout>
   );

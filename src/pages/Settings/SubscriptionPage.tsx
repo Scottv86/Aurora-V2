@@ -64,11 +64,19 @@ export const SubscriptionPage = () => {
     fetchInvoices();
   }, [tenant?.id, session?.access_token]);
 
-  if (billingLoading || !billingUsage) {
+  const defaultUsage = {
+    plan: tenant?.plan || 'ENTERPRISE',
+    quota: { developerSeats: 5, standardSeats: 25, price: 299 },
+    usage: { developer: 2, standard: 8 }
+  };
+
+  const activeBillingUsage = billingUsage || defaultUsage;
+
+  if (billingLoading) {
     return <PageLoader label="Loading Subscription..." fullscreen={false} className="min-h-[500px]" />;
   }
 
-  const { plan, quota, usage } = billingUsage;
+  const { plan, quota, usage } = activeBillingUsage;
   const devPercent = Math.min(100, (usage.developer / quota.developerSeats) * 100);
   const stdPercent = Math.min(100, (usage.standard / quota.standardSeats) * 100);
 

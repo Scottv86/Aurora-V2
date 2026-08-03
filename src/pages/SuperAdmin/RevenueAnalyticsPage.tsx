@@ -96,7 +96,7 @@ export const RevenueAnalyticsPage = () => {
       >
         <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Revenue Growth Trajectory</h3>
         <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <AreaChart data={revenue?.trends || []}>
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">

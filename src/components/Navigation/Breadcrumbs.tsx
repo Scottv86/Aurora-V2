@@ -35,6 +35,7 @@ const PATH_MAP: Record<string, string> = {
   usage: 'Model Usage',
   subscription: 'Subscription',
   'platform-modules': 'Platform Modules',
+  pages: 'Pages',
   apps: 'Apps',
   docs: 'Documents',
   drive: 'Drive',
@@ -151,7 +152,7 @@ export const Breadcrumbs = () => {
     };
   }).filter((item) => {
     if (isSettings && item.segment === 'workspace') return false;
-    return !['records', 'sub', 'member', 'teams', 'positions', 'pages', 'page', 'apps'].includes(item.segment);
+    return !['records', 'sub', 'member', 'teams', 'positions', 'page', 'platform-modules'].includes(item.segment);
   });
 
   // For /workspace/settings index route, display "Settings > Overview"

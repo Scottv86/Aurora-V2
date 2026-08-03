@@ -393,7 +393,7 @@ const QueryResultVisualizer = ({ result }: { result: any[] }) => {
         </div>
       ) : (
         <div className="w-full pt-1">
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
             <BarChart data={result} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <XAxis dataKey={stringKeys[0] || keys[0]} stroke="#888888" fontSize={9} tickLine={false} />
               <YAxis stroke="#888888" fontSize={9} tickLine={false} />

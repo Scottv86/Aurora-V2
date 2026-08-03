@@ -3471,7 +3471,7 @@ export const ModuleView = () => {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col">
             <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Status Breakdown</h4>
             <div className="h-64 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <PieChart>
                   <Pie
                     data={analyticsData.statusData}
@@ -3505,7 +3505,7 @@ export const ModuleView = () => {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col">
             <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Creation Activity Trend</h4>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <AreaChart data={analyticsData.trendData}>
                   <defs>
                     <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
@@ -3526,7 +3526,7 @@ export const ModuleView = () => {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col lg:col-span-2">
             <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Workload distribution by Member</h4>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={analyticsData.assigneeData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e720" />
                   <XAxis dataKey="name" tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />

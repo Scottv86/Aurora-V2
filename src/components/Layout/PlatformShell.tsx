@@ -425,6 +425,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
                           location.pathname.includes('/workspace/settings/ai-builder') ||
+                          location.pathname.includes('/workspace/settings/navigation/builder') ||
                           isReportBuilder;
 
   const rawLayoutStyle = tenant?.branding?.layout_style || 'sidebar';
@@ -656,9 +657,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                             <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
                           )}
                           <nav className="space-y-0.5">
-                            {group.items.map((item) => (
+                            {group.items.map((item, idx) => (
                               <SidebarItem
-                                key={item.to}
+                                key={`${item.to}-${item.label}-${idx}`}
                                 icon={item.icon}
                                 label={item.label}
                                 to={item.to}
@@ -744,9 +745,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
                     
                     <div className={cn("flex-1 space-y-0.5 overflow-y-auto custom-scrollbar", isSidebarReallyOpen ? "px-2" : "px-0")}>
-                      {filteredSettingsItems.map((item) => (
+                      {filteredSettingsItems.map((item, idx) => (
                         <SidebarItem
-                          key={item.to}
+                          key={`${item.to}-${item.label}-${idx}`}
                           icon={item.icon}
                           label={item.label}
                           to={item.to}

@@ -116,7 +116,7 @@ export const FleetManager = () => {
              <p className="text-xs text-zinc-500 font-mono uppercase tracking-tighter mt-1">Usage by configuration type</p>
           </div>
           <div className="h-48 w-full mt-4">
-             <ResponsiveContainer width="100%" height="100%">
+             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <PieChart>
                   <Pie
                     data={pieData}

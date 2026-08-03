@@ -209,7 +209,7 @@ export const InlineChartComponent: React.FC<InlineChartConfig> = ({
 
       {/* Chart Viewport */}
       <div className="w-full pt-1" style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           {renderChart()}
         </ResponsiveContainer>
       </div>

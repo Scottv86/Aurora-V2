@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
+  ArrowLeft,
   Save, 
   Eye, 
   EyeOff,
@@ -4671,8 +4672,82 @@ export const ModuleEditor = () => {
     });
   };
 
+  const HeaderModuleIcon = (LucideIcons as any)[moduleSettings.iconName] || Box;
+
   return (
     <div className="h-full flex flex-col bg-transparent text-zinc-900 dark:text-zinc-100 overflow-hidden">
+      {/* Top Page Title Header (Unified Builder style) */}
+      <div className="px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-30 relative">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate('/workspace/settings/platform-modules')}
+            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+            title="Back to Platform Modules"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <HeaderModuleIcon className="text-indigo-500" size={18} />
+              <input
+                type="text"
+                placeholder="Enter Module Name..."
+                value={moduleSettings.name}
+                onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
+                className="text-lg font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1"
+              />
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-indigo-500/30 bg-indigo-500/10 text-indigo-500 ml-1">
+                {moduleSettings.category || 'Custom'}
+              </span>
+            </div>
+            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Module Builder</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+            title="Open Command Palette (Ctrl+K)"
+          >
+            <Command size={16} />
+          </button>
+
+          <button 
+            onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-2 border rounded-xl text-xs font-bold transition-all uppercase tracking-wider",
+              activeTab === 'preview' 
+                ? "bg-indigo-600 border-indigo-500 text-white" 
+                : "bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+          >
+            <Eye size={15} />
+            <span>{activeTab === 'preview' ? 'Exit Preview' : 'Preview'}</span>
+          </button>
+
+          <button 
+            onClick={handleSave}
+            disabled={isSaving || isLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-xl text-xs font-bold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-wider disabled:opacity-50"
+          >
+            <Save size={15} />
+            <span>{isSaving ? 'Saving...' : 'Save'}</span>
+          </button>
+
+          {id !== 'new' && (
+            <button 
+              onClick={() => window.open(`/workspace/modules/${id}`, '_blank')}
+              className="flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-white/[0.01] border border-zinc-200 dark:border-white/5 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm uppercase tracking-wider"
+              title="View in Workspace"
+            >
+              <ExternalLink size={15} />
+              <span>Launch</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Sub-Header / Toolbar */}
       <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/60 backdrop-blur-xl flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
@@ -4798,24 +4873,24 @@ export const ModuleEditor = () => {
                 <span>{showDebugger ? 'Hide Sidebar' : 'Show Sidebar'}</span>
               </button>
               <button className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-lg text-[10px] font-bold hover:text-zinc-900 dark:hover:text-white transition-all uppercase tracking-widest">
-                <Sparkles size={12} />
-                <span>AI Optimize</span>
+                <Sliders size={12} />
+                <span>Engine Settings</span>
               </button>
             </>
           )}
 
-          {(activeTab === 'builder' || activeTab === 'preview') && (
-            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800">
-              {[
+          {activeTab === 'builder' && (
+            <div className="flex items-center gap-1 bg-zinc-100/80 dark:bg-zinc-900/60 p-1 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 backdrop-blur-md">
+              {([
                 { id: 'desktop', icon: Monitor },
                 { id: 'tablet', icon: Tablet },
                 { id: 'mobile', icon: Smartphone }
-              ].map((v) => (
+              ] as const).map((v) => (
                 <button
                   key={v.id}
-                  onClick={() => setViewportSize(v.id as any)}
+                  onClick={() => setViewportSize(v.id)}
                   className={cn(
-                    "p-1.5 rounded-md transition-all",
+                    "p-1.5 rounded-lg transition-all",
                     viewportSize === v.id 
                       ? "bg-white dark:bg-zinc-800 text-indigo-600 shadow-sm" 
                       : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
@@ -4826,47 +4901,6 @@ export const ModuleEditor = () => {
                 </button>
               ))}
             </div>
-          )}
-
-          <button 
-            onClick={() => setIsCommandPaletteOpen(true)}
-            className="p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all"
-            title="Open Command Palette (Ctrl+K)"
-          >
-            <Command size={14} />
-          </button>
-
-          <button 
-            onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 border rounded-lg text-[10px] font-bold transition-all uppercase tracking-widest",
-              activeTab === 'preview' 
-                ? "bg-indigo-600 border-indigo-500 text-white" 
-                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-          >
-            <Eye size={12} />
-            <span>{activeTab === 'preview' ? 'Exit Preview' : 'Preview'}</span>
-          </button>
-
-          <button 
-            onClick={handleSave}
-            disabled={isSaving || isLoading}
-            className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 rounded-lg text-[10px] font-bold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest disabled:opacity-50"
-          >
-            <Save size={12} />
-            <span>{isSaving ? 'Saving...' : 'Save'}</span>
-          </button>
-
-          {id !== 'new' && (
-            <button 
-              onClick={() => window.open(`/workspace/modules/${id}`, '_blank')}
-              className="flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm uppercase tracking-widest"
-              title="View in Workspace"
-            >
-              <ExternalLink size={12} />
-              <span>Launch</span>
-            </button>
           )}
         </div>
       </div>

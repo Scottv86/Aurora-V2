@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -10,9 +11,7 @@ import {
   Search, 
   Loader2, 
   Sparkles, 
-  HelpCircle,
-  Layers,
-  Wand2
+  Layers
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useNewModuleModal } from '../../context/NewModuleModalContext';
@@ -20,7 +19,6 @@ import { MODULES } from '../../constants/modules';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
-import { cn } from '../../lib/utils';
 
 export const NewModuleModal: React.FC = () => {
   const navigate = useNavigate();
@@ -107,9 +105,9 @@ export const NewModuleModal: React.FC = () => {
 
   if (!isOpen) return null;
 
-  return (
+  const modalNode = (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
         {/* Backdrop overlay */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -151,167 +149,171 @@ export const NewModuleModal: React.FC = () => {
 
             <button
               onClick={closeNewModuleModal}
-              className="p-2.5 rounded-full text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
+              className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
 
-          {/* Body Section */}
-          <div className="p-8 pt-4 overflow-y-auto relative z-10">
+          {/* Body content */}
+          <div className="px-8 pb-8 flex-1 overflow-y-auto custom-scrollbar relative z-10">
             {view === 'choices' ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
                 {/* 1. Blank Canvas */}
-                <button
+                <div 
                   onClick={handleStartBlank}
-                  className="group relative p-7 bg-white/70 dark:bg-zinc-950/70 border border-zinc-200/80 dark:border-zinc-800/80 rounded-3xl text-left hover:border-emerald-500/60 transition-all hover:shadow-2xl hover:shadow-emerald-500/10 flex flex-col justify-between"
+                  className="group relative p-6 bg-zinc-50/50 dark:bg-zinc-950/50 hover:bg-emerald-500/5 dark:hover:bg-emerald-500/10 border border-zinc-200/80 dark:border-zinc-800/80 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 rounded-3xl transition-all cursor-pointer flex flex-col justify-between"
                 >
-                  <div>
-                    <div className="w-13 h-13 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-5 group-hover:scale-110 transition-transform">
-                      <Database size={26} />
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Database size={24} />
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider mb-2 inline-block">
-                      Manual
-                    </span>
-                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">
-                      Start Blank
-                    </h3>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">
-                      Take total control. Build custom fields, schemas, and automation triggers step-by-step.
-                    </p>
+                    <div>
+                      <span className="inline-block px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wider uppercase mb-2">
+                        Manual
+                      </span>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">Start Blank</h3>
+                      <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                        Take total control. Build custom fields, schemas, and automation triggers step-by-step.
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-6 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold text-xs group-hover:translate-x-1 transition-transform">
+                  <div className="mt-6 flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
                     <span>Start Blank Canvas</span>
-                    <ArrowRight size={14} />
+                    <ArrowRight size={14} className="ml-1" />
                   </div>
-                </button>
+                </div>
 
-                {/* 2. Template */}
-                <button
+                {/* 2. Template Library */}
+                <div 
                   onClick={() => setView('templates')}
-                  className="group relative p-7 bg-white/70 dark:bg-zinc-950/70 border border-zinc-200/80 dark:border-zinc-800/80 rounded-3xl text-left hover:border-amber-500/60 transition-all hover:shadow-2xl hover:shadow-amber-500/10 flex flex-col justify-between"
+                  className="group relative p-6 bg-zinc-50/50 dark:bg-zinc-950/50 hover:bg-amber-500/5 dark:hover:bg-amber-500/10 border border-zinc-200/80 dark:border-zinc-800/80 hover:border-amber-500/30 dark:hover:border-amber-500/30 rounded-3xl transition-all cursor-pointer flex flex-col justify-between"
                 >
-                  <div>
-                    <div className="w-13 h-13 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center text-amber-600 dark:text-amber-400 mb-5 group-hover:scale-110 transition-transform">
-                      <LayoutGrid size={26} />
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <LayoutGrid size={24} />
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider mb-2 inline-block">
-                      Prebuilt
-                    </span>
-                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">
-                      Start from Template
-                    </h3>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">
-                      Select from industry blueprints (CRM, Support Tickets, Assets) and customize instantly.
-                    </p>
+                    <div>
+                      <span className="inline-block px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold tracking-wider uppercase mb-2">
+                        Prebuilt
+                      </span>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">Start from Template</h3>
+                      <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                        Select from industry blueprints (CRM, Support Tickets, Assets) and customize instantly.
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-6 flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-xs group-hover:translate-x-1 transition-transform">
+                  <div className="mt-6 flex items-center text-xs font-bold text-amber-600 dark:text-amber-400 group-hover:translate-x-1 transition-transform">
                     <span>Browse Templates</span>
-                    <ArrowRight size={14} />
+                    <ArrowRight size={14} className="ml-1" />
                   </div>
-                </button>
+                </div>
 
-                {/* 3. AI */}
-                <button
+                {/* 3. AI Architect */}
+                <div 
                   onClick={handleStartAI}
-                  className="group relative p-7 bg-gradient-to-b from-indigo-500/5 to-purple-500/5 dark:from-indigo-500/10 dark:to-purple-500/10 border border-indigo-500/30 rounded-3xl text-left hover:border-indigo-500/70 transition-all hover:shadow-2xl hover:shadow-indigo-500/20 flex flex-col justify-between"
+                  className="group relative p-6 bg-indigo-500/10 dark:bg-indigo-500/15 hover:bg-indigo-500/20 border border-indigo-500/30 dark:border-indigo-500/40 rounded-3xl transition-all cursor-pointer flex flex-col justify-between"
                 >
-                  <div>
-                    <div className="w-13 h-13 bg-indigo-500/15 border border-indigo-500/30 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-5 group-hover:scale-110 transition-transform">
-                      <Cpu size={26} />
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Cpu size={24} />
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 text-[10px] font-black uppercase tracking-wider mb-2 inline-block flex items-center gap-1 w-fit">
-                      <Wand2 size={10} /> AI Powered
-                    </span>
-                    <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">
-                      Build with AI
-                    </h3>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-xs leading-relaxed">
-                      Describe your workflow in plain English and let Aurora AI generate schema and forms for you.
-                    </p>
+                    <div>
+                      <span className="inline-block px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold tracking-wider uppercase mb-2">
+                        AI Powered
+                      </span>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">Build with AI</h3>
+                      <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                        Describe your workflow in plain English and let Aurora AI generate schema and forms for you.
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-6 flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-bold text-xs group-hover:translate-x-1 transition-transform">
+                  <div className="mt-6 flex items-center text-xs font-bold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
                     <span>Generate with AI</span>
-                    <ArrowRight size={14} />
+                    <ArrowRight size={14} className="ml-1" />
                   </div>
-                </button>
+                </div>
               </div>
             ) : (
-              /* Template Selection View */
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+              <div className="space-y-6 pt-2">
+                <div className="flex items-center justify-between gap-4">
                   <button
                     onClick={() => setView('choices')}
-                    className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white text-xs font-bold transition-colors w-fit"
+                    className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
                   >
                     <ArrowLeft size={16} />
-                    <span>Back to Creation Options</span>
+                    <span>Back to Options</span>
                   </button>
 
-                  <div className="relative flex-1 max-w-md">
-                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  {/* Search filter */}
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={14} />
                     <input
                       type="text"
-                      placeholder="Search template library..."
+                      placeholder="Search templates..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 bg-zinc-100/70 dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full pl-9 pr-4 py-1.5 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[55vh] overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
                   {filteredTemplates.map((template) => {
-                    const IconComponent = template.icon || HelpCircle;
-                    const isBeingInstalled = installingId === template.id;
+                    const TemplateIcon = template.icon || Layers;
+                    const isInstalling = installingId === template.id;
 
                     return (
                       <div
                         key={template.id}
-                        onClick={() => !loading && handleInstallTemplate(template)}
-                        className={cn(
-                          "group p-5 bg-white/70 dark:bg-zinc-950/70 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl hover:border-indigo-500/60 transition-all shadow-sm cursor-pointer flex flex-col justify-between relative overflow-hidden",
-                          isBeingInstalled && "border-indigo-500 ring-2 ring-indigo-500/20"
-                        )}
+                        className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl flex flex-col justify-between gap-4 hover:border-indigo-500/30 transition-all"
                       >
-                        <div>
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform">
-                              <IconComponent size={20} />
-                            </div>
-                            <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
-                              {template.category || 'General'}
-                            </span>
+                        <div className="flex items-start gap-3">
+                          <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
+                            <TemplateIcon size={20} />
                           </div>
-
-                          <h4 className="text-sm font-bold text-zinc-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                            {template.name}
-                          </h4>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed line-clamp-3">
-                            {template.description}
-                          </p>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{template.name}</h4>
+                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                {template.category || 'General'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-500 leading-relaxed mt-1 line-clamp-2">
+                              {template.description || 'Pre-configured module template with fields and actions.'}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                          {isBeingInstalled ? (
-                            <span className="flex items-center gap-2 text-indigo-500">
-                              <Loader2 size={14} className="animate-spin" /> Provisioning...
-                            </span>
-                          ) : (
-                            <>
-                              <span>Install Template</span>
-                              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                            </>
-                          )}
+                        <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
+                          <span className="text-[10px] text-zinc-400 font-medium">
+                            {(template as any).fields?.length || 0} fields preconfigured
+                          </span>
+                          <button
+                            onClick={() => handleInstallTemplate(template)}
+                            disabled={loading}
+                            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isInstalling ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                <span>Installing...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Install Template</span>
+                                <ArrowRight size={14} />
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     );
                   })}
 
                   {filteredTemplates.length === 0 && (
-                    <div className="col-span-full py-12 text-center text-zinc-400 space-y-2">
-                      <Layers size={32} className="mx-auto text-zinc-300 dark:text-zinc-700" />
-                      <p className="text-xs font-medium">No templates match your search query.</p>
+                    <div className="col-span-2 text-center py-8 text-zinc-400 text-xs">
+                      No templates match "{searchQuery}"
                     </div>
                   )}
                 </div>
@@ -322,4 +324,6 @@ export const NewModuleModal: React.FC = () => {
       </div>
     </AnimatePresence>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : null;
 };

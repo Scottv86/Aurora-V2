@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   DndContext, 
   closestCenter,
@@ -6,6 +6,11 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  DragOverlay,
+  useDroppable,
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -17,24 +22,22 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { 
   GripVertical, 
-  Plus, 
   Trash2, 
   Eye, 
   EyeOff, 
-  ChevronRight, 
-  ChevronLeft, 
   Edit3, 
   Check, 
   X, 
   ArrowUp, 
   ArrowDown, 
-  Heading
+  FolderPlus,
+  Compass,
+  CornerDownRight,
+  ChevronLeft
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '../UI/Primitives';
-import { cn, flattenFields, slugify } from '../../lib/utils';
-import { PLATFORM_MODULES } from '../../config/platformModules';
-import { toast } from 'sonner';
+import { cn } from '../../lib/utils';
 
 // Types matching NavigationSettingsPage
 interface MenuItem {
@@ -65,15 +68,21 @@ interface Props {
   onChange: (sections: MenuSection[]) => void;
   layout: 'sidebar' | 'slim' | 'top';
   modules?: any[];
+  selectedItemId?: string | null;
+  onSelectItem?: (itemId: string | null) => void;
+  onDropToolboxItem?: (sectionId: string, toolData: any) => void;
 }
 
-const COMMON_ICONS = [
-  'LayoutDashboard', 'Users', 'ClipboardList', 'FileText', 'Inbox', 'BookOpen', 
-  'BarChart', 'Settings', 'Database', 'Lock', 'Shield', 'Globe', 'Layers', 
-  'MessageSquare', 'Calendar', 'Folder', 'Zap', 'Terminal', 'Heart', 'HelpCircle'
-];
+export const NavigationArchitect = ({ 
+  sections, 
+  onChange, 
+  layout: _layout, 
+  selectedItemId, 
+  onSelectItem,
+  onDropToolboxItem
+}: Props) => {
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
-export const NavigationArchitect = ({ sections, onChange, layout: _layout, modules }: Props) => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -113,24 +122,109 @@ export const NavigationArchitect = ({ sections, onChange, layout: _layout, modul
     onChange(updated);
   };
 
-  const handleDragEnd = (event: any, sectionId: string) => {
+  // Find container helper
+  const findContainer = (id: string): string | null => {
+    if (sections.some(s => s.id === id)) return id;
+    for (const sec of sections) {
+      if (sec.items?.some(i => i.id === id || i.children?.some(c => c.id === id))) {
+        return sec.id;
+      }
+    }
+    return null;
+  };
+
+  // Find item helper
+  const findItem = (id: string): MenuItem | null => {
+    for (const sec of sections) {
+      for (const item of sec.items || []) {
+        if (item.id === id) return item;
+        if (item.children) {
+          const child = item.children.find(c => c.id === id);
+          if (child) return child;
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
-    if (active.id !== over.id) {
-      onChange(sections.map(sec => {
-        if (sec.id !== sectionId) return sec;
-        
-        const oldIndex = sec.items.findIndex(i => i.id === active.id);
-        const newIndex = sec.items.findIndex(i => i.id === over.id);
-        
-        if (oldIndex === -1 || newIndex === -1) return sec;
-        
-        return {
-          ...sec,
-          items: arrayMove(sec.items, oldIndex, newIndex)
-        };
-      }));
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    const activeContainer = findContainer(activeId);
+    const overContainer = findContainer(overId);
+
+    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
+
+    // Moving between categories!
+    const sourceSection = sections.find(s => s.id === activeContainer);
+    const targetSection = sections.find(s => s.id === overContainer);
+
+    if (!sourceSection || !targetSection) return;
+
+    const activeItem = sourceSection.items.find(i => i.id === activeId);
+    if (!activeItem) return;
+
+    const newSourceItems = sourceSection.items.filter(i => i.id !== activeId);
+    const overIndex = targetSection.items.findIndex(i => i.id === overId);
+    const newTargetItems = [...targetSection.items];
+
+    if (overIndex >= 0) {
+      newTargetItems.splice(overIndex, 0, activeItem);
+    } else {
+      newTargetItems.push(activeItem);
+    }
+
+    onChange(sections.map(s => {
+      if (s.id === activeContainer) return { ...s, items: newSourceItems };
+      if (s.id === overContainer) return { ...s, items: newTargetItems };
+      return s;
+    }));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    // Section reordering check
+    const isSectionDrag = sections.some(s => s.id === activeId);
+    if (isSectionDrag) {
+      const oldIndex = sections.findIndex(s => s.id === activeId);
+      const newIndex = sections.findIndex(s => s.id === overId);
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        onChange(arrayMove(sections, oldIndex, newIndex));
+      }
+      return;
+    }
+
+    const activeContainer = findContainer(activeId);
+    const overContainer = findContainer(overId);
+
+    if (!activeContainer || !overContainer) return;
+
+    if (activeContainer === overContainer) {
+      // Reordering inside same section
+      const section = sections.find(s => s.id === activeContainer);
+      if (!section) return;
+
+      const oldIndex = section.items.findIndex(i => i.id === activeId);
+      const newIndex = section.items.findIndex(i => i.id === overId);
+
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        const reordered = arrayMove(section.items, oldIndex, newIndex);
+        onChange(sections.map(s => s.id === activeContainer ? { ...s, items: reordered } : s));
+      }
     }
   };
 
@@ -154,26 +248,6 @@ export const NavigationArchitect = ({ sections, onChange, layout: _layout, modul
           return item;
         })
       };
-    }));
-  };
-
-  const moveItemToSection = (currentSectionId: string, targetSectionId: string, item: MenuItem) => {
-    onChange(sections.map(sec => {
-      // Remove from current
-      if (sec.id === currentSectionId) {
-        return {
-          ...sec,
-          items: sec.items.filter(i => i.id !== item.id)
-        };
-      }
-      // Add to target
-      if (sec.id === targetSectionId) {
-        return {
-          ...sec,
-          items: [...sec.items, item]
-        };
-      }
-      return sec;
     }));
   };
 
@@ -228,805 +302,499 @@ export const NavigationArchitect = ({ sections, onChange, layout: _layout, modul
     }));
   };
 
+  const activeDragItem = activeDragId ? findItem(activeDragId) : null;
+  const activeDragSection = activeDragId ? sections.find(s => s.id === activeDragId) : null;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-        <div>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Menu Tree Architect</h3>
-        </div>
-        <Button onClick={addSection} variant="secondary" size="sm" className="h-8 gap-1 text-xs">
-          <Plus size={14} /> Add Category
+    <div className="space-y-4 select-none">
+      {/* Category Actions Bar */}
+      <div className="flex items-center justify-between pb-2 border-b border-zinc-200/50 dark:border-white/10">
+        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+          {sections.length} Categories
+        </span>
+        <Button onClick={addSection} variant="secondary" size="sm" className="h-8 gap-1.5 text-xs font-bold shadow-sm">
+          <FolderPlus size={14} className="text-indigo-500" /> Add Category
         </Button>
       </div>
 
       {sections.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-          <Heading className="text-zinc-300 dark:text-zinc-700 mb-2" size={32} />
-          <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300">No categories created yet</h4>
-          <p className="text-xs text-zinc-500 max-w-xs mt-1">Create your first category to start structuring your custom menu.</p>
+        <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-white/10 dark:bg-zinc-900/10">
+          <Compass className="text-zinc-400 dark:text-zinc-600 mb-3 animate-pulse" size={36} />
+          <h4 className="text-sm font-bold text-zinc-800 dark:text-zinc-200">No categories in navigation</h4>
+          <p className="text-xs text-zinc-500 max-w-xs mt-1">Click "+ Add Category" above or drag/click items from the Left Toolbox.</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {sections.map((section, sIndex) => (
-            <div 
-              key={section.id} 
-              className="border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/20 overflow-hidden shadow-sm"
-            >
-              {/* Section Header */}
-              <div className="flex items-center justify-between p-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                <div className="flex items-center gap-2 flex-1">
-                  <input
-                    type="text"
-                    value={section.title}
-                    onChange={(e) => updateSectionTitle(section.id, e.target.value)}
-                    className="bg-transparent border-none p-0 text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 focus:ring-0 w-48 focus:border-b focus:border-indigo-500"
-                  />
-                  <span className="text-[9px] bg-zinc-100 dark:bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-bold uppercase">
-                    {section.items?.length || 0} items
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-zinc-400 hover:text-zinc-600"
-                    disabled={sIndex === 0}
-                    onClick={() => moveSection(sIndex, 'up')}
-                  >
-                    <ArrowUp size={13} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-zinc-400 hover:text-zinc-600"
-                    disabled={sIndex === sections.length - 1}
-                    onClick={() => moveSection(sIndex, 'down')}
-                  >
-                    <ArrowDown size={13} />
-                  </Button>
-                  <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-zinc-400 hover:text-red-500"
-                    onClick={() => removeSection(section.id)}
-                  >
-                    <Trash2 size={13} />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Section Items (Sortable with DndContext) */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => handleDragEnd(e, section.id)}
-              >
-                <SortableContext
-                  items={section.items.map(i => i.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="p-3 space-y-2 min-h-[60px] bg-zinc-50/50 dark:bg-zinc-900/10">
-                    {section.items.length === 0 ? (
-                      <p className="text-[10px] text-zinc-400 italic text-center py-4">No items inside. Drag items here or click "+" on tools.</p>
-                    ) : (
-                      section.items.map((item, itemIndex) => (
-                        <SortableItemWrapper
-                          key={item.id}
-                          item={item}
-                          itemIndex={itemIndex}
-                          sectionId={section.id}
-                          allSections={sections}
-                          onRemove={() => removeItem(section.id, item.id)}
-                          onUpdate={(updates: Partial<MenuItem>) => updateItem(section.id, item.id, updates)}
-                          onIndent={() => indentItem(section.id, itemIndex)}
-                          onOutdent={(parentItemId: string, childId: string) => outdentItem(section.id, parentItemId, childId)}
-                          onChildUpdate={(childId: string, updates: Partial<MenuItem>) => updateChildItem(section.id, item.id, childId, updates)}
-                          onMoveToSection={(targetSecId: string) => moveItemToSection(section.id, targetSecId, item)}
-                          modules={modules}
-                        />
-                      ))
-                    )}
-                  </div>
-                </SortableContext>
-              </DndContext>
-
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={sections.map(s => s.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-6">
+              {sections.map((section, sIndex) => (
+                <CategorySectionContainer
+                  key={section.id}
+                  section={section}
+                  sIndex={sIndex}
+                  sections={sections}
+                  selectedItemId={selectedItemId}
+                  onSelectItem={onSelectItem}
+                  onDropToolboxItem={onDropToolboxItem}
+                  updateSectionTitle={updateSectionTitle}
+                  moveSection={moveSection}
+                  removeSection={removeSection}
+                  removeItem={removeItem}
+                  updateItem={updateItem}
+                  indentItem={indentItem}
+                  outdentItem={outdentItem}
+                  updateChildItem={updateChildItem}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+
+          <DragOverlay>
+            {activeDragItem && (
+              <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-2xl flex items-center gap-3 border border-indigo-400 opacity-90">
+                <GripVertical size={16} />
+                <span className="text-xs font-bold">{activeDragItem.label}</span>
+              </div>
+            )}
+            {activeDragSection && (
+              <div className="p-4 bg-indigo-600 text-white rounded-2xl shadow-2xl flex items-center gap-3 border border-indigo-400 opacity-90">
+                <GripVertical size={18} />
+                <span className="text-xs font-black uppercase tracking-wider">{activeDragSection.title} ({activeDragSection.items.length} items)</span>
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
     </div>
   );
 };
 
-// Sortable Wrapper Component
-const SortableItemWrapper = ({ 
-  item, 
-  itemIndex, 
-  sectionId, 
-  allSections,
-  onRemove, 
-  onUpdate, 
-  onIndent,
-  onOutdent,
-  onChildUpdate,
-  onMoveToSection,
-  modules
-}: any) => {
+// Container for each Menu Category / Section
+const CategorySectionContainer = ({
+  section,
+  sIndex,
+  sections,
+  selectedItemId,
+  onSelectItem,
+  onDropToolboxItem,
+  updateSectionTitle,
+  moveSection,
+  removeSection,
+  removeItem,
+  updateItem,
+  indentItem,
+  outdentItem,
+  updateChildItem
+}: {
+  section: MenuSection;
+  sIndex: number;
+  sections: MenuSection[];
+  selectedItemId?: string | null;
+  onSelectItem?: (itemId: string | null) => void;
+  onDropToolboxItem?: (sectionId: string, toolData: any) => void;
+  updateSectionTitle: (id: string, title: string) => void;
+  moveSection: (index: number, dir: 'up' | 'down') => void;
+  removeSection: (id: string) => void;
+  removeItem: (secId: string, itemId: string) => void;
+  updateItem: (secId: string, itemId: string, updates: Partial<MenuItem>) => void;
+  indentItem: (secId: string, idx: number) => void;
+  outdentItem: (secId: string, parentId: string, childId: string) => void;
+  updateChildItem: (secId: string, parentId: string, childId: string, updates: Partial<MenuItem>) => void;
+}) => {
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState(section.title);
+
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     transition,
-    isDragging
-  } = useSortable({ id: item.id });
+    isDragging,
+  } = useSortable({ id: section.id });
+
+  const { isOver } = useDroppable({
+    id: section.id,
+  });
 
   const style = {
-    transform: CSS.Translate.toString(transform),
+    transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.3 : 1,
-    zIndex: isDragging ? 100 : undefined,
   };
 
-  return (
-    <div ref={setNodeRef} style={style} className="space-y-1">
-      <ItemCard 
-        item={item} 
-        itemIndex={itemIndex}
-        sectionId={sectionId}
-        allSections={allSections}
-        onRemove={onRemove} 
-        onUpdate={onUpdate}
-        onIndent={onIndent}
-        onMoveToSection={onMoveToSection}
-        dragProps={{ ...attributes, ...listeners }} 
-        modules={modules}
-      />
+  const saveTitle = () => {
+    if (titleInput.trim()) {
+      updateSectionTitle(section.id, titleInput.trim());
+    } else {
+      setTitleInput(section.title);
+    }
+    setEditingTitle(false);
+  };
 
-      {/* Render children sub-items */}
-      {item.children && item.children.length > 0 && (
-        <div className="pl-6 border-l border-zinc-200 dark:border-zinc-800 ml-4.5 space-y-1.5 py-1">
-          {item.children.map((child: MenuItem) => (
-            <ItemCard 
-              key={child.id}
-              item={child}
-              sectionId={sectionId}
-              allSections={allSections}
-              isChild={true}
-              onRemove={() => {
-                const filtered = item.children?.filter((c: MenuItem) => c.id !== child.id) || [];
-                onUpdate({ children: filtered });
-              }}
-              onUpdate={(updates: any) => onChildUpdate(child.id, updates)}
-              onOutdent={() => onOutdent(item.id, child.id)}
-              modules={modules}
-            />
-          ))}
-        </div>
+  const itemIds = section.items.map(i => i.id);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const rawData = e.dataTransfer.getData('application/json');
+        if (rawData && onDropToolboxItem) {
+          try {
+            const data = JSON.parse(rawData);
+            onDropToolboxItem(section.id, data);
+          } catch (err) {
+            console.error('Failed to parse dropped toolbox data:', err);
+          }
+        }
+      }}
+      className={cn(
+        "rounded-2xl border transition-all overflow-hidden p-4 bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl",
+        isOver 
+          ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-500/[0.02]" 
+          : "border-zinc-200/80 dark:border-white/5"
       )}
+    >
+      {/* Category Section Header */}
+      <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-200/50 dark:border-white/5">
+        <div className="flex items-center gap-2">
+          {/* Section Drag Handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded transition-colors"
+            title="Drag Category to Reorder"
+          >
+            <GripVertical size={15} />
+          </div>
+          {editingTitle ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={titleInput}
+                onChange={(e) => setTitleInput(e.target.value)}
+                autoFocus
+                className="bg-white dark:bg-zinc-800 border border-indigo-500 rounded-lg px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveTitle();
+                  if (e.key === 'Escape') {
+                    setTitleInput(section.title);
+                    setEditingTitle(false);
+                  }
+                }}
+              />
+              <button onClick={saveTitle} className="p-1 text-emerald-500 hover:text-emerald-400">
+                <Check size={14} />
+              </button>
+              <button onClick={() => { setTitleInput(section.title); setEditingTitle(false); }} className="p-1 text-zinc-400 hover:text-zinc-300">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <span className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">
+                {section.title}
+              </span>
+              <button
+                onClick={() => { setTitleInput(section.title); setEditingTitle(true); }}
+                className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-opacity"
+                title="Rename Category"
+              >
+                <Edit3 size={12} />
+              </button>
+            </div>
+          )}
+
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+            {section.items.length} items
+          </span>
+        </div>
+
+        {/* Section Reorder / Controls */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => moveSection(sIndex, 'up')}
+            disabled={sIndex === 0}
+            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400"
+            title="Move Category Up"
+          >
+            <ArrowUp size={14} />
+          </button>
+          <button
+            onClick={() => moveSection(sIndex, 'down')}
+            disabled={sIndex === sections.length - 1}
+            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400"
+            title="Move Category Down"
+          >
+            <ArrowDown size={14} />
+          </button>
+          <button
+            onClick={() => removeSection(section.id)}
+            className="p-1 rounded-lg text-zinc-400 hover:text-red-500 transition-colors"
+            title="Delete Category"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Category Items Droppable Context */}
+      <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+        <div className="space-y-1.5 min-h-[48px]">
+          {section.items.length === 0 ? (
+            <div className="py-6 text-center border border-dashed border-zinc-200 dark:border-zinc-800/80 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/20 text-xs text-zinc-400 font-medium">
+              Drag menu items here into <span className="font-bold text-zinc-600 dark:text-zinc-300">{section.title}</span>
+            </div>
+          ) : (
+            section.items.map((item, iIndex) => (
+              <SortableItemRow
+                key={item.id}
+                item={item}
+                itemIndex={iIndex}
+                section={section}
+                selectedItemId={selectedItemId}
+                onSelectItem={onSelectItem}
+                removeItem={removeItem}
+                updateItem={updateItem}
+                indentItem={indentItem}
+                outdentItem={outdentItem}
+                updateChildItem={updateChildItem}
+              />
+            ))
+          )}
+        </div>
+      </SortableContext>
     </div>
   );
 };
 
-// Card representation of menu item
-const ItemCard = ({ 
-  item, 
+// Sortable Row representing each menu item
+const SortableItemRow = ({
+  item,
   itemIndex,
-  sectionId, 
-  allSections,
-  isChild,
-  onRemove, 
-  onUpdate, 
-  onIndent,
-  onOutdent,
-  onMoveToSection,
-  dragProps,
-  modules = []
-}: any) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editLabel, setEditLabel] = useState(item.label);
-  const [editPath, setEditPath] = useState(item.to || '');
-  const [editIcon, setEditIcon] = useState(item.iconName);
-  const [editIconInput, setEditIconInput] = useState('');
-  const [isSubtitle, setIsSubtitle] = useState(!!item.isSubtitle);
+  section,
+  selectedItemId,
+  onSelectItem,
+  removeItem,
+  updateItem,
+  indentItem,
+  outdentItem,
+  updateChildItem
+}: {
+  item: MenuItem;
+  itemIndex: number;
+  section: MenuSection;
+  selectedItemId?: string | null;
+  onSelectItem?: (itemId: string | null) => void;
+  removeItem: (secId: string, itemId: string) => void;
+  updateItem: (secId: string, itemId: string, updates: Partial<MenuItem>) => void;
+  indentItem: (secId: string, idx: number) => void;
+  outdentItem: (secId: string, parentId: string, childId: string) => void;
+  updateChildItem: (secId: string, parentId: string, childId: string, updates: Partial<MenuItem>) => void;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
 
-  // Queue edit states:
-  const [editQueueItemType, setEditQueueItemType] = useState<'single' | 'unified'>('single');
-  const [editQueueModuleId, setEditQueueModuleId] = useState('');
-  const [editQueueModuleIds, setEditQueueModuleIds] = useState<string[]>([]);
-  const [editQueueRules, setEditQueueRules] = useState<{ fieldId: string; operator: string; value: string }[]>([]);
-  const [editQueueColumns, setEditQueueColumns] = useState<string[]>([]);
-
-  const activeCustomModules = useMemo(() => {
-    return modules.filter((mod: any) => {
-      if (mod.type === 'PAGE') return false;
-      if (mod.status !== 'ACTIVE' && !mod.enabled) return false;
-      const isPlatform = PLATFORM_MODULES.some((pm: any) => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId);
-      if (isPlatform) return false;
-      if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
-      return true;
-    });
-  }, [modules]);
-
-  const queueAvailableFields = useMemo(() => {
-    const list: { id: string; label: string; origin?: string }[] = [
-      { id: 'currentUser.teamName', label: 'Current User: Team Name' },
-      { id: 'currentUser.teamId', label: 'Current User: Team ID' },
-      { id: 'currentUser.role', label: 'Current User: Role' },
-      { id: 'currentUser.id', label: 'Current User: Member ID' },
-      { id: 'status', label: 'Status' },
-      { id: 'priority', label: 'Priority' },
-      { id: 'assigneeId', label: 'Assignee ID' },
-      { id: 'participantIds', label: 'Participants' }
-    ];
-
-    const targetModuleIds = editQueueItemType === 'single' 
-      ? (editQueueModuleId ? [editQueueModuleId] : []) 
-      : editQueueModuleIds;
-
-    targetModuleIds.forEach(mId => {
-      const mod = modules.find((m: any) => m.id === mId);
-      if (mod?.layout) {
-        const flat = flattenFields(mod.layout);
-        flat.forEach(f => {
-          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
-            if (!list.some(item => item.id === f.id)) {
-              list.push({ id: f.id, label: `${f.label || f.name} (${mod.name})`, origin: mod.name });
-            }
-          }
-        });
-      }
-    });
-
-    return list;
-  }, [editQueueItemType, editQueueModuleId, editQueueModuleIds, modules]);
-
-  const queueColumnOptions = useMemo(() => {
-    const list: { id: string; label: string; group: string }[] = [
-      { id: 'id', label: 'Record ID', group: 'System' },
-      { id: 'moduleId', label: 'Module Name', group: 'System' },
-      { id: 'title', label: 'Title/Key', group: 'System' },
-      { id: 'status', label: 'Status', group: 'System' },
-      { id: 'priority', label: 'Priority', group: 'System' },
-      { id: 'assigneeId', label: 'Assignee', group: 'System' },
-      { id: 'participantIds', label: 'Participants', group: 'System' },
-      { id: 'createdAt', label: 'Created At', group: 'System' },
-      { id: 'updatedAt', label: 'Updated At', group: 'System' }
-    ];
-
-    const targetModuleIds = editQueueItemType === 'single' 
-      ? (editQueueModuleId ? [editQueueModuleId] : []) 
-      : editQueueModuleIds;
-
-    targetModuleIds.forEach(mId => {
-      const mod = modules.find((m: any) => m.id === mId);
-      if (mod?.layout) {
-        const flat = flattenFields(mod.layout);
-        flat.forEach(f => {
-          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
-            if (!list.some(item => item.id === f.id)) {
-              list.push({ id: f.id, label: f.label || f.name, group: mod.name });
-            }
-          }
-        });
-      }
-    });
-
-    return list;
-  }, [editQueueItemType, editQueueModuleId, editQueueModuleIds, modules]);
-
-  const startEdit = () => {
-    setEditLabel(item.label);
-    setEditPath(item.to || '');
-    setEditIcon(item.iconName);
-    setIsSubtitle(!!item.isSubtitle);
-
-    // Initialize queue states
-    const isUnified = !!item.isUnifiedQueue;
-    setEditQueueItemType(isUnified ? 'unified' : 'single');
-    setEditQueueModuleId(item.moduleId || '');
-    setEditQueueModuleIds(item.moduleIds || []);
-    
-    const initialRules = item.queueConfig?.conditions?.rules?.map((r: any) => ({
-      fieldId: r.fieldId,
-      operator: r.operator,
-      value: r.value || ''
-    })) || [{ fieldId: '', operator: 'equals', value: '' }];
-    setEditQueueRules(initialRules);
-    
-    setEditQueueColumns(item.queueConfig?.columns || [
-      'id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'
-    ]);
-
-    setIsEditing(true);
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
   };
 
-  const saveEdit = () => {
-    const icon = editIconInput.trim() || editIcon;
-
-    if (item.queueConfig) {
-      // It is a queue item! We must validate and update queue specific fields
-      if (!editLabel.trim()) {
-        toast.error('Please enter a queue label.');
-        return;
-      }
-      if (editQueueItemType === 'single' && !editQueueModuleId) {
-        toast.error('Please select a target module.');
-        return;
-      }
-      if (editQueueItemType === 'unified' && editQueueModuleIds.length === 0) {
-        toast.error('Please select at least one module.');
-        return;
-      }
-
-      const validRules = editQueueRules
-        .filter(r => r.fieldId)
-        .map(r => {
-          const isVar = r.fieldId.startsWith('currentUser.');
-          return {
-            fieldId: r.fieldId,
-            fieldType: isVar ? 'variable' : 'field',
-            operator: r.operator,
-            value: r.value,
-            valueType: 'literal'
-          };
-        });
-
-      const conditions = {
-        type: 'group',
-        logicalOperator: 'AND',
-        rules: validRules
-      };
-
-      // Enforce label uniqueness (prevent duplicate slugs for queues)
-      const newSlug = slugify(editLabel);
-      const getAllQueues = (items: any[]): any[] => {
-        const q: any[] = [];
-        items.forEach(it => {
-          if (it.isUnifiedQueue || it.to?.startsWith('/workspace/queues/')) {
-            q.push(it);
-          }
-          if (it.children) {
-            q.push(...getAllQueues(it.children));
-          }
-        });
-        return q;
-      };
-      const existingQueues = getAllQueues(allSections.flatMap((s: any) => s.items || []));
-      const isDuplicate = existingQueues.some(q => q.id !== item.id && slugify(q.label) === newSlug);
-      if (isDuplicate) {
-        toast.error(`A queue with the label "${editLabel}" (slug: "${newSlug}") already exists. Please choose a unique label.`);
-        return;
-      }
-
-      const updatedTo = editQueueItemType === 'single'
-        ? `/workspace/modules/${(() => {
-            const mod = modules.find((m: any) => m.id === editQueueModuleId);
-            return mod ? slugify(mod.name) : editQueueModuleId;
-          })()}?queueId=${slugify(editLabel)}`
-        : `/workspace/queues/${slugify(editLabel)}`;
-
-      onUpdate({
-        label: editLabel,
-        iconName: icon,
-        moduleId: editQueueItemType === 'single' ? editQueueModuleId : undefined,
-        moduleIds: editQueueItemType === 'unified' ? editQueueModuleIds : undefined,
-        isUnifiedQueue: editQueueItemType === 'unified',
-        to: updatedTo,
-        queueConfig: {
-          conditions,
-          columns: editQueueItemType === 'unified' ? editQueueColumns : []
-        }
-      });
-    } else {
-      // Normal item edit
-      onUpdate({
-        label: editLabel,
-        iconName: icon,
-        isSubtitle: isSubtitle,
-        to: isSubtitle ? undefined : editPath
-      });
-    }
-
-    setIsEditing(false);
-  };
-
-  const IconComponent = (LucideIcons as any)[item.iconName] || LucideIcons.Box;
+  const isSelected = selectedItemId === item.id;
+  const IconComponent = (LucideIcons as any)[item.iconName] || LucideIcons.Link2;
 
   return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
-      <div className="flex items-center gap-3 p-3">
-        {/* Drag handle */}
-        {!isChild && (
-          <div {...dragProps} className="cursor-grab active:cursor-grabbing p-1 text-zinc-300 dark:text-zinc-700 hover:text-zinc-500">
+    <div ref={setNodeRef} style={style} className="space-y-1">
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onSelectItem) onSelectItem(item.id);
+        }}
+        className={cn(
+          "group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none",
+          isSelected 
+            ? "bg-indigo-500/[0.08] dark:bg-indigo-500/[0.12] border-indigo-500 ring-2 ring-indigo-500/20" 
+            : "bg-white/60 dark:bg-white/[0.03] border-zinc-200/60 dark:border-white/5 hover:border-indigo-500/40 hover:bg-white dark:hover:bg-white/[0.06]"
+        )}
+      >
+        {/* Left Side: Drag handle, Icon, Label, Path */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded transition-colors"
+          >
             <GripVertical size={14} />
           </div>
-        )}
-        
-        {/* Indent Guide for children */}
-        {isChild && (
-          <div className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-        )}
 
-        {/* Icon preview */}
-        <div className={cn(
-          "p-2 rounded-lg text-zinc-500",
-          item.isSubtitle ? "bg-zinc-100 dark:bg-zinc-800" : "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
-        )}>
-          <IconComponent size={14} />
-        </div>
+          {/* Icon Badge */}
+          <div className={cn(
+            "p-2 rounded-lg border transition-all shrink-0",
+            isSelected 
+              ? "bg-indigo-500 text-white border-indigo-400" 
+              : "bg-zinc-100 dark:bg-white/5 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-white/10 group-hover:text-indigo-500"
+          )}>
+            <IconComponent size={15} />
+          </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={cn(
-              "text-xs font-semibold truncate",
-              item.isSubtitle ? "text-zinc-400 dark:text-zinc-500 uppercase tracking-widest font-extrabold text-[10px]" : "text-zinc-700 dark:text-zinc-300"
-            )}>
-              {item.label}
-            </span>
-            {item.isSubtitle && (
-              <span className="text-[8px] bg-zinc-100 dark:bg-zinc-800 text-zinc-400 px-1 py-0.2 rounded font-bold uppercase">Subtitle</span>
+          {/* Label & Details */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-xs font-bold truncate",
+                isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-900 dark:text-white"
+              )}>
+                {item.label}
+              </span>
+
+              {item.isSubtitle && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700">
+                  Label
+                </span>
+              )}
+
+              {item.children && item.children.length > 0 && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                  {item.children.length} sub-items
+                </span>
+              )}
+            </div>
+
+            {item.to && (
+              <p className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 truncate mt-0.5">
+                {item.to}
+              </p>
             )}
           </div>
-          {!item.isSubtitle && (
-            <p className="text-[10px] text-zinc-400 truncate">{item.to || 'No Link'}</p>
-          )}
         </div>
 
-        {/* Actions panel */}
-        <div className="flex items-center gap-1 shrink-0">
-          
-          {/* Nesting controls */}
-          {!isChild && itemIndex > 0 && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-7 w-7 text-zinc-400 hover:text-zinc-600"
-              onClick={onIndent}
-              title="Indent (Nest under item above)"
+        {/* Right Side: Visibility, Indent, Remove */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+
+          {/* Indent button */}
+          {itemIndex > 0 && (
+            <button
+              onClick={() => indentItem(section.id, itemIndex)}
+              className="p-1 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition-colors"
+              title="Nest under item above"
             >
-              <ChevronRight size={13} />
-            </Button>
+              <CornerDownRight size={13} />
+            </button>
           )}
 
-          {isChild && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-7 w-7 text-zinc-400 hover:text-zinc-600"
-              onClick={onOutdent}
-              title="Outdent (Move to top level)"
-            >
-              <ChevronLeft size={13} />
-            </Button>
-          )}
-
-          {/* Move to another section (only top-level items) */}
-          {!isChild && (
-            <select
-              className="text-[10px] bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 max-w-[80px]"
-              onChange={(e) => {
-                if (e.target.value) {
-                  onMoveToSection(e.target.value);
-                  e.target.value = '';
-                }
-              }}
-              defaultValue=""
-            >
-              <option value="" disabled>Move...</option>
-              {allSections.filter((s: any) => s.id !== sectionId).map((s: any) => (
-                <option key={s.id} value={s.id}>{s.title}</option>
-              ))}
-            </select>
-          )}
-
-          {/* Visibility trigger */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7 text-zinc-400 hover:text-zinc-600"
-            onClick={() => onUpdate({ isVisible: item.isVisible !== false ? false : true })}
+          {/* Visibility Toggle */}
+          <button
+            onClick={() => updateItem(section.id, item.id, { isVisible: item.isVisible === false ? true : false })}
+            className={cn(
+              "p-1.5 rounded-lg transition-colors",
+              item.isVisible === false 
+                ? "text-amber-500 bg-amber-500/10" 
+                : "text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title={item.isVisible === false ? "Hidden from menu" : "Visible in menu"}
           >
-            {item.isVisible !== false ? <Eye size={13} /> : <EyeOff size={13} className="text-zinc-300" />}
-          </Button>
+            {item.isVisible === false ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
 
-          {/* Edit trigger */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7 text-zinc-400 hover:text-indigo-500"
-            onClick={startEdit}
+          {/* Remove item */}
+          <button
+            onClick={() => removeItem(section.id, item.id)}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+            title="Remove menu item"
           >
-            <Edit3 size={13} />
-          </Button>
-
-          {/* Delete trigger */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7 text-zinc-400 hover:text-red-500"
-            onClick={onRemove}
-          >
-            <Trash2 size={13} />
-          </Button>
+            <Trash2 size={14} />
+          </button>
         </div>
       </div>
 
-      {/* Edit drawer/inline panel */}
-      {isEditing && (
-        <div className="p-3.5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Edit Menu Item</span>
-            {!item.queueConfig && (
-              <div className="flex gap-2 text-[10px]">
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={isSubtitle} 
-                    onChange={(e) => {
-                      setIsSubtitle(e.target.checked);
-                    }}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 h-3 w-3"
-                  />
-                  <span className="font-bold text-zinc-500 uppercase">Is Subtitle</span>
-                </label>
-              </div>
-            )}
-          </div>
+      {/* Sub-items / Nested Children */}
+      {item.children && item.children.length > 0 && (
+        <div className="pl-6 space-y-1.5 pt-1 border-l-2 border-indigo-500/20 ml-4">
+          {item.children.map((child) => {
+            const ChildIcon = (LucideIcons as any)[child.iconName] || LucideIcons.Link2;
+            const isChildSelected = selectedItemId === child.id;
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Label</label>
-              <input
-                type="text"
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none"
-                value={editLabel}
-                onChange={(e) => setEditLabel(e.target.value)}
-              />
-            </div>
-
-            {!isSubtitle && !item.queueConfig && (
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Route Path</label>
-                <input
-                  type="text"
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none"
-                  value={editPath}
-                  onChange={(e) => setEditPath(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Choose Predefined Icon</label>
-              <select
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none"
-                value={editIcon}
-                onChange={(e) => setEditIcon(e.target.value)}
+            return (
+              <div
+                key={child.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onSelectItem) onSelectItem(child.id);
+                }}
+                className={cn(
+                  "group flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none",
+                  isChildSelected
+                    ? "bg-indigo-500/[0.08] dark:bg-indigo-500/[0.12] border-indigo-500 ring-2 ring-indigo-500/20"
+                    : "bg-white/40 dark:bg-white/[0.02] border-zinc-200/50 dark:border-white/5 hover:border-indigo-500/40"
+                )}
               >
-                {COMMON_ICONS.map(i => (
-                  <option key={i} value={i}>{i}</option>
-                ))}
-              </select>
-            </div>
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className={cn(
+                    "p-1.5 rounded-lg border transition-all shrink-0",
+                    isChildSelected 
+                      ? "bg-indigo-500 text-white border-indigo-400" 
+                      : "bg-zinc-100 dark:bg-white/5 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-white/10"
+                  )}>
+                    <ChildIcon size={13} />
+                  </div>
 
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Or Type Lucide Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Activity"
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded px-2 py-1 text-xs outline-none"
-                value={editIconInput}
-                onChange={(e) => setEditIconInput(e.target.value)}
-              />
-            </div>
-          </div>
+                  <div className="min-w-0 flex-1">
+                    <span className={cn(
+                      "text-xs font-semibold truncate block",
+                      isChildSelected ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-800 dark:text-zinc-200"
+                    )}>
+                      {child.label}
+                    </span>
+                    {child.to && (
+                      <span className="text-[9px] font-mono text-zinc-400 truncate block">
+                        {child.to}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-          {/* Queue builder configurations if queueConfig is present */}
-          {item.queueConfig && (
-            <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-900 space-y-3">
-              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                <span className="text-[10px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-                  Queue Config
-                </span>
-                <div className="flex gap-2 text-[10px]">
+                <div className="flex items-center gap-1 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                   <button
-                    type="button"
-                    onClick={() => {
-                      setEditQueueItemType('single');
-                      setEditQueueColumns(['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']);
-                    }}
-                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", editQueueItemType === 'single' ? "bg-indigo-600 text-white" : "text-zinc-450")}
+                    onClick={() => outdentItem(section.id, item.id, child.id)}
+                    className="p-1 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition-colors"
+                    title="Promote to top level"
                   >
-                    Single Module
+                    <ChevronLeft size={13} />
                   </button>
+
                   <button
-                    type="button"
-                    onClick={() => {
-                      setEditQueueItemType('unified');
-                    }}
-                    className={cn("px-1.5 py-0.5 rounded font-bold uppercase", editQueueItemType === 'unified' ? "bg-indigo-600 text-white" : "text-zinc-450")}
+                    onClick={() => updateChildItem(section.id, item.id, child.id, { isVisible: child.isVisible === false ? true : false })}
+                    className={cn(
+                      "p-1 rounded-lg transition-colors",
+                      child.isVisible === false ? "text-amber-500 bg-amber-500/10" : "text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                    )}
+                    title={child.isVisible === false ? "Hidden" : "Visible"}
                   >
-                    Unified
+                    {child.isVisible === false ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 </div>
               </div>
-
-              <div className="space-y-3">
-                {/* Module Selector */}
-                {editQueueItemType === 'single' ? (
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-zinc-500 uppercase">Target Module</label>
-                    <select
-                      className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-2.5 py-1 text-xs outline-none focus:border-indigo-500/50"
-                      value={editQueueModuleId}
-                      onChange={(e) => setEditQueueModuleId(e.target.value)}
-                    >
-                      <option value="">Select a Module...</option>
-                      {activeCustomModules.map((m: any) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-zinc-500 uppercase block">Select Target Modules</label>
-                    <div className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded p-2 max-h-28 overflow-y-auto space-y-1 custom-scrollbar">
-                      {activeCustomModules.map((m: any) => {
-                        const isChecked = editQueueModuleIds.includes(m.id);
-                        return (
-                          <label key={m.id} className="flex items-center gap-2 text-xs font-medium text-zinc-750 dark:text-zinc-350 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setEditQueueModuleIds([...editQueueModuleIds, m.id]);
-                                } else {
-                                  setEditQueueModuleIds(editQueueModuleIds.filter(id => id !== m.id));
-                                }
-                              }}
-                              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span>{m.name}</span>
-                          </label>
-                        );
-                      })}
-                      {activeCustomModules.length === 0 && (
-                        <p className="text-[10px] text-zinc-400 italic">No active custom modules.</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Condition Builder Section */}
-                <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
-                  <label className="text-[9px] font-bold text-zinc-500 uppercase block">Filtering Rules (AND)</label>
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
-                    {editQueueRules.map((rule, idx) => (
-                      <div key={idx} className="flex gap-1.5 items-center">
-                        <select
-                          className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-1 text-[10px] outline-none"
-                          value={rule.fieldId}
-                          onChange={(e) => {
-                            const updated = [...editQueueRules];
-                            updated[idx].fieldId = e.target.value;
-                            setEditQueueRules(updated);
-                          }}
-                        >
-                          <option value="">Field...</option>
-                          {queueAvailableFields.map(f => (
-                            <option key={f.id} value={f.id}>{f.label}</option>
-                          ))}
-                        </select>
-
-                        <select
-                          className="w-18 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1 py-1 text-[10px] outline-none"
-                          value={rule.operator}
-                          onChange={(e) => {
-                            const updated = [...editQueueRules];
-                            updated[idx].operator = e.target.value;
-                            setEditQueueRules(updated);
-                          }}
-                        >
-                          <option value="equals">==</option>
-                          <option value="not_equals">!=</option>
-                          <option value="contains">contains</option>
-                          <option value="is_empty">empty</option>
-                          <option value="not_empty">not empty</option>
-                        </select>
-
-                        {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
-                          <input
-                            type="text"
-                            placeholder="Value"
-                            className="w-20 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-1 text-[10px] outline-none"
-                            value={rule.value}
-                            onChange={(e) => {
-                              const updated = [...editQueueRules];
-                              updated[idx].value = e.target.value;
-                              setEditQueueRules(updated);
-                            }}
-                          />
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditQueueRules(editQueueRules.filter((_, i) => i !== idx));
-                          }}
-                          disabled={editQueueRules.length === 1}
-                          className="text-zinc-400 hover:text-red-500 disabled:opacity-30"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setEditQueueRules([...editQueueRules, { fieldId: '', operator: 'equals', value: '' }])}
-                    className="flex items-center gap-1 text-[9px] text-indigo-650 dark:text-indigo-400 font-bold uppercase mt-1 hover:underline"
-                  >
-                    <Plus size={10} /> Add Rule
-                  </button>
-                </div>
-
-                {/* Columns Selection Section (Only for Unified Queues) */}
-                {editQueueItemType === 'unified' && (
-                  <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-800 pt-2">
-                    <label className="text-[9px] font-bold text-zinc-500 uppercase block">Display Columns</label>
-                    <div className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded p-2 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
-                      {Array.from(new Set(queueColumnOptions.map(c => c.group))).map(groupName => (
-                        <div key={groupName} className="space-y-1">
-                          <div className="text-[9px] font-black text-zinc-450 dark:text-zinc-650 uppercase tracking-widest border-b border-zinc-200/60 dark:border-zinc-900 pb-0.5">
-                            {groupName} Fields
-                          </div>
-                          <div className="grid grid-cols-2 gap-1.5 pl-1">
-                            {queueColumnOptions.filter(c => c.group === groupName).map(col => {
-                              const isChecked = editQueueColumns.includes(col.id);
-                              return (
-                                <label key={col.id} className="flex items-center gap-1.5 text-[10px] text-zinc-700 dark:text-zinc-350 cursor-pointer select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setEditQueueColumns([...editQueueColumns, col.id]);
-                                      } else {
-                                        setEditQueueColumns(editQueueColumns.filter(c => c !== col.id));
-                                      }
-                                    }}
-                                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3 w-3"
-                                  />
-                                  <span className="truncate">{col.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-1.5 pt-1.5">
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsEditing(false)}>
-              <X size={12} /> Cancel
-            </Button>
-            <Button variant="primary" size="sm" className="h-7 text-xs" onClick={saveEdit}>
-              <Check size={12} /> Done
-            </Button>
-          </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -230,7 +230,7 @@ export const Analytics = () => {
                 </div>
               </div>
               <div className="h-80 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="colorCases" x1="0" y1="0" x2="0" y2="1">
@@ -277,7 +277,7 @@ export const Analytics = () => {
             <div className="p-8 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-8 shadow-sm dark:shadow-none">
               <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Module Distribution</h3>
               <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <PieChart>
                     <Pie
                       data={moduleDistribution}

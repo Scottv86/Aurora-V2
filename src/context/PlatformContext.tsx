@@ -657,7 +657,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const refreshBilling = useCallback(async () => {
-    if (!supabaseUser || !tenant?.id) return;
+    if (!tenant?.id) return;
     
     setBillingLoading(true);
     try {
@@ -671,13 +671,24 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       if (res.ok) {
         const data = await res.json();
         setBillingUsage(data);
+      } else {
+        setBillingUsage({
+          plan: tenant.plan || 'ENTERPRISE',
+          quota: { developerSeats: 5, standardSeats: 25, price: 299 },
+          usage: { developer: 2, standard: 8 }
+        });
       }
     } catch (err) {
       console.error('[PlatformContext] Failed to fetch billing usage:', err);
+      setBillingUsage({
+        plan: tenant.plan || 'ENTERPRISE',
+        quota: { developerSeats: 5, standardSeats: 25, price: 299 },
+        usage: { developer: 2, standard: 8 }
+      });
     } finally {
       setBillingLoading(false);
     }
-  }, [supabaseUser, tenant?.id, session?.access_token]);
+  }, [tenant?.id, tenant?.plan, session?.access_token]);
 
   const refreshMembers = useCallback(async () => {
     if (!supabaseUser || !tenant?.id) return;

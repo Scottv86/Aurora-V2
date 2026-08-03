@@ -91,8 +91,10 @@ import { PagesManagementPage } from './pages/Settings/PagesManagementPage';
 import { SitesPage } from './pages/Settings/SitesPage';
 import { BrandingSettingsPage } from './pages/Settings/BrandingSettingsPage';
 import { NavigationSettingsPage } from './pages/Settings/NavigationSettingsPage';
+import { NavigationManagementPage } from './pages/Settings/NavigationManagementPage';
 import { SettingsOverview } from './pages/Settings/SettingsOverview';
 import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
+import { MigrationPage } from './pages/Settings/MigrationPage';
 import { AutomationsPage } from './pages/Settings/AutomationsPage';
 import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
 import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
@@ -320,7 +322,8 @@ const App = () => {
 
                 <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
                 <Route path="branding" element={<BrandingSettingsPage />} />
-                <Route path="navigation" element={<NavigationSettingsPage />} />
+                <Route path="navigation" element={<NavigationManagementPage />} />
+                <Route path="navigation/builder" element={<NavigationSettingsPage />} />
                 <Route path="appearance" element={<Navigate to="/workspace/settings/branding" replace />} />
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />
@@ -358,7 +361,7 @@ const App = () => {
                  <Route path="records-management" element={<Navigate to="/workspace/settings/platform-modules/records-management" replace />} />
                  <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                  <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
-                 <Route path="migration" element={<ComingSoon title="Migration" description="Data import, export, and migration utilities for moving data between systems." />} />
+                 <Route path="migration" element={<MigrationPage />} />
                  <Route path="integrations" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
                  <Route path="integrations/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/integration-management/:id" replace />} />
                  {/* Legacy redirects */}
