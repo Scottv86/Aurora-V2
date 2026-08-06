@@ -189,7 +189,7 @@ export const Breadcrumbs = () => {
         const isMode = (index < breadcrumbItems.length - 1);
         
         return (
-          <div key={item.to} className="flex items-center gap-1.5 shrink-0">
+          <div key={`${item.to}-${index}`} className="flex items-center gap-1.5 shrink-0">
             {index > 0 && (
               <ChevronRight size={12} className="text-indigo-600 dark:text-indigo-400" />
             )}

@@ -7,7 +7,6 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  useDroppable,
   DragStartEvent,
   DragEndEvent,
   DragOverEvent
@@ -158,6 +157,10 @@ export const NavigationArchitect = ({
     const activeId = String(active.id);
     const overId = String(over.id);
 
+    // Ignore section drags during drag over to prevent infinite re-render loops (measureRects)
+    const isSectionDrag = sections.some(s => s.id === activeId);
+    if (isSectionDrag) return;
+
     const activeContainer = findContainer(activeId);
     const overContainer = findContainer(overId);
 
@@ -200,10 +203,13 @@ export const NavigationArchitect = ({
     // Section reordering check
     const isSectionDrag = sections.some(s => s.id === activeId);
     if (isSectionDrag) {
-      const oldIndex = sections.findIndex(s => s.id === activeId);
-      const newIndex = sections.findIndex(s => s.id === overId);
-      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        onChange(arrayMove(sections, oldIndex, newIndex));
+      const targetSectionId = findContainer(overId);
+      if (targetSectionId) {
+        const oldIndex = sections.findIndex(s => s.id === activeId);
+        const newIndex = sections.findIndex(s => s.id === targetSectionId);
+        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+          onChange(arrayMove(sections, oldIndex, newIndex));
+        }
       }
       return;
     }
@@ -417,11 +423,8 @@ const CategorySectionContainer = ({
     transform,
     transition,
     isDragging,
+    isOver,
   } = useSortable({ id: section.id });
-
-  const { isOver } = useDroppable({
-    id: section.id,
-  });
 
   const style = {
     transform: CSS.Transform.toString(transform),

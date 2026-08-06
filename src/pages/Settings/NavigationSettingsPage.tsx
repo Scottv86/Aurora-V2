@@ -19,8 +19,11 @@ import {
   Eye,
   EyeOff,
   LayoutGrid,
-  Loader2
+  Loader2,
+  Search,
+  X
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -69,6 +72,32 @@ const COMMON_ICONS = [
   'LayoutDashboard', 'Users', 'ClipboardList', 'FileText', 'Inbox', 'BookOpen', 
   'BarChart', 'Settings', 'Database', 'Lock', 'Shield', 'Globe', 'Layers', 
   'MessageSquare', 'Calendar', 'Folder', 'Zap', 'Terminal', 'Heart', 'HelpCircle'
+];
+
+const ALL_CATALOG_APPS = [
+  { id: 'inbox', label: 'Inbox', iconName: 'Inbox', to: '/workspace/apps/inbox' },
+  { id: 'docs', label: 'Documents', iconName: 'FileText', to: '/workspace/apps/docs' },
+  { id: 'drive', label: 'Drive', iconName: 'Folder', to: '/workspace/apps/drive' },
+  { id: 'query', label: 'Query', iconName: 'Database', to: '/workspace/apps/query' },
+  { id: 'chat', label: 'Chat', iconName: 'MessageSquare', to: '/workspace/apps/chat' },
+  { id: 'meet', label: 'Meet', iconName: 'Video', to: '/workspace/apps/meet' },
+  { id: 'calendar', label: 'Calendar', iconName: 'Calendar', to: '/workspace/apps/calendar' },
+  { id: 'notes', label: 'Notes', iconName: 'StickyNote', to: '/workspace/apps/notes' },
+  { id: 'reminders', label: 'Reminders', iconName: 'Bell', to: '/workspace/apps/reminders' },
+  { id: 'reports', label: 'Reports', iconName: 'BarChart3', to: '/workspace/apps/reports' },
+  { id: 'converter', label: 'File Converter', iconName: 'FileType', to: '/workspace/apps/converter' },
+  { id: 'feed', label: 'Feed', iconName: 'Rss', to: '/workspace/apps/feed' },
+  { id: 'draw', label: 'Draw', iconName: 'Palette', to: '/workspace/apps/draw' },
+  { id: 'whiteboard', label: 'Whiteboard', iconName: 'Presentation', to: '/workspace/apps/whiteboard' },
+  { id: 'calculator', label: 'Calculator', iconName: 'Calculator', to: '/workspace/apps/calculator' },
+  { id: 'snipper', label: 'Snipping Tool', iconName: 'Scissors', to: '/workspace/apps/snipper' },
+  { id: 'flowchart', label: 'Flowchart', iconName: 'Workflow', to: '/workspace/apps/flowchart' },
+  { id: 'pdf-editor', label: 'PDF Editor', iconName: 'FileEdit', to: '/workspace/apps/pdf-editor' },
+  { id: 'redact', label: 'Redact', iconName: 'EyeOff', to: '/workspace/apps/redact' },
+  { id: 'slideshow', label: 'Slideshow', iconName: 'MonitorPlay', to: '/workspace/apps/slideshow' },
+  { id: 'graphics', label: 'Graphics', iconName: 'Image', to: '/workspace/apps/graphics' },
+  { id: 'campaigns', label: 'Campaigns', iconName: 'Send', to: '/workspace/apps/campaigns' },
+  { id: 'spreadsheet', label: 'Spreadsheet', iconName: 'Table', to: '/workspace/apps/spreadsheet' }
 ];
 
 export const NavigationSettingsPage = () => {
@@ -128,6 +157,7 @@ export const NavigationSettingsPage = () => {
 
   // Modal / Add tool states
   const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | null>(null);
+  const [appSearchQuery, setAppSearchQuery] = useState('');
 
   // Custom link form state
   const [customLabel, setCustomLabel] = useState('');
@@ -580,16 +610,31 @@ export const NavigationSettingsPage = () => {
     path: mod.path
   }));
 
-  const appIconsMap: Record<string, string> = {
-    inbox: 'Inbox', docs: 'FileText', drive: 'Folder', chat: 'MessageSquare',
-    meet: 'Video', calendar: 'Calendar', notes: 'StickyNote', reminders: 'Bell',
-    reports: 'BarChart', converter: 'FileText', feed: 'Rss', draw: 'Palette',
-    whiteboard: 'Layout', calculator: 'Terminal', snipper: 'Scissors', flowchart: 'Workflow',
-    'pdf-editor': 'FileEdit', redact: 'EyeOff', slideshow: 'MonitorPlay', graphics: 'Image',
-    campaigns: 'Send', spreadsheet: 'Table'
-  };
+  const availableCatalogApps = useMemo(() => {
+    const list = [...ALL_CATALOG_APPS];
+    if (tenant?.enabledApps && Array.isArray(tenant.enabledApps)) {
+      for (const appId of tenant.enabledApps) {
+        if (!list.some(a => a.id === appId)) {
+          list.push({
+            id: appId,
+            label: appId.charAt(0).toUpperCase() + appId.slice(1).replace(/-/g, ' '),
+            iconName: 'Layout',
+            to: `/workspace/apps/${appId}`
+          });
+        }
+      }
+    }
+    return list;
+  }, [tenant?.enabledApps]);
 
-  const enabledApps = tenant?.enabledApps || [];
+  const filteredCatalogApps = useMemo(() => {
+    if (!appSearchQuery.trim()) return availableCatalogApps;
+    const q = appSearchQuery.toLowerCase().trim();
+    return availableCatalogApps.filter(app => 
+      app.label.toLowerCase().includes(q) || app.id.toLowerCase().includes(q)
+    );
+  }, [availableCatalogApps, appSearchQuery]);
+
   const isOverrideActive = activeScope.type !== 'default';
 
   // Find currently selected item across sections & children
@@ -1467,37 +1512,68 @@ export const NavigationSettingsPage = () => {
 
       {activeAddTool === 'app' && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <LayoutGrid size={18} className="text-indigo-500" /> Select Catalog App
-            </h3>
-            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto custom-scrollbar">
-              {enabledApps.map((appId: string) => {
-                const iconName = appIconsMap[appId] || 'Layout';
-                const appLabel = appId.charAt(0).toUpperCase() + appId.slice(1);
-                return (
-                  <button
-                    key={appId}
-                    onClick={() => {
-                      addItemToActiveSection({
-                        id: `app:${appId}-${Date.now()}`,
-                        label: appLabel,
-                        iconName: iconName,
-                        to: `/workspace/apps/${appId}`,
-                        isVisible: true
-                      });
-                      setActiveAddTool(null);
-                    }}
-                    className="flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
-                  >
-                    <span className="font-bold text-xs truncate">{appLabel}</span>
-                    <Plus size={14} className="text-zinc-400 group-hover:text-indigo-500 shrink-0" />
-                  </button>
-                );
-              })}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <LayoutGrid size={18} className="text-indigo-500" /> Select Catalog App
+              </h3>
+              <button onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg">
+                <X size={16} />
+              </button>
             </div>
-            <div className="flex justify-end pt-2">
-              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Close</Button>
+
+            {/* Search Filter */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
+              <input
+                type="text"
+                placeholder="Search catalog apps (e.g. Query, Drive, Docs)..."
+                value={appSearchQuery}
+                onChange={(e) => setAppSearchQuery(e.target.value)}
+                autoFocus
+                className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-white"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+              {filteredCatalogApps.length === 0 ? (
+                <div className="col-span-2 py-8 text-center text-xs text-zinc-400">
+                  No catalog apps matching "{appSearchQuery}"
+                </div>
+              ) : (
+                filteredCatalogApps.map((app) => {
+                  const IconComp = (LucideIcons as any)[app.iconName] || LucideIcons.Layout;
+                  return (
+                    <button
+                      key={app.id}
+                      onClick={() => {
+                        addItemToActiveSection({
+                          id: `app:${app.id}-${Date.now()}`,
+                          label: app.label,
+                          iconName: app.iconName,
+                          to: app.to,
+                          isVisible: true
+                        });
+                        setActiveAddTool(null);
+                        setAppSearchQuery('');
+                      }}
+                      className="flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 text-indigo-500 shrink-0 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                          <IconComp size={15} />
+                        </div>
+                        <span className="font-bold text-xs truncate text-zinc-800 dark:text-zinc-200">{app.label}</span>
+                      </div>
+                      <Plus size={14} className="text-zinc-400 group-hover:text-indigo-500 shrink-0 ml-1" />
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button variant="ghost" onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); }}>Close</Button>
             </div>
           </div>
         </div>
