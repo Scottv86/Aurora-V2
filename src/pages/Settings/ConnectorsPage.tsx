@@ -20,11 +20,11 @@ import {
   Plug
 } from 'lucide-react';
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
-import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
@@ -61,6 +61,7 @@ export const ConnectorsPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'setup' | 'usage' | 'test' | 'mapping' | 'logs'>('setup');
+  const [listTab, setListTab] = useState<'all' | 'active' | 'vault'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchData = async () => {
@@ -177,10 +178,20 @@ export const ConnectorsPage = () => {
     [activeConnectors, selectedConnectorId]
   );
 
-  const filteredRegistry = registry.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredRegistry = useMemo(() => {
+    return registry.filter(c => {
+      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.category.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (listTab === 'active') {
+        return activeConnectors.some(ac => ac.connectorId === c.id && ac.isActive);
+      }
+      if (listTab === 'vault') {
+        return activeConnectors.some(ac => ac.connectorId === c.id && ac.secrets && ac.secrets.length > 0);
+      }
+      return true;
+    });
+  }, [registry, searchQuery, listTab, activeConnectors]);
 
   const usage = useMemo(() => {
     if (!selectedConnectorId || !modules) return [];
@@ -234,40 +245,98 @@ export const ConnectorsPage = () => {
     ? '/workspace/settings/platform-modules/integration-management'
     : '/workspace/platform/integration-management';
 
+  const listSubNavItems: SettingsSubNavItem[] = [
+    { id: 'all', label: 'All Integrations', icon: Plug, description: 'Nexus connectors catalog' },
+    { id: 'active', label: 'Active Integrations', icon: CheckCircle2, description: 'Enabled tenant connectors' },
+    { id: 'vault', label: 'Secrets Vault', icon: ShieldCheck, description: 'Encrypted API keys' }
+  ];
+
+  const detailSubNavItems: SettingsSubNavItem[] = [
+    { id: 'setup', label: 'Setup & Secrets', icon: Settings2, description: 'Credentials & API keys' },
+    { id: 'mapping', label: 'Data Mapping', icon: ArrowRightLeft, description: 'Field schema mappings' },
+    { id: 'usage', label: 'Usage & Binding', icon: Layout, description: 'Active module placements' },
+    { id: 'test', label: 'Test Plug', icon: Play, description: 'Payload execution tester' },
+    { id: 'logs', label: 'Execution Logs', icon: FileText, description: 'Audit & request trace' }
+  ];
+
   if (isSettingsMode) {
     return (
-      <div className="flex flex-col w-full">
-        {!selectedConnectorId ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative z-10"
-          >
-            <PageHeader 
-              title=""
-              description=""
-              actions={
-                <div className="flex items-center gap-4">
-                  <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
-                    <input 
-                      type="text"
-                      placeholder="Search Nexus Registry..."
-                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <button 
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-xl shadow-indigo-500/10"
-                  >
-                    <Plus className="w-4 h-4" /> Add Integration
-                  </button>
-                </div>
-              }
-            />
-
+      <SettingsSubNavLayout
+        title={selectedConnectorId ? (selectedConnector?.name || 'Integration Details') : 'Integration Management'}
+        description={selectedConnectorId ? (selectedConnector?.category ? `${selectedConnector.category} • Enterprise Vaulted` : 'Configure your Nexus integration settings.') : 'Manage external API connectors, Nexus webhooks, and security secrets vault.'}
+        icon={Plug}
+        items={selectedConnectorId ? detailSubNavItems : listSubNavItems}
+        activeId={selectedConnectorId ? activeTab : listTab}
+        onTabChange={(id) => {
+          if (selectedConnectorId) {
+            setActiveTab(id as any);
+          } else {
+            setListTab(id as any);
+          }
+        }}
+        actions={
+          selectedConnectorId ? (
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={toggleActivation}
+                className={clsx(
+                  "font-bold transition-all shadow-md",
+                  selectedTenantConnector?.isActive
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-rose-500/10 hover:text-rose-400 border border-zinc-200 dark:border-white/5"
+                    : "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/20"
+                )}
+              >
+                {selectedTenantConnector?.isActive ? (
+                  <>
+                    <AlertCircle className="w-4 h-4 mr-1 inline" /> Deactivate
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 mr-1 inline" /> Activate Integration
+                  </>
+                )}
+              </Button>
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={() => navigate(basePath)}
+                className="gap-2 font-bold"
+              >
+                <ArrowLeft size={16} /> All Integrations
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+                <input 
+                  type="text"
+                  placeholder="Search Registry..."
+                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => navigate('/workspace/settings/platform-modules')}
+                className="gap-2 font-bold"
+              >
+                <ArrowLeft size={16} /> Back to Modules
+              </Button>
+              <Button 
+                onClick={() => setIsModalOpen(true)}
+                className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+              >
+                <Plus size={16} /> Add Integration
+              </Button>
+            </div>
+          )
+        }
+      >
+        <div className="w-full">
+          {!selectedConnectorId ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredRegistry.map(conn => {
                 const isActive = activeConnectors.some(ac => ac.connectorId === conn.id);
@@ -278,7 +347,7 @@ export const ConnectorsPage = () => {
                     key={conn.id}
                     whileHover={{ y: -4 }}
                     onClick={() => navigate(`${basePath}/${conn.id}`)}
-                    className="group border border-zinc-200 dark:border-white/5 bg-white dark:bg-white/[0.02] backdrop-blur-xl rounded-[2rem] p-6 hover:shadow-2xl hover:border-indigo-500/20 transition-all cursor-pointer flex flex-col justify-between h-48"
+                    className="group border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-6 hover:shadow-xl hover:border-indigo-500/20 transition-all cursor-pointer flex flex-col justify-between h-48"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-4">
@@ -298,101 +367,31 @@ export const ConnectorsPage = () => {
                 );
               })}
             </div>
-          </motion.div>
-        ) : (
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex-1 flex flex-col relative z-10"
-          >
-            <PageHeader 
-              title={selectedConnector?.name || 'Integration Details'}
-              description={selectedConnector?.category ? `${selectedConnector.category} • Enterprise Vaulted` : 'Configure your Nexus integration settings.'}
-              actions={
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={toggleActivation}
-                    className={clsx(
-                      "flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-xl",
-                      selectedTenantConnector?.isActive
-                        ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-red-500/10 hover:text-red-400 border border-zinc-200 dark:border-white/5"
-                        : "bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-500/20"
-                    )}
-                  >
-                    {selectedTenantConnector?.isActive ? (
-                      <>
-                        <AlertCircle className="w-4 h-4" />
-                        Deactivate
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4" />
-                        Activate Integration
-                      </>
-                    )}
-                  </button>
-                  <Button 
-                    variant="secondary" 
-                    size="sm"
-                    onClick={() => navigate(basePath)}
-                    className="gap-2 font-bold"
-                  >
-                    <ArrowLeft size={16} /> Back to Integrations
-                  </Button>
-                </div>
-              }
-            />
-
-            <div className="flex-1 flex flex-col bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
-              <div className="px-8 border-b border-zinc-200 dark:border-white/5 flex gap-8">
-                {[
-                  { id: 'setup', label: 'Setup', icon: Settings2 },
-                  { id: 'mapping', label: 'Data Mapping', icon: ArrowRightLeft },
-                  { id: 'usage', label: 'Usage & Placements', icon: Layout },
-                  { id: 'test', label: 'Test Plug', icon: Play },
-                  { id: 'logs', label: 'Logs', icon: FileText },
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={clsx(
-                      "flex items-center gap-2 py-4 text-xs font-black uppercase tracking-widest border-b-2 transition-all",
-                      activeTab === tab.id 
-                        ? "border-indigo-500 text-indigo-600 dark:text-indigo-400" 
-                        : "border-transparent text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300"
-                    )}
-                  >
-                    <tab.icon className="w-3 h-3" />
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-8">
-                {activeTab === 'setup' && selectedConnector && (
-                  <ConnectorSetup 
-                    connector={selectedConnector} 
-                    activeConnector={selectedTenantConnector}
-                    onRefresh={fetchData}
-                  />
-                )}
-                {activeTab === 'usage' && (
-                  <ConnectorUsage usage={usage} />
-                )}
-                {activeTab === 'test' && selectedConnector && (
-                  <ConnectorTest connector={selectedConnector} />
-                )}
-                {activeTab === 'mapping' && selectedConnector && (
-                  <ConnectorMapping connector={selectedConnector} />
-                )}
-                {activeTab === 'logs' && selectedConnector && (
-                  <ConnectorLogs connector={selectedConnector} />
-                )}
-              </div>
+          ) : (
+            <div className="w-full space-y-6">
+              {activeTab === 'setup' && selectedConnector && (
+                <ConnectorSetup 
+                  connector={selectedConnector} 
+                  activeConnector={selectedTenantConnector}
+                  onRefresh={fetchData}
+                />
+              )}
+              {activeTab === 'usage' && (
+                <ConnectorUsage usage={usage} />
+              )}
+              {activeTab === 'test' && selectedConnector && (
+                <ConnectorTest connector={selectedConnector} />
+              )}
+              {activeTab === 'mapping' && selectedConnector && (
+                <ConnectorMapping connector={selectedConnector} />
+              )}
+              {activeTab === 'logs' && selectedConnector && (
+                <ConnectorLogs connector={selectedConnector} />
+              )}
             </div>
-          </motion.div>
-        )}
-      </div>
+          )}
+        </div>
+      </SettingsSubNavLayout>
     );
   }
 

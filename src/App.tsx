@@ -42,7 +42,6 @@ import { AntigravityChat } from './components/AntigravityChat';
 
 import { DocumentAutomation } from './components/DocumentAutomation';
 import { TenantOverview } from './components/TenantOverview';
-import { AppsSettings } from './components/Settings/Organization/AppsSettings';
 import { GlobalListsSettings } from './pages/Settings/PlatformModules/GlobalListsSettings';
 import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
 import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
@@ -318,7 +317,7 @@ const App = () => {
                 <Route path="builder/page/:id" element={<PageBuilder />} />
                 <Route path="pages" element={<PagesManagementPage />} />
                 <Route path="modules" element={<Navigate to="/workspace/settings/platform-modules" replace />} />
-                <Route path="apps" element={<AppsSettings />} />
+                <Route path="apps" element={<Navigate to="/workspace/settings" replace />} />
 
                 <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
                 <Route path="branding" element={<BrandingSettingsPage />} />

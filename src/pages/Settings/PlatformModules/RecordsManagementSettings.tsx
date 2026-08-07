@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../../components/UI/Primitives';
 import { 
   Database, 
@@ -9,18 +10,27 @@ import {
   FileCheck,
   AlertTriangle,
   Save,
-  Check
+  ArrowLeft
 } from 'lucide-react';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 
 export const RecordsManagementSettings = () => {
+  const navigate = useNavigate();
   const [retentionYears, setRetentionYears] = useState('7');
   const [storageProvider, setStorageProvider] = useState<'local' | 's3' | 'gcp' | 'azure'>('s3');
   const [enableWorm, setEnableWorm] = useState(true);
   const [auditLevel, setAuditLevel] = useState<'metadata' | 'full'>('full');
   const [hashAlgo, setHashAlgo] = useState('sha256');
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('policy');
+
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'policy', label: 'Retention Policy', icon: Shield, description: 'Compliance & hold schedules' },
+    { id: 'storage', label: 'Storage Provider', icon: Cloud, description: 'S3/Azure/Local targets' },
+    { id: 'security', label: 'WORM & Auditing', icon: Lock, description: 'Cryptographic immutability' }
+  ];
 
   const handleSave = () => {
     setSaving(true);
@@ -31,196 +41,199 @@ export const RecordsManagementSettings = () => {
   };
 
   return (
-    <div className="space-y-8 relative z-10 w-full">
-      {/* Placeholder Banner */}
-      <div className="p-4 bg-indigo-500/5 border border-indigo-500/15 dark:border-indigo-500/10 rounded-2xl flex items-start gap-4">
-        <div className="p-2 bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
-          <AlertTriangle size={20} className="animate-pulse" />
+    <SettingsSubNavLayout
+      title="Records Management"
+      description="Retention rules, immutable storage targets, and cryptographic auditing compliance."
+      icon={Database}
+      items={subNavItems}
+      activeId={activeTab}
+      onTabChange={setActiveTab}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            onClick={() => navigate('/workspace/settings/platform-modules')}
+            className="gap-2 font-bold"
+          >
+            <ArrowLeft size={16} /> Back to Modules
+          </Button>
+          <Button 
+            variant="primary" 
+            size="sm" 
+            onClick={handleSave} 
+            disabled={saving}
+            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+          >
+            {saving ? 'Saving...' : (
+              <>
+                <Save size={16} /> Save Settings
+              </>
+            )}
+          </Button>
         </div>
-        <div className="space-y-1">
-          <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-widest">🚧 Settings Placeholder Page</h4>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            These settings configure the core compliance rules and archival database engines for the Records Management system. Saving rules here triggers simulated configurations.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Retention Standards */}
-        <div className="p-6 bg-white/40 dark:bg-white/[0.02] border border-white/20 dark:border-white/5 rounded-3xl space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Lock className="text-indigo-500" size={18} />
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Default Retention Standards</h3>
+      }
+    >
+      <div className="space-y-8 text-left max-w-4xl">
+        {/* Placeholder Banner */}
+        <div className="p-4 bg-indigo-500/5 border border-indigo-500/15 dark:border-indigo-500/10 rounded-2xl flex items-start gap-4">
+          <div className="p-2 bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl">
+            <AlertTriangle size={20} className="animate-pulse" />
           </div>
-          
-          <div className="space-y-2">
-            <label className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Global Expiry Threshold</label>
-            <select
-              value={retentionYears}
-              onChange={(e) => setRetentionYears(e.target.value)}
-              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              <option value="1">1 Year (Temp Audits & Transients)</option>
-              <option value="3">3 Years (Standard Operations Data)</option>
-              <option value="5">5 Years (Extended Customer Logs)</option>
-              <option value="7">7 Years (Tax, Invoices & Finance Default)</option>
-              <option value="99">Permanent (Do not delete automatically)</option>
-            </select>
-            <p className="text-[10px] text-zinc-500 leading-normal">
-              Unless overridden by a specific module retention schedule, this default period is applied to all eligible compliance records.
+          <div className="space-y-1">
+            <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200">Compliance & Archival Storage Engine</h4>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+              Configure automated retention policies and immutable ledger settings for generated reports, document attachments, and system logs.
             </p>
           </div>
         </div>
 
-        {/* Security & Verification */}
-        <div className="p-6 bg-white/40 dark:bg-white/[0.02] border border-white/20 dark:border-white/5 rounded-3xl space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="text-indigo-500" size={18} />
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Data Integrity Security</h3>
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-zinc-50/50 dark:bg-zinc-900/30 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50">
-            <div className="space-y-0.5">
-              <span className="text-xs font-bold text-zinc-850 dark:text-zinc-200 block">Immutable WORM Holds</span>
-              <span className="text-[10px] text-zinc-400 block">Prevent manual deletion of records under active legal holds.</span>
-            </div>
-            <button
-              onClick={() => setEnableWorm(!enableWorm)}
-              className={cn(
-                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                enableWorm ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-              )}
-            >
-              <span
-                className={cn(
-                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                  enableWorm ? "translate-x-4" : "translate-x-0"
-                )}
-              />
-            </button>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Integrity Hashing Algorithm</label>
-            <select
-              value={hashAlgo}
-              onChange={(e) => setHashAlgo(e.target.value)}
-              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              <option value="sha256">SHA-256 (High Security, Recommended)</option>
-              <option value="sha512">SHA-512 (Ultra-high Compliance)</option>
-              <option value="md5">MD5 (Legacy Compatibility)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Storage Targets */}
-      <div className="p-6 bg-white/40 dark:bg-white/[0.02] border border-white/20 dark:border-white/5 rounded-3xl space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Server className="text-indigo-500" size={18} />
-          <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Archival Storage Targets</h3>
-        </div>
-        <p className="text-xs text-zinc-400 leading-normal">
-          Select where records are stored once they expire from active operational databases and transition to cold archival states.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-          {[
-            { id: 'local', name: 'Database Archive', description: 'Internal DB partition table', icon: Database },
-            { id: 's3', name: 'AWS S3 Glacier', description: 'Amazon WORM Glacier vaults', icon: Cloud },
-            { id: 'gcp', name: 'GCP Coldline', description: 'Google Cloud Storage buckets', icon: Cloud },
-            { id: 'azure', name: 'Azure Archive', description: 'Microsoft Blob Storage tiers', icon: Cloud }
-          ].map((item) => {
-            const ProviderIcon = item.icon;
-            const isSelected = storageProvider === item.id;
-            return (
-              <div
-                key={item.id}
-                onClick={() => setStorageProvider(item.id as any)}
-                className={cn(
-                  "p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-between h-36 relative overflow-hidden",
-                  isSelected
-                    ? "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/10 shadow-lg shadow-indigo-500/5"
-                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white/20 dark:bg-white/[0.01]"
-                )}
-              >
-                <div className="flex justify-between items-start">
-                  <div className={cn(
-                    "p-2 rounded-lg border",
-                    isSelected 
-                      ? "bg-indigo-600 text-white border-indigo-600" 
-                      : "bg-zinc-50 dark:bg-zinc-900 text-zinc-400 border-zinc-200 dark:border-zinc-800"
-                  )}>
-                    <ProviderIcon size={16} />
-                  </div>
-                  {isSelected && (
-                    <div className="w-4 h-4 bg-indigo-600 rounded-full flex items-center justify-center text-white">
-                      <Check size={10} strokeWidth={3} />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-250 block">{item.name}</span>
-                  <span className="text-[10px] text-zinc-450 dark:text-zinc-500 block leading-tight mt-1">{item.description}</span>
-                </div>
+        {/* Section 1: Retention Schedules */}
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl">
+                <Shield size={20} />
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Audit Logs Settings */}
-      <div className="p-6 bg-white/40 dark:bg-white/[0.02] border border-white/20 dark:border-white/5 rounded-3xl space-y-4">
-        <div className="flex items-center gap-2 mb-2">
-          <FileCheck className="text-indigo-500" size={18} />
-          <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Disposition Logs depth</h3>
-        </div>
-        <div className="flex gap-4">
-          <label className={cn(
-            "flex-1 p-4 border rounded-2xl cursor-pointer transition-all flex items-start gap-3",
-            auditLevel === 'metadata'
-              ? "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/10"
-              : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-          )} onClick={() => setAuditLevel('metadata')}>
-            <input type="radio" checked={auditLevel === 'metadata'} onChange={() => {}} className="mt-1" />
-            <div className="space-y-0.5">
-              <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">Metadata Logs Only</span>
-              <span className="text-[10px] text-zinc-400 block leading-normal">Only log timestamps and quantity of purged records (Complies with strict deletion guidelines).</span>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Retention & Purge Schedule</h3>
+                <p className="text-xs text-zinc-400">Define maximum storage lifespan before records are flagged for disposition.</p>
+              </div>
             </div>
-          </label>
+          </div>
 
-          <label className={cn(
-            "flex-1 p-4 border rounded-2xl cursor-pointer transition-all flex items-start gap-3",
-            auditLevel === 'full'
-              ? "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/10"
-              : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-          )} onClick={() => setAuditLevel('full')}>
-            <input type="radio" checked={auditLevel === 'full'} onChange={() => {}} className="mt-1" />
-            <div className="space-y-0.5">
-              <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">Full Record Diff Auditing</span>
-              <span className="text-[10px] text-zinc-400 block leading-normal">Keep complete cryptographic hash signatures and metadata logs for trace compliance auditing.</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Default Retention Period</label>
+              <select 
+                value={retentionYears}
+                onChange={(e) => setRetentionYears(e.target.value)}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              >
+                <option value="1">1 Year (Basic operational logs)</option>
+                <option value="3">3 Years (Financial transactions)</option>
+                <option value="7">7 Years (Standard legal compliance)</option>
+                <option value="10">10 Years (Extended statutory audit)</option>
+                <option value="indefinite">Indefinite (Legal hold / No auto-purge)</option>
+              </select>
             </div>
-          </label>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cryptographic Hash Standard</label>
+              <select 
+                value={hashAlgo}
+                onChange={(e) => setHashAlgo(e.target.value)}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              >
+                <option value="sha256">SHA-256 (FIPS 180-4 standard)</option>
+                <option value="sha512">SHA-512 (High security requirement)</option>
+                <option value="blake3">BLAKE3 (High speed verification)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Storage Target */}
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                <Cloud size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Primary Document Storage Provider</h3>
+                <p className="text-xs text-zinc-400">Select where document blobs, PDF reports, and export bundles are persisted.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { id: 's3', name: 'Amazon S3', icon: Cloud },
+              { id: 'gcp', name: 'Google Storage', icon: Server },
+              { id: 'azure', name: 'Azure Blob', icon: Database },
+              { id: 'local', name: 'Local Volume', icon: FileCheck },
+            ].map((provider) => {
+              const Icon = provider.icon;
+              const isSelected = storageProvider === provider.id;
+              return (
+                <button
+                  key={provider.id}
+                  onClick={() => setStorageProvider(provider.id as any)}
+                  className={cn(
+                    "p-4 rounded-2xl border text-left transition-all flex flex-col justify-between gap-3",
+                    isSelected 
+                      ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
+                      : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 dark:text-zinc-400"
+                  )}
+                >
+                  <Icon size={20} />
+                  <span className="text-xs font-bold">{provider.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Section 3: WORM Immutability */}
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                <Lock size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Immutability & Cryptographic Controls</h3>
+                <p className="text-xs text-zinc-400">Enforce Write-Once-Read-Many (WORM) storage protection to prevent deletion.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+            <div className="space-y-0.5">
+              <h5 className="text-xs font-bold text-zinc-900 dark:text-white">Enable WORM Object Lock</h5>
+              <p className="text-[11px] text-zinc-450">Objects cannot be overwritten or deleted until retention period expires.</p>
+            </div>
+            <input 
+              type="checkbox" 
+              checked={enableWorm} 
+              onChange={(e) => setEnableWorm(e.target.checked)}
+              className="h-4 w-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Audit Trail Logging Depth</label>
+            <div className="flex gap-4">
+              <label className={cn(
+                "flex-1 p-4 border rounded-2xl cursor-pointer transition-all flex items-start gap-3",
+                auditLevel === 'metadata' 
+                  ? "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/10" 
+                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+              )} onClick={() => setAuditLevel('metadata')}>
+                <input type="radio" checked={auditLevel === 'metadata'} onChange={() => {}} className="mt-1" />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">Metadata Only</span>
+                  <span className="text-[10px] text-zinc-400 block leading-normal">Track user timestamps, actions, and record IDs without storing delta blobs.</span>
+                </div>
+              </label>
+
+              <label className={cn(
+                "flex-1 p-4 border rounded-2xl cursor-pointer transition-all flex items-start gap-3",
+                auditLevel === 'full'
+                  ? "border-indigo-500 bg-indigo-500/[0.03] dark:bg-indigo-500/10"
+                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+              )} onClick={() => setAuditLevel('full')}>
+                <input type="radio" checked={auditLevel === 'full'} onChange={() => {}} className="mt-1" />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block">Full Record Diff Auditing</span>
+                  <span className="text-[10px] text-zinc-400 block leading-normal">Keep complete cryptographic hash signatures and metadata logs for trace compliance auditing.</span>
+                </div>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t border-zinc-200 dark:border-zinc-800">
-        <Button 
-          variant="primary" 
-          size="sm" 
-          onClick={handleSave} 
-          disabled={saving}
-          className="gap-2 font-bold"
-        >
-          {saving ? 'Saving...' : (
-            <>
-              <Save size={16} /> Save Settings
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
+    </SettingsSubNavLayout>
   );
 };

@@ -160,11 +160,11 @@ export const AppLauncher = () => {
         <button 
           onClick={() => {
             setIsAppLauncherOpen(false);
-            navigate('/workspace/settings/apps');
+            navigate('/workspace/settings/platform-modules');
           }}
           className="text-[10px] font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors uppercase tracking-widest cursor-pointer"
         >
-          Manage Apps
+          Manage Modules
         </button>
         <button 
           onClick={() => alert('App Request submitted to workspace administrator.')}

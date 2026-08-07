@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   FileText, 
   Plus, 
@@ -10,18 +10,22 @@ import {
   Trash2, 
   Edit2,
   Filter,
-  Database
+  Database,
+  ArrowLeft
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DocumentTemplate } from '../types/platform';
 import { DocumentService } from '../services/documentService';
 import { usePlatform } from '../hooks/usePlatform';
 import { DocumentTemplateBuilder } from './DocumentTemplateBuilder';
+import { SettingsSubNavLayout, SettingsSubNavItem } from './Settings/SettingsSubNavLayout';
+import { Button } from './UI/Primitives';
 import { toast } from 'sonner';
 import { PageHeader } from './UI/PageHeader';
 
 export const DocumentAutomation = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -29,6 +33,7 @@ export const DocumentAutomation = () => {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'published' | 'drafts'>('all');
 
   useEffect(() => {
     if (tenant) {
@@ -60,9 +65,21 @@ export const DocumentAutomation = () => {
     setIsBuilderOpen(true);
   };
 
-  const filteredTemplates = templates.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTemplates = useMemo(() => {
+    return templates.filter(t => {
+      const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (activeTab === 'published') return t.status === 'Published';
+      if (activeTab === 'drafts') return t.status === 'Draft';
+      return true;
+    });
+  }, [templates, searchQuery, activeTab]);
+
+  const docSubNavItems: SettingsSubNavItem[] = [
+    { id: 'all', label: 'All Templates', icon: FileText, description: 'Complete catalog' },
+    { id: 'published', label: 'Active Templates', icon: Zap, description: 'Published templates' },
+    { id: 'drafts', label: 'Draft Templates', icon: Clock, description: 'Work in progress' }
+  ];
 
   if (isBuilderOpen) {
     return (
@@ -93,24 +110,10 @@ export const DocumentAutomation = () => {
     );
   }
 
-  return (
-    <div className={cn("flex flex-col w-full", !isSettingsMode && "px-6 lg:px-12 py-10 space-y-8")}>
-      <PageHeader 
-        title={isSettingsMode ? "" : "Templates"}
-        description={isSettingsMode ? "" : "Create and manage reusable document templates for your platform."}
-        actions={
-          <button
-            onClick={handleCreateNew}
-            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-500/20"
-          >
-            <Plus size={20} />
-            Create Template
-          </button>
-        }
-      />
-
+  const mainContent = (
+    <div className="space-y-8 text-left w-full">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm dark:shadow-none">
+        <div className="bg-white/40 dark:bg-zinc-900/50 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 p-6 rounded-3xl shadow-sm">
           <div className="flex items-center gap-3 text-indigo-600 dark:text-indigo-400 mb-4">
             <FileText size={20} />
             <span className="text-sm font-bold uppercase tracking-wider">Active Templates</span>
@@ -118,7 +121,7 @@ export const DocumentAutomation = () => {
           <div className="text-4xl font-bold text-zinc-900 dark:text-white">{templates.filter(t => t.status === 'Published').length}</div>
           <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-2">Templates ready for generation</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm dark:shadow-none">
+        <div className="bg-white/40 dark:bg-zinc-900/50 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 p-6 rounded-3xl shadow-sm">
           <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400 mb-4">
             <Clock size={20} />
             <span className="text-sm font-bold uppercase tracking-wider">Drafts</span>
@@ -126,7 +129,7 @@ export const DocumentAutomation = () => {
           <div className="text-4xl font-bold text-zinc-900 dark:text-white">{templates.filter(t => t.status === 'Draft').length}</div>
           <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-2">Templates currently in development</p>
         </div>
-        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm dark:shadow-none">
+        <div className="bg-white/40 dark:bg-zinc-900/50 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 p-6 rounded-3xl shadow-sm">
           <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400 mb-4">
             <Zap size={20} />
             <span className="text-sm font-bold uppercase tracking-wider">Auto-Generated</span>
@@ -252,6 +255,58 @@ export const DocumentAutomation = () => {
           </table>
         </div>
       </div>
+    </div>
+  );
+
+  if (isSettingsMode) {
+    return (
+      <SettingsSubNavLayout
+        title="Document Generation"
+        description="Create and manage automated PDF and document output templates across platform modules."
+        icon={FileText}
+        items={docSubNavItems}
+        activeId={activeTab}
+        onTabChange={(id) => setActiveTab(id as any)}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => navigate('/workspace/settings/platform-modules')}
+              className="gap-2 font-bold"
+            >
+              <ArrowLeft size={16} /> Back to Modules
+            </Button>
+            <Button 
+              onClick={handleCreateNew} 
+              className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+            >
+              <Plus size={16} /> Create Template
+            </Button>
+          </div>
+        }
+      >
+        {mainContent}
+      </SettingsSubNavLayout>
+    );
+  }
+
+  return (
+    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
+      <PageHeader 
+        title="Templates"
+        description="Create and manage reusable document templates for your platform."
+        actions={
+          <button
+            onClick={handleCreateNew}
+            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-500/20"
+          >
+            <Plus size={20} />
+            Create Template
+          </button>
+        }
+      />
+      {mainContent}
     </div>
   );
 };

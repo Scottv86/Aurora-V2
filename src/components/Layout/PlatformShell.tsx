@@ -10,10 +10,8 @@ import {
   Building,
   CreditCard,
   Layers,
-  Terminal,
   Palette,
   Compass,
-  LayoutGrid,
   ArrowRightLeft,
   Sparkles
 } from 'lucide-react';
@@ -291,7 +289,14 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       const targetUrl = new URL(path, window.location.origin);
       const currentUrl = new URL(location.pathname + location.search, window.location.origin);
       
+      if (targetUrl.pathname === '/workspace/settings' || targetUrl.pathname === '/workspace/settings/') {
+        return currentUrl.pathname === '/workspace/settings' || currentUrl.pathname === '/workspace/settings/';
+      }
+
       if (currentUrl.pathname !== targetUrl.pathname) {
+        if (currentUrl.pathname.startsWith(targetUrl.pathname + '/')) {
+          return true;
+        }
         return false;
       }
       
@@ -370,51 +375,78 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const SETTINGS_NAV_GROUPS = [
     {
-      category: 'General',
-      icon: Settings2,
+      category: 'General & Security',
+      icon: LucideIcons.ShieldCheck,
       items: [
         { label: 'Overview', icon: LayoutDashboard, to: '/workspace/settings' },
         { label: 'Organisation', icon: Building, to: '/workspace/settings/organization' },
+        { label: 'Workforce & Access', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/workforce-management' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
         { label: 'AI Services', icon: Sparkles, to: '/workspace/settings/ai-services' },
       ]
     },
     {
-      category: 'Look & Feel',
-      icon: Palette,
+      category: 'App Builder & Customization',
+      icon: Layout,
       items: [
-        { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
-        { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
+        { label: 'Custom Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
-      ]
-    },
-
-    {
-      category: 'Modules & Apps',
-      icon: LucideIcons.Layout,
-      items: [
-        { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
-        { label: 'Apps', icon: LayoutGrid, to: '/workspace/settings/apps' },
+        { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
+        { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
       ]
     },
     {
-      category: 'Data & Logic',
-      icon: Terminal,
+      category: 'Logic & Workflows',
+      icon: LucideIcons.Zap,
       items: [
-        { label: 'Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
+        { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },
+        { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
+        { label: 'Data Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
       ]
     },
-
+    {
+      category: 'Integrations & APIs',
+      icon: LucideIcons.Plug,
+      items: [
+        { label: 'Connected Apps', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
+        { label: 'API Management', icon: LucideIcons.Key, to: '/workspace/settings/platform-modules/api-management' },
+      ]
+    },
+    {
+      category: 'Finance & Catalogs',
+      icon: LucideIcons.Banknote,
+      items: [
+        { label: 'Financial Management', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
+        { label: 'Pricing Catalog', icon: LucideIcons.Tag, to: '/workspace/settings/platform-modules/pricing-catalog' },
+        { label: 'Inventory Manager', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/inventory-manager' },
+        { label: 'Global Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
+        { label: 'People & Organisations', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/people-organisations' },
+      ]
+    },
+    {
+      category: 'Analytics & Content',
+      icon: LucideIcons.BarChart2,
+      items: [
+        { label: 'Report Management', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
+        { label: 'Knowledge Base', icon: LucideIcons.BookOpen, to: '/workspace/settings/platform-modules/knowledge-base' },
+        { label: 'Sites & Portals', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
+        { label: 'Document Generation', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
+        { label: 'Records Management', icon: LucideIcons.Archive, to: '/workspace/settings/platform-modules/records-management' },
+      ]
+    }
   ];
 
-  const filteredSettingsItems = useMemo(() => {
-    const allItems = SETTINGS_NAV_GROUPS.flatMap(group => group.items);
-    if (!settingsSearchQuery) return allItems;
+  const filteredSettingsGroups = useMemo(() => {
+    if (!settingsSearchQuery) return SETTINGS_NAV_GROUPS;
     const query = settingsSearchQuery.toLowerCase();
     
-    return allItems.filter(item => 
-      item.label.toLowerCase().includes(query)
-    );
+    return SETTINGS_NAV_GROUPS.map(group => ({
+      ...group,
+      items: group.items.filter(item => 
+        item.label.toLowerCase().includes(query) ||
+        group.category.toLowerCase().includes(query)
+      )
+    })).filter(group => group.items.length > 0);
   }, [settingsSearchQuery]);
 
   const isAdminPath = location.pathname.startsWith('/admin');
@@ -741,19 +773,39 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                 )}
 
                 {!isAdminPath && isSettingsMode && (
-                  <div className="flex flex-col h-full">
+                  <div className="flex flex-col h-full space-y-6">
+                    {isSidebarReallyOpen ? (
+                      <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+                        Settings Suite
+                      </div>
+                    ) : (
+                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 mb-4 mx-2" />
+                    )}
 
-                    
-                    <div className={cn("flex-1 space-y-0.5 overflow-y-auto custom-scrollbar", isSidebarReallyOpen ? "px-2" : "px-0")}>
-                      {filteredSettingsItems.map((item, idx) => (
-                        <SidebarItem
-                          key={`${item.to}-${item.label}-${idx}`}
-                          icon={item.icon}
-                          label={item.label}
-                          to={item.to}
-                          active={isActive(item.to)}
-                          collapsed={collapsed}
-                        />
+                    <div className="space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                      {filteredSettingsGroups.map((group) => (
+                        <div key={group.category} className="space-y-1">
+                          {isSidebarReallyOpen ? (
+                            <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-3 pb-1">
+                              {group.category}
+                            </p>
+                          ) : (
+                            <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
+                          )}
+                          <nav className="space-y-0.5">
+                            {group.items.map((item, idx) => (
+                              <SidebarItem
+                                key={`${item.to}-${item.label}-${idx}`}
+                                icon={item.icon}
+                                label={item.label}
+                                to={item.to}
+                                active={isActive(item.to)}
+                                collapsed={collapsed}
+                              />
+                            ))}
+                          </nav>
+                        </div>
                       ))}
                     </div>
                   </div>

@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
+import { Button } from '../../../components/UI/Primitives';
 import { 
   Search, 
   Plus, 
@@ -390,10 +392,69 @@ export const GlobalListsSettings = () => {
     </AnimatePresence>
   );
 
-  if (isSettingsMode) {
-    return (
-      <div className="flex flex-col h-[calc(100vh-16rem)] w-full relative z-30">
+  const navigate = useNavigate();
+  const subNavItems: SettingsSubNavItem[] = selectedListId ? [
+    { id: 'detail', label: activeList?.name || 'Table View', icon: Database, description: `${localItems.length} records` },
+    { id: 'master', label: 'All Global Lists', icon: Archive, description: 'Return to list directory' }
+  ] : [
+    { id: 'master', label: 'All Global Lists', icon: Database, description: 'Enterprise lookup tables' }
+  ];
+
+  return (
+    <SettingsSubNavLayout
+      title="Global Lists"
+      description="Enterprise-grade lookup tables with schema customization and versioning."
+      icon={Database}
+      items={subNavItems}
+      activeId={selectedListId ? 'detail' : 'master'}
+      onTabChange={(id) => {
+        if (id === 'master') {
+          setSelectedListId(null);
+          setInspectedItem(null);
+          setActiveMenuColumnId(null);
+          setActiveEditingCell(null);
+          setIsEditingMetadata(false);
+        }
+      }}
+      actions={
+        <div className="flex items-center gap-2">
+          {selectedListId ? (
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => {
+                setSelectedListId(null);
+                setInspectedItem(null);
+                setActiveMenuColumnId(null);
+                setActiveEditingCell(null);
+                setIsEditingMetadata(false);
+              }}
+              className="gap-2 font-bold"
+            >
+              <ArrowLeft size={16} /> All Lists
+            </Button>
+          ) : (
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => navigate('/workspace/settings/platform-modules')}
+              className="gap-2 font-bold"
+            >
+              <ArrowLeft size={16} /> Back to Modules
+            </Button>
+          )}
+          <Button 
+            onClick={() => setIsCreatingList(true)} 
+            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+          >
+            <Plus size={16} /> New List
+          </Button>
+        </div>
+      }
+    >
+      <div className="w-full">
         {content}
+
         <AnimatePresence>
           {contextMenu && (
             <ContextMenuPortal 
@@ -418,41 +479,7 @@ export const GlobalListsSettings = () => {
           {confirmRetireItemId && <ConfirmationModal title="Retire Record?" message="Archive this version." confirmLabel="Retire" onConfirm={() => handleRetireItem()} onCancel={() => setConfirmRetireItemId(null)} />}
         </AnimatePresence>
       </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-10rem)] w-full px-6 lg:px-12 py-10 relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
-      {content}
-
-      <AnimatePresence>
-        {contextMenu && (
-          <ContextMenuPortal 
-            {...contextMenu} 
-            onClose={() => setContextMenu(null)}
-            actions={{
-              insertRowAbove: () => handleAddRow(contextMenu.rowIndex),
-              insertRowBelow: () => handleAddRow(contextMenu.rowIndex !== undefined ? contextMenu.rowIndex + 1 : undefined),
-              insertColLeft: () => handleAddColumn(contextMenu.colIndex),
-              insertColRight: () => handleAddColumn(contextMenu.colIndex !== undefined ? contextMenu.colIndex + 1 : undefined),
-              removeRow: () => { if (contextMenu.itemId) setConfirmRetireItemId(contextMenu.itemId); },
-              removeCol: () => { if (contextMenu.colId) setConfirmDeleteColumnId(contextMenu.colId); }
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {isCreatingList && <CreateListModal onClose={() => setIsCreatingList(false)} onSubmit={handleCreateList} data={newListData} setData={setNewListData} />}
-        {confirmDeleteListId && <ConfirmationModal title="Delete List?" message="Irreversible action." confirmLabel="Delete" onConfirm={() => { deleteList(confirmDeleteListId); setConfirmDeleteListId(null); setSelectedListId(null); }} onCancel={() => setConfirmDeleteListId(null)} />}
-        {confirmDeleteColumnId && <ConfirmationModal title="Delete Column?" message="Data will be lost." confirmLabel="Delete" onConfirm={() => handleDeleteColumn()} onCancel={() => setConfirmDeleteColumnId(null)} />}
-        {confirmRetireItemId && <ConfirmationModal title="Retire Record?" message="Archive this version." confirmLabel="Retire" onConfirm={() => handleRetireItem()} onCancel={() => setConfirmRetireItemId(null)} />}
-      </AnimatePresence>
-    </div>
+    </SettingsSubNavLayout>
   );
 };
 

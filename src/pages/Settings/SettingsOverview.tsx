@@ -4,9 +4,6 @@ import * as LucideIcons from 'lucide-react';
 import { 
   Search, 
   ArrowRight,
-  Layout,
-  Settings2,
-  Terminal,
   Activity,
   FilePlus,
   UserPlus
@@ -25,15 +22,24 @@ interface SettingItem {
 }
 
 const SETTINGS_ITEMS: SettingItem[] = [
-  // General
+  // General & Security
   {
     id: 'organization',
     label: 'Organisation',
     description: 'General info and company branding settings.',
     icon: 'Building',
     to: '/workspace/settings/organization',
-    category: 'General',
-    tags: ['branding', 'general', 'seo', 'social']
+    category: 'General & Security',
+    tags: ['branding', 'general', 'seo', 'social', 'company']
+  },
+  {
+    id: 'workforce-management',
+    label: 'Workforce & Access',
+    description: 'Organize workspace members, teams, positions, and control access permissions.',
+    icon: 'Users',
+    to: '/workspace/settings/platform-modules/workforce-management',
+    category: 'General & Security',
+    tags: ['members', 'users', 'teams', 'positions', 'roles', 'permissions', 'access', 'security']
   },
   {
     id: 'subscription',
@@ -41,7 +47,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Manage platform software seat licenses, invoices, and payment methods.',
     icon: 'CreditCard',
     to: '/workspace/settings/subscription',
-    category: 'General',
+    category: 'General & Security',
     tags: ['subscription', 'payment', 'invoices', 'licenses', 'seats']
   },
   {
@@ -50,20 +56,28 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Bring your own API keys (BYOK), tier routing, usage cost tracking, and data privacy.',
     icon: 'Sparkles',
     to: '/workspace/settings/ai-services',
-    category: 'General',
+    category: 'General & Security',
     tags: ['ai', 'byok', 'openai', 'anthropic', 'gemini', 'grok', 'deepseek', 'privacy', 'keys', 'tokens']
   },
 
-  
-  // Look & Feel
+  // App Builder & Customization
   {
-    id: 'branding',
-    label: 'Branding',
-    description: 'Logo, brand colors, and customization themes.',
-    icon: 'Palette',
-    to: '/workspace/settings/branding',
-    category: 'Look & Feel',
-    tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
+    id: 'platform-modules',
+    label: 'Custom Modules',
+    description: 'Build and configure custom data modules, tables, and schemas.',
+    icon: 'Layers',
+    to: '/workspace/settings/platform-modules',
+    category: 'App Builder & Customization',
+    tags: ['system', 'custom', 'modules', 'builder', 'data models', 'entities']
+  },
+  {
+    id: 'pages',
+    label: 'Pages',
+    description: 'Manage custom pages, dashboard widgets, and layouts.',
+    icon: 'Layout',
+    to: '/workspace/settings/pages',
+    category: 'App Builder & Customization',
+    tags: ['pages', 'dashboards', 'widgets', 'layouts']
   },
   {
     id: 'navigation',
@@ -71,50 +85,173 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Layout style and navigation menu architect.',
     icon: 'Compass',
     to: '/workspace/settings/navigation',
-    category: 'Look & Feel',
+    category: 'App Builder & Customization',
     tags: ['layout', 'menu', 'sidebar', 'top menu', 'navigation']
   },
-
-  // Modules & Apps
   {
-    id: 'platform-modules',
-    label: 'Modules',
-    description: 'Manage core system features and custom builder modules.',
-    icon: 'Cpu',
-    to: '/workspace/settings/platform-modules',
-    category: 'Modules & Apps',
-    tags: ['system', 'custom', 'modules', 'builder']
-  },
-  {
-    id: 'apps',
-    label: 'Apps',
-    description: 'Connected third-party tools.',
-    icon: 'LayoutGrid',
-    to: '/workspace/settings/apps',
-    category: 'Modules & Apps',
-    tags: ['integrations', 'ecosystem', 'tools']
+    id: 'branding',
+    label: 'Branding',
+    description: 'Logo, brand colors, and customization themes.',
+    icon: 'Palette',
+    to: '/workspace/settings/branding',
+    category: 'App Builder & Customization',
+    tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
   },
 
-  // Data & Logic
+  // Logic & Workflows
+  {
+    id: 'automation-management',
+    label: 'Automations',
+    description: 'Build automated workflow rules, triggers, actions, and audit logs.',
+    icon: 'Zap',
+    to: '/workspace/settings/platform-modules/automation-management',
+    category: 'Logic & Workflows',
+    tags: ['automations', 'workflows', 'triggers', 'actions', 'logic', 'rules']
+  },
+  {
+    id: 'work-distribution',
+    label: 'Work Distribution',
+    description: 'Configure routing rules to automatically intake and distribute work across modules.',
+    icon: 'Inbox',
+    to: '/workspace/settings/platform-modules/work-distribution',
+    category: 'Logic & Workflows',
+    tags: ['intake', 'routing', 'triage', 'work distribution', 'queues']
+  },
   {
     id: 'migration',
-    label: 'Migration',
-    description: 'Import and export data.',
+    label: 'Data Migration',
+    description: 'Import and export platform data and schema definitions.',
     icon: 'ArrowRightLeft',
     to: '/workspace/settings/migration',
-    category: 'Data & Logic',
-    tags: ['import', 'export', 'transfer']
+    category: 'Logic & Workflows',
+    tags: ['import', 'export', 'transfer', 'migration']
   },
+
+  // Integrations & APIs
+  {
+    id: 'integration-management',
+    label: 'Connected Apps',
+    description: 'Connect and sync data with third-party tools, APIs, and databases.',
+    icon: 'Plug',
+    to: '/workspace/settings/platform-modules/integration-management',
+    category: 'Integrations & APIs',
+    tags: ['connectors', 'integrations', 'third-party', 'sync', 'webhooks']
+  },
+  {
+    id: 'api-management',
+    label: 'API Management',
+    description: 'Manage programmatic API keys, endpoints, and developer access logs.',
+    icon: 'Key',
+    to: '/workspace/settings/platform-modules/api-management',
+    category: 'Integrations & APIs',
+    tags: ['api', 'developer', 'keys', 'endpoints', 'rest', 'access']
+  },
+
+  // Finance & Catalogs
+  {
+    id: 'financial-management',
+    label: 'Financial Management',
+    description: 'Financial settings, tax configurations, and payment processing rules.',
+    icon: 'Banknote',
+    to: '/workspace/settings/platform-modules/financial-management',
+    category: 'Finance & Catalogs',
+    tags: ['finance', 'tax', 'payments', 'accounting', 'billing']
+  },
+  {
+    id: 'pricing-catalog',
+    label: 'Pricing Catalog',
+    description: 'Centralized registry of products, service rates, application fees, subscriptions, and penalties.',
+    icon: 'Tag',
+    to: '/workspace/settings/platform-modules/pricing-catalog',
+    category: 'Finance & Catalogs',
+    tags: ['pricing', 'rates', 'fees', 'catalog', 'products', 'services']
+  },
+  {
+    id: 'inventory-manager',
+    label: 'Inventory Manager',
+    description: 'Real-time stock tracking, alert thresholds, and quantity adjustments for catalog products.',
+    icon: 'Boxes',
+    to: '/workspace/settings/platform-modules/inventory-manager',
+    category: 'Finance & Catalogs',
+    tags: ['inventory', 'stock', 'products', 'supplies', 'tracking']
+  },
+  {
+    id: 'global-lists',
+    label: 'Global Lists',
+    description: 'Enterprise-grade lookup tables with full SCD Type 2 versioning.',
+    icon: 'ListTodo',
+    to: '/workspace/settings/platform-modules/global-lists',
+    category: 'Finance & Catalogs',
+    tags: ['lists', 'lookups', 'dropdowns', 'scd2', 'tables']
+  },
+  {
+    id: 'people-organisations',
+    label: 'People & Organisations',
+    description: 'Manage core entity taxonomies and global relationship rules.',
+    icon: 'Users',
+    to: '/workspace/settings/platform-modules/people-organisations',
+    category: 'Finance & Catalogs',
+    tags: ['people', 'organisations', 'entities', 'taxonomies', 'relationships']
+  },
+
+  // Analytics & Content
+  {
+    id: 'report-management',
+    label: 'Report Management',
+    description: 'Create custom data visualizations, scheduled reports, and export dashboards.',
+    icon: 'BarChart2',
+    to: '/workspace/settings/platform-modules/report-management',
+    category: 'Analytics & Content',
+    tags: ['reports', 'analytics', 'visualizations', 'charts', 'exports', 'dashboards']
+  },
+  {
+    id: 'knowledge-base',
+    label: 'Knowledge Base',
+    description: 'Central repository for institutional knowledge, documentation, training materials, and AI agent reference context.',
+    icon: 'BookOpen',
+    to: '/workspace/settings/platform-modules/knowledge-base',
+    category: 'Analytics & Content',
+    tags: ['knowledge', 'documentation', 'wiki', 'training', 'ai context']
+  },
+  {
+    id: 'sites',
+    label: 'Sites & Portals',
+    description: 'Manage external pages, citizen portals, and public forms.',
+    icon: 'Globe',
+    to: '/workspace/settings/platform-modules/sites',
+    category: 'Analytics & Content',
+    tags: ['sites', 'portals', 'public', 'forms', 'citizen']
+  },
+  {
+    id: 'document-generation',
+    label: 'Document Generation',
+    description: 'Configure automated document templates, PDF creation, and email merging.',
+    icon: 'FileText',
+    to: '/workspace/settings/platform-modules/document-generation',
+    category: 'Analytics & Content',
+    tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
+  },
+  {
+    id: 'records-management',
+    label: 'Records Management',
+    description: 'Configure compliance retention schedules, legal holds, and auto-disposition policies.',
+    icon: 'Archive',
+    to: '/workspace/settings/platform-modules/records-management',
+    category: 'Analytics & Content',
+    tags: ['records', 'compliance', 'retention', 'legal hold', 'governance']
+  }
 ];
 
 import { useNewModuleModal } from '../../context/NewModuleModalContext';
 
 const CategoryIcon = ({ category }: { category: string }) => {
   switch (category) {
-    case 'General': return <Settings2 className="w-4 h-4" />;
-    case 'Look & Feel': return <LucideIcons.Palette className="w-4 h-4" />;
-    case 'Modules & Apps': return <Layout className="w-4 h-4" />;
-    case 'Data & Logic': return <Terminal className="w-4 h-4" />;
+    case 'General & Security': return <LucideIcons.ShieldCheck className="w-4 h-4" />;
+    case 'App Builder & Customization': return <LucideIcons.Layout className="w-4 h-4" />;
+    case 'Logic & Workflows': return <LucideIcons.Zap className="w-4 h-4" />;
+    case 'Integrations & APIs': return <LucideIcons.Plug className="w-4 h-4" />;
+    case 'Finance & Catalogs': return <LucideIcons.Banknote className="w-4 h-4" />;
+    case 'Analytics & Content': return <LucideIcons.BarChart2 className="w-4 h-4" />;
     default: return <Activity className="w-4 h-4" />;
   }
 };
@@ -141,10 +278,12 @@ export const SettingsOverview = () => {
   const categories = useMemo(() => {
     const cats = Array.from(new Set(filteredItems.map(item => item.category)));
     const order = [
-      'General',
-      'Look & Feel', 
-      'Modules & Apps', 
-      'Data & Logic'
+      'General & Security',
+      'App Builder & Customization',
+      'Logic & Workflows',
+      'Integrations & APIs',
+      'Finance & Catalogs',
+      'Analytics & Content'
     ];
     return cats.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   }, [filteredItems]);

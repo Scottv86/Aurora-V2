@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { 
   ShieldCheck, Plus, Trash2,
-  Info, Settings, ShieldAlert, GitFork, Loader2, Play
+  Info, Settings, ShieldAlert, GitFork, Loader2, Play, ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Tabs } from '../../components/UI/TabsAndModal';
+import { Button } from '../../components/UI/Primitives';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { RoutingSandboxModal } from '../../components/Triage/RoutingSandboxModal';
 
 interface VisualCondition {
@@ -150,18 +152,18 @@ const parseMappings = (rawMap: Record<string, string>): VisualMappings => {
   return result;
 };
 export const IntakeSettingsPage = () => {
+  const navigate = useNavigate();
   const { tenant, modules, modulesLoading, refreshModules } = usePlatform();
   const { session } = useAuth();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-  const isNested = window.location.pathname.includes('/platform-modules/');
   const [activeTab, setActiveTab] = useState<'routing' | 'security'>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') === 'security' ? 'security' : 'routing';
   });
   
-  const tabs = [
-    { id: 'routing', label: 'Routing & Channels', icon: GitFork },
-    { id: 'security', label: 'Security & Quarantine', icon: ShieldCheck }
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'routing', label: 'Routing & Channels', icon: GitFork, description: 'Rule-based distribution' },
+    { id: 'security', label: 'Security & Quarantine', icon: ShieldCheck, description: 'Threat rules & sanitization' }
   ];
   
   const [isSandboxOpen, setIsSandboxOpen] = useState(false);
@@ -798,33 +800,24 @@ export const IntakeSettingsPage = () => {
   };
 
   return (
-    <div className={`flex-1 flex flex-col gap-8 ${isNested ? 'p-0 bg-transparent' : 'bg-zinc-950 p-10 overflow-y-auto custom-scrollbar'}`}>
-      {/* Header section */}
-      {!isNested && (
-        <header className="flex items-center justify-between border-b border-zinc-900 pb-6 shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Work Distribution Settings</span>
-              <span className="h-3 w-px bg-zinc-800"></span>
-              <span className="text-[10px] font-bold text-zinc-450">Platform Settings</span>
-            </div>
-            <h1 className="text-2xl font-black text-white tracking-tight mt-1 flex items-center gap-2">
-              <ShieldCheck className="text-indigo-400" size={24} />
-              Work Distribution
-            </h1>
-            <p className="text-xs text-zinc-400 mt-1">Configure tenancy-wide rules to automatically route, validate, and distribute incoming requests.</p>
-          </div>
-        </header>
-      )}
-
-      {/* Sub-navigation tabs */}
-      <Tabs 
-        tabs={tabs} 
-        activeTab={activeTab} 
-        onChange={(id) => setActiveTab(id as any)} 
-        firstTabPadding={false}
-      />
-
+    <SettingsSubNavLayout
+      title="Work Distribution"
+      description="Configure tenancy-wide rules to automatically route, validate, and distribute incoming requests."
+      icon={GitFork}
+      items={subNavItems}
+      activeId={activeTab}
+      onTabChange={(id) => setActiveTab(id as any)}
+      actions={
+        <Button 
+          variant="secondary" 
+          size="sm" 
+          onClick={() => navigate('/workspace/settings/platform-modules')}
+          className="gap-2 font-bold"
+        >
+          <ArrowLeft size={16} /> Back to Modules
+        </Button>
+      }
+    >
       {activeTab === 'routing' ? (
         modulesLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
@@ -1434,6 +1427,6 @@ export const IntakeSettingsPage = () => {
         sourceFields={sandboxSourceFields}
         modules={modules}
       />
-    </div>
+    </SettingsSubNavLayout>
   );
 };

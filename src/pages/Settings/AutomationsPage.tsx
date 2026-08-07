@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
 import { API_BASE_URL } from '../../config';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
+import { Button } from '../../components/UI/Primitives';
 import { 
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Globe, Layers, Calendar, Search, Sparkles, Code, Play, UserCheck,
-  GitFork, Route, RotateCw, FileText, Grid, CreditCard
+  GitFork, Route, RotateCw, FileText, Grid, CreditCard, ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -1131,10 +1133,18 @@ export const AutomationsPage: React.FC = () => {
     });
   }, [automations, searchQuery, filterScope]);
 
-  return (
+  const navigate = useNavigate();
+
+  const autoSubNavItems: SettingsSubNavItem[] = [
+    { id: 'ALL', label: 'All Automation Rules', icon: Zap, description: 'Complete rules catalog' },
+    { id: 'GLOBAL', label: 'Global Workflows', icon: Globe, description: 'Cross-module rules' },
+    { id: 'LOCAL', label: 'Local Handlers', icon: Route, description: 'Module-specific triggers' }
+  ];
+
+  const mainAutomationContent = (
     <div className={cn(
-      "flex w-full overflow-hidden",
-      isSettingsMode ? "h-[calc(100vh-16rem)] rounded-[2rem] border border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl" : "h-full bg-zinc-50 dark:bg-zinc-950"
+      "flex w-full overflow-hidden h-full",
+      isSettingsMode ? "rounded-3xl border border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl" : "bg-zinc-50 dark:bg-zinc-950"
     )}>
       
       {/* COLUMN 1: Rules Directory Sidebar */}
@@ -2600,4 +2610,41 @@ export const AutomationsPage: React.FC = () => {
 
     </div>
   );
+
+  if (isSettingsMode) {
+    return (
+      <SettingsSubNavLayout
+        title="Automation Management"
+        description="Design visual trigger conditions, automated actions, and multi-step workflow rules."
+        icon={Zap}
+        items={autoSubNavItems}
+        activeId={filterScope}
+        onTabChange={(id) => setFilterScope(id as any)}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              onClick={() => navigate('/workspace/settings/platform-modules')}
+              className="gap-2 font-bold"
+            >
+              <ArrowLeft size={16} /> Back to Modules
+            </Button>
+            <Button 
+              onClick={handleCreateRule} 
+              className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+            >
+              <Plus size={16} /> New Rule
+            </Button>
+          </div>
+        }
+      >
+        <div className="h-[calc(100vh-14rem)] w-full">
+          {mainAutomationContent}
+        </div>
+      </SettingsSubNavLayout>
+    );
+  }
+
+  return mainAutomationContent;
 };

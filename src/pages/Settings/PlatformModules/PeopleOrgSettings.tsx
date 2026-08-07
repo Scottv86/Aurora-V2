@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Tags, 
   Shapes, 
@@ -7,13 +8,16 @@ import {
   Trash2, 
   Edit3, 
   Info,
-  Loader2
+  Loader2,
+  Users,
+  ArrowLeft
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
-import { Modal, Tabs } from '../../../components/UI/TabsAndModal';
+import { Modal } from '../../../components/UI/TabsAndModal';
 import { Button, Input } from '../../../components/UI/Primitives';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
 
 interface Taxonomy {
@@ -26,6 +30,7 @@ interface Taxonomy {
 }
 
 export const PeopleOrgSettings = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'taxonomy' | 'relationships' | 'fields'>('taxonomy');
   const [taxonomies, setTaxonomies] = useState<Taxonomy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,21 +157,31 @@ export const PeopleOrgSettings = () => {
     }
   };
 
-  const tabs = [
-    { id: 'taxonomy', label: 'Organization Types', icon: Tags },
-    { id: 'relationships', label: 'Relationship Types', icon: Shapes },
-    { id: 'fields', label: 'Custom Metadata', icon: Database },
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'taxonomy', label: 'Organization Types', icon: Tags, description: 'Entity classifications' },
+    { id: 'relationships', label: 'Relationship Types', icon: Shapes, description: 'Connection rules' },
+    { id: 'fields', label: 'Custom Metadata', icon: Database, description: 'Field extensibility' },
   ];
 
   return (
-    <div className="space-y-8">
-      <Tabs 
-        tabs={tabs} 
-        activeTab={activeTab} 
-        onChange={(id) => setActiveTab(id as any)} 
-        firstTabPadding={false}
-      />
-
+    <SettingsSubNavLayout
+      title="People & Organisations"
+      description="Manage core entity taxonomies, relationship rules, and field extensibility."
+      icon={Users}
+      items={subNavItems}
+      activeId={activeTab}
+      onTabChange={(id) => setActiveTab(id as any)}
+      actions={
+        <Button 
+          variant="secondary" 
+          size="sm" 
+          onClick={() => navigate('/workspace/settings/platform-modules')}
+          className="gap-2 font-bold"
+        >
+          <ArrowLeft size={16} /> Back to Modules
+        </Button>
+      }
+    >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           {activeTab === 'taxonomy' && (
@@ -212,47 +227,46 @@ export const PeopleOrgSettings = () => {
             </div>
           </div>
         </div>
-      </div>
-
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        title={editingItem ? 'Edit Type' : 'Add New Type'}
-      >
-        <form onSubmit={handleSave} className="space-y-4 py-4">
-          <Input 
-            label="Name" 
-            placeholder="e.g. Private Limited Company" 
-            value={formData.name} 
-            onChange={e => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
-          <Input 
-            label="Slug / Code" 
-            placeholder="e.g. PTE_LTD" 
-            value={formData.slug} 
-            onChange={e => setFormData({ ...formData, slug: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
-            required
-            disabled={!!editingItem}
-          />
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Description</label>
-            <textarea 
-              className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              rows={3}
-              value={formData.description}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
+        </div>
+        <Modal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          title={editingItem ? 'Edit Type' : 'Add New Type'}
+        >
+          <form onSubmit={handleSave} className="space-y-4 py-4">
+            <Input 
+              label="Name" 
+              placeholder="e.g. Private Limited Company" 
+              value={formData.name} 
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              required
             />
-          </div>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Changes</Button>
-          </div>
-        </form>
-      </Modal>
-    </div>
-  );
-};
+            <Input 
+              label="Slug / Code" 
+              placeholder="e.g. PTE_LTD" 
+              value={formData.slug} 
+              onChange={e => setFormData({ ...formData, slug: e.target.value.toUpperCase().replace(/\s+/g, '_') })}
+              required
+              disabled={!!editingItem}
+            />
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Description</label>
+              <textarea 
+                className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                rows={3}
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+              <Button type="submit">Save Changes</Button>
+            </div>
+          </form>
+        </Modal>
+      </SettingsSubNavLayout>
+    );
+  };
 
 const TaxonomyList = ({ title, items, loading, onAdd, onEdit, onDelete, addLabel = "Add Schema" }: { 
   title: string; 

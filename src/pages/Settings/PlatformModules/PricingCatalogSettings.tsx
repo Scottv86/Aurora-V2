@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Tag, 
   Plus, 
@@ -8,16 +9,17 @@ import {
   Package, 
   Clock, 
   DollarSign, 
-  Loader2
+  Loader2,
+  RefreshCw,
+  ArrowLeft
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
 import { Modal } from '../../../components/UI/TabsAndModal';
 import { Button, Input } from '../../../components/UI/Primitives';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
-import { useLocation } from 'react-router-dom';
-import { PageHeader } from '../../../components/UI/PageHeader';
 
 interface CatalogItem {
   id: string;
@@ -41,7 +43,7 @@ interface CatalogItem {
 }
 
 export const PricingCatalogSettings = () => {
-  const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -250,57 +252,88 @@ export const PricingCatalogSettings = () => {
   const subscriptionCount = items.filter(i => i.type === 'RECURRING').length;
   const servicesFeesCount = items.filter(i => i.type === 'SERVICE' || i.type === 'FEE' || i.type === 'FINE').length;
 
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'ALL', label: 'All Catalog Items', icon: Tag, description: 'Complete rate registry' },
+    { id: 'PRODUCT', label: 'Products & Inventory', icon: Package, description: 'Physical/digital items' },
+    { id: 'SERVICE', label: 'Services & Labor', icon: Clock, description: 'Time & duration rates' },
+    { id: 'FEE', label: 'Fees & Fines', icon: DollarSign, description: 'Procedural charges' },
+    { id: 'RECURRING', label: 'Subscriptions', icon: RefreshCw, description: 'Recurring retainers' }
+  ];
 
-  const content = (
-    <div className="space-y-6 text-left">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center">
-            <Tag size={24} />
+  return (
+    <SettingsSubNavLayout
+      title="Pricing Catalog"
+      description="Centralized registry of products, service rates, application fees, subscriptions, and penalties."
+      icon={Tag}
+      items={subNavItems}
+      activeId={selectedTypeFilter}
+      onTabChange={setSelectedTypeFilter}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            onClick={() => navigate('/workspace/settings/platform-modules')}
+            className="gap-2 font-bold"
+          >
+            <ArrowLeft size={16} /> Back to Modules
+          </Button>
+          <Button 
+            onClick={() => handleOpenModal()} 
+            className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+          >
+            <Plus size={16} /> Add Item
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-6 text-left">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center">
+              <Tag size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Catalog Items</p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{totalCount}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Catalog Items</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{totalCount}</p>
+
+          <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${lowStockCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500' : 'bg-zinc-100 dark:bg-white/5 text-zinc-455'}`}>
+              <Package size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Low Stock Alerts</p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{lowStockCount}</p>
+            </div>
+          </div>
+
+          <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+            <div className="w-12 h-12 bg-teal-500/10 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center">
+              <Clock size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Recurring & Subs</p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{subscriptionCount}</p>
+            </div>
+          </div>
+
+          <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+            <div className="w-12 h-12 bg-pink-500/10 text-pink-600 dark:text-pink-400 rounded-2xl flex items-center justify-center">
+              <DollarSign size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Services, Fees & Fines</p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{servicesFeesCount}</p>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${lowStockCount > 0 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500' : 'bg-zinc-100 dark:bg-white/5 text-zinc-455'}`}>
-            <Package size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Low Stock Alerts</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{lowStockCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
-          <div className="w-12 h-12 bg-teal-500/10 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center">
-            <Clock size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Recurring & Subs</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{subscriptionCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
-          <div className="w-12 h-12 bg-pink-500/10 text-pink-600 dark:text-pink-400 rounded-2xl flex items-center justify-center">
-            <DollarSign size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Services, Fees & Fines</p>
-            <p className="text-2xl font-bold text-zinc-900 dark:text-white mt-1">{servicesFeesCount}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* List Controls */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl p-4 border border-white/20 dark:border-white/5 rounded-3xl shadow-xl">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-80">
+        {/* List Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl p-4 border border-white/20 dark:border-white/5 rounded-3xl shadow-xl">
+          <div className="relative flex-1 w-full sm:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
             <input
               type="text"
@@ -312,352 +345,306 @@ export const PricingCatalogSettings = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-          {['ALL', 'PRODUCT', 'SERVICE', 'FEE', 'RECURRING', 'FINE'].map(type => (
-            <button
-              key={type}
-              onClick={() => setSelectedTypeFilter(type)}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
-                selectedTypeFilter === type 
-                  ? 'bg-indigo-600 text-white shadow-md' 
-                  : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200/50 dark:border-white/10 text-zinc-650 dark:text-zinc-350 hover:text-zinc-800 dark:hover:text-white font-semibold'
-              }`}
-            >
-              {type === 'RECURRING' ? 'SUBS' : type}
-            </button>
-          ))}
-          
-          <div className="h-6 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
-
-          <button
-            onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-500 transition-all shadow-md shadow-indigo-500/10"
-          >
-            <Plus size={16} />
-            <span>Add Item</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Catalog Items Table */}
-      <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[300px] relative">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-32 text-zinc-400">
-            <Loader2 className="animate-spin mb-2" size={32} />
-            <p className="text-sm">Loading Pricing Catalog...</p>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 text-zinc-450">
-            <Tag size={48} className="mb-4 opacity-20" />
-            <p className="text-base font-bold">No catalog items found</p>
-            <p className="text-xs max-w-xs text-center mt-1">Try refining your search or add a new pricing catalog item to get started.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800/80 text-[10px] uppercase tracking-wider text-zinc-400 font-bold bg-zinc-50/50 dark:bg-zinc-900/20">
-                  <th className="py-4 px-6">Name & SKU</th>
-                  <th className="py-4 px-4">Type</th>
-                  <th className="py-4 px-4">Structure & Rate</th>
-                  <th className="py-4 px-4">Status</th>
-                  <th className="py-4 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/50">
-                {filteredItems.map(item => (
-                  <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                    <td className="py-4 px-6">
-                      <div>
-                        <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] font-mono bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded-md uppercase">
-                            {item.code}
-                          </span>
-                          {item.description && (
-                            <span className="text-[11px] text-zinc-450 truncate max-w-[240px] md:max-w-[400px]">
-                              • {item.description}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                        item.type === 'PRODUCT' ? 'bg-blue-500/5 border-blue-500/20 text-blue-600 dark:text-blue-400' :
-                        item.type === 'SERVICE' ? 'bg-purple-500/5 border-purple-500/20 text-purple-600 dark:text-purple-400' :
-                        item.type === 'FEE' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
-                        item.type === 'RECURRING' ? 'bg-teal-500/5 border-teal-500/20 text-teal-600 dark:text-teal-400' :
-                        'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-455'
-                      }`}>
-                        {item.type === 'RECURRING' ? 'SUBSCRIPTION' : item.type}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200">
-                      <div>
-                        <span>{new Intl.NumberFormat('en-AU', { style: 'currency', currency: item.currency }).format(item.basePrice)}</span>
-                        <span className="text-xs text-zinc-450 font-semibold ml-1">
-                          {item.type === 'SERVICE' && item.priceType === 'TIME' ? `/ ${item.billingBlockMinutes || 15} mins` :
-                           item.type === 'RECURRING' ? `/ ${item.billingIntervalCount && item.billingIntervalCount > 1 ? item.billingIntervalCount + ' ' : ''}${item.billingInterval}` :
-                           item.priceType === 'UNIT' ? '/ unit' : 'Flat Fee'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                        item.status === 'active' ? 'bg-green-500' :
-                        item.status === 'draft' ? 'bg-zinc-400' : 'bg-red-500'
-                      }`} />
-                      <span className="text-xs capitalize text-zinc-550">{item.status}</span>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button 
-                          onClick={() => handleOpenModal(item)}
-                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-xl text-zinc-400 hover:text-indigo-500 transition-colors"
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(item.id)}
-                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-red-550/10 rounded-xl text-zinc-400 hover:text-red-555 transition-colors"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+        {/* Catalog Items Table */}
+        <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[300px] relative">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-32 text-zinc-400">
+              <Loader2 className="animate-spin mb-2" size={32} />
+              <p className="text-sm">Loading Pricing Catalog...</p>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-32 text-zinc-450">
+              <Tag size={48} className="mb-4 opacity-20" />
+              <p className="text-base font-bold">No catalog items found</p>
+              <p className="text-xs max-w-xs text-center mt-1">Try refining your search or add a new pricing catalog item to get started.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800/80 text-[10px] uppercase tracking-wider text-zinc-400 font-bold bg-zinc-50/50 dark:bg-zinc-900/20">
+                    <th className="py-4 px-6">Name & SKU</th>
+                    <th className="py-4 px-4">Type</th>
+                    <th className="py-4 px-4">Structure & Rate</th>
+                    <th className="py-4 px-4">Status</th>
+                    <th className="py-4 px-6 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Create / Edit Item Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingItem ? 'Edit Catalog Item' : 'Register New Pricing Item'}
-      >
-        <form onSubmit={handleSave} className="space-y-5 py-4 text-left">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input 
-              label="Item Name" 
-              placeholder="e.g. Senior Partner Consulting" 
-              value={formData.name} 
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
-              required
-            />
-            <Input 
-              label="SKU / Unique Code" 
-              placeholder="e.g. SRV-CONS-01" 
-              value={formData.code} 
-              onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase().replace(/\s+/g, '-') })}
-              required
-              disabled={!!editingItem}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Catalog Type</label>
-              <select
-                value={formData.type}
-                onChange={e => {
-                  const newType = e.target.value as CatalogItem['type'];
-                  const priceType = 
-                    newType === 'PRODUCT' ? 'UNIT' :
-                    newType === 'SERVICE' ? 'TIME' : 'FLAT';
-                  setFormData({ ...formData, type: newType, priceType });
-                }}
-                className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
-              >
-                <option value="PRODUCT" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">PRODUCT (Physical/Digital Item)</option>
-                <option value="SERVICE" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">SERVICE (Billed Time/Labor)</option>
-                <option value="FEE" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">FEE (Procedural Lodgment/Access charge)</option>
-                <option value="RECURRING" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">RECURRING (Subscription/Retainer/Annual fee)</option>
-                <option value="FINE" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">FINE (Penalty/Late citation charge)</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Pricing Structure</label>
-              <select
-                value={formData.priceType}
-                onChange={e => setFormData({ ...formData, priceType: e.target.value as CatalogItem['priceType'] })}
-                className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
-              >
-                <option value="FLAT" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">FLAT (Fixed cost item)</option>
-                <option value="UNIT" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">UNIT (Quantity-based scale)</option>
-                <option value="TIME" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">TIME (Duration billing schedule)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input 
-              label="Base Rate / Cost" 
-              type="number"
-              step="0.01"
-              placeholder="0.00" 
-              value={formData.basePrice} 
-              onChange={e => setFormData({ ...formData, basePrice: Number(e.target.value) })}
-              required
-            />
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Currency</label>
-              <select
-                value={formData.currency}
-                onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
-              >
-                <option value="AUD" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">AUD ($)</option>
-                <option value="USD" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">USD ($)</option>
-                <option value="EUR" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">EUR (€)</option>
-                <option value="GBP" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">GBP (£)</option>
-                <option value="NZD" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">NZD ($)</option>
-              </select>
-            </div>
-          </div>
-
-          {formData.type === 'SERVICE' && formData.priceType === 'TIME' && (
-            <div className="space-y-1">
-              <Input 
-                label="Billing Block (Minutes)" 
-                type="number"
-                placeholder="e.g. 15 for 15-minute blocks" 
-                value={formData.billingBlockMinutes} 
-                onChange={e => setFormData({ ...formData, billingBlockMinutes: Number(e.target.value) })}
-                required
-              />
+                </thead>
+                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/50">
+                  {filteredItems.map(item => (
+                    <tr key={item.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                      <td className="py-4 px-6">
+                        <div>
+                          <p className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-mono bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded-md uppercase">
+                              {item.code}
+                            </span>
+                            {item.description && (
+                              <span className="text-[11px] text-zinc-450 truncate max-w-[240px] md:max-w-[400px]">
+                                • {item.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                          item.type === 'PRODUCT' ? 'bg-blue-500/5 border-blue-500/20 text-blue-600 dark:text-blue-400' :
+                          item.type === 'SERVICE' ? 'bg-purple-500/5 border-purple-500/20 text-purple-600 dark:text-purple-400' :
+                          item.type === 'FEE' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' :
+                          item.type === 'RECURRING' ? 'bg-teal-500/5 border-teal-500/20 text-teal-600 dark:text-teal-400' :
+                          'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-455'
+                        }`}>
+                          {item.type === 'RECURRING' ? 'SUBSCRIPTION' : item.type}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                        <div>
+                          <span>{new Intl.NumberFormat('en-AU', { style: 'currency', currency: item.currency }).format(item.basePrice)}</span>
+                          <span className="text-xs text-zinc-450 font-semibold ml-1">
+                            {item.type === 'SERVICE' && item.priceType === 'TIME' ? `/ ${item.billingBlockMinutes || 15} mins` :
+                             item.type === 'RECURRING' ? `/ ${item.billingIntervalCount && item.billingIntervalCount > 1 ? item.billingIntervalCount + ' ' : ''}${item.billingInterval}` :
+                             item.priceType === 'UNIT' ? '/ unit' : 'Flat Fee'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                          item.status === 'active' ? 'bg-green-500' :
+                          item.status === 'draft' ? 'bg-zinc-400' : 'bg-red-500'
+                        }`} />
+                        <span className="text-xs capitalize text-zinc-550">{item.status}</span>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button 
+                            onClick={() => handleOpenModal(item)}
+                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-xl text-zinc-400 hover:text-indigo-500 transition-colors"
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(item.id)}
+                            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-red-550/10 rounded-xl text-zinc-400 hover:text-red-555 transition-colors"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+        </div>
 
-          {formData.type === 'RECURRING' && (
+        {/* Create / Edit Item Modal */}
+        <Modal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          title={editingItem ? 'Edit Catalog Item' : 'Register New Pricing Item'}
+        >
+          <form onSubmit={handleSave} className="space-y-5 py-4 text-left">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input 
+                label="Item Name" 
+                placeholder="e.g. Senior Partner Consulting" 
+                value={formData.name} 
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+              <Input 
+                label="SKU / Unique Code" 
+                placeholder="e.g. SRV-CONS-01" 
+                value={formData.code} 
+                onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase().replace(/\s+/g, '-') })}
+                required
+                disabled={!!editingItem}
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Recurrence Cycle</label>
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Catalog Type</label>
                 <select
-                  value={formData.billingInterval}
-                  onChange={e => setFormData({ ...formData, billingInterval: e.target.value })}
+                  value={formData.type}
+                  onChange={e => {
+                    const newType = e.target.value as CatalogItem['type'];
+                    const priceType = 
+                      newType === 'PRODUCT' ? 'UNIT' :
+                      newType === 'SERVICE' ? 'TIME' : 'FLAT';
+                    setFormData({ ...formData, type: newType, priceType });
+                  }}
                   className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
-                  required
                 >
-                  <option value="month" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Monthly</option>
-                  <option value="year" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">Annually</option>
-                  <option value="week" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">Weekly</option>
-                  <option value="day" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">Daily</option>
+                  <option value="PRODUCT" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">PRODUCT (Physical/Digital Item)</option>
+                  <option value="SERVICE" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">SERVICE (Billed Time/Labor)</option>
+                  <option value="FEE" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">FEE (Procedural Lodgment/Access charge)</option>
+                  <option value="RECURRING" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">RECURRING (Subscription/Retainer/Annual fee)</option>
+                  <option value="FINE" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">FINE (Penalty/Late citation charge)</option>
                 </select>
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Pricing Structure</label>
+                <select
+                  value={formData.priceType}
+                  onChange={e => setFormData({ ...formData, priceType: e.target.value as CatalogItem['priceType'] })}
+                  className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
+                >
+                  <option value="FLAT" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">FLAT (Fixed cost item)</option>
+                  <option value="UNIT" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">UNIT (Quantity-based scale)</option>
+                  <option value="TIME" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">TIME (Duration billing schedule)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input 
-                label="Cycle Interval Frequency" 
+                label="Base Rate / Cost" 
                 type="number"
-                placeholder="e.g. 1 for every cycle, 3 for quarterly" 
-                value={formData.billingIntervalCount} 
-                onChange={e => setFormData({ ...formData, billingIntervalCount: Number(e.target.value) })}
+                step="0.01"
+                placeholder="0.00" 
+                value={formData.basePrice} 
+                onChange={e => setFormData({ ...formData, basePrice: Number(e.target.value) })}
                 required
               />
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Currency</label>
+                <select
+                  value={formData.currency}
+                  onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                  className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
+                >
+                  <option value="AUD" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">AUD ($)</option>
+                  <option value="USD" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">USD ($)</option>
+                  <option value="EUR" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">EUR (€)</option>
+                  <option value="GBP" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">GBP (£)</option>
+                  <option value="NZD" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">NZD ($)</option>
+                </select>
+              </div>
             </div>
-          )}
 
-          {formData.type === 'PRODUCT' && (
-            <div className="space-y-4 bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800/80">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">Track Stock Inventory</p>
-                  <p className="text-[11px] text-zinc-450">Enable real-time warnings when quantities drop below limit.</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={formData.trackInventory}
-                  onChange={e => setFormData({ ...formData, trackInventory: e.target.checked })}
-                  className="w-4 h-4 text-indigo-650 border-zinc-300 rounded focus:ring-indigo-500/20"
+            {formData.type === 'SERVICE' && formData.priceType === 'TIME' && (
+              <div className="space-y-1">
+                <Input 
+                  label="Billing Block (Minutes)" 
+                  type="number"
+                  placeholder="e.g. 15 for 15-minute blocks" 
+                  value={formData.billingBlockMinutes} 
+                  onChange={e => setFormData({ ...formData, billingBlockMinutes: Number(e.target.value) })}
+                  required
                 />
               </div>
+            )}
 
-              {formData.trackInventory && (
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-                  <Input 
-                    label="Current Stock Level" 
-                    type="number"
-                    value={formData.stockLevel} 
-                    onChange={e => setFormData({ ...formData, stockLevel: Number(e.target.value) })}
-                  />
-                  <Input 
-                    label="Reorder Threshold" 
-                    type="number"
-                    value={formData.reorderPoint} 
-                    onChange={e => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
+            {formData.type === 'RECURRING' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Recurrence Cycle</label>
+                  <select
+                    value={formData.billingInterval}
+                    onChange={e => setFormData({ ...formData, billingInterval: e.target.value })}
+                    className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
+                    required
+                  >
+                    <option value="month" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Monthly</option>
+                    <option value="year" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">Annually</option>
+                    <option value="week" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">Weekly</option>
+                    <option value="day" className="bg-white text-zinc-900 dark:bg-zinc-955 dark:text-white">Daily</option>
+                  </select>
+                </div>
+                <Input 
+                  label="Cycle Interval Frequency" 
+                  type="number"
+                  placeholder="e.g. 1 for every cycle, 3 for quarterly" 
+                  value={formData.billingIntervalCount} 
+                  onChange={e => setFormData({ ...formData, billingIntervalCount: Number(e.target.value) })}
+                  required
+                />
+              </div>
+            )}
+
+            {formData.type === 'PRODUCT' && (
+              <div className="space-y-4 bg-zinc-50 dark:bg-white/5 p-4 rounded-2xl border border-zinc-150 dark:border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">Track Stock Inventory</p>
+                    <p className="text-[11px] text-zinc-450">Enable real-time warnings when quantities drop below limit.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.trackInventory}
+                    onChange={e => setFormData({ ...formData, trackInventory: e.target.checked })}
+                    className="w-4 h-4 text-indigo-650 border-zinc-300 rounded focus:ring-indigo-500/20"
                   />
                 </div>
-              )}
+
+                {formData.trackInventory && (
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                    <Input 
+                      label="Current Stock Level" 
+                      type="number"
+                      value={formData.stockLevel} 
+                      onChange={e => setFormData({ ...formData, stockLevel: Number(e.target.value) })}
+                    />
+                    <Input 
+                      label="Reorder Threshold" 
+                      type="number"
+                      value={formData.reorderPoint} 
+                      onChange={e => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Item Description</label>
+              <textarea 
+                className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                rows={2}
+                placeholder="Enter brief description of this pricing element..."
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+              />
             </div>
-          )}
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Item Description</label>
-            <textarea 
-              className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              rows={2}
-              placeholder="Enter brief description of this pricing element..."
-              value={formData.description}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
-            />
-          </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Custom Metadata (JSON)</label>
+              <textarea 
+                className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-205 dark:border-zinc-800 rounded-2xl p-4 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                rows={3}
+                placeholder='{"key": "value"}'
+                value={formData.metadataStr}
+                onChange={e => setFormData({ ...formData, metadataStr: e.target.value })}
+              />
+            </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Custom Metadata (JSON)</label>
-            <textarea 
-              className="w-full bg-zinc-50 dark:bg-white/5 dark:backdrop-blur-md border border-zinc-205 dark:border-zinc-800 rounded-2xl p-4 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              rows={3}
-              placeholder='{"key": "value"}'
-              value={formData.metadataStr}
-              onChange={e => setFormData({ ...formData, metadataStr: e.target.value })}
-            />
-          </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Lifecycle Status</label>
+              <select
+                value={formData.status}
+                onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
+              >
+                <option value="active" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Active (Available for API queries)</option>
+                <option value="draft" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Draft (Private, not queryable)</option>
+                <option value="archived" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Archived (Deprecating SKU)</option>
+              </select>
+            </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Lifecycle Status</label>
-            <select
-              value={formData.status}
-              onChange={e => setFormData({ ...formData, status: e.target.value as any })}
-              className="w-full bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium text-zinc-900 dark:text-white"
-            >
-              <option value="active" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Active (Available for API queries)</option>
-              <option value="draft" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Draft (Private, not queryable)</option>
-              <option value="archived" className="bg-white text-zinc-900 dark:bg-zinc-950 dark:text-white">Archived (Deprecating SKU)</option>
-            </select>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Item'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-    </div>
-  );
-
-  if (isSettingsMode) {
-    return content;
-  }
-
-  return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
-      <PageHeader 
-        title="Pricing Catalog"
-        description="Centralized registry of products, service rates, application fees, subscriptions, and penalties."
-      />
-      <div className="flex-1 relative z-10">
-        {content}
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Item'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       </div>
-    </div>
+    </SettingsSubNavLayout>
   );
 };

@@ -14,6 +14,7 @@ import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/UI/Primitives';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, flattenFields } from '../../../lib/utils';
@@ -1420,33 +1421,39 @@ export const ReportManagementSettings = () => {
     }
   };
 
+  const reportSubNavItems: SettingsSubNavItem[] = [
+    { id: 'ALL', label: 'All Reports', icon: BarChart2, description: 'Complete report catalog' },
+    { id: 'PUBLISHED', label: 'Published Reports', icon: Check, description: 'Live dashboards' },
+    { id: 'DRAFTS', label: 'Draft Reports', icon: FileText, description: 'Unpublished drafts' }
+  ];
+
   return (
     <div className="w-full h-full relative z-10 flex flex-col min-h-0">
       {view === 'LIST' ? (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            {/* List Tab Switcher */}
-            <div className="flex bg-zinc-100/30 dark:bg-white/[0.02] border border-zinc-200/20 dark:border-white/5 rounded-2xl p-1 w-fit">
-              {(['ALL', 'PUBLISHED', 'DRAFTS'] as const).map(tabOpt => (
-                <button
-                  key={tabOpt}
-                  onClick={() => setActiveTab(tabOpt)}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                    activeTab === tabOpt 
-                      ? "bg-indigo-600 text-white shadow-lg" 
-                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                  )}
-                >
-                  {tabOpt}
-                </button>
-              ))}
+        <SettingsSubNavLayout
+          title="Report Management"
+          description="Build, customize, publish, and embed custom analytics dashboards across platform modules."
+          icon={BarChart2}
+          items={reportSubNavItems}
+          activeId={activeTab}
+          onTabChange={(id) => setActiveTab(id as any)}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => navigate('/workspace/settings/platform-modules')}
+                className="gap-2 font-bold"
+              >
+                <ArrowLeft size={16} /> Back to Modules
+              </Button>
+              <Button onClick={() => setShowCreatorModal(true)} className="gap-2 shadow-lg shadow-indigo-500/10 font-bold bg-indigo-600 hover:bg-indigo-500 text-white">
+                <Plus size={16} /> Create Report
+              </Button>
             </div>
-
-            <Button onClick={() => setShowCreatorModal(true)} className="gap-2 shadow-lg shadow-indigo-500/10">
-              <Plus size={16} /> Create Report
-            </Button>
-          </div>
+          }
+        >
+          <div className="space-y-6">
 
           {/* Reports Grid */}
           {loading ? (
@@ -1733,7 +1740,8 @@ export const ReportManagementSettings = () => {
             )}
           </AnimatePresence>
         </div>
-      ) : (
+      </SettingsSubNavLayout>
+    ) : (
         /* VISUAL BUILDER CANVAS (PowerBI / Tableau inspired layout) */
         currentReport && (
           <div className="flex flex-col h-full w-full bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl rounded-none border-none overflow-hidden animate-fade-in">
