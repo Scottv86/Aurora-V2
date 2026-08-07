@@ -434,14 +434,7 @@ export const GlobalListsSettings = () => {
               <ArrowLeft size={16} /> All Lists
             </Button>
           ) : (
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              onClick={() => navigate('/workspace/settings/platform-modules')}
-              className="gap-2 font-bold"
-            >
-              <ArrowLeft size={16} /> Back to Modules
-            </Button>
+
           )}
           <Button 
             onClick={() => setIsCreatingList(true)} 

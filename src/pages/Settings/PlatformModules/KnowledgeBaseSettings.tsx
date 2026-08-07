@@ -195,14 +195,7 @@ export const KnowledgeBaseSettings = () => {
       onTabChange={setActiveTab}
       actions={
         <div className="flex items-center gap-2">
-          <Button 
-            variant="secondary" 
-            size="sm" 
-            onClick={() => navigate('/workspace/settings/platform-modules')}
-            className="gap-2 font-bold"
-          >
-            <ArrowLeft size={16} /> Back to Modules
-          </Button>
+
           <Button variant="primary" size="sm" onClick={handleStartCreate} className="font-bold gap-2 bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20">
             <Plus size={16} /> Create Article
           </Button>

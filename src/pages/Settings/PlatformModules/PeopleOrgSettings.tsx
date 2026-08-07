@@ -172,14 +172,7 @@ export const PeopleOrgSettings = () => {
       activeId={activeTab}
       onTabChange={(id) => setActiveTab(id as any)}
       actions={
-        <Button 
-          variant="secondary" 
-          size="sm" 
-          onClick={() => navigate('/workspace/settings/platform-modules')}
-          className="gap-2 font-bold"
-        >
-          <ArrowLeft size={16} /> Back to Modules
-        </Button>
+
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

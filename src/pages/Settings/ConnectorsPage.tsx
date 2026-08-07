@@ -317,14 +317,7 @@ export const ConnectorsPage = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={() => navigate('/workspace/settings/platform-modules')}
-                className="gap-2 font-bold"
-              >
-                <ArrowLeft size={16} /> Back to Modules
-              </Button>
+
               <Button 
                 onClick={() => setIsModalOpen(true)}
                 className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"

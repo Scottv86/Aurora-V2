@@ -242,14 +242,7 @@ export const APISettings = () => {
         }}
         actions={
           <div className="flex items-center gap-2">
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              onClick={() => navigate('/workspace/settings/platform-modules')}
-              className="gap-2 font-bold"
-            >
-              <ArrowLeft size={16} /> Back to Modules
-            </Button>
+
           </div>
         }
       >

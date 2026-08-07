@@ -100,14 +100,7 @@ export const WorkforcePage = () => {
         onTabChange={(id) => { setActiveTab(id); setActiveFilter('all'); }}
         actions={
           <div className="flex items-center gap-3">
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              onClick={() => navigate('/workspace/settings/platform-modules')}
-              className="gap-2 font-bold"
-            >
-              <ArrowLeft size={16} /> Back to Modules
-            </Button>
+
             <div className="relative">
               <button 
                 onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}

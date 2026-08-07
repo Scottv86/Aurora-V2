@@ -172,14 +172,7 @@ export const InventoryManagerSettings = () => {
       activeId={selectedFilter}
       onTabChange={(id) => setSelectedFilter(id as any)}
       actions={
-        <Button 
-          variant="secondary" 
-          size="sm" 
-          onClick={() => navigate('/workspace/settings/platform-modules')}
-          className="gap-2 font-bold"
-        >
-          <ArrowLeft size={16} /> Back to Modules
-        </Button>
+
       }
     >
       <div className="space-y-6 text-left">

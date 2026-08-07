@@ -269,14 +269,7 @@ export const DocumentAutomation = () => {
         onTabChange={(id) => setActiveTab(id as any)}
         actions={
           <div className="flex items-center gap-2">
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              onClick={() => navigate('/workspace/settings/platform-modules')}
-              className="gap-2 font-bold"
-            >
-              <ArrowLeft size={16} /> Back to Modules
-            </Button>
+
             <Button 
               onClick={handleCreateNew} 
               className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
