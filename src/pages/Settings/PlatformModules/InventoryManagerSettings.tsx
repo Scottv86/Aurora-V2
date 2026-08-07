@@ -171,9 +171,6 @@ export const InventoryManagerSettings = () => {
       items={subNavItems}
       activeId={selectedFilter}
       onTabChange={(id) => setSelectedFilter(id as any)}
-      actions={
-
-      }
     >
       <div className="space-y-6 text-left">
         {/* KPI Cards */}

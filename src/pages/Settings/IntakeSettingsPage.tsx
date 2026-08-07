@@ -807,9 +807,6 @@ export const IntakeSettingsPage = () => {
       items={subNavItems}
       activeId={activeTab}
       onTabChange={(id) => setActiveTab(id as any)}
-      actions={
-
-      }
     >
       {activeTab === 'routing' ? (
         modulesLoading ? (

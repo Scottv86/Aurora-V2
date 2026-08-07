@@ -418,7 +418,7 @@ export const GlobalListsSettings = () => {
       }}
       actions={
         <div className="flex items-center gap-2">
-          {selectedListId ? (
+          {selectedListId && (
             <Button 
               variant="secondary" 
               size="sm" 
@@ -433,8 +433,6 @@ export const GlobalListsSettings = () => {
             >
               <ArrowLeft size={16} /> All Lists
             </Button>
-          ) : (
-
           )}
           <Button 
             onClick={() => setIsCreatingList(true)} 
