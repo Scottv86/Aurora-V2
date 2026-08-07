@@ -130,7 +130,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
   // Integrations & APIs
   {
     id: 'integration-management',
-    label: 'Connected Apps',
+    label: 'Integrations',
     description: 'Connect and sync data with third-party tools, APIs, and databases.',
     icon: 'Plug',
     to: '/workspace/settings/platform-modules/integration-management',

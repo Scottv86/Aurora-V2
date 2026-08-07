@@ -62,7 +62,7 @@ const PATH_MAP: Record<string, string> = {
   migration: 'Migration',
   connectors: 'Integrations',
   'workforce-management': 'Workforce Management',
-  'integration-management': 'Integration Management',
+  'integration-management': 'Integrations',
   'automation-management': 'Automation Management',
   'document-generation': 'Document Generation',
   'report-management': 'Report Management',

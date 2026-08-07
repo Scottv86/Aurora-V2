@@ -408,7 +408,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Integrations & APIs',
       icon: LucideIcons.Plug,
       items: [
-        { label: 'Connected Apps', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
+        { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
         { label: 'API Management', icon: LucideIcons.Key, to: '/workspace/settings/platform-modules/api-management' },
       ]
     },
