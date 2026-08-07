@@ -79,6 +79,9 @@ interface PlatformContextType {
   deleteNotification: (id: string) => void;
   clearNotifications: () => void;
   unreadCount: number;
+  isBuilderFullscreen: boolean;
+  setIsBuilderFullscreen: (fullscreen: boolean) => void;
+  toggleBuilderFullscreen: () => void;
   connectionError: boolean;
   connectionErrorMessage: string | null;
   isOffline: boolean;
@@ -131,6 +134,9 @@ const fallbackContext: PlatformContextType = {
   deleteNotification: () => {},
   clearNotifications: () => {},
   unreadCount: 0,
+  isBuilderFullscreen: false,
+  setIsBuilderFullscreen: () => {},
+  toggleBuilderFullscreen: () => {},
   connectionError: false,
   connectionErrorMessage: null,
   isOffline: false
@@ -172,6 +178,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isRecyclingBinOpen, setIsRecyclingBinOpen] = useState(false);
   const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
+  const [isBuilderFullscreen, setIsBuilderFullscreen] = useState(false);
+
+  const toggleBuilderFullscreen = useCallback(() => {
+    setIsBuilderFullscreen(prev => !prev);
+  }, []);
   
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -918,6 +929,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       deleteNotification,
       clearNotifications,
       unreadCount,
+      isBuilderFullscreen,
+      setIsBuilderFullscreen,
+      toggleBuilderFullscreen,
       connectionError,
       connectionErrorMessage,
       isOffline

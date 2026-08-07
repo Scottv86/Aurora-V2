@@ -21,6 +21,8 @@ import {
   LayoutGrid,
   Loader2,
   Search,
+  Maximize2,
+  Minimize2,
   X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -103,8 +105,14 @@ const ALL_CATALOG_APPS = [
 export const NavigationSettingsPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams } = usePlatform();
+  const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
   const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
   const [showBreadcrumbs, setShowBreadcrumbs] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -663,29 +671,44 @@ export const NavigationSettingsPage = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans select-none">
+    <div className={cn(
+      "flex flex-col w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans select-none transition-all duration-300",
+      isBuilderFullscreen ? "h-screen" : "h-full"
+    )}>
       
       {/* Top Header Bar (Unified Builder style) */}
-      <div className="px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-20 relative">
+      <div className={cn(
+        "px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-20 relative transition-all duration-300",
+        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+      )}>
         
         {/* Left: Back, Icon, Title, Subtitle */}
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/workspace/settings/navigation')}
-            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+            onClick={() => {
+              setIsBuilderFullscreen(false);
+              navigate('/workspace/settings/navigation');
+            }}
+            className={cn(
+              "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
+              isBuilderFullscreen ? "p-1.5" : "p-2.5"
+            )}
           >
             <ArrowLeft size={16} />
           </button>
           
           <div>
             <div className="flex items-center gap-2">
-              <Compass className="text-indigo-500 shrink-0" size={18} />
+              <Compass className="text-indigo-500 shrink-0" size={isBuilderFullscreen ? 16 : 18} />
               <input
                 type="text"
                 placeholder="Enter Navigation Name..."
                 value={navigationName}
                 onChange={(e) => setNavigationName(e.target.value)}
-                className="text-lg font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1"
+                className={cn(
+                  "font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1 transition-all",
+                  isBuilderFullscreen ? "text-sm font-bold" : "text-lg"
+                )}
               />
               <span className={cn(
                 "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ml-1 shrink-0",
@@ -696,12 +719,26 @@ export const NavigationSettingsPage = () => {
                 {activeScope.type === 'default' ? 'Default Layout' : `${activeScope.type}: ${activeScope.id}`}
               </span>
             </div>
-            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Navigation Builder</p>
+            {!isBuilderFullscreen && (
+              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Navigation Builder</p>
+            )}
           </div>
         </div>
 
         {/* Right Header Controls & Save Button */}
         <div className="flex items-center gap-3">
+          <Button
+            onClick={toggleBuilderFullscreen}
+            variant={isBuilderFullscreen ? "primary" : "secondary"}
+            className={cn(
+              "gap-1.5 font-bold uppercase tracking-wider",
+              isBuilderFullscreen ? "bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 px-3 text-[11px]" : "text-xs"
+            )}
+            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+          >
+            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
+            <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+          </Button>
           
           {/* Scope Selector */}
           <div className="flex items-center gap-2 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs font-medium">
@@ -752,32 +789,54 @@ export const NavigationSettingsPage = () => {
 
           {/* Layout Presentation Toggle */}
           {!isOverrideActive && (
-            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl p-1 text-xs">
-              <button
-                onClick={() => setLayoutStyle('sidebar')}
-                className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'sidebar' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-                title="Sidebar layout"
-              >
-                <Rows size={14} />
-              </button>
-              <button
-                onClick={() => setLayoutStyle('slim')}
-                className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'slim' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-                title="Slim layout"
-              >
-                <Layout size={14} />
-              </button>
-              <button
-                onClick={() => setLayoutStyle('top')}
-                className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'top' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-                title="Top Menu layout"
-              >
-                <Columns size={14} />
-              </button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl p-1 text-xs">
+                <button
+                  onClick={() => setLayoutStyle('sidebar')}
+                  className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'sidebar' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                  title="Sidebar layout"
+                >
+                  <Rows size={14} />
+                </button>
+                <button
+                  onClick={() => setLayoutStyle('slim')}
+                  className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'slim' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                  title="Slim sidebar layout"
+                >
+                  <Columns size={14} />
+                </button>
+                <button
+                  onClick={() => setLayoutStyle('top')}
+                  className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'top' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
+                  title="Top menu layout"
+                >
+                  <Layout size={14} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 pl-3 border-l border-zinc-200 dark:border-white/10">
+                <span className="text-xs font-medium text-zinc-400 select-none">Breadcrumbs:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowBreadcrumbs(!showBreadcrumbs)}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                    showBreadcrumbs ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                  )}
+                  title="Toggle breadcrumbs display"
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
+                      showBreadcrumbs ? "translate-x-4" : "translate-x-0"
+                    )}
+                  />
+                </button>
+              </div>
             </div>
           )}
 
-          <Button onClick={handleSave} loading={saving} className="gap-2 shadow-lg shadow-indigo-500/10 font-bold">
+          <Button onClick={handleSave} loading={saving} className={cn("gap-2 shadow-lg shadow-indigo-500/10 font-bold", isBuilderFullscreen && "py-1.5 px-3 text-xs")}>
             <Save size={16} />
             Save Layout
           </Button>

@@ -4,7 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { 
   ArrowLeft, Save, Trash2, Settings, 
-  Sparkles, Layout, Eye, Loader2, Cpu, GripVertical
+  Sparkles, Layout, Eye, Loader2, Cpu, GripVertical,
+  Maximize2, Minimize2
 } from 'lucide-react';
 import ReactGridLayout from 'react-grid-layout';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -77,8 +78,14 @@ const useMyContainerWidth = (loading: boolean) => {
 export const PageBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { tenant, refreshModules, modules } = usePlatform();
+  const { tenant, refreshModules, modules, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
 
   const [name, setName] = useState('');
   const [iconName, setIconName] = useState('Layers');
@@ -329,36 +336,70 @@ export const PageBuilder = () => {
   const PageIcon = (Icons as any)[iconName] || Icons.Layout;
 
   return (
-    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden">
+    <div className={cn(
+      "flex flex-col w-full bg-transparent overflow-hidden transition-all duration-300",
+      isBuilderFullscreen ? "h-screen" : "h-[calc(100vh-4rem)]"
+    )}>
       {/* Top Header */}
-      <div className="px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-10 relative">
+      <div className={cn(
+        "px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-10 relative transition-all duration-300",
+        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+      )}>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/workspace/settings/pages')}
-            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+            onClick={() => {
+              setIsBuilderFullscreen(false);
+              navigate('/workspace/settings/pages');
+            }}
+            className={cn(
+              "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
+              isBuilderFullscreen ? "p-1.5" : "p-2.5"
+            )}
+            title="Back to Pages"
           >
             <ArrowLeft size={16} />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <PageIcon className="text-indigo-500" size={18} />
+              <PageIcon className="text-indigo-500" size={isBuilderFullscreen ? 16 : 18} />
               <input
                 type="text"
                 placeholder="Enter Page Name..."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="text-lg font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1"
+                className={cn(
+                  "font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1 transition-all",
+                  isBuilderFullscreen ? "text-sm font-bold" : "text-lg"
+                )}
               />
             </div>
-            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Page Builder</p>
+            {!isBuilderFullscreen && (
+              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Page Builder</p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={toggleBuilderFullscreen}
+            variant={isBuilderFullscreen ? "primary" : "secondary"}
+            className={cn(
+              "gap-1.5 font-bold uppercase tracking-wider",
+              isBuilderFullscreen ? "bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 px-3 text-[11px]" : "text-xs"
+            )}
+            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+          >
+            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
+            <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+          </Button>
+
           <Button 
             onClick={() => setShowAIModal(true)}
             variant="secondary"
-            className="gap-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10 font-bold"
+            className={cn(
+              "gap-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10 font-bold",
+              isBuilderFullscreen && "py-1.5 px-3 text-xs"
+            )}
           >
             <Sparkles size={16} />
             Build with AI
@@ -367,13 +408,17 @@ export const PageBuilder = () => {
           <Button 
             onClick={() => navigate(`/workspace/pages/${slugify(name)}`)}
             variant="secondary"
-            className="gap-2 font-bold"
+            className={cn("gap-2 font-bold", isBuilderFullscreen && "py-1.5 px-3 text-xs")}
           >
             <Eye size={16} />
             Preview Page
           </Button>
 
-          <Button onClick={handleSave} loading={saving} className="gap-2 shadow-lg shadow-indigo-500/10 font-bold">
+          <Button 
+            onClick={handleSave} 
+            loading={saving} 
+            className={cn("gap-2 shadow-lg shadow-indigo-500/10 font-bold", isBuilderFullscreen && "py-1.5 px-3 text-xs")}
+          >
             <Save size={16} />
             Save Layout
           </Button>

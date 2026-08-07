@@ -15,7 +15,9 @@ import {
   Loader2,
   Terminal,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -43,8 +45,14 @@ interface SchemaData {
 }
 
 export const QueryExplorer = () => {
-  const { tenant } = usePlatform();
+  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
 
   // UI State
@@ -308,7 +316,10 @@ export const QueryExplorer = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-zinc-900 text-zinc-300 font-sans">
+    <div className={cn(
+      "flex w-full overflow-hidden bg-zinc-900 text-zinc-300 font-sans transition-all duration-300",
+      isBuilderFullscreen ? "h-screen" : "h-[calc(100vh-64px)]"
+    )}>
       {/* 1. Object Explorer (Sidebar) */}
       <div className="w-80 flex flex-col border-r border-zinc-800 bg-zinc-950 select-none">
         <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
@@ -520,8 +531,23 @@ export const QueryExplorer = () => {
             </button>
           </div>
 
-          {/* Indicators */}
-          <div className="flex items-center gap-4 text-xs font-mono text-zinc-500">
+          {/* Indicators & Fullscreen Toggle */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleBuilderFullscreen}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded transition-colors uppercase tracking-wider",
+                isBuilderFullscreen
+                  ? "bg-indigo-600 text-white"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+              )}
+              title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+            >
+              {isBuilderFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+              <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+            </button>
+
+            <div className="flex items-center gap-4 text-xs font-mono text-zinc-500">
             {executing ? (
               <span className="text-blue-400 flex items-center gap-1.5">
                 <Loader2 size={12} className="animate-spin" />
@@ -540,6 +566,7 @@ export const QueryExplorer = () => {
             ) : (
               <span>Ready</span>
             )}
+            </div>
           </div>
         </div>
 

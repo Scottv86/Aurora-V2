@@ -22,6 +22,7 @@ import {
   Sidebar,
   Grid3X3,
   Maximize2,
+  Minimize2,
   Folder,
   ListPlus,
   Calculator,
@@ -1566,8 +1567,14 @@ export const ModuleEditor = () => {
   const { id: routeId } = useParams();
   const id = routeId || 'new';
   const navigate = useNavigate();
-  const { tenant, modules, refreshModules, setBreadcrumbOverride } = usePlatform();
+  const { tenant, modules, refreshModules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
   const { lists: globalLists } = useGlobalLists();
   const { teams } = useTeams();
   const { positions } = usePositions();
@@ -4677,37 +4684,68 @@ export const ModuleEditor = () => {
   return (
     <div className="h-full flex flex-col bg-transparent text-zinc-900 dark:text-zinc-100 overflow-hidden">
       {/* Top Page Title Header (Unified Builder style) */}
-      <div className="px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-30 relative">
+      <div className={cn(
+        "px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-30 relative transition-all duration-300",
+        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+      )}>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => navigate('/workspace/settings/platform-modules')}
-            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+            onClick={() => {
+              setIsBuilderFullscreen(false);
+              navigate('/workspace/settings/platform-modules');
+            }}
+            className={cn(
+              "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
+              isBuilderFullscreen ? "p-1.5" : "p-2.5"
+            )}
             title="Back to Platform Modules"
           >
             <ArrowLeft size={16} />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <HeaderModuleIcon className="text-indigo-500" size={18} />
+              <HeaderModuleIcon className="text-indigo-500" size={isBuilderFullscreen ? 16 : 18} />
               <input
                 type="text"
                 placeholder="Enter Module Name..."
                 value={moduleSettings.name}
                 onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
-                className="text-lg font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1"
+                className={cn(
+                  "font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1 transition-all",
+                  isBuilderFullscreen ? "text-sm font-bold" : "text-lg"
+                )}
               />
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-indigo-500/30 bg-indigo-500/10 text-indigo-500 ml-1">
                 {moduleSettings.category || 'Custom'}
               </span>
             </div>
-            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Module Builder</p>
+            {!isBuilderFullscreen && (
+              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Module Builder</p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={toggleBuilderFullscreen}
+            className={cn(
+              "rounded-xl border transition-all flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs",
+              isBuilderFullscreen 
+                ? "bg-indigo-600 border-indigo-500 text-white px-3 py-1.5 shadow-md shadow-indigo-500/20" 
+                : "border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-white/50 dark:bg-white/[0.01] p-2.5"
+            )}
+            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+          >
+            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
+            {isBuilderFullscreen && <span className="hidden sm:inline text-[10px]">Exit Fullscreen</span>}
+          </button>
+
           <button 
             onClick={() => setIsCommandPaletteOpen(true)}
-            className="p-2.5 rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]"
+            className={cn(
+              "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
+              isBuilderFullscreen ? "p-1.5" : "p-2.5"
+            )}
             title="Open Command Palette (Ctrl+K)"
           >
             <Command size={16} />
@@ -4716,7 +4754,8 @@ export const ModuleEditor = () => {
           <button 
             onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
             className={cn(
-              "flex items-center gap-2 px-3.5 py-2 border rounded-xl text-xs font-bold transition-all uppercase tracking-wider",
+              "flex items-center gap-2 border rounded-xl font-bold transition-all uppercase tracking-wider",
+              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3.5 py-2 text-xs",
               activeTab === 'preview' 
                 ? "bg-indigo-600 border-indigo-500 text-white" 
                 : "bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
@@ -4729,7 +4768,10 @@ export const ModuleEditor = () => {
           <button 
             onClick={handleSave}
             disabled={isSaving || isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-xl text-xs font-bold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-wider disabled:opacity-50"
+            className={cn(
+              "flex items-center gap-2 bg-indigo-600 rounded-xl font-bold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-wider disabled:opacity-50",
+              isBuilderFullscreen ? "px-3 py-1.5 text-[11px]" : "px-4 py-2 text-xs"
+            )}
           >
             <Save size={15} />
             <span>{isSaving ? 'Saving...' : 'Save'}</span>
@@ -4738,7 +4780,10 @@ export const ModuleEditor = () => {
           {id !== 'new' && (
             <button 
               onClick={() => window.open(`/workspace/modules/${id}`, '_blank')}
-              className="flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-white/[0.01] border border-zinc-200 dark:border-white/5 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm uppercase tracking-wider"
+              className={cn(
+                "flex items-center gap-2 bg-white/50 dark:bg-white/[0.01] border border-zinc-200 dark:border-white/5 rounded-xl font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm uppercase tracking-wider",
+                isBuilderFullscreen ? "px-3 py-1.5 text-[11px]" : "px-4 py-2 text-xs"
+              )}
               title="View in Workspace"
             >
               <ExternalLink size={15} />

@@ -8,7 +8,9 @@ import {
   Workflow,
   Layers,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,7 +21,13 @@ import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
 
 export const AIBuilder = () => {
-  const { tenant } = usePlatform();
+  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
   const { user, session } = useAuth();
   const [step, setStep] = useState(1);
   const [prompt, setPrompt] = useState('');
@@ -148,16 +156,40 @@ export const AIBuilder = () => {
   };
 
   return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      <div className="text-center space-y-4">
+    <div className={cn(
+      "flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 transition-all duration-300 relative",
+      isBuilderFullscreen && "py-4 px-4 h-screen overflow-y-auto"
+    )}>
+      {/* Top Header Fullscreen Action */}
+      <div className="flex justify-end items-center">
+        <button
+          onClick={toggleBuilderFullscreen}
+          className={cn(
+            "rounded-xl border transition-all flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs",
+            isBuilderFullscreen 
+              ? "bg-indigo-600 border-indigo-500 text-white px-3 py-1.5 shadow-md shadow-indigo-500/20" 
+              : "border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-white/50 dark:bg-white/[0.01] px-3 py-2"
+          )}
+          title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+        >
+          {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
+          <span>{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+        </button>
+      </div>
+
+      <div className={cn("text-center space-y-4", isBuilderFullscreen && "space-y-2")}>
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-widest">
           <Sparkles size={14} />
           <span>AI-Native Solution Builder</span>
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-white">What are you building today?</h1>
-        <p className="text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">
-          Describe your business process, upload requirements, or paste a legacy form. Aurora will architect the modules, workflows, and logic for you.
-        </p>
+        <h1 className={cn("font-bold tracking-tight text-zinc-900 dark:text-white", isBuilderFullscreen ? "text-2xl" : "text-4xl")}>
+          What are you building today?
+        </h1>
+        {!isBuilderFullscreen && (
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-xl mx-auto">
+            Describe your business process, upload requirements, or paste a legacy form. Aurora will architect the modules, workflows, and logic for you.
+          </p>
+        )}
       </div>
 
       <AnimatePresence mode="wait">

@@ -19,7 +19,9 @@ import {
   Upload, 
   FolderPlus, 
   FilePlus, 
-  X
+  X,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriveItem, DriveType, DocumentClassification } from '../../types/drive';
@@ -38,8 +40,14 @@ type NavTab = 'PERSONAL' | 'TENANT_SHARED' | 'STARRED' | 'RECENT' | 'GOVERNANCE'
 export const DriveApp = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { tenant } = usePlatform();
+  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { user, session } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
 
   const [activeNav, setActiveNav] = useState<NavTab>(() => {
     const selectedId = searchParams.get('selectedId');
@@ -237,7 +245,10 @@ export const DriveApp = () => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-zinc-50/50 dark:bg-zinc-950/50 overflow-hidden relative">
+    <div className={cn(
+      "flex flex-col w-full bg-zinc-50/50 dark:bg-zinc-950/50 overflow-hidden relative transition-all duration-300",
+      isBuilderFullscreen ? "h-screen" : "h-[calc(100vh-4rem)]"
+    )}>
       {/* Standardized App Header */}
       <PageHeader 
         title={
@@ -253,6 +264,20 @@ export const DriveApp = () => {
         iconClassName="bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
         actions={
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleBuilderFullscreen}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border uppercase tracking-wider",
+                isBuilderFullscreen 
+                  ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              )}
+              title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+            >
+              {isBuilderFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+            </button>
+
             <button
               onClick={() => {
                 const driveType = activeNav === 'PERSONAL' ? 'PERSONAL' : 'TENANT_SHARED';

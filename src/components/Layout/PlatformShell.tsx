@@ -224,11 +224,29 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     connectionError,
     connectionErrorMessage,
     isOffline,
-    refetchContext
+    refetchContext,
+    isBuilderFullscreen,
+    setIsBuilderFullscreen
   } = usePlatform();
   
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Reset fullscreen when route changes
+  useEffect(() => {
+    setIsBuilderFullscreen(false);
+  }, [location.pathname, setIsBuilderFullscreen]);
+
+  // Escape key to exit fullscreen mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isBuilderFullscreen) {
+        setIsBuilderFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBuilderFullscreen, setIsBuilderFullscreen]);
   const pathnames = location.pathname.split('/').filter(x => x);
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
@@ -469,7 +487,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       ? isSidebarHovered 
       : isSidebarOpen);
 
-  const currentWidth = isModuleBuilder || layoutStyle === 'top'
+  const currentWidth = isModuleBuilder || isBuilderFullscreen || layoutStyle === 'top'
     ? 0
     : (isSidebarReallyOpen ? sidebarWidth : 64);
 
@@ -587,7 +605,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           />
         )}
       </AnimatePresence>
-      <Navbar />
+      {!isBuilderFullscreen && <Navbar />}
 
       {/* Top Mounted Mega Menu */}
       {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
@@ -597,7 +615,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       )}
 
       <div className="flex">
-        {!isModuleBuilder && layoutStyle !== 'top' && (
+        {!isModuleBuilder && !isBuilderFullscreen && layoutStyle !== 'top' && (
           <aside 
             onMouseEnter={() => {
               if (layoutStyle === 'slim') setIsSidebarHovered(true);
@@ -842,16 +860,18 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           className={cn(
             "flex-1 flex flex-col overflow-y-auto",
             !isResizing && !isModuleBuilder && "transition-all duration-300",
-            layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
-              ? "h-[calc(100vh-7rem)]" 
-              : "h-[calc(100vh-4rem)]"
+            isBuilderFullscreen 
+              ? "h-screen" 
+              : (layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
+                  ? "h-[calc(100vh-7rem)]" 
+                  : "h-[calc(100vh-4rem)]")
           )}
         >
           <div className={cn(
             "mx-auto flex flex-col min-h-full",
             (fullBleed || isAdminPath) ? "w-full flex-1" : "max-w-7xl w-full"
           )}>
-            {pathnames.length > 0 && !isModuleBuilder && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
+            {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">
                 <Breadcrumbs />
                 {getContextualAction()}

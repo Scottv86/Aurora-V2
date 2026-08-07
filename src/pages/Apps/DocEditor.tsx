@@ -22,7 +22,9 @@ import {
   ShieldCheck, 
   Heading1, 
   Heading2,
-  Trash2
+  Trash2,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriveItem, DriveType, MergeFieldToken, DocumentClassification } from '../../types/drive';
@@ -39,8 +41,14 @@ import { toast } from 'sonner';
 export const DocEditor = () => {
   const { documentId } = useParams();
   const navigate = useNavigate();
-  const { modules, tenant } = usePlatform();
+  const { modules, tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { user, session } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
 
   const [documentItem, setDocumentItem] = useState<DriveItem | null>(null);
 
@@ -263,15 +271,24 @@ export const DocEditor = () => {
   if (!documentItem) return null;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-zinc-100 dark:bg-zinc-950 overflow-hidden relative">
+    <div className={cn(
+      "flex flex-col w-full bg-zinc-100 dark:bg-zinc-950 overflow-hidden relative transition-all duration-300",
+      isBuilderFullscreen ? "h-screen" : "h-[calc(100vh-4rem)]"
+    )}>
 
       {/* Top Header Bar */}
-      <div className="px-6 lg:px-12 py-3.5 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md flex items-center justify-between shrink-0 z-20 shadow-sm">
+      <div className={cn(
+        "px-6 lg:px-12 py-3.5 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md flex items-center justify-between shrink-0 z-20 shadow-sm transition-all duration-300",
+        isBuilderFullscreen && "py-1.5 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80"
+      )}>
         
         {/* Left: Back & Document Title */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/workspace/apps/docs')}
+            onClick={() => {
+              setIsBuilderFullscreen(false);
+              navigate('/workspace/apps/docs');
+            }}
             className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             title="Back to Documents"
           >
@@ -296,25 +313,38 @@ export const DocEditor = () => {
             </div>
 
             {/* Folder Location & Record Number Bar */}
-            <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 px-1 mt-0.5">
-              <button
-                onClick={() => setIsDrivePickerOpen(true)}
-                className="flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors group cursor-pointer"
-                title="Click to change folder location"
-              >
-                <FolderUp size={12} className="text-amber-500 group-hover:scale-110 transition-transform" />
-                <span className="font-bold underline decoration-zinc-300 dark:decoration-zinc-700 underline-offset-2">{folderPath}</span>
-              </button>
-              <span>•</span>
-              <span className="font-mono text-[10px] text-zinc-400">{documentItem.recordsMetadata.recordNumber}</span>
-            </div>
+            {!isBuilderFullscreen && (
+              <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 px-1 mt-0.5">
+                <button
+                  onClick={() => setIsDrivePickerOpen(true)}
+                  className="flex items-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors group cursor-pointer"
+                  title="Click to change folder location"
+                >
+                  <FolderUp size={12} className="text-amber-500 group-hover:scale-110 transition-transform" />
+                  <span className="font-bold underline decoration-zinc-300 dark:decoration-zinc-700 underline-offset-2">{folderPath}</span>
+                </button>
+                <span>•</span>
+                <span className="font-mono text-[10px] text-zinc-400">{documentItem.recordsMetadata.recordNumber}</span>
+              </div>
+            )}
           </div>
         </div>
 
-
-
         {/* Right Action Bar */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={toggleBuilderFullscreen}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-all border uppercase tracking-wider",
+              isBuilderFullscreen 
+                ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20" 
+                : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            )}
+            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+          >
+            {isBuilderFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+          </button>
           {/* Save to Drive / Folder selector */}
           <button
             onClick={() => setIsDrivePickerOpen(true)}

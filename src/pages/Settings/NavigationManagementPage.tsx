@@ -3,15 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Compass, 
   Plus, 
-  Sliders, 
   Shield, 
   Users, 
   Briefcase, 
   UserCheck, 
   Trash2, 
-  Rows, 
-  Layout, 
-  Columns, 
   Edit3, 
   Layers
 } from 'lucide-react';
@@ -23,8 +19,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
-
-type LayoutStyle = 'sidebar' | 'slim' | 'top';
 
 interface MenuItem {
   id: string;
@@ -52,12 +46,10 @@ interface AdvancedMenuConfig {
 
 export const NavigationManagementPage = () => {
   const navigate = useNavigate();
-  const { tenant, updateMenuConfig, updateTenant, refetchContext, members, teams } = usePlatform();
+  const { tenant, updateMenuConfig, refetchContext, members, teams } = usePlatform();
   const { session } = useAuth();
 
   const [positions, setPositions] = useState<any[]>([]);
-  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>('sidebar');
-  const [showBreadcrumbs, setShowBreadcrumbs] = useState(true);
 
   // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -87,16 +79,6 @@ export const NavigationManagementPage = () => {
     fetchPositions();
   }, [tenant, session]);
 
-  // Sync shell presentation settings from tenant branding
-  useEffect(() => {
-    if (tenant?.branding) {
-      if (tenant.branding.layout_style) {
-        setLayoutStyle(tenant.branding.layout_style as LayoutStyle);
-      }
-      setShowBreadcrumbs(tenant.branding.show_breadcrumbs !== false);
-    }
-  }, [tenant]);
-
   // Get current menu configuration
   const tConfig = (tenant?.menuConfig as any) || {};
   const advancedConfig: AdvancedMenuConfig = {
@@ -119,25 +101,6 @@ export const NavigationManagementPage = () => {
       });
     });
     return count;
-  };
-
-  // Handle saving global shell layout style & breadcrumb preferences
-  const handleSaveShellPresentation = async (newStyle: LayoutStyle, newBreadcrumbs: boolean) => {
-    setLayoutStyle(newStyle);
-    setShowBreadcrumbs(newBreadcrumbs);
-    try {
-      await updateTenant({
-        branding: {
-          ...tenant?.branding,
-          layout_style: newStyle,
-          show_breadcrumbs: newBreadcrumbs
-        }
-      });
-      await refetchContext();
-      toast.success('Workspace layout presentation updated!');
-    } catch (err) {
-      toast.error('Failed to update workspace layout settings');
-    }
   };
 
   // Handle resetting an override
@@ -274,74 +237,7 @@ export const NavigationManagementPage = () => {
 
       <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-8">
 
-        {/* Global Layout Shell Presentation Summary Card */}
-        <div className="p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div>
-            <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <Sliders size={16} className="text-indigo-500" />
-              Workspace Presentation Shell
-            </h4>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              Configure how the main navigation panel and breadcrumbs header are presented across the workspace.
-            </p>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Layout Style Toggles */}
-            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-2xl p-1 text-xs">
-              <button
-                onClick={() => handleSaveShellPresentation('sidebar', showBreadcrumbs)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all",
-                  layoutStyle === 'sidebar' ? "bg-indigo-600 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                )}
-              >
-                <Rows size={14} />
-                Sidebar
-              </button>
-              <button
-                onClick={() => handleSaveShellPresentation('slim', showBreadcrumbs)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all",
-                  layoutStyle === 'slim' ? "bg-indigo-600 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                )}
-              >
-                <Layout size={14} />
-                Slim Hover
-              </button>
-              <button
-                onClick={() => handleSaveShellPresentation('top', showBreadcrumbs)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all",
-                  layoutStyle === 'top' ? "bg-indigo-600 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                )}
-              >
-                <Columns size={14} />
-                Top Menu
-              </button>
-            </div>
-
-            {/* Breadcrumbs Toggle */}
-            <div className="flex items-center gap-2 pl-2 border-l border-zinc-200 dark:border-zinc-800">
-              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Breadcrumbs:</span>
-              <button
-                type="button"
-                onClick={() => handleSaveShellPresentation(layoutStyle, !showBreadcrumbs)}
-                className={cn(
-                  "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                  showBreadcrumbs ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
-                )}
-              >
-                <span
-                  className={cn(
-                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
-                    showBreadcrumbs ? "translate-x-4" : "translate-x-0"
-                  )}
-                />
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* Navigation Menus Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">

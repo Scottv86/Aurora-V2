@@ -3,7 +3,7 @@ import {
   BarChart2, Plus, ArrowLeft, Trash2, Edit2, Eye, Share2, 
   Sparkles, Save, Check, RefreshCw, FileText, BarChart, LineChart, 
   PieChart, Layers, Table, Activity, TrendingUp, Info, User, AlertTriangle, Printer,
-  GripVertical
+  GripVertical, Maximize2, Minimize2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, BarChart as ReBarChart, Bar, 
@@ -460,8 +460,14 @@ const ReportBuilderCanvas = ({
 };
 
 export const ReportManagementSettings = () => {
-  const { tenant, modules, setBreadcrumbOverride } = usePlatform();
+  const { tenant, modules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
+
+  useEffect(() => {
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -1774,14 +1780,21 @@ export const ReportManagementSettings = () => {
               }
             ` }} />
             {/* Top Toolbar */}
-            <div className="px-6 py-4 border-b border-zinc-200/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl flex justify-between items-center shrink-0">
+            <div className={cn(
+              "px-6 py-4 border-b border-zinc-200/50 dark:border-white/10 bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl flex justify-between items-center shrink-0 transition-all duration-300",
+              isBuilderFullscreen && "py-2 px-4 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+            )}>
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => {
+                    setIsBuilderFullscreen(false);
                     navigate('?');
                     fetchReports();
                   }}
-                  className="p-2 rounded-xl border border-zinc-200/50 dark:border-white/10 hover:bg-zinc-150 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
+                  className={cn(
+                    "rounded-xl border border-zinc-200/50 dark:border-white/10 hover:bg-zinc-150 dark:hover:bg-zinc-800 text-zinc-500 transition-colors",
+                    isBuilderFullscreen ? "p-1.5" : "p-2"
+                  )}
                 >
                   <ArrowLeft size={16} />
                 </button>
@@ -1791,7 +1804,10 @@ export const ReportManagementSettings = () => {
                       type="text"
                       value={currentReport.name}
                       onChange={(e) => setCurrentReport(prev => prev ? { ...prev, name: e.target.value } : null)}
-                      className="text-sm font-bold text-zinc-950 dark:text-white bg-transparent outline-none border-b border-transparent hover:border-zinc-300 focus:border-indigo-500 px-1"
+                      className={cn(
+                        "font-bold text-zinc-950 dark:text-white bg-transparent outline-none border-b border-transparent hover:border-zinc-300 focus:border-indigo-500 px-1 transition-all",
+                        isBuilderFullscreen ? "text-xs font-semibold" : "text-sm font-bold"
+                      )}
                     />
                     <span className={cn(
                       "text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider",
@@ -1802,22 +1818,38 @@ export const ReportManagementSettings = () => {
                       {currentReport.status}
                     </span>
                   </div>
-                  <input
-                    type="text"
-                    value={currentReport.description || ''}
-                    placeholder="Add report description..."
-                    onChange={(e) => setCurrentReport(prev => prev ? { ...prev, description: e.target.value } : null)}
-                    className="text-[10px] text-zinc-450 dark:text-zinc-500 bg-transparent outline-none w-80 block px-1"
-                  />
+                  {!isBuilderFullscreen && (
+                    <input
+                      type="text"
+                      value={currentReport.description || ''}
+                      placeholder="Add report description..."
+                      onChange={(e) => setCurrentReport(prev => prev ? { ...prev, description: e.target.value } : null)}
+                      className="text-[10px] text-zinc-450 dark:text-zinc-500 bg-transparent outline-none w-80 block px-1"
+                    />
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <Button
+                  variant={isBuilderFullscreen ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={toggleBuilderFullscreen}
+                  className={cn(
+                    "gap-1.5 font-bold uppercase tracking-wider print-hide",
+                    isBuilderFullscreen ? "bg-indigo-600 text-white text-[11px] py-1 px-2.5" : "text-xs"
+                  )}
+                  title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
+                >
+                  {isBuilderFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  <span>{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
+                </Button>
+
+                <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => setIsPreview(!isPreview)}
-                  className="gap-1.5 font-bold print-hide"
+                  className="gap-1.5 font-bold print-hide text-xs"
                 >
                   {isPreview ? <Edit2 size={14} /> : <Eye size={14} />}
                   {isPreview ? 'Design Mode' : 'Preview Mode'}
@@ -1827,7 +1859,7 @@ export const ReportManagementSettings = () => {
                   variant="secondary"
                   size="sm"
                   onClick={() => window.print()}
-                  className="gap-1.5 font-bold print-hide"
+                  className="gap-1.5 font-bold print-hide text-xs"
                 >
                   <Printer size={14} /> Export PDF
                 </Button>
@@ -1837,7 +1869,7 @@ export const ReportManagementSettings = () => {
                   size="sm"
                   onClick={() => handleSaveReport('Draft')}
                   loading={savingReport}
-                  className="font-bold"
+                  className="font-bold text-xs"
                 >
                   <Save size={14} className="mr-1.5" /> Save Draft
                 </Button>
@@ -1847,7 +1879,7 @@ export const ReportManagementSettings = () => {
                   size="sm"
                   onClick={() => handleSaveReport('Published')}
                   loading={savingReport}
-                  className="font-bold shadow-lg shadow-indigo-500/10"
+                  className="font-bold shadow-lg shadow-indigo-500/10 text-xs"
                 >
                   <Check size={14} className="mr-1.5" /> Publish
                 </Button>
