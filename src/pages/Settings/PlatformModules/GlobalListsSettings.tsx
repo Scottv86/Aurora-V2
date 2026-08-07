@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { Button } from '../../../components/UI/Primitives';
 import { 
@@ -392,7 +392,6 @@ export const GlobalListsSettings = () => {
     </AnimatePresence>
   );
 
-  const navigate = useNavigate();
   const subNavItems: SettingsSubNavItem[] = selectedListId ? [
     { id: 'detail', label: activeList?.name || 'Table View', icon: Database, description: `${localItems.length} records` },
     { id: 'master', label: 'All Global Lists', icon: Archive, description: 'Return to list directory' }

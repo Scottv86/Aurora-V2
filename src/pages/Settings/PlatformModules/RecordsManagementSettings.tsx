@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button } from '../../../components/UI/Primitives';
 import { 
   Database, 
@@ -9,15 +8,13 @@ import {
   Server,
   FileCheck,
   AlertTriangle,
-  Save,
-  ArrowLeft
+  Save
 } from 'lucide-react';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 
 export const RecordsManagementSettings = () => {
-  const navigate = useNavigate();
   const [retentionYears, setRetentionYears] = useState('7');
   const [storageProvider, setStorageProvider] = useState<'local' | 's3' | 'gcp' | 'azure'>('s3');
   const [enableWorm, setEnableWorm] = useState(true);

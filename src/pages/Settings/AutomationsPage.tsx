@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
@@ -10,7 +10,7 @@ import {
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Globe, Layers, Calendar, Search, Sparkles, Code, Play, UserCheck,
-  GitFork, Route, RotateCw, FileText, Grid, CreditCard, ArrowLeft
+  GitFork, Route, RotateCw, FileText, Grid, CreditCard
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -1132,8 +1132,6 @@ export const AutomationsPage: React.FC = () => {
       return matchesSearch;
     });
   }, [automations, searchQuery, filterScope]);
-
-  const navigate = useNavigate();
 
   const autoSubNavItems: SettingsSubNavItem[] = [
     { id: 'ALL', label: 'All Automation Rules', icon: Zap, description: 'Complete rules catalog' },

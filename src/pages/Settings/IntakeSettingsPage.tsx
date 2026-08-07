@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { 
   ShieldCheck, Plus, Trash2,
-  Info, Settings, ShieldAlert, GitFork, Loader2, Play, ArrowLeft
+  Info, Settings, ShieldAlert, GitFork, Loader2, Play
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '../../components/UI/Primitives';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { RoutingSandboxModal } from '../../components/Triage/RoutingSandboxModal';
 
@@ -152,7 +150,6 @@ const parseMappings = (rawMap: Record<string, string>): VisualMappings => {
   return result;
 };
 export const IntakeSettingsPage = () => {
-  const navigate = useNavigate();
   const { tenant, modules, modulesLoading, refreshModules } = usePlatform();
   const { session } = useAuth();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';

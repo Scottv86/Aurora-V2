@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { 
   Code, 
   Search, 
@@ -11,11 +10,9 @@ import {
   Tag, 
   ChevronRight, 
   Copy,
-  Check,
-  ArrowLeft
+  Check
 } from 'lucide-react';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
-import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
@@ -218,8 +215,6 @@ export const APISettings = () => {
     }
     return '';
   };
-
-  const navigate = useNavigate();
 
   const apiSubNavItems: SettingsSubNavItem[] = API_LIST.map(api => ({
     id: api.id,

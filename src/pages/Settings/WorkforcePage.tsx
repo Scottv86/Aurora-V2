@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { PeopleCenter } from '../../components/Settings/Workforce/PeopleCenter';
 import { TeamHub } from '../../components/Settings/Workforce/TeamHub';
@@ -9,14 +8,13 @@ import { SecurityGroups } from '../../components/Settings/Workforce/SecurityGrou
 import { ActivityLog } from '../../components/Settings/Workforce/ActivityLog';
 import { OnboardingWizard } from '../../components/Settings/Workforce/OnboardingWizard';
 import { CreateTeamModal } from '../../components/Settings/Workforce/CreateTeamModal';
-import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot, ArrowLeft } from 'lucide-react';
+import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot } from 'lucide-react';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
 import { cn } from '../../lib/utils';
 
 export const WorkforcePage = () => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('people');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');

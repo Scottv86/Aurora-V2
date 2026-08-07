@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { 
   FileText, 
   Plus, 
@@ -10,8 +10,7 @@ import {
   Trash2, 
   Edit2,
   Filter,
-  Database,
-  ArrowLeft
+  Database
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DocumentTemplate } from '../types/platform';
@@ -25,7 +24,6 @@ import { PageHeader } from './UI/PageHeader';
 
 export const DocumentAutomation = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant, isLoading: platformLoading } = usePlatform();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);

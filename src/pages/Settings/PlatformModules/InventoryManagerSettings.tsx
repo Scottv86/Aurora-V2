@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Boxes, 
   Search, 
@@ -7,14 +6,12 @@ import {
   Loader2,
   Plus,
   Minus,
-  AlertTriangle,
-  ArrowLeft
+  AlertTriangle
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
-import { Button } from '../../../components/UI/Primitives';
 import { toast } from 'sonner';
 
 interface CatalogItem {
@@ -33,7 +30,6 @@ interface CatalogItem {
 }
 
 export const InventoryManagerSettings = () => {
-  const navigate = useNavigate();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);

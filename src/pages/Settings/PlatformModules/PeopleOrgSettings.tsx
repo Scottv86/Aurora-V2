@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Tags, 
   Shapes, 
@@ -9,8 +8,7 @@ import {
   Edit3, 
   Info,
   Loader2,
-  Users,
-  ArrowLeft
+  Users
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
@@ -30,7 +28,6 @@ interface Taxonomy {
 }
 
 export const PeopleOrgSettings = () => {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'taxonomy' | 'relationships' | 'fields'>('taxonomy');
   const [taxonomies, setTaxonomies] = useState<Taxonomy[]>([]);
   const [loading, setLoading] = useState(true);

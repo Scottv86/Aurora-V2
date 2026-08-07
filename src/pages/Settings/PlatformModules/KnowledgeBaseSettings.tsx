@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { Button, Input } from '../../../components/UI/Primitives';
-import { Search, Plus, BookOpen, Trash2, Edit2, CheckCircle, ArrowLeft, Tag } from 'lucide-react';
+import { Search, Plus, BookOpen, Trash2, Edit2, CheckCircle, Tag } from 'lucide-react';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
 
@@ -66,7 +65,6 @@ const DEFAULT_ARTICLES: KBArticle[] = [
 
 export const KnowledgeBaseSettings = () => {
   const { tenant } = usePlatform();
-  const navigate = useNavigate();
   const [articles, setArticles] = useState<KBArticle[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');

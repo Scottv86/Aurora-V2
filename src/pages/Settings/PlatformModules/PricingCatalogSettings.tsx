@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   Tag, 
   Plus, 
@@ -10,8 +9,7 @@ import {
   Clock, 
   DollarSign, 
   Loader2,
-  RefreshCw,
-  ArrowLeft
+  RefreshCw
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
@@ -43,7 +41,6 @@ interface CatalogItem {
 }
 
 export const PricingCatalogSettings = () => {
-  const navigate = useNavigate();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
