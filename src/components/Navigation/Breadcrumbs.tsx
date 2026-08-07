@@ -34,7 +34,7 @@ const PATH_MAP: Record<string, string> = {
   billing: 'Billing & Plans',
   usage: 'Model Usage',
   subscription: 'Subscription',
-  'platform-modules': 'Platform Modules',
+  'platform-modules': 'Custom Modules',
   pages: 'Pages',
   apps: 'Apps',
   docs: 'Documents',
@@ -150,9 +150,10 @@ export const Breadcrumbs = () => {
       to,
       label: getLabel(segment, index)
     };
-  }).filter((item) => {
+  }).filter((item, idx, arr) => {
     if (isSettings && item.segment === 'workspace') return false;
-    return !['records', 'sub', 'member', 'teams', 'positions', 'page', 'platform-modules'].includes(item.segment);
+    if (item.segment === 'platform-modules' && idx < arr.length - 1) return false;
+    return !['records', 'sub', 'member', 'teams', 'positions', 'page'].includes(item.segment);
   });
 
   // For /workspace/settings index route, display "Settings > Overview"
