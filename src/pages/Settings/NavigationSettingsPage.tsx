@@ -661,6 +661,107 @@ export const NavigationSettingsPage = () => {
     return null;
   }, [selectedItemId, activeSections]);
 
+  // Helper to update the currently selected item in activeSections
+  const updateSelectedItemInSections = (updates: Partial<MenuItem>) => {
+    if (!selectedItemInfo) return;
+    handleSectionsChange(activeSections.map(sec => {
+      if (sec.id !== selectedItemInfo.sectionId) return sec;
+      return {
+        ...sec,
+        items: sec.items.map(it => {
+          if (it.id === selectedItemInfo.item.id) return { ...it, ...updates };
+          if (it.children) {
+            return {
+              ...it,
+              children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, ...updates } : child)
+            };
+          }
+          return it;
+        })
+      };
+    }));
+  };
+
+  const isSelectedItemQueue = Boolean(
+    selectedItemInfo?.item.queueConfig || 
+    selectedItemInfo?.item.isUnifiedQueue || 
+    selectedItemInfo?.item.moduleId || 
+    (selectedItemInfo?.item.moduleIds && selectedItemInfo.item.moduleIds.length > 0) || 
+    selectedItemInfo?.item.to?.startsWith('/workspace/queues/') || 
+    selectedItemInfo?.item.to?.includes('queueId=')
+  );
+
+  const selectedItemAvailableFields = useMemo(() => {
+    if (!selectedItemInfo) return [];
+    const item = selectedItemInfo.item;
+    const isUnified = item.isUnifiedQueue;
+    const targetModuleIds = isUnified 
+      ? (item.moduleIds || []) 
+      : (item.moduleId ? [item.moduleId] : []);
+
+    const list: { id: string; label: string; origin?: string }[] = [
+      { id: 'currentUser.teamName', label: 'Current User: Team Name' },
+      { id: 'currentUser.teamId', label: 'Current User: Team ID' },
+      { id: 'currentUser.role', label: 'Current User: Role' },
+      { id: 'currentUser.id', label: 'Current User: Member ID' },
+      { id: 'status', label: 'Status' },
+      { id: 'priority', label: 'Priority' },
+      { id: 'assigneeId', label: 'Assignee ID' }
+    ];
+
+    targetModuleIds.forEach(mId => {
+      const mod = modules.find((m: any) => m.id === mId);
+      if (mod?.layout) {
+        const flat = flattenFields(mod.layout);
+        flat.forEach((f: any) => {
+          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
+            if (!list.some(entry => entry.id === f.id)) {
+              list.push({ id: f.id, label: `${f.label || f.name} (${mod.name})`, origin: mod.name });
+            }
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [selectedItemInfo, modules]);
+
+  const selectedItemColumnOptions = useMemo(() => {
+    if (!selectedItemInfo) return [];
+    const item = selectedItemInfo.item;
+    const isUnified = item.isUnifiedQueue;
+    const targetModuleIds = isUnified 
+      ? (item.moduleIds || []) 
+      : (item.moduleId ? [item.moduleId] : []);
+
+    const list: { id: string; label: string; group: string }[] = [
+      { id: 'id', label: 'Record ID', group: 'System' },
+      { id: 'moduleId', label: 'Module Name', group: 'System' },
+      { id: 'title', label: 'Title/Key', group: 'System' },
+      { id: 'status', label: 'Status', group: 'System' },
+      { id: 'priority', label: 'Priority', group: 'System' },
+      { id: 'assigneeId', label: 'Assignee', group: 'System' },
+      { id: 'createdAt', label: 'Created At', group: 'System' },
+      { id: 'updatedAt', label: 'Updated At', group: 'System' }
+    ];
+
+    targetModuleIds.forEach(mId => {
+      const mod = modules.find((m: any) => m.id === mId);
+      if (mod?.layout) {
+        const flat = flattenFields(mod.layout);
+        flat.forEach((f: any) => {
+          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
+            if (!list.some(entry => entry.id === f.id)) {
+              list.push({ id: f.id, label: f.label || f.name, group: mod.name });
+            }
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [selectedItemInfo, modules]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 w-full h-full bg-white dark:bg-zinc-950">
@@ -1029,22 +1130,20 @@ export const NavigationSettingsPage = () => {
                     value={selectedItemInfo.item.label}
                     onChange={(e) => {
                       const updatedLabel = e.target.value;
-                      handleSectionsChange(activeSections.map(sec => {
-                        if (sec.id !== selectedItemInfo.sectionId) return sec;
-                        return {
-                          ...sec,
-                          items: sec.items.map(it => {
-                            if (it.id === selectedItemInfo.item.id) return { ...it, label: updatedLabel };
-                            if (it.children) {
-                              return {
-                                ...it,
-                                children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, label: updatedLabel } : child)
-                              };
-                            }
-                            return it;
-                          })
-                        };
-                      }));
+                      let updatedTo = selectedItemInfo.item.to;
+
+                      if (isSelectedItemQueue) {
+                        const labelSlug = slugify(updatedLabel);
+                        if (selectedItemInfo.item.isUnifiedQueue) {
+                          updatedTo = `/workspace/queues/${labelSlug}`;
+                        } else if (selectedItemInfo.item.moduleId) {
+                          const mod = modules.find((m: any) => m.id === selectedItemInfo.item.moduleId);
+                          const modSlug = mod ? slugify(mod.name) : selectedItemInfo.item.moduleId;
+                          updatedTo = `/workspace/modules/${modSlug}?queueId=${labelSlug}`;
+                        }
+                      }
+
+                      updateSelectedItemInSections({ label: updatedLabel, ...(updatedTo ? { to: updatedTo } : {}) });
                     }}
                     className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30"
                   />
@@ -1058,23 +1157,7 @@ export const NavigationSettingsPage = () => {
                       type="text"
                       value={selectedItemInfo.item.to || ''}
                       onChange={(e) => {
-                        const updatedTo = e.target.value;
-                        handleSectionsChange(activeSections.map(sec => {
-                          if (sec.id !== selectedItemInfo.sectionId) return sec;
-                          return {
-                            ...sec,
-                            items: sec.items.map(it => {
-                              if (it.id === selectedItemInfo.item.id) return { ...it, to: updatedTo };
-                              if (it.children) {
-                                return {
-                                  ...it,
-                                  children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, to: updatedTo } : child)
-                                };
-                              }
-                              return it;
-                            })
-                          };
-                        }));
+                        updateSelectedItemInSections({ to: e.target.value });
                       }}
                       className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-indigo-500/30 font-mono"
                     />
@@ -1087,23 +1170,7 @@ export const NavigationSettingsPage = () => {
                   <select
                     value={selectedItemInfo.item.iconName}
                     onChange={(e) => {
-                      const updatedIcon = e.target.value;
-                      handleSectionsChange(activeSections.map(sec => {
-                        if (sec.id !== selectedItemInfo.sectionId) return sec;
-                        return {
-                          ...sec,
-                          items: sec.items.map(it => {
-                            if (it.id === selectedItemInfo.item.id) return { ...it, iconName: updatedIcon };
-                            if (it.children) {
-                              return {
-                                ...it,
-                                children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, iconName: updatedIcon } : child)
-                              };
-                            }
-                            return it;
-                          })
-                        };
-                      }));
+                      updateSelectedItemInSections({ iconName: e.target.value });
                     }}
                     className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
                   >
@@ -1121,23 +1188,7 @@ export const NavigationSettingsPage = () => {
                   </div>
                   <button
                     onClick={() => {
-                      const newVis = selectedItemInfo.item.isVisible === false;
-                      handleSectionsChange(activeSections.map(sec => {
-                        if (sec.id !== selectedItemInfo.sectionId) return sec;
-                        return {
-                          ...sec,
-                          items: sec.items.map(it => {
-                            if (it.id === selectedItemInfo.item.id) return { ...it, isVisible: newVis };
-                            if (it.children) {
-                              return {
-                                ...it,
-                                children: it.children.map(child => child.id === selectedItemInfo.item.id ? { ...child, isVisible: newVis } : child)
-                              };
-                            }
-                            return it;
-                          })
-                        };
-                      }));
+                      updateSelectedItemInSections({ isVisible: selectedItemInfo.item.isVisible === false });
                     }}
                     className={cn(
                       "p-2 rounded-xl border transition-all",
@@ -1147,6 +1198,318 @@ export const NavigationSettingsPage = () => {
                     {selectedItemInfo.item.isVisible !== false ? <Eye size={16} /> : <EyeOff size={16} />}
                   </button>
                 </div>
+
+                {/* Work Queue Configuration Section */}
+                {!selectedItemInfo.item.isSubtitle && (
+                  <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block flex items-center gap-1.5">
+                        <Cpu size={13} className="text-purple-500" /> Work Queue Settings
+                      </label>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                        {isSelectedItemQueue ? (selectedItemInfo.item.isUnifiedQueue ? 'Unified' : 'Single') : 'Disabled'}
+                      </span>
+                    </div>
+
+                    {/* Queue Mode Selector Buttons */}
+                    <div className="grid grid-cols-3 gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateSelectedItemInSections({
+                            isUnifiedQueue: false,
+                            moduleId: undefined,
+                            moduleIds: undefined,
+                            queueConfig: undefined
+                          });
+                        }}
+                        className={cn(
+                          "py-1 rounded-lg font-bold transition-all text-center",
+                          !isSelectedItemQueue ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        )}
+                      >
+                        Plain Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defaultMod = activeCustomModules[0]?.id || '';
+                          const labelSlug = slugify(selectedItemInfo.item.label || 'queue');
+                          const mod = modules.find((m: any) => m.id === defaultMod);
+                          const modSlug = mod ? slugify(mod.name) : defaultMod;
+                          updateSelectedItemInSections({
+                            isUnifiedQueue: false,
+                            moduleId: selectedItemInfo.item.moduleId || defaultMod,
+                            moduleIds: undefined,
+                            to: `/workspace/modules/${modSlug}?queueId=${labelSlug}`,
+                            queueConfig: selectedItemInfo.item.queueConfig || {
+                              conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
+                              columns: []
+                            }
+                          });
+                        }}
+                        className={cn(
+                          "py-1 rounded-lg font-bold transition-all text-center",
+                          isSelectedItemQueue && !selectedItemInfo.item.isUnifiedQueue ? "bg-purple-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        )}
+                      >
+                        Single Queue
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defaultMods = selectedItemInfo.item.moduleIds?.length ? selectedItemInfo.item.moduleIds : (activeCustomModules[0]?.id ? [activeCustomModules[0].id] : []);
+                          const labelSlug = slugify(selectedItemInfo.item.label || 'queue');
+                          updateSelectedItemInSections({
+                            isUnifiedQueue: true,
+                            moduleId: undefined,
+                            moduleIds: defaultMods,
+                            to: `/workspace/queues/${labelSlug}`,
+                            queueConfig: selectedItemInfo.item.queueConfig || {
+                              conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
+                              columns: ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']
+                            }
+                          });
+                        }}
+                        className={cn(
+                          "py-1 rounded-lg font-bold transition-all text-center",
+                          isSelectedItemQueue && selectedItemInfo.item.isUnifiedQueue ? "bg-purple-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        )}
+                      >
+                        Unified Queue
+                      </button>
+                    </div>
+
+                    {/* Single Queue Module Selector */}
+                    {isSelectedItemQueue && !selectedItemInfo.item.isUnifiedQueue && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase block">Target Custom Module</label>
+                        <select
+                          value={selectedItemInfo.item.moduleId || ''}
+                          onChange={(e) => {
+                            const newModId = e.target.value;
+                            const mod = modules.find((m: any) => m.id === newModId);
+                            const modSlug = mod ? slugify(mod.name) : newModId;
+                            const labelSlug = slugify(selectedItemInfo.item.label || 'queue');
+                            updateSelectedItemInSections({
+                              moduleId: newModId,
+                              to: `/workspace/modules/${modSlug}?queueId=${labelSlug}`
+                            });
+                          }}
+                          className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs outline-none"
+                        >
+                          <option value="">Select custom module...</option>
+                          {activeCustomModules.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Unified Multi-Module Selector */}
+                    {isSelectedItemQueue && selectedItemInfo.item.isUnifiedQueue && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase block">Target Custom Modules</label>
+                        <div className="bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
+                          {activeCustomModules.map(m => {
+                            const isChecked = (selectedItemInfo.item.moduleIds || []).includes(m.id);
+                            return (
+                              <label key={m.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const currentIds = selectedItemInfo.item.moduleIds || [];
+                                    const updatedIds = e.target.checked
+                                      ? [...currentIds, m.id]
+                                      : currentIds.filter(id => id !== m.id);
+                                    updateSelectedItemInSections({ moduleIds: updatedIds });
+                                  }}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-purple-600 focus:ring-purple-500"
+                                />
+                                <span className="truncate">{m.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Queue Filter Rules Editor */}
+                    {isSelectedItemQueue && (
+                      <div className="space-y-2 pt-2 border-t border-zinc-200/50 dark:border-white/5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase block">Filter Rules (AND)</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
+                              const currentRules = currentConfig.conditions?.rules || [];
+                              const newRule = { fieldId: '', fieldType: 'field', operator: 'equals', value: '', valueType: 'literal' };
+                              updateSelectedItemInSections({
+                                queueConfig: {
+                                  ...currentConfig,
+                                  conditions: {
+                                    ...currentConfig.conditions,
+                                    rules: [...currentRules, newRule]
+                                  }
+                                }
+                              });
+                            }}
+                            className="flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold uppercase hover:underline"
+                          >
+                            <Plus size={11} /> Add Rule
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {(selectedItemInfo.item.queueConfig?.conditions?.rules || []).length === 0 ? (
+                            <div className="text-[10px] text-zinc-400 italic p-2 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-center">
+                              No filter rules defined. Queue matches all records.
+                            </div>
+                          ) : (
+                            (selectedItemInfo.item.queueConfig?.conditions?.rules || []).map((rule: any, rIdx: number) => (
+                              <div key={rIdx} className="flex flex-col gap-1.5 p-2 bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <select
+                                    value={rule.fieldId || ''}
+                                    onChange={(e) => {
+                                      const fieldId = e.target.value;
+                                      const isVar = fieldId.startsWith('currentUser.');
+                                      const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
+                                      const rules = [...(currentConfig.conditions?.rules || [])];
+                                      rules[rIdx] = { ...rules[rIdx], fieldId, fieldType: isVar ? 'variable' : 'field' };
+                                      updateSelectedItemInSections({
+                                        queueConfig: {
+                                          ...currentConfig,
+                                          conditions: { ...currentConfig.conditions, rules }
+                                        }
+                                      });
+                                    }}
+                                    className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] outline-none"
+                                  >
+                                    <option value="">Select Field...</option>
+                                    {selectedItemAvailableFields.map(f => (
+                                      <option key={f.id} value={f.id}>{f.label}</option>
+                                    ))}
+                                  </select>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const currentConfig = selectedItemInfo.item.queueConfig!;
+                                      const rules = (currentConfig.conditions?.rules || []).filter((_: any, i: number) => i !== rIdx);
+                                      updateSelectedItemInSections({
+                                        queueConfig: {
+                                          ...currentConfig,
+                                          conditions: { ...currentConfig.conditions, rules }
+                                        }
+                                      });
+                                    }}
+                                    className="text-zinc-400 hover:text-red-500 p-1"
+                                    title="Delete rule"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <select
+                                    value={rule.operator || 'equals'}
+                                    onChange={(e) => {
+                                      const operator = e.target.value;
+                                      const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
+                                      const rules = [...(currentConfig.conditions?.rules || [])];
+                                      rules[rIdx] = { ...rules[rIdx], operator };
+                                      updateSelectedItemInSections({
+                                        queueConfig: {
+                                          ...currentConfig,
+                                          conditions: { ...currentConfig.conditions, rules }
+                                        }
+                                      });
+                                    }}
+                                    className="w-28 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] outline-none"
+                                  >
+                                    <option value="equals">equals</option>
+                                    <option value="not_equals">not equals</option>
+                                    <option value="contains">contains</option>
+                                    <option value="is_empty">is empty</option>
+                                    <option value="not_empty">not empty</option>
+                                  </select>
+
+                                  {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
+                                    <input
+                                      type="text"
+                                      placeholder="Value"
+                                      value={rule.value || ''}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
+                                        const rules = [...(currentConfig.conditions?.rules || [])];
+                                        rules[rIdx] = { ...rules[rIdx], value };
+                                        updateSelectedItemInSections({
+                                          queueConfig: {
+                                            ...currentConfig,
+                                            conditions: { ...currentConfig.conditions, rules }
+                                          }
+                                        });
+                                      }}
+                                      className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] outline-none"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Display Columns Selection (for Unified Queues) */}
+                    {isSelectedItemQueue && selectedItemInfo.item.isUnifiedQueue && (
+                      <div className="space-y-1.5 pt-2 border-t border-zinc-200/50 dark:border-white/5">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase block">Display Columns</label>
+                        <div className="bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
+                          {Array.from(new Set(selectedItemColumnOptions.map(c => c.group))).map(groupName => (
+                            <div key={groupName} className="space-y-1">
+                              <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800 pb-0.5">
+                                {groupName} Fields
+                              </div>
+                              <div className="grid grid-cols-1 gap-1 pl-1">
+                                {selectedItemColumnOptions.filter(c => c.group === groupName).map(col => {
+                                  const currentCols = selectedItemInfo.item.queueConfig?.columns || [];
+                                  const isChecked = currentCols.includes(col.id);
+                                  return (
+                                    <label key={col.id} className="flex items-center gap-1.5 text-[11px] text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
+                                          const updatedCols = e.target.checked
+                                            ? [...(currentConfig.columns || []), col.id]
+                                            : (currentConfig.columns || []).filter((c: string) => c !== col.id);
+                                          updateSelectedItemInSections({
+                                            queueConfig: {
+                                              ...currentConfig,
+                                              columns: updatedCols
+                                            }
+                                          });
+                                        }}
+                                        className="rounded border-zinc-300 dark:border-zinc-700 text-purple-600 focus:ring-purple-500 h-3 w-3"
+                                      />
+                                      <span className="truncate">{col.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Remove Item */}
                 <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4">

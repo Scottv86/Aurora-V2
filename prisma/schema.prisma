@@ -49,6 +49,7 @@ model Tenant {
   aiMapping              TenantAIMapping?
   aiMetrics              AIUsageMetric[]
   recyclingBinItems      RecyclingBinItem[]
+  sites                  Site[]
 
   @@map("tenants")
 }
@@ -922,5 +923,30 @@ model RecyclingBinItem {
   @@index([tenantId, deletedAt])
   @@map("recycling_bin_items")
 }
+
+model Site {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  category    String   // internal, external, public
+  type        String   // Intranet Hub, Knowledge Base, Customer Portal, Vendor Portal, Landing Page, Status Page, Microsite, Wiki, Partner Hub
+  domain      String
+  status      String   @default("active") // active, draft, offline
+  access      String   @default("Authenticated") // Public, Authenticated, Restricted, Admin Only
+  branding    Json?
+  navConfig   Json?    @map("nav_config")
+  pagesConfig Json?    @map("pages_config")
+  metrics     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, category])
+  @@map("sites")
+}
+
 
 

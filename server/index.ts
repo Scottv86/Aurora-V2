@@ -26,6 +26,7 @@ import antigravityRoutes from './routes/antigravityRoutes';
 import aiSettingsRoutes from './routes/aiSettingsRoutes';
 import trashRoutes from './routes/trashRoutes';
 import digitalTwinRoutes from './routes/digitalTwin';
+import siteRoutes from './routes/siteRoutes';
 
 
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
@@ -124,6 +125,8 @@ app.use('/api/antigravity', authenticate, requireTenantAccess, antigravityRoutes
 app.use('/api/ai', authenticate, requireTenantAccess, aiSettingsRoutes);
 app.use('/api/trash', authenticate, requireTenantAccess, trashRoutes);
 app.use('/api/digital-twin', digitalTwinRoutes);
+app.use('/api/sites', siteRoutes);
+
 
 
 
@@ -157,4 +160,4 @@ httpServer.listen(PORT, () => {
   console.log(`🚀 Aurora Platform Server (with Real-time) running on http://localhost:${PORT}`);
   AutomationScheduler.start();
 });
-// Trigger restart to reload server port 3001
+// Trigger restart to reload server port 3001 with generated Prisma Site client

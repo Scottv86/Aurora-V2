@@ -4,6 +4,38 @@ import { SecurityScreeningService } from '../services/securityScreening';
 
 const router = Router();
 
+/**
+ * GET /api/public/sites/:id
+ * Public endpoint to fetch site configuration for portal view
+ */
+router.get('/sites/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const site = await globalPrisma.site.findFirst({
+      where: {
+        OR: [
+          { id },
+          { domain: id }
+        ]
+      }
+    });
+
+    if (!site) {
+      return res.status(404).json({ error: 'Site not found' });
+    }
+
+    if (site.status === 'offline') {
+      return res.status(403).json({ error: 'Site is currently offline for maintenance' });
+    }
+
+    res.json(site);
+  } catch (err: any) {
+    console.error('[PublicAPI] GET /sites/:id Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch public site' });
+  }
+});
+
+
 async function ensureTriageModule(tenantId: string) {
   // Returns triage module if exists, but does not auto-provision it.
   return await globalPrisma.module.findFirst({

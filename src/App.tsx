@@ -88,6 +88,9 @@ import { WorkspacePageView } from './pages/WorkspacePage/WorkspacePageView';
 import { PageBuilder } from './pages/WorkspacePage/PageBuilder';
 import { PagesManagementPage } from './pages/Settings/PagesManagementPage';
 import { SitesPage } from './pages/Settings/SitesPage';
+import { SiteBuilderPage } from './pages/Settings/SiteBuilderPage';
+import { PortalViewPage } from './pages/Platform/PortalViewPage';
+
 import { BrandingSettingsPage } from './pages/Settings/BrandingSettingsPage';
 import { NavigationSettingsPage } from './pages/Settings/NavigationSettingsPage';
 import { NavigationManagementPage } from './pages/Settings/NavigationManagementPage';
@@ -213,6 +216,8 @@ const App = () => {
               {/* Login & Root Redirect */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/workspace" replace />} />
+              <Route path="/public/portal/:siteId" element={<PortalViewPage />} />
+
                 {/* Aurora Chat (Unified all-in-one sidebar/screen) */}
                 <Route path="/workspace/aurora-vibe" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
                 <Route path="/workspace/aurora-vibe/:sessionId" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
@@ -279,6 +284,9 @@ const App = () => {
                 <Route path="platform/workforce/teams/:id" element={<TeamDetailView />} />
                 <Route path="platform/integrations" element={<ConnectorsPage />} />
                 <Route path="platform/sites" element={<SitesPage />} />
+                <Route path="platform/sites/:siteId/portal" element={<NavigateWithParams to="/public/portal/:siteId" replace />} />
+
+
                 <Route path="platform/automations" element={<AutomationsPage />} />
                 <Route path="platform/templates" element={<DocumentAutomation />} />
                 <Route path="platform/reports" element={<ReportManagementSettings />} />
@@ -315,6 +323,9 @@ const App = () => {
                 <Route path="ai-builder" element={<AIBuilder />} />
                 <Route path="builder/:id" element={<ModuleEditor />} />
                 <Route path="builder/page/:id" element={<PageBuilder />} />
+                <Route path="builder/site/:siteId" element={<SiteBuilderPage />} />
+
+
                 <Route path="pages" element={<PagesManagementPage />} />
                 <Route path="modules" element={<Navigate to="/workspace/settings/platform-modules" replace />} />
                 <Route path="apps" element={<Navigate to="/workspace/settings" replace />} />

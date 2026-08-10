@@ -1,43 +1,29 @@
-import { useState } from 'react';
-import { Modal } from '../../components/UI/TabsAndModal';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { NewSiteModal } from '../../components/Modals/NewSiteModal';
+import { PageHeader } from '../../components/UI/PageHeader';
+import { Button } from '../../components/UI/Primitives';
+import { motion } from 'motion/react';
 import { 
   Network, 
   Globe, 
   ExternalLink,
-  Laptop,
   Plus,
   Search,
-  Copy,
-  Check,
   Trash2,
-  Settings,
-  Activity,
-  Sparkles,
-  Lock,
-  Eye
+  RefreshCw,
+  Headphones,
+  BookOpen,
+  ArrowRight,
+  Sparkles
 } from 'lucide-react';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
-import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
+import { SiteService, Site } from '../../services/siteService';
 import { toast } from 'sonner';
 
-interface Site {
-  id: string;
-  name: string;
-  description: string;
-  category: 'internal' | 'external' | 'public';
-  type: string;
-  domain: string;
-  status: 'active' | 'draft' | 'offline';
-  access: 'Public' | 'Authenticated' | 'Restricted' | 'Admin Only';
-  metricLabel: string;
-  metricValue: string;
-  lastUpdated: string;
-}
-
-const INITIAL_SITES: Site[] = [
+const INITIAL_SEED_SITES: Partial<Site>[] = [
   // Internal Sites
   {
-    id: 'site-1',
     name: 'Main Intranet',
     description: 'Central organizational hub for corporate announcements, company policies, employee directories, and departmental news.',
     category: 'internal',
@@ -45,12 +31,9 @@ const INITIAL_SITES: Site[] = [
     domain: 'intranet.aurora.internal',
     status: 'active',
     access: 'Authenticated',
-    metricLabel: 'Active Members',
-    metricValue: '1,240',
-    lastUpdated: '2 hours ago'
+    metrics: { metricLabel: 'Active Members', metricValue: '1,240' }
   },
   {
-    id: 'site-2',
     name: 'Engineering Knowledge Base',
     description: 'Technical documentation, architecture decision records (ADRs), API guidelines, and developer onboarding materials.',
     category: 'internal',
@@ -58,12 +41,9 @@ const INITIAL_SITES: Site[] = [
     domain: 'docs.eng.aurora.internal',
     status: 'active',
     access: 'Restricted',
-    metricLabel: 'Articles Published',
-    metricValue: '348',
-    lastUpdated: '1 day ago'
+    metrics: { metricLabel: 'Articles Published', metricValue: '348' }
   },
   {
-    id: 'site-3',
     name: 'Operations Handbook',
     description: 'Standard operating procedures, emergency protocols, infrastructure runbooks, and compliance checklists.',
     category: 'internal',
@@ -71,14 +51,10 @@ const INITIAL_SITES: Site[] = [
     domain: 'ops.aurora.internal',
     status: 'active',
     access: 'Authenticated',
-    metricLabel: 'Active Readers',
-    metricValue: '512',
-    lastUpdated: '3 days ago'
+    metrics: { metricLabel: 'Active Readers', metricValue: '512' }
   },
-
   // External Portals
   {
-    id: 'site-4',
     name: 'Client Support Portal',
     description: 'Customer ticket submission, live chat assistant, knowledge base search, and SLA status tracking dashboard.',
     category: 'external',
@@ -86,12 +62,9 @@ const INITIAL_SITES: Site[] = [
     domain: 'support.aurora-app.com',
     status: 'active',
     access: 'Public',
-    metricLabel: 'Monthly Tickets',
-    metricValue: '4,120',
-    lastUpdated: '4 hours ago'
+    metrics: { metricLabel: 'Monthly Tickets', metricValue: '4,120' }
   },
   {
-    id: 'site-5',
     name: 'Supplier & Vendor Portal',
     description: 'Authenticated vendor center for uploading project proposals, verifying compliance credentials, and submitting invoice details.',
     category: 'external',
@@ -99,26 +72,10 @@ const INITIAL_SITES: Site[] = [
     domain: 'vendor.aurora.app',
     status: 'active',
     access: 'Authenticated',
-    metricLabel: 'Linked Vendors',
-    metricValue: '120',
-    lastUpdated: '4 hours ago'
-  },
-  {
-    id: 'site-6',
-    name: 'Partner Collaboration Hub',
-    description: 'Shared portal for agency partners and affiliate distributors to request marketing collaterals and track joint lead statuses.',
-    category: 'external',
-    type: 'Partner Hub',
-    domain: 'partners.aurora.app',
-    status: 'offline',
-    access: 'Authenticated',
-    metricLabel: 'Active Partners',
-    metricValue: '0',
-    lastUpdated: '1 week ago'
+    metrics: { metricLabel: 'Linked Vendors', metricValue: '120' }
   },
   // Public Sites
   {
-    id: 'site-7',
     name: 'Product Launch Landing Page',
     description: 'Promotional marketing website for capturing customer pre-registrations, product specifications, and email signups.',
     category: 'public',
@@ -126,222 +83,148 @@ const INITIAL_SITES: Site[] = [
     domain: 'launch.aurora.app',
     status: 'active',
     access: 'Public',
-    metricLabel: 'Monthly Traffic',
-    metricValue: '88K views',
-    lastUpdated: '10 mins ago'
-  },
-  {
-    id: 'site-8',
-    name: 'System Uptime Status Page',
-    description: 'Public operations board illustrating server health, latency stats, historical incident records, and maintenance logs.',
-    category: 'public',
-    type: 'Status Page',
-    domain: 'status.aurora.app',
-    status: 'active',
-    access: 'Public',
-    metricLabel: 'Avg. Uptime',
-    metricValue: '99.98%',
-    lastUpdated: '5 mins ago'
-  },
-  {
-    id: 'site-9',
-    name: 'Annual Developer Conference',
-    description: 'Event microsite housing schedule tables, speakers lists, location information, and registration tickets for the event.',
-    category: 'public',
-    type: 'Microsite',
-    domain: 'event2026.aurora.app',
-    status: 'offline',
-    access: 'Public',
-    metricLabel: 'Total Signups',
-    metricValue: '0',
-    lastUpdated: '2 weeks ago'
+    metrics: { metricLabel: 'Monthly Traffic', metricValue: '88K views' }
   }
 ];
 
 export const SitesPage = () => {
-  const [activeTab, setActiveTab] = useState('internal');
-  const [sites, setSites] = useState<Site[]>(INITIAL_SITES);
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<string>('all');
+  const [sites, setSites] = useState<Site[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // New Site Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newSiteName, setNewSiteName] = useState('');
-  const [newSiteDesc, setNewSiteDesc] = useState('');
-  const [newSiteCategory, setNewSiteCategory] = useState<'internal' | 'external' | 'public'>('internal');
-  const [newSiteType, setNewSiteType] = useState('');
-  const [newSiteDomain, setNewSiteDomain] = useState('');
-  const [newSiteAccess, setNewSiteAccess] = useState<'Public' | 'Authenticated' | 'Restricted' | 'Admin Only'>('Authenticated');
-  const [newSiteStatus, setNewSiteStatus] = useState<'active' | 'draft' | 'offline'>('active');
 
-  const subNavItems: SettingsSubNavItem[] = [
-    { id: 'internal', label: 'Internal Sites', icon: Network, description: 'Intranet hubs & wikis' },
-    { id: 'external', label: 'External Portals', icon: Globe, description: 'Client submission portals' },
-    { id: 'public', label: 'Public Sites', icon: Laptop, description: 'Landing pages & microsites' },
-  ];
-
-  const handleCopyLink = (domain: string, id: string) => {
-    const fullUrl = domain.startsWith('/') ? `${window.location.origin}${domain}` : `https://${domain}`;
-    navigator.clipboard.writeText(fullUrl);
-    setCopiedId(id);
-    toast.success('Site link copied to clipboard!');
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleDeleteSite = (id: string, name: string) => {
-    setSites(prev => prev.filter(site => site.id !== id));
-    toast.success(`"${name}" was deleted successfully.`);
-  };
-
-  const handleToggleStatus = (id: string, currentStatus: 'active' | 'draft' | 'offline') => {
-    const statusCycle: ('active' | 'draft' | 'offline')[] = ['active', 'draft', 'offline'];
-    const nextIndex = (statusCycle.indexOf(currentStatus) + 1) % statusCycle.length;
-    const nextStatus = statusCycle[nextIndex];
-
-    setSites(prev => prev.map(site => {
-      if (site.id === id) {
-        return { ...site, status: nextStatus, lastUpdated: 'Just now' };
+  const fetchSites = async () => {
+    try {
+      setLoading(true);
+      let data = await SiteService.getSites();
+      
+      // Auto-seed demo sites if database has no sites
+      if (data.length === 0) {
+        toast.info('Seeding default enterprise sites...');
+        for (const seed of INITIAL_SEED_SITES) {
+          await SiteService.createSite(seed);
+        }
+        data = await SiteService.getSites();
       }
-      return site;
-    }));
-    toast.info(`Site status updated to ${nextStatus.toUpperCase()}`);
+      
+      setSites(data);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to fetch sites.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCreateSite = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSiteName || !newSiteDomain) {
-      toast.error('Please enter a Site Name and URL / Domain.');
-      return;
+  useEffect(() => {
+    fetchSites();
+  }, []);
+
+  const handleDeleteSite = async (e: React.MouseEvent, siteId: string, siteName: string) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete "${siteName}"?`)) return;
+
+    try {
+      await SiteService.deleteSite(siteId);
+      setSites(prev => prev.filter(s => s.id !== siteId));
+      toast.success(`Site "${siteName}" deleted.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete site.');
     }
+  };
 
-    const metricMapping = {
-      internal: { label: 'Active Members', value: '1' },
-      external: { label: 'Forms Published', value: '1' },
-      public: { label: 'Monthly Traffic', value: '0 views' }
-    };
-
-    const newSite: Site = {
-      id: `site-${Date.now()}`,
-      name: newSiteName,
-      description: newSiteDesc || 'No description provided.',
-      category: newSiteCategory,
-      type: newSiteType || (newSiteCategory === 'internal' ? 'Intranet Hub' : newSiteCategory === 'external' ? 'Customer Portal' : 'Landing Page'),
-      domain: newSiteDomain,
-      status: newSiteStatus,
-      access: newSiteAccess,
-      metricLabel: metricMapping[newSiteCategory].label,
-      metricValue: metricMapping[newSiteCategory].value,
-      lastUpdated: 'Just now'
-    };
-
-    setSites(prev => [newSite, ...prev]);
-    setIsModalOpen(false);
-    toast.success(`"${newSiteName}" site created successfully!`);
-
-    // Reset fields
-    setNewSiteName('');
-    setNewSiteDesc('');
-    setNewSiteType('');
-    setNewSiteDomain('');
-    setNewSiteAccess('Authenticated');
-    setNewSiteStatus('active');
+  const handleOpenBuilder = (siteId: string) => {
+    navigate(`/workspace/settings/builder/site/${siteId}`);
   };
 
   // Filter logic
   const filteredSites = sites.filter(site => {
-    const matchesCategory = site.category === activeTab;
-    const matchesSearch = site.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          site.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          site.type.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = activeTab === 'all' || site.category === activeTab;
+    const matchesSearch = searchQuery === '' || 
+      site.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      site.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      site.domain.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || site.status === statusFilter;
     return matchesCategory && matchesSearch && matchesStatus;
   });
 
-  // Calculate statistics for active tab
-  const activeTabSites = sites.filter(s => s.category === activeTab);
-  const totalCount = activeTabSites.length;
-  const activeCount = activeTabSites.filter(s => s.status === 'active').length;
-  const customDomains = activeTabSites.filter(s => !s.domain.startsWith('/')).length;
+  const getSiteIcon = (type: string, category: string) => {
+    if (type.includes('Customer') || type.includes('Support')) return Headphones;
+    if (type.includes('Knowledge') || type.includes('Docs')) return BookOpen;
+    if (category === 'public') return Globe;
+    return Network;
+  };
 
   return (
     <LicenseGate fallback={<div className="p-10"><LicenseRestrictedPlaceholder /></div>}>
-      <SettingsSubNavLayout
-        title="Sites & Portals"
-        description="Manage your organization's internal hubs, client-facing submission portals, and public marketing microsites."
-        icon={Network}
-        items={subNavItems}
-        activeId={activeTab}
-        onTabChange={setActiveTab}
-        actions={
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer"
-          >
-            <Plus size={16} /> Create Site
-          </button>
-        }
-      >
-        {/* Content Area */}
-        <div className="flex-1 space-y-8">
+      <div className="flex flex-col w-full relative min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50">
+        
+        {/* Page Header matching Custom Modules Page */}
+        <PageHeader 
+          title="Sites & Portals"
+          description="Build, manage, and extend tenant-specific intranet hubs, client-facing submission portals, and public marketing sites."
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchSites}
+                className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl transition-all cursor-pointer"
+                title="Refresh Sites"
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              </button>
+              <Button onClick={() => setIsModalOpen(true)} className="gap-2 shadow-lg shadow-indigo-500/10">
+                <Plus size={16} /> Create Site
+              </Button>
+            </div>
+          }
+        />
+
+        <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
           
-          {/* Stats Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-              <div className="p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded-xl">
-                <Network size={20} />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold uppercase tracking-wider">Total Sites</p>
-                <h4 className="text-2xl font-extrabold text-zinc-900 dark:text-white mt-1">{totalCount}</h4>
-              </div>
+          {/* Category Filter Pills & Search Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            
+            {/* Category Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+              {[
+                { id: 'all', label: 'All Sites' },
+                { id: 'internal', label: 'Internal Hubs' },
+                { id: 'external', label: 'External Portals' },
+                { id: 'public', label: 'Public Sites' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                      : 'bg-white/60 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-800/80'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-xl relative">
-                <Activity size={20} />
-                <span className="absolute top-3 right-3 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-              </div>
-              <div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold uppercase tracking-wider">Active & Live</p>
-                <h4 className="text-2xl font-extrabold text-zinc-900 dark:text-white mt-1">{activeCount}</h4>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 rounded-xl">
-                <Globe size={20} />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold uppercase tracking-wider">Custom Domains</p>
-                <h4 className="text-2xl font-extrabold text-zinc-900 dark:text-white mt-1">{customDomains}</h4>
-              </div>
-            </div>
-          </div>
-
-          {/* Filtering and Actions Bar */}
-          <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl p-4">
-            <div className="flex flex-col sm:flex-row gap-3 flex-1 max-w-2xl">
-              {/* Search */}
-              <div className="relative flex-1">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
-                <input 
+            {/* Search & Status Filter */}
+            <div className="flex items-center gap-3">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={14} />
+                <input
                   type="text"
-                  placeholder="Search sites by name, type or description..."
+                  placeholder="Search sites or domains..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-900 dark:text-white"
+                  className="w-full pl-9 pr-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
                 />
               </div>
 
-              {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-800 dark:text-zinc-200 font-medium"
+                className="px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-900 dark:text-white focus:outline-none shadow-sm cursor-pointer"
               >
                 <option value="all">All Statuses</option>
                 <option value="active">Active</option>
@@ -349,311 +232,135 @@ export const SitesPage = () => {
                 <option value="offline">Offline</option>
               </select>
             </div>
-
-            {/* Create Button */}
-            <button 
-              onClick={() => {
-                setNewSiteCategory(activeTab as 'internal' | 'external' | 'public');
-                setIsModalOpen(true);
-              }}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-indigo-500/20 active:scale-98 transition-all"
-            >
-              <Plus size={16} />
-              <span>New Site</span>
-            </button>
           </div>
 
-          {/* Grid View */}
-          {filteredSites.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredSites.map(site => {
-                const isCopied = copiedId === site.id;
-                const statusColors = {
-                  active: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400',
-                  draft: 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400',
-                  offline: 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 dark:text-zinc-400'
-                };
-                
-                return (
-                  <div 
-                    key={site.id}
-                    className="group relative flex flex-col p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl hover:border-zinc-300 dark:hover:border-zinc-700 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
-                  >
-                    {/* Hover Glow Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
-                    {/* Card Header */}
-                    <div className="flex items-start justify-between relative z-10">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold rounded-lg uppercase tracking-wide">
-                        {site.type}
-                      </span>
-                      
-                      {/* Status pill (Interactive: toggles on click for admin settings) */}
-                      <button
-                        onClick={() => handleToggleStatus(site.id, site.status)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 border text-xs font-semibold rounded-full transition-all hover:brightness-95 active:scale-95 ${statusColors[site.status]}`}
-                        title="Click to toggle status"
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${
-                          site.status === 'active' ? 'bg-emerald-500' : site.status === 'draft' ? 'bg-amber-500' : 'bg-zinc-400'
-                        }`} />
-                        <span className="capitalize">{site.status}</span>
-                      </button>
-                    </div>
-
-                    {/* Site Info */}
-                    <div className="mt-4 flex-1 relative z-10">
-                      <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">
-                        {site.name}
-                      </h3>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed line-clamp-3 min-h-[3rem]">
-                        {site.description}
-                      </p>
-                    </div>
-
-                    {/* URL Path / Custom Domain (Interactive Copy) */}
-                    <div className="mt-4 relative z-10">
-                      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/50 dark:border-zinc-800/80 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
-                        <span className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400 font-mono truncate">
-                          <Globe size={12} className="text-zinc-400 shrink-0" />
-                          {site.domain}
-                        </span>
-                        <button
-                          onClick={() => handleCopyLink(site.domain, site.id)}
-                          className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 rounded-md transition-all shrink-0"
-                          title="Copy Link"
-                        >
-                          {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Mini Stats and Access Controls */}
-                    <div className="mt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/80 pt-4 text-xs relative z-10">
-                      <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
-                        {site.access === 'Public' ? <Eye size={12} /> : <Lock size={12} />}
-                        <span className="font-medium">{site.access}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-zinc-400">{site.metricLabel}: </span>
-                        <span className="font-semibold text-zinc-800 dark:text-zinc-200">{site.metricValue}</span>
-                      </div>
-                    </div>
-
-                    {/* Action Footer */}
-                    <div className="mt-4 flex items-center gap-2 border-t border-zinc-100 dark:border-zinc-800/80 pt-4 relative z-10">
-                      <a 
-                        href={site.domain.startsWith('/') ? site.domain : `https://${site.domain}`}
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 rounded-xl transition-all"
-                      >
-                        <span>Visit Site</span>
-                        <ExternalLink size={12} />
-                      </a>
-
-                      <button 
-                        onClick={() => toast.info(`Configuration settings for "${site.name}" will open in a sidebar soon.`)}
-                        className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all"
-                        title="Configure Branding & SEO"
-                      >
-                        <Settings size={14} />
-                      </button>
-
-                      <button 
-                        onClick={() => handleDeleteSite(site.id, site.name)}
-                        className="p-1.5 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all"
-                        title="Delete Site"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+          {/* Glassmorphic 3-Column Grid matching Custom Modules */}
+          {loading ? (
+            <div className="py-20 flex flex-col items-center justify-center text-zinc-500">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent mb-3" />
+              <p className="text-xs font-semibold">Loading sites & portals from database...</p>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-900/30">
-              <Sparkles size={36} className="text-zinc-300 dark:text-zinc-700 mb-3" />
-              <h4 className="text-base font-bold text-zinc-900 dark:text-white">No sites found</h4>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center max-w-sm mt-1">
-                We couldn't find any sites matching your filters. Create a new one or adjust your search parameters.
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredSites.map((site, i) => {
+                const SiteIcon = getSiteIcon(site.type || '', site.category);
+                return (
+                  <motion.div
+                    key={site.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                    onClick={() => handleOpenBuilder(site.id)}
+                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    <div>
+                      {/* Card Header: Icon + Category Badge + Actions */}
+                      <div className="relative z-10 flex items-start justify-between mb-4">
+                        <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+                          <SiteIcon size={24} />
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                            site.status === 'active' 
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                          }`}>
+                            {site.status}
+                          </span>
+                          
+                          <button
+                            onClick={(e) => { e.stopPropagation(); window.open(`/public/portal/${site.id}`, '_blank'); }}
+                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                            title="Visit Live Site"
+                          >
+                            <ExternalLink size={14} />
+                          </button>
+                          
+                          <button
+                            onClick={(e) => handleDeleteSite(e, site.id, site.name)}
+                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                            title="Delete Site"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Card Content: Title & Description */}
+                      <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <h3 className="text-lg font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {site.name}
+                          </h3>
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-400 font-mono">
+                            {site.type || site.category}
+                          </span>
+                        </div>
+                        
+                        <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed mb-3 line-clamp-2">
+                          {site.description || "No description provided."}
+                        </p>
+
+                        <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 dark:bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/10">
+                          <Globe size={13} className="shrink-0" />
+                          <span className="truncate">{site.domain}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Footer Action */}
+                    <div className="relative z-10 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-sm font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0 transform duration-300">
+                      <span className="flex items-center gap-2">
+                        Configure Site Studio <ArrowRight size={15} />
+                      </span>
+                      <span className="text-[10px] font-mono text-zinc-400">
+                        {site.pages?.length || 1} {site.pages?.length === 1 ? 'Page' : 'Pages'}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+
+              {/* Dashed Create Card matching Custom Modules */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: filteredSites.length * 0.03 }}
+                onClick={() => setIsModalOpen(true)}
+                className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[240px]"
+              >
+                <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform mb-3">
+                  <Plus size={24} />
+                </div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-1">Create Custom Site</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs leading-relaxed">
+                  Start from scratch, deploy a pre-configured site blueprint, or generate with AI.
+                </p>
+              </motion.div>
             </div>
           )}
 
+          {filteredSites.length === 0 && !loading && (
+            <div className="text-center py-16 text-zinc-500">
+              <Sparkles size={32} className="mx-auto mb-3 text-zinc-400 opacity-50" />
+              <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">No Sites Found</h3>
+              <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
+                No sites or portals match "{searchQuery}". Create a new site or adjust your search filters.
+              </p>
+            </div>
+          )}
         </div>
-      </SettingsSubNavLayout>
+      </div>
 
-      {/* Create Site Modal */}
-      <Modal
+      {/* New Site Creation Modal (Choices, Templates & AI) */}
+      <NewSiteModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Create New Site"
-        size="md"
-        footer={
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              form="create-site-form"
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-indigo-500/20 transition-all"
-            >
-              Create Site
-            </button>
-          </div>
-        }
-      >
-        <form id="create-site-form" onSubmit={handleCreateSite} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-              Category
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['internal', 'external', 'public'] as const).map(cat => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => {
-                    setNewSiteCategory(cat);
-                    // Autofill type suggestions based on category
-                    if (cat === 'internal') setNewSiteType('Intranet Hub');
-                    else if (cat === 'external') setNewSiteType('Customer Portal');
-                    else setNewSiteType('Landing Page');
-                  }}
-                  className={`py-2 px-3 text-xs font-bold border rounded-xl capitalize transition-all ${
-                    newSiteCategory === cat 
-                      ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400' 
-                      : 'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900'
-                  }`}
-                >
-                  {cat === 'internal' ? 'Internal' : cat === 'external' ? 'External' : 'Public'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="site-name" className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-              Site Name
-            </label>
-            <input 
-              id="site-name"
-              type="text"
-              placeholder="e.g. employee-handbook"
-              value={newSiteName}
-              onChange={(e) => setNewSiteName(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-900 dark:text-white"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="site-desc" className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-              Description
-            </label>
-            <textarea
-              id="site-desc"
-              rows={2}
-              placeholder="Provide a short summary of this site's purpose..."
-              value={newSiteDesc}
-              onChange={(e) => setNewSiteDesc(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-900 dark:text-white resize-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="site-type" className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-                Site Type
-              </label>
-              <select
-                id="site-type"
-                value={newSiteType}
-                onChange={(e) => setNewSiteType(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-800 dark:text-zinc-200"
-              >
-                {newSiteCategory === 'internal' && (
-                  <>
-                    <option value="Intranet Hub">Intranet Hub</option>
-                    <option value="Knowledge Base">Knowledge Base</option>
-                    <option value="Wiki">Wiki</option>
-                  </>
-                )}
-                {newSiteCategory === 'external' && (
-                  <>
-                    <option value="Customer Portal">Customer Portal</option>
-                    <option value="Vendor Portal">Vendor Portal</option>
-                    <option value="Partner Hub">Partner Hub</option>
-                  </>
-                )}
-                {newSiteCategory === 'public' && (
-                  <>
-                    <option value="Landing Page">Landing Page</option>
-                    <option value="Status Page">Status Page</option>
-                    <option value="Microsite">Microsite</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="site-access" className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-                Access Level
-              </label>
-              <select
-                id="site-access"
-                value={newSiteAccess}
-                onChange={(e) => setNewSiteAccess(e.target.value as any)}
-                className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-800 dark:text-zinc-200"
-              >
-                <option value="Public">Public (Unauthenticated)</option>
-                <option value="Authenticated">Authenticated</option>
-                <option value="Restricted">Restricted (Invitation only)</option>
-                <option value="Admin Only">Admin Only</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="site-domain" className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-              URL Path / Custom Domain
-            </label>
-            <input 
-              id="site-domain"
-              type="text"
-              placeholder={newSiteCategory === 'external' ? 'e.g. /portal or portal.mycompany.com' : 'e.g. docs.mycompany.com'}
-              value={newSiteDomain}
-              onChange={(e) => setNewSiteDomain(e.target.value)}
-              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-900 dark:text-white"
-              required
-            />
-          </div>
-
-          <div>
-            <label htmlFor="site-status" className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
-              Initial Status
-            </label>
-            <select
-              id="site-status"
-              value={newSiteStatus}
-              onChange={(e) => setNewSiteStatus(e.target.value as any)}
-              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-zinc-800 dark:text-zinc-200"
-            >
-              <option value="active">Active (Online)</option>
-              <option value="draft">Draft (Private Setup)</option>
-              <option value="offline">Offline (Maintenance)</option>
-            </select>
-          </div>
-        </form>
-      </Modal>
+        onSiteCreated={() => fetchSites()}
+      />
     </LicenseGate>
   );
 };
-

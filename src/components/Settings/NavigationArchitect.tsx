@@ -32,7 +32,8 @@ import {
   FolderPlus,
   Compass,
   CornerDownRight,
-  ChevronLeft
+  ChevronLeft,
+  Cpu
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '../UI/Primitives';
@@ -76,6 +77,7 @@ export const NavigationArchitect = ({
   sections, 
   onChange, 
   layout: _layout, 
+  modules,
   selectedItemId, 
   onSelectItem,
   onDropToolboxItem
@@ -345,6 +347,7 @@ export const NavigationArchitect = ({
                   section={section}
                   sIndex={sIndex}
                   sections={sections}
+                  modules={modules}
                   selectedItemId={selectedItemId}
                   onSelectItem={onSelectItem}
                   onDropToolboxItem={onDropToolboxItem}
@@ -386,6 +389,7 @@ const CategorySectionContainer = ({
   section,
   sIndex,
   sections,
+  modules,
   selectedItemId,
   onSelectItem,
   onDropToolboxItem,
@@ -401,6 +405,7 @@ const CategorySectionContainer = ({
   section: MenuSection;
   sIndex: number;
   sections: MenuSection[];
+  modules?: any[];
   selectedItemId?: string | null;
   onSelectItem?: (itemId: string | null) => void;
   onDropToolboxItem?: (sectionId: string, toolData: any) => void;
@@ -567,6 +572,7 @@ const CategorySectionContainer = ({
                 item={item}
                 itemIndex={iIndex}
                 section={section}
+                modules={modules}
                 selectedItemId={selectedItemId}
                 onSelectItem={onSelectItem}
                 removeItem={removeItem}
@@ -588,6 +594,7 @@ const SortableItemRow = ({
   item,
   itemIndex,
   section,
+  modules,
   selectedItemId,
   onSelectItem,
   removeItem,
@@ -599,6 +606,7 @@ const SortableItemRow = ({
   item: MenuItem;
   itemIndex: number;
   section: MenuSection;
+  modules?: any[];
   selectedItemId?: string | null;
   onSelectItem?: (itemId: string | null) => void;
   removeItem: (secId: string, itemId: string) => void;
@@ -624,6 +632,17 @@ const SortableItemRow = ({
 
   const isSelected = selectedItemId === item.id;
   const IconComponent = (LucideIcons as any)[item.iconName] || LucideIcons.Link2;
+
+  const isQueue = Boolean(
+    item.queueConfig || 
+    item.isUnifiedQueue || 
+    item.moduleId || 
+    (item.moduleIds && item.moduleIds.length > 0) || 
+    item.to?.startsWith('/workspace/queues/') || 
+    item.to?.includes('queueId=')
+  );
+  const ruleCount = item.queueConfig?.conditions?.rules?.length || 0;
+  const targetModName = item.moduleId ? modules?.find((m: any) => m.id === item.moduleId)?.name : null;
 
   return (
     <div ref={setNodeRef} style={style} className="space-y-1">
@@ -661,13 +680,21 @@ const SortableItemRow = ({
 
           {/* Label & Details */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className={cn(
                 "text-xs font-bold truncate",
                 isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-900 dark:text-white"
               )}>
                 {item.label}
               </span>
+
+              {isQueue && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1 shrink-0">
+                  <Cpu size={10} />
+                  {item.isUnifiedQueue ? `Unified Queue (${item.moduleIds?.length || 0} modules)` : `Queue${targetModName ? `: ${targetModName}` : ''}`}
+                  {ruleCount > 0 && <span className="opacity-75">• {ruleCount} rules</span>}
+                </span>
+              )}
 
               {item.isSubtitle && (
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700">
@@ -736,6 +763,17 @@ const SortableItemRow = ({
             const ChildIcon = (LucideIcons as any)[child.iconName] || LucideIcons.Link2;
             const isChildSelected = selectedItemId === child.id;
 
+            const isChildQueue = Boolean(
+              child.queueConfig || 
+              child.isUnifiedQueue || 
+              child.moduleId || 
+              (child.moduleIds && child.moduleIds.length > 0) || 
+              child.to?.startsWith('/workspace/queues/') || 
+              child.to?.includes('queueId=')
+            );
+            const childRuleCount = child.queueConfig?.conditions?.rules?.length || 0;
+            const childTargetModName = child.moduleId ? modules?.find((m: any) => m.id === child.moduleId)?.name : null;
+
             return (
               <div
                 key={child.id}
@@ -761,12 +799,21 @@ const SortableItemRow = ({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <span className={cn(
-                      "text-xs font-semibold truncate block",
-                      isChildSelected ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-800 dark:text-zinc-200"
-                    )}>
-                      {child.label}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn(
+                        "text-xs font-semibold truncate block",
+                        isChildSelected ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-800 dark:text-zinc-200"
+                      )}>
+                        {child.label}
+                      </span>
+                      {isChildQueue && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1 shrink-0">
+                          <Cpu size={10} />
+                          {child.isUnifiedQueue ? `Unified Queue (${child.moduleIds?.length || 0} modules)` : `Queue${childTargetModName ? `: ${childTargetModName}` : ''}`}
+                          {childRuleCount > 0 && <span className="opacity-75">• {childRuleCount} rules</span>}
+                        </span>
+                      )}
+                    </div>
                     {child.to && (
                       <span className="text-[9px] font-mono text-zinc-400 truncate block">
                         {child.to}

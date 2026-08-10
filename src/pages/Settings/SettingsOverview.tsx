@@ -71,6 +71,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['system', 'custom', 'modules', 'builder', 'data models', 'entities']
   },
   {
+    id: 'sites',
+    label: 'Sites & Portals',
+    description: 'Manage external web pages, citizen portals, and public forms.',
+    icon: 'Globe',
+    to: '/workspace/settings/platform-modules/sites',
+    category: 'App Builder & Customization',
+    tags: ['sites', 'portals', 'pages', 'public', 'external', 'builder']
+  },
+  {
     id: 'pages',
     label: 'Pages',
     description: 'Manage custom pages, dashboard widgets, and layouts.',
@@ -97,6 +106,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'App Builder & Customization',
     tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
   },
+
 
   // Logic & Workflows
   {

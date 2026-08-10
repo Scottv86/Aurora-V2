@@ -73,10 +73,8 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
     xl: 'max-w-5xl',
   };
 
-  if (!isOpen) return null;
-
   const modalNode = (
-    <AnimatePresence mode="wait">
+    <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           {/* Backdrop */}
@@ -84,6 +82,7 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             onClick={onClose}
             className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md"
           />
@@ -93,6 +92,7 @@ export const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }:
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
               'relative z-10 w-full overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-zinc-800/80 dark:border dark:border-zinc-800',
               sizes[size]

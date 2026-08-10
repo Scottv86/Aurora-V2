@@ -216,6 +216,7 @@ const AuroraBackground = () => (
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading } = useAuth();
   const { 
+    user: platformUser,
     isLoading: platformLoading, 
     menuConfig, 
     tenant,
@@ -228,6 +229,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     isBuilderFullscreen,
     setIsBuilderFullscreen
   } = usePlatform();
+
+  const isTenantAdmin = isDeveloper || 
+    platformUser?.role === 'TENANT_ADMIN' || 
+    platformUser?.role?.toLowerCase() === 'tenant admin' || 
+    platformUser?.role?.toLowerCase() === 'admin' || 
+    platformUser?.isSuperAdmin === true || 
+    platformUser?.licenceType === 'Developer';
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -311,12 +319,17 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         return currentUrl.pathname === '/workspace/settings' || currentUrl.pathname === '/workspace/settings/';
       }
 
+      if (targetUrl.pathname.replace(/\/$/, '') === '/workspace/settings/platform-modules') {
+        return currentUrl.pathname.replace(/\/$/, '') === '/workspace/settings/platform-modules';
+      }
+
       if (currentUrl.pathname !== targetUrl.pathname) {
         if (currentUrl.pathname.startsWith(targetUrl.pathname + '/')) {
           return true;
         }
         return false;
       }
+
       
       const targetQueueId = targetUrl.searchParams.get('queueId') || targetUrl.searchParams.get('queue');
       const currentQueueId = currentUrl.searchParams.get('queueId') || currentUrl.searchParams.get('queue');
@@ -341,51 +354,122 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     }
   };
 
+  const renderConfigureButton = (label: string, onClick: () => void, iconName: string = 'SlidersHorizontal') => {
+    const IconComponent = (LucideIcons as any)[iconName] || LucideIcons.SlidersHorizontal;
+    return (
+      <button
+        onClick={onClick}
+        className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-bold transition-all shadow-sm group shrink-0"
+      >
+        <IconComponent size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+        <span>{label}</span>
+      </button>
+    );
+  };
+
   const getContextualAction = () => {
-    if (!isDeveloper) return null;
+    if (!isTenantAdmin) return null;
     
-    // Check if we are viewing a custom workspace page
-    // Path: /workspace/pages/:pageId
+    // 1. Check if viewing a custom workspace page: /workspace/pages/:pageId
     if (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2]) {
       const pageId = pathnames[2];
-      return (
-        <button
-          onClick={() => navigate(`/workspace/settings/builder/page/${pageId}`)}
-          className="flex items-center gap-1.5 px-3 py-1 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 text-[10px] font-bold text-zinc-655 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm h-7"
-        >
-          <LucideIcons.Edit3 size={11} className="text-zinc-500" />
-          Edit Page Layout
-        </button>
+      const matchedPage = modules?.find((m: any) => m.type === 'PAGE' && (m.id === pageId || slugify(m.name) === pageId || m.name.toLowerCase() === pageId.toLowerCase()));
+      const targetId = matchedPage ? matchedPage.id : pageId;
+      return renderConfigureButton(
+        'Configure Page', 
+        () => navigate(`/workspace/settings/builder/page/${targetId}`),
+        'Layout'
       );
     }
     
-    // Check if we are viewing a module page
-    // Path: /workspace/modules/:moduleId
+    // 2. Check if viewing a custom module page: /workspace/modules/:moduleId
     if (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2] && pathnames[3] !== 'records') {
       const moduleId = pathnames[2];
-      return (
-        <button
-          onClick={() => navigate(`/workspace/settings/builder/${moduleId}`)}
-          className="flex items-center gap-1.5 px-3 py-1 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 text-[10px] font-bold text-zinc-655 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm h-7"
-        >
-          <LucideIcons.Edit3 size={11} className="text-zinc-500" />
-          Configure Module
-        </button>
+      const matchedMod = modules?.find((m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name.toLowerCase() === moduleId.toLowerCase()));
+      const targetId = matchedMod ? matchedMod.id : moduleId;
+      return renderConfigureButton(
+        'Configure Module', 
+        () => navigate(`/workspace/settings/builder/${targetId}`),
+        'SlidersHorizontal'
       );
     }
-    
-    // Check if we are viewing the work-distribution page
-    // Path: /workspace/platform/work-distribution
-    if (pathnames[0] === 'workspace' && pathnames[1] === 'platform' && pathnames[2] === 'work-distribution') {
-      return (
-        <button
-          onClick={() => navigate('/workspace/settings/platform-modules/work-distribution')}
-          className="flex items-center gap-1.5 px-3 py-1 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm h-7"
-        >
-          <LucideIcons.Edit3 size={11} className="text-zinc-500" />
-          Configure Module
-        </button>
+
+    // 3. Check if viewing a queue page: /workspace/queues/:queueId
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2]) {
+      return renderConfigureButton(
+        'Configure Queue', 
+        () => navigate('/workspace/settings/navigation/builder'),
+        'Compass'
       );
+    }
+
+    // 4. Platform Operations & System Modules: /workspace/platform/*
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'platform' && pathnames[2]) {
+      const feature = pathnames[2];
+      
+      if (feature === 'work-distribution' || feature === 'intake') {
+        return renderConfigureButton('Configure Work Distribution', () => navigate('/workspace/settings/platform-modules/work-distribution'), 'Inbox');
+      }
+      if (feature === 'people-organisations' || feature === 'entities') {
+        return renderConfigureButton('Configure Directory', () => navigate('/workspace/settings/platform-modules/people-organisations'), 'Users');
+      }
+      if (feature === 'knowledge-base') {
+        return renderConfigureButton('Configure Knowledge Base', () => navigate('/workspace/settings/platform-modules/knowledge-base'), 'BookOpen');
+      }
+      if (feature === 'pricing-catalog') {
+        return renderConfigureButton('Configure Pricing Catalog', () => navigate('/workspace/settings/platform-modules/pricing-catalog'), 'Tag');
+      }
+      if (feature === 'inventory-manager') {
+        return renderConfigureButton('Configure Inventory', () => navigate('/workspace/settings/platform-modules/inventory-manager'), 'Boxes');
+      }
+      if (feature === 'global-lists') {
+        return renderConfigureButton('Configure Global Lists', () => navigate('/workspace/settings/platform-modules/global-lists'), 'ListTodo');
+      }
+      if (feature === 'workforce') {
+        return renderConfigureButton('Configure Workforce', () => navigate('/workspace/settings/platform-modules/workforce-management'), 'Users');
+      }
+      if (feature === 'integrations') {
+        return renderConfigureButton('Configure Integrations', () => navigate('/workspace/settings/platform-modules/integration-management'), 'Plug');
+      }
+      if (feature === 'sites') {
+        return renderConfigureButton('Configure Sites', () => navigate('/workspace/settings/platform-modules/sites'), 'Globe');
+      }
+      if (feature === 'automations') {
+        return renderConfigureButton('Configure Automations', () => navigate('/workspace/settings/platform-modules/automation-management'), 'Zap');
+      }
+      if (feature === 'templates') {
+        return renderConfigureButton('Configure Templates', () => navigate('/workspace/settings/platform-modules/document-generation'), 'FileText');
+      }
+      if (feature === 'reports') {
+        return renderConfigureButton('Configure Reports', () => navigate('/workspace/settings/platform-modules/report-management'), 'BarChart2');
+      }
+      if (feature === 'api') {
+        return renderConfigureButton('Configure API', () => navigate('/workspace/settings/platform-modules/api-management'), 'Key');
+      }
+      if (feature === 'records-management') {
+        return renderConfigureButton('Configure Records', () => navigate('/workspace/settings/platform-modules/records-management'), 'Archive');
+      }
+    }
+
+    // 5. Utility Apps: /workspace/apps/*
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'apps' && pathnames[2]) {
+      const appName = pathnames[2];
+      if (appName === 'docs') {
+        return renderConfigureButton('Configure Documents', () => navigate('/workspace/settings/platform-modules/document-generation'), 'FileText');
+      }
+      if (appName === 'drive') {
+        return renderConfigureButton('Configure Storage', () => navigate('/workspace/settings/platform-modules/records-management'), 'Folder');
+      }
+    }
+
+    // 6. Analytics: /workspace/analytics
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'analytics') {
+      return renderConfigureButton('Configure Reports', () => navigate('/workspace/settings/platform-modules/report-management'), 'BarChart2');
+    }
+
+    // 7. My Work: /workspace/my-work
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'my-work') {
+      return renderConfigureButton('Configure Work Queue', () => navigate('/workspace/settings/platform-modules/work-distribution'), 'ClipboardList');
     }
     
     return null;
@@ -408,6 +492,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Layout,
       items: [
         { label: 'Custom Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
+        { label: 'Sites & Portals', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
         { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
         { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
         { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
@@ -447,11 +532,11 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       items: [
         { label: 'Report Management', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
         { label: 'Knowledge Base', icon: LucideIcons.BookOpen, to: '/workspace/settings/platform-modules/knowledge-base' },
-        { label: 'Sites & Portals', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
         { label: 'Document Generation', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
         { label: 'Records Management', icon: LucideIcons.Archive, to: '/workspace/settings/platform-modules/records-management' },
       ]
     }
+
   ];
 
   const filteredSettingsGroups = useMemo(() => {
@@ -610,7 +695,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       {/* Top Mounted Mega Menu */}
       {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
         <div className="sticky top-16 z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
-          <TopMegaMenu menuConfig={resolvedConfig} isDeveloper={isDeveloper} />
+          <TopMegaMenu menuConfig={resolvedConfig} isDeveloper={isTenantAdmin} />
         </div>
       )}
 
@@ -737,12 +822,34 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       />
                     ))}
 
+                    {resolvedConfig.sections.length > 0 && isTenantAdmin && (
+                      <div className="pt-3 mt-2 border-t border-zinc-200/60 dark:border-zinc-800/60">
+                        {collapsed ? (
+                          <button
+                            onClick={() => navigate('/workspace/settings/navigation/builder')}
+                            className="w-10 h-10 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 flex items-center justify-center transition-all shadow-sm group mx-auto"
+                            title="Configure Navigation"
+                          >
+                            <Compass size={18} className="group-hover:rotate-45 transition-transform duration-300" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => navigate('/workspace/settings/navigation/builder')}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 transition-all shadow-sm group"
+                          >
+                            <Compass size={15} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+                            <span className="truncate">Configure Navigation</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {resolvedConfig.sections.length === 0 && (
                       <div className={cn("text-center", collapsed ? "px-1 py-4" : "px-4 py-6 space-y-4")}>
-                        {isDeveloper ? (
+                        {isTenantAdmin ? (
                           collapsed ? (
                             <button
-                              onClick={() => navigate('/workspace/settings/navigation')}
+                              onClick={() => navigate('/workspace/settings/navigation/builder')}
                               className="w-10 h-10 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 flex items-center justify-center transition-all mx-auto animate-pulse"
                               title="Configure Navigation"
                             >
@@ -758,7 +865,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                                 <p className="text-[9px] text-zinc-500 leading-normal">No menu items configured. Design your layout in settings.</p>
                               </div>
                               <button 
-                                onClick={() => navigate('/workspace/settings/navigation')}
+                                onClick={() => navigate('/workspace/settings/navigation/builder')}
                                 className="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition-all shadow-sm"
                               >
                                 Open Builder
@@ -871,7 +978,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             "mx-auto flex flex-col min-h-full",
             (fullBleed || isAdminPath) ? "w-full flex-1" : "max-w-7xl w-full"
           )}>
-            {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false) && (
+            {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">
                 <Breadcrumbs />
                 {getContextualAction()}

@@ -33,7 +33,7 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
         </div>
         {isDeveloper && (
           <NavLink
-            to="/workspace/settings/navigation"
+            to="/workspace/settings/navigation/builder"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-650 hover:bg-indigo-700 text-white font-bold transition-all shadow-sm shrink-0"
           >
             <LucideIcons.Settings size={12} />
@@ -45,46 +45,57 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
   }
 
   return (
-    <nav className="flex items-center gap-2 h-full text-sm font-medium">
-      {menuConfig.sections.map((section) => {
-        const visibleItems = section.items?.filter(i => i.isVisible !== false) || [];
-        if (visibleItems.length === 0) return null;
+    <div className="flex items-center justify-between w-full h-full gap-4">
+      <nav className="flex items-center gap-2 h-full text-sm font-medium overflow-x-auto custom-scrollbar">
+        {menuConfig.sections.map((section) => {
+          const visibleItems = section.items?.filter(i => i.isVisible !== false) || [];
+          if (visibleItems.length === 0) return null;
 
-        const hasDropdown = visibleItems.length > 0;
+          const hasDropdown = visibleItems.length > 0;
 
-        return (
-          <div 
-            key={section.id} 
-            className="relative h-full flex items-center"
-            onMouseEnter={() => setActiveSection(section.id)}
-            onMouseLeave={() => setActiveSection(null)}
-          >
-            <button
-              type="button"
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900/50 transition-all duration-200",
-                activeSection === section.id && "bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-white"
-              )}
+          return (
+            <div 
+              key={section.id} 
+              className="relative h-full flex items-center"
+              onMouseEnter={() => setActiveSection(section.id)}
+              onMouseLeave={() => setActiveSection(null)}
             >
-              <span className="text-xs font-bold uppercase tracking-wider">{section.title}</span>
-              {hasDropdown && <ChevronDown size={12} className={cn("transition-transform duration-200 text-zinc-400", activeSection === section.id && "rotate-180")} />}
-            </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900/50 transition-all duration-200",
+                  activeSection === section.id && "bg-zinc-100 dark:bg-zinc-900 text-zinc-900 dark:text-white"
+                )}
+              >
+                <span className="text-xs font-bold uppercase tracking-wider">{section.title}</span>
+                {hasDropdown && <ChevronDown size={12} className={cn("transition-transform duration-200 text-zinc-400", activeSection === section.id && "rotate-180")} />}
+              </button>
 
-            {hasDropdown && activeSection === section.id && (
-              <div className="absolute left-0 top-full pt-1.5 z-50">
-                <div className="w-[300px] bg-white/95 dark:bg-zinc-950/95 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl backdrop-blur-xl p-3.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <div className="space-y-1">
-                    {visibleItems.map((item) => (
-                      <MegaMenuItemRenderer key={item.id} item={item} />
-                    ))}
+              {hasDropdown && activeSection === section.id && (
+                <div className="absolute left-0 top-full pt-1.5 z-50">
+                  <div className="w-[300px] bg-white/95 dark:bg-zinc-950/95 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl backdrop-blur-xl p-3.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="space-y-1">
+                      {visibleItems.map((item) => (
+                        <MegaMenuItemRenderer key={item.id} item={item} />
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </nav>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+      {isDeveloper && (
+        <NavLink
+          to="/workspace/settings/navigation/builder"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs transition-all shadow-sm shrink-0 border border-indigo-200/50 dark:border-indigo-500/20 group"
+        >
+          <LucideIcons.Compass size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+          <span>Configure Navigation</span>
+        </NavLink>
+      )}
+    </div>
   );
 };
 
