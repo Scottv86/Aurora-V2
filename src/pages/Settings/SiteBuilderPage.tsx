@@ -66,7 +66,7 @@ export const SiteBuilderPage: React.FC = () => {
   const [access, setAccess] = useState<'Public' | 'Authenticated' | 'Restricted' | 'Admin Only'>('Authenticated');
 
   // Branding state
-  const [accentColor, setAccentColor] = useState('#3b82f6');
+  const [accentColor, setAccentColor] = useState('#6366f1');
   const [logoUrl, setLogoUrl] = useState('');
   const [headerTitle, setHeaderTitle] = useState('');
   const [footerText, setFooterText] = useState('');
@@ -169,13 +169,13 @@ export const SiteBuilderPage: React.FC = () => {
         setAccess(data.access || 'Authenticated');
 
         const branding = data.branding || {
-          accentColor: '#3b82f6',
+          accentColor: '#6366f1',
           logoUrl: '',
           headerTitle: data.name,
           footerText: 'Powered by Aurora Platform',
           headerLayout: 'top_right'
         };
-        setAccentColor(branding.accentColor || '#3b82f6');
+        setAccentColor(branding.accentColor || '#6366f1');
         setLogoUrl(branding.logoUrl || '');
         setHeaderTitle(branding.headerTitle || data.name);
         setFooterText(branding.footerText || 'Powered by Aurora Platform');
@@ -722,8 +722,8 @@ export const SiteBuilderPage: React.FC = () => {
         {/* LEFT INSPECTOR SIDEBAR (400px split into 56px Vertical Icon Rail + 344px Tool Panel) */}
         <aside className="w-[400px] shrink-0 bg-zinc-900 border-r border-zinc-800 flex h-full overflow-hidden">
           
-          {/* VERTICAL ICON RAIL (56px) - Scalable for growing list of builder tools */}
-          <div className="w-[56px] shrink-0 bg-zinc-950 border-r border-zinc-800/80 flex flex-col items-center py-3 space-y-2.5 z-10 overflow-y-auto no-scrollbar">
+          {/* VERTICAL ICON RAIL (56px) - Modern edge-aligned tab rail */}
+          <div className="w-[56px] shrink-0 bg-black border-r border-zinc-800/80 flex flex-col items-center py-3 space-y-1 z-10 overflow-y-auto no-scrollbar">
             {[
               { id: 'pages', label: 'Pages', icon: Layers },
               { id: 'branding', label: 'Branding', icon: Palette },
@@ -742,25 +742,32 @@ export const SiteBuilderPage: React.FC = () => {
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id as any)}
-                  className={`group relative p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
-                    isActive 
-                      ? 'bg-zinc-800 text-white shadow-md ring-1 ring-zinc-700/60' 
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                  }`}
+                  className="w-full h-11 relative flex items-center justify-center cursor-pointer group transition-all"
                   title={t.label}
                 >
-                  <Icon size={17} style={{ color: isActive ? accentColor : undefined }} />
-                  
-                  {/* Left Edge Accent Bar */}
+                  {/* Left Edge Accent Bar - Full height of icon (20px) */}
                   {isActive && (
                     <span 
-                      className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full"
-                      style={{ backgroundColor: accentColor }}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[20px] rounded-r-full transition-all duration-200 shadow-sm"
+                      style={{ backgroundColor: accentColor || '#6366f1' }}
                     />
                   )}
 
+                  {/* Icon - Colored icon, NO background */}
+                  <div className="flex items-center justify-center">
+                    <Icon 
+                      size={20} 
+                      className={`transition-all duration-200 ${
+                        isActive 
+                          ? 'scale-105' 
+                          : 'text-zinc-400 group-hover:text-zinc-200'
+                      }`}
+                      style={isActive ? { color: accentColor || '#6366f1' } : undefined}
+                    />
+                  </div>
+
                   {/* Hover Tooltip */}
-                  <span className="absolute left-full ml-3 px-2 py-1 bg-zinc-900 border border-zinc-800 text-white text-[10px] font-bold rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-lg z-50">
+                  <span className="absolute left-full ml-2 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-100 text-[11px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
                     {t.label}
                   </span>
                 </button>
