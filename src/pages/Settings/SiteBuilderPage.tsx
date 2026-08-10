@@ -636,19 +636,6 @@ export const SiteBuilderPage: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm font-bold text-white leading-none">{name}</h1>
-                
-                {/* Active Page Selector */}
-                <select
-                  value={activePageId}
-                  onChange={e => setActivePageId(e.target.value)}
-                  className="bg-zinc-950 border border-zinc-800 text-indigo-400 text-xs font-bold px-2 py-0.5 rounded-lg outline-none cursor-pointer"
-                >
-                  {pages.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.parentId ? `└ ${p.title}` : p.title} ({p.slug})
-                    </option>
-                  ))}
-                </select>
               </div>
               <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{domain} &bull; {activePage?.slug}</p>
             </div>
