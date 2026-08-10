@@ -42,6 +42,7 @@ import { Site, SiteService, SiteNavItem, SiteWidget, SitePage } from '../../serv
 import { usePlatform } from '../../hooks/usePlatform';
 import { Modal } from '../../components/UI/TabsAndModal';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'motion/react';
 
 
 export const SiteBuilderPage: React.FC = () => {
@@ -722,7 +723,7 @@ export const SiteBuilderPage: React.FC = () => {
         {/* LEFT INSPECTOR SIDEBAR (400px split into 56px Vertical Icon Rail + 344px Tool Panel) */}
         <aside className="w-[400px] shrink-0 bg-zinc-900 border-r border-zinc-800 flex h-full overflow-hidden">
           
-          {/* VERTICAL ICON RAIL (56px) - Modern edge-aligned tab rail */}
+          {/* VERTICAL ICON RAIL (56px) - Modern animated edge-aligned tab rail */}
           <div className="w-[56px] shrink-0 bg-black border-r border-zinc-800/80 flex flex-col items-center py-3 space-y-1 z-10 overflow-y-auto no-scrollbar">
             {[
               { id: 'pages', label: 'Pages', icon: Layers },
@@ -745,26 +746,34 @@ export const SiteBuilderPage: React.FC = () => {
                   className="w-full h-11 relative flex items-center justify-center cursor-pointer group transition-all"
                   title={t.label}
                 >
-                  {/* Left Edge Accent Bar - Full height of icon (20px) */}
+                  {/* Left Edge Accent Bar - Smooth sliding spring transition */}
                   {isActive && (
-                    <span 
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[20px] rounded-r-full transition-all duration-200 shadow-sm"
+                    <motion.span 
+                      layoutId="activeSidetabIndicator"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[20px] rounded-r-full shadow-sm z-10"
                       style={{ backgroundColor: accentColor || '#6366f1' }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   )}
 
-                  {/* Icon - Colored icon, NO background */}
-                  <div className="flex items-center justify-center">
+                  {/* Icon - Micro-bounce pop on active selection */}
+                  <motion.div 
+                    animate={{ 
+                      scale: isActive ? [0.85, 1.15, 1] : 1,
+                    }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className="flex items-center justify-center"
+                  >
                     <Icon 
                       size={20} 
-                      className={`transition-all duration-200 ${
+                      className={`transition-colors duration-200 ${
                         isActive 
-                          ? 'scale-105' 
+                          ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]' 
                           : 'text-zinc-400 group-hover:text-zinc-200'
                       }`}
                       style={isActive ? { color: accentColor || '#6366f1' } : undefined}
                     />
-                  </div>
+                  </motion.div>
 
                   {/* Hover Tooltip */}
                   <span className="absolute left-full ml-2 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-100 text-[11px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
