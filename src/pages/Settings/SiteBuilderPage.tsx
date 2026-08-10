@@ -1481,14 +1481,6 @@ export const SiteBuilderPage: React.FC = () => {
 
         {/* RIGHT LIVE WYSIWYG PREVIEW CANVAS */}
         <main className="flex-1 bg-zinc-950 flex flex-col items-center justify-start p-6 overflow-y-auto relative">
-          
-          <div className="w-full max-w-5xl flex items-center justify-between mb-4 text-xs text-zinc-500">
-            <span className="font-mono flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live WYSIWYG Preview &bull; Page: <span className="text-white font-bold">{activePage?.title}</span>
-            </span>
-            <span className="uppercase tracking-wider font-semibold">{viewport} Viewport ({headerLayout})</span>
-          </div>
 
           {/* Viewport Frame Container */}
           <div className={`transition-all duration-300 shadow-2xl rounded-3xl border border-zinc-800 bg-zinc-950 overflow-hidden flex flex-col ${viewportWidthClass} min-h-[700px]`}>
