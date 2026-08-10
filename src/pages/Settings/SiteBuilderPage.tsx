@@ -1502,58 +1502,61 @@ export const SiteBuilderPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Navbar Links (Desktop, supporting parent-child submenus) */}
-              <div className="hidden md:flex items-center gap-4 text-xs font-semibold text-zinc-300">
-                {rootPages.map(rootPage => {
-                  const children = getChildPages(rootPage.id);
-                  const hasChildren = children.length > 0;
-                  const isActive = activePage?.id === rootPage.id || children.some(c => c.id === activePage?.id);
+              {/* Navbar Links (Visible on Desktop Viewport) */}
+              {viewport === 'desktop' && (
+                <div className="flex items-center gap-4 text-xs font-semibold text-zinc-300">
+                  {rootPages.map(rootPage => {
+                    const children = getChildPages(rootPage.id);
+                    const hasChildren = children.length > 0;
+                    const isActive = activePage?.id === rootPage.id || children.some(c => c.id === activePage?.id);
 
-                  return (
-                    <div key={rootPage.id} className="relative group">
-                      <button
-                        onClick={() => setActivePageId(rootPage.id)}
-                        className={`flex items-center gap-1 hover:text-white transition-colors cursor-pointer ${
-                          isActive ? 'text-white font-bold underline underline-offset-4' : ''
-                        }`}
-                      >
-                        <span>{rootPage.title}</span>
-                        {hasChildren && <ChevronDown size={12} className="text-zinc-500 group-hover:text-white" />}
-                      </button>
+                    return (
+                      <div key={rootPage.id} className="relative group">
+                        <button
+                          onClick={() => setActivePageId(rootPage.id)}
+                          className={`flex items-center gap-1 hover:text-white transition-colors cursor-pointer ${
+                            isActive ? 'text-white font-bold underline underline-offset-4' : ''
+                          }`}
+                        >
+                          <span>{rootPage.title}</span>
+                          {hasChildren && <ChevronDown size={12} className="text-zinc-500 group-hover:text-white" />}
+                        </button>
 
-                      {/* Dropdown Menu for Nested Child Pages */}
-                      {hasChildren && (
-                        <div className="absolute top-full left-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl p-1.5 shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-50">
-                          {children.map(child => (
-                            <button
-                              key={child.id}
-                              onClick={() => setActivePageId(child.id)}
-                              className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center justify-between"
-                            >
-                              <span>{child.title}</span>
-                              <ChevronRight size={12} className="text-zinc-600" />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        {/* Dropdown Menu for Nested Child Pages */}
+                        {hasChildren && (
+                          <div className="absolute top-full left-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl p-1.5 shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-50">
+                            {children.map(child => (
+                              <button
+                                key={child.id}
+                                onClick={() => setActivePageId(child.id)}
+                                className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center justify-between"
+                              >
+                                <span>{child.title}</span>
+                                <ChevronRight size={12} className="text-zinc-600" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Mobile Hamburger Toggle Button (Visible on Mobile/Tablet Viewport) */}
               <div className="flex items-center gap-2">
                 {viewport !== 'desktop' && (
                   <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all cursor-pointer"
+                    className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
+                    title={isMobileMenuOpen ? "Close Menu" : "Open Navigation Menu"}
                   >
                     {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
                   </button>
                 )}
 
                 <span 
-                  className="px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase hidden sm:inline"
+                  className="px-2 py-0.5 text-[10px] font-extrabold rounded-md uppercase shrink-0"
                   style={{ backgroundColor: `${accentColor}25`, color: accentColor }}
                 >
                   {access}
