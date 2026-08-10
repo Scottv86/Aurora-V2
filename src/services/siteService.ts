@@ -36,7 +36,7 @@ export interface SiteThemeConfig {
   cardStyle: 'solid' | 'glass' | 'bordered' | 'gradient';
   borderRadius: 'none' | 'md' | 'xl' | '2xl' | 'full';
   fontFamily: string;
-  headerLayout: 'top_right' | 'top_center' | 'pill_header' | 'minimal';
+  headerLayout: 'top_right' | 'top_center' | 'pill_header' | 'minimal' | 'sidebar_left' | 'sidebar_right';
   navLinkStyle?: 'underline' | 'pills' | 'badges' | 'glowing_text' | 'ghost_button';
   customCss?: string;
 }
@@ -52,7 +52,7 @@ export interface PresetTheme {
   cardStyle: 'solid' | 'glass' | 'bordered' | 'gradient';
   borderRadius: 'none' | 'md' | 'xl' | '2xl' | 'full';
   fontFamily: string;
-  headerLayout: 'top_right' | 'top_center' | 'pill_header' | 'minimal';
+  headerLayout: 'top_right' | 'top_center' | 'pill_header' | 'minimal' | 'sidebar_left' | 'sidebar_right';
   navLinkStyle?: 'underline' | 'pills' | 'badges' | 'glowing_text' | 'ghost_button';
 }
 
@@ -135,7 +135,7 @@ export interface SiteBranding {
   headerTitle: string;
   footerText: string;
   themeMode?: 'dark' | 'light' | 'system';
-  headerLayout?: 'top_right' | 'top_center' | 'pill_header' | 'minimal';
+  headerLayout?: 'top_right' | 'top_center' | 'pill_header' | 'minimal' | 'sidebar_left' | 'sidebar_right';
   fontFamily?: 'sans' | 'outfit' | 'mono' | 'serif' | 'playfair';
   navLinkStyle?: 'underline' | 'pills' | 'badges' | 'glowing_text' | 'ghost_button';
   themeConfig?: SiteThemeConfig;
@@ -158,13 +158,82 @@ export interface FormFieldConfig {
 
 export interface SiteWidget {
   id: string;
-  type: 'hero' | 'announcements' | 'ticket_form' | 'kb_search' | 'status_widget' | 'form_embed' | 'module_feed';
+  type: 
+    | 'hero' | 'announcements' | 'ticket_form' | 'kb_search' | 'status_widget' | 'form_embed' | 'module_feed' 
+    | 'record_grid' | 'record_detail' | 'status_tracker' | 'live_chat' | 'auth_widget' | 'bond_lodgement' 
+    | 'action_button' | 'data_table' | 'record_lookup' | 'custom_form' | 'record_card' | 'progress_stepper' 
+    | 'chat_thread' | 'auth_box' | 'action_bar' | 'card_grid' | 'kpi_stat_group'
+    | 'kanban_board' | 'event_calendar' | 'file_vault' | 'form_wizard' | 'feedback_survey' 
+    | 'calculator_widget' | 'signature_pad' | 'user_profile' | 'access_guard' | 'team_directory' 
+    | 'activity_feed' | 'faq_accordion' | 'feature_grid' | 'tabbed_content' | 'pricing_table' 
+    | 'testimonials' | 'cta_strip' | 'embed_iframe' | 'bottom_nav_bar' | 'floating_action_btn' 
+    | 'push_prompt' | 'infinite_stream' | 'slider_carousel' | 'cms_collection_list'
+    | 'heading_block' | 'text_paragraph' | 'horizontal_rule' | 'content_panel' | 'vertical_spacer';
   enabled: boolean;
   title: string;
   subtitle?: string;
+  headingLevel?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+  textAlign?: 'left' | 'center' | 'right';
+  dividerStyle?: 'solid' | 'dashed' | 'dotted' | 'gradient';
+  panelStyle?: 'card_surface' | 'subtle_tint' | 'bordered_glass' | 'gradient_glow';
+  spacerHeight?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   targetModuleId?: string;
   targetModuleName?: string;
+  targetSubmoduleId?: string;
+  targetSubmoduleName?: string;
+  contextSource?: 'all_records' | 'parent_route_record' | 'filtered_subset';
+  fieldMapping?: { 
+    titleField?: string; 
+    subtitleField?: string; 
+    badgeField?: string; 
+    imageField?: string; 
+    priceField?: string; 
+    dateField?: string; 
+    detailRoute?: string 
+  };
+  slides?: {
+    id: string;
+    title: string;
+    subtitle?: string;
+    imageUrl?: string;
+    buttonLabel?: string;
+    buttonAction?: string;
+    actionTarget?: string;
+  }[];
   formFields?: FormFieldConfig[];
+  displayColumns?: string[];
+  recordFilter?: string;
+  trackerPlaceholder?: string;
+  chatWelcomeMsg?: string;
+  authMode?: 'login' | 'register' | 'sso_only' | 'both';
+  buttonLabel?: string;
+  buttonAction?: 'open_modal' | 'navigate' | 'trigger_workflow' | 'download' | 'execute_api';
+  actionTarget?: string;
+  layoutColumns?: '1_col' | '2_col' | '3_col' | '4_col' | 'split_1_2' | 'split_2_1';
+  customSnippet?: string;
+  customBadge?: string;
+}
+
+export interface SiteAuthConfig {
+  enabled: boolean;
+  allowPublicRegistration: boolean;
+  providers: ('email' | 'google' | 'apple' | 'microsoft' | 'saml')[];
+  defaultRole?: string;
+  sessionDurationMinutes?: number;
+  requireMfa?: boolean;
+}
+
+export interface SiteAppExportConfig {
+  appId: string;
+  appName: string;
+  platform: 'all' | 'web' | 'ios' | 'android';
+  version: string;
+  buildNumber: number;
+  iconUrl?: string;
+  splashBgColor?: string;
+  pushNotificationsEnabled?: boolean;
+  cameraAccessEnabled?: boolean;
+  biometricsEnabled?: boolean;
 }
 
 export interface SitePage {
@@ -233,6 +302,8 @@ export interface Site {
   typographyConfig?: SiteTypographyConfig;
   customCode?: SiteCustomCode;
   localizationConfig?: SiteLocalizationConfig;
+  authConfig?: SiteAuthConfig;
+  appExportConfig?: SiteAppExportConfig;
   submissions?: SiteSubmission[];
   metrics?: {
     metricLabel: string;
@@ -351,5 +422,66 @@ export const SiteService = {
     if (!res.ok) {
       throw new Error(`Failed to delete site: ${res.statusText}`);
     }
+  },
+
+  async trackApplication(siteId: string, trackingCode: string): Promise<any> {
+    const res = await fetch(`${getApiBaseUrl()}/public/sites/${siteId}/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackingCode })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Tracking code not found or invalid');
+    }
+    return await res.json();
+  },
+
+  async sendChatMessage(siteId: string, message: string, senderName?: string): Promise<any> {
+    const res = await fetch(`${getApiBaseUrl()}/public/sites/${siteId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, senderName: senderName || 'Portal Visitor' })
+    });
+    if (!res.ok) {
+      throw new Error('Failed to send chat message');
+    }
+    return await res.json();
+  },
+
+  async fetchPublicModuleRecords(siteId: string, moduleId?: string, search?: string): Promise<any[]> {
+    const url = new URL(`${getApiBaseUrl()}/public/sites/${siteId}/records`);
+    if (moduleId) url.searchParams.append('moduleId', moduleId);
+    if (search) url.searchParams.append('search', search);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    return await res.json();
+  },
+
+  async lodgePropertyBond(siteId: string, bondData: any): Promise<any> {
+    const res = await fetch(`${getApiBaseUrl()}/public/sites/${siteId}/bonds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bondData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to lodge property bond');
+    }
+    return await res.json();
+  },
+
+  async exportMobileAppManifest(siteId: string, config: SiteAppExportConfig): Promise<any> {
+    const res = await fetch(`${getApiBaseUrl()}/sites/${siteId}/export-mobile-bundle`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ config })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to generate mobile export package');
+    }
+    return await res.json();
   }
 };

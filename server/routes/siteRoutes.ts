@@ -122,14 +122,46 @@ router.post('/', async (req: TenantRequest, res: Response) => {
     const defaultPages = [
       {
         id: 'page-home',
-        title: 'Home',
+        title: 'Home Portal',
         slug: '/',
-        description: 'Main portal home page.',
+        description: 'Main portal home page and service hub.',
         isHome: true,
         widgets: [
-          { id: 'w-hero', type: 'hero', enabled: true, title: `Welcome to ${name}`, subtitle: description || 'Your official portal hub.' },
+          { id: 'w-hero', type: 'hero', enabled: true, title: `Welcome to ${name}`, subtitle: description || 'Your official self-service portal hub.' },
           { id: 'w-announcements', type: 'announcements', enabled: true, title: 'Portal News & Updates' },
-          { id: 'w-status', type: 'status_widget', enabled: siteCategory === 'public', title: 'Live Service Status' }
+          { id: 'w-status', type: 'status_widget', enabled: true, title: 'Live System Health Status' }
+        ]
+      },
+      {
+        id: 'page-bonds',
+        title: 'Property Bond Lodgement',
+        slug: '/bonds',
+        description: 'Lodge and manage property bonds directly with the Aurora Tenancy Register.',
+        isHome: false,
+        widgets: [
+          { id: 'w-bond-hub', type: 'bond_lodgement', enabled: true, title: 'Property Bond Lodgement Portal' },
+          { id: 'w-record-grid', type: 'record_grid', enabled: true, title: 'Live Tenancy Records Feed' }
+        ]
+      },
+      {
+        id: 'page-tracker',
+        title: 'Status Tracker & Live Chat',
+        slug: '/tracker',
+        description: 'Track application progress and chat live with online support staff.',
+        isHome: false,
+        widgets: [
+          { id: 'w-status-tracker', type: 'status_tracker', enabled: true, title: 'Application / Bond Status Tracker' },
+          { id: 'w-live-chat', type: 'live_chat', enabled: true, title: 'Online Customer Support Live Chat' }
+        ]
+      },
+      {
+        id: 'page-auth',
+        title: 'Portal Access & SSO',
+        slug: '/auth',
+        description: 'Portal member login and third-party SSO authentication.',
+        isHome: false,
+        widgets: [
+          { id: 'w-portal-auth', type: 'auth_widget', enabled: true, title: 'Portal Member Access & SSO' }
         ]
       },
       {
@@ -144,7 +176,7 @@ router.post('/', async (req: TenantRequest, res: Response) => {
       },
       {
         id: 'page-contact',
-        title: 'Support & Contact',
+        title: 'Support & Intake',
         slug: '/contact',
         description: 'Submit inquiries and support tickets.',
         isHome: false,
@@ -288,5 +320,96 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
   }
 });
 
+// POST /api/sites/:id/export-mobile-bundle
+// Generates mobile application export package for iOS (App Store) & Android (Play Store) via Capacitor/Expo
+router.post('/:id/export-mobile-bundle', async (req: TenantRequest, res: Response) => {
+  try {
+    const { db, tenantId } = await getDbContext(req);
+    const { id } = req.params;
+    const { config } = req.body;
+
+    const site = await (db as any).site.findFirst({
+      where: { id, tenantId }
+    });
+
+    if (!site) {
+      return res.status(404).json({ error: 'Site not found' });
+    }
+
+    const appId = config?.appId || `com.aurora.${site.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+    const appName = config?.appName || site.name;
+    const version = config?.version || '1.0.0';
+
+    const mobileManifest = {
+      generator: 'Aurora Universal Site & Mobile Builder v2.0',
+      timestamp: new Date().toISOString(),
+      siteId: site.id,
+      tenantId: site.tenantId,
+      app: {
+        appId,
+        appName,
+        version,
+        buildNumber: config?.buildNumber || 1,
+        platform: config?.platform || 'all',
+        entryUrl: `https://${site.domain || 'aurora-portal.local'}/portal/${site.id}`,
+        branding: site.branding || {},
+        pushEnabled: !!config?.pushNotificationsEnabled,
+        cameraEnabled: !!config?.cameraAccessEnabled,
+        biometricsEnabled: !!config?.biometricsEnabled
+      },
+      capacitorConfig: {
+        appId,
+        appName,
+        webDir: 'dist',
+        server: {
+          url: `https://${site.domain || 'aurora-portal.local'}/portal/${site.id}`,
+          cleartext: false
+        },
+        plugins: {
+          PushNotifications: { presentationOptions: ["badge", "sound", "alert"] },
+          SplashScreen: { backgroundColor: config?.splashBgColor || "#09090b", launchShowDuration: 2000 }
+        }
+      },
+      reactNativeExpoConfig: {
+        name: appName,
+        slug: appName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        version,
+        orientation: 'portrait',
+        icon: config?.iconUrl || './assets/icon.png',
+        userInterfaceStyle: 'dark',
+        splash: {
+          image: config?.iconUrl || './assets/splash.png',
+          resizeMode: 'contain',
+          backgroundColor: config?.splashBgColor || '#09090b'
+        },
+        ios: {
+          supportsTablet: true,
+          bundleIdentifier: appId
+        },
+        android: {
+          adaptiveIcon: {
+            foregroundImage: config?.iconUrl || './assets/adaptive-icon.png',
+            backgroundColor: config?.splashBgColor || '#09090b'
+          },
+          package: appId
+        }
+      },
+      buildCommands: {
+        capacitorAndroid: `npx cap add android && npx cap open android`,
+        capacitorIos: `npx cap add ios && npx cap open ios`,
+        expoBuild: `npx eas build --platform all`
+      }
+    };
+
+    res.json({
+      success: true,
+      message: 'Mobile app bundle manifest compiled successfully!',
+      manifest: mobileManifest
+    });
+  } catch (err: any) {
+    console.error('[SitesAPI] POST /:id/export-mobile-bundle Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to generate mobile export package' });
+  }
+});
 
 export default router;

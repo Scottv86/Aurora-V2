@@ -55,6 +55,16 @@ const INITIAL_SEED_SITES: Partial<Site>[] = [
   },
   // External Portals
   {
+    name: 'Property Bond Lodgement Portal',
+    description: 'Official self-service portal for bond holders & residents to lodge property bonds, track application status, and live chat with support.',
+    category: 'external',
+    type: 'Customer Portal',
+    domain: 'bonds.aurora.app',
+    status: 'active',
+    access: 'Public',
+    metrics: { metricLabel: 'Bonds Lodged', metricValue: '1,840' }
+  },
+  {
     name: 'Client Support Portal',
     description: 'Customer ticket submission, live chat assistant, knowledge base search, and SLA status tracking dashboard.',
     category: 'external',

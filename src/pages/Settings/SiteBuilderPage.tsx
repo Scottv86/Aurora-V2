@@ -26,6 +26,7 @@ import {
   Layers,
   X,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -33,6 +34,7 @@ import {
   EyeOff,
   Sliders,
   FormInput,
+  Zap,
   GripVertical,
   ArrowUp,
   ArrowDown,
@@ -43,7 +45,29 @@ import {
   Globe,
   BarChart3,
   History,
-  RefreshCw
+  RefreshCw,
+  Building2,
+  Clock,
+  MessageSquare,
+  Lock,
+  Calendar,
+  FileText,
+  Star,
+  Calculator,
+  PenTool,
+  UserCheck,
+  Users,
+  HelpCircle,
+  CreditCard,
+  MessageCircle,
+  Bell,
+  Compass,
+  Database,
+  Images,
+  Heading,
+  Minus,
+  Box,
+  MoveVertical
 } from 'lucide-react';
 
 import { Site, SiteService, SiteNavItem, SiteWidget, SitePage, FormFieldConfig, PRESET_THEMES, PresetTheme, SiteThemeConfig, ENTERPRISE_FONTS } from '../../services/siteService';
@@ -72,10 +96,20 @@ export const SiteBuilderPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'pages' | 'branding' | 'widgets' | 'nav' | 'seo' | 'inbox' | 'code' | 'typography' | 'localization' | 'access' | 'analytics' | 'history'>('pages');
-  const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile' | 'mobile_android'>('desktop');
   const [canvasZoom, setCanvasZoom] = useState<number>(100);
   const [selectedElement, setSelectedElement] = useState<InspectableElement>({ type: 'header' });
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+
+  // Mobile App Exporter Modal State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [appId, setAppId] = useState('com.aurora.mobileportal');
+  const [appName, setAppName] = useState('');
+  const [appPlatform, setAppPlatform] = useState<'all' | 'web' | 'ios' | 'android'>('all');
+  const [appVersion, setAppVersion] = useState('1.0.0');
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [exportingApp, setExportingApp] = useState(false);
+  const [exportedManifest, setExportedManifest] = useState<any>(null);
 
   // Theme Studio State
   const [activeThemeSegment, setActiveThemeSegment] = useState<'presets' | 'custom'>('presets');
@@ -98,13 +132,15 @@ export const SiteBuilderPage: React.FC = () => {
   const [logoUrl, setLogoUrl] = useState('');
   const [headerTitle, setHeaderTitle] = useState('');
   const [footerText, setFooterText] = useState('');
-  const [headerLayout, setHeaderLayout] = useState<'top_right' | 'top_center' | 'pill_header' | 'minimal'>('top_right');
+  const [headerLayout, setHeaderLayout] = useState<'top_right' | 'top_center' | 'pill_header' | 'minimal' | 'sidebar_left' | 'sidebar_right'>('top_right');
 
   // Multi-Page & Drag-and-Drop State
   const [pages, setPages] = useState<SitePage[]>([]);
   const [activePageId, setActivePageId] = useState<string>('');
   const [draggedPageId, setDraggedPageId] = useState<string | null>(null);
   const [dragOverPageId, setDragOverPageId] = useState<string | null>(null);
+  const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null);
+  const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null);
 
   // Navigation Items
   const [navItems, setNavItems] = useState<SiteNavItem[]>([]);
@@ -283,6 +319,7 @@ export const SiteBuilderPage: React.FC = () => {
 
 
   const [isAddPageModalOpen, setIsAddPageModalOpen] = useState(false);
+  const [deletePageTarget, setDeletePageTarget] = useState<{ id: string; title: string } | null>(null);
   const [newPageTitle, setNewPageTitle] = useState('');
   const [newPageSlug, setNewPageSlug] = useState('');
   const [newPageDesc, setNewPageDesc] = useState('');
@@ -331,7 +368,7 @@ export const SiteBuilderPage: React.FC = () => {
           initialPages = [
             {
               id: 'page-home',
-              title: 'Home',
+              title: 'Home Portal',
               slug: '/',
               description: 'Main portal home page.',
               isHome: true,
@@ -339,29 +376,7 @@ export const SiteBuilderPage: React.FC = () => {
               widgets: Array.isArray(data.pagesConfig) ? data.pagesConfig : [
                 { id: 'w-hero', type: 'hero', enabled: true, title: `Welcome to ${data.name}`, subtitle: data.description },
                 { id: 'w-announcements', type: 'announcements', enabled: true, title: 'Portal News & Bulletins' },
-                { id: 'w-status', type: 'status_widget', enabled: data.category === 'public', title: 'Live System Status' }
-              ]
-            },
-            {
-              id: 'page-services',
-              title: 'Services & Knowledge',
-              slug: '/services',
-              description: 'Knowledge base articles and documentation.',
-              isHome: false,
-              parentId: null,
-              widgets: [
-                { id: 'w-kb-search', type: 'kb_search', enabled: true, title: 'Search Knowledge Base' }
-              ]
-            },
-            {
-              id: 'page-contact',
-              title: 'Support & Contact',
-              slug: '/contact',
-              description: 'Submit support tickets and inquiries.',
-              isHome: false,
-              parentId: null,
-              widgets: [
-                { id: 'w-contact-form', type: 'ticket_form', enabled: true, title: 'Submit Support Ticket' }
+                { id: 'w-status', type: 'status_widget', enabled: true, title: 'Live System Health Monitor' }
               ]
             }
           ];
@@ -370,11 +385,13 @@ export const SiteBuilderPage: React.FC = () => {
         setPages(initialPages);
         setActivePageId(initialPages[0]?.id || 'page-home');
 
-        setNavItems(data.navConfig || [
-          { id: 'nav-1', label: 'Home', path: '/' },
-          { id: 'nav-2', label: 'Services & Knowledge', path: '/services' },
-          { id: 'nav-3', label: 'Support & Contact', path: '/contact' }
-        ]);
+        // Build navigation items from initialPages
+        const navList: SiteNavItem[] = initialPages.map(p => ({
+          id: `nav-${p.id}`,
+          label: p.title,
+          path: p.slug
+        }));
+        setNavItems(data.navConfig && data.navConfig.length >= initialPages.length ? data.navConfig : navList);
 
         // SEO Config Resolution
         if (data.seoConfig) {
@@ -539,6 +556,36 @@ export const SiteBuilderPage: React.FC = () => {
     toast.info('Page nesting updated.');
   };
 
+  const getWidgetGridClass = (layout?: string) => {
+    switch (layout) {
+      case '2_col': return 'col-span-12 md:col-span-6';
+      case '3_col': return 'col-span-12 md:col-span-4';
+      case '4_col': return 'col-span-12 md:col-span-3';
+      case 'split_1_2': return 'col-span-12 md:col-span-4';
+      case 'split_2_1': return 'col-span-12 md:col-span-8';
+      case '1_col':
+      default: return 'col-span-12';
+    }
+  };
+
+  const handleDropWidgetOnCanvas = (targetWidgetId: string) => {
+    if (!draggedWidgetId || draggedWidgetId === targetWidgetId || !activePage) return;
+    
+    const updatedWidgets = [...activePage.widgets];
+    const draggedIdx = updatedWidgets.findIndex(w => w.id === draggedWidgetId);
+    const targetIdx = updatedWidgets.findIndex(w => w.id === targetWidgetId);
+    
+    if (draggedIdx !== -1 && targetIdx !== -1) {
+      const [movedWidget] = updatedWidgets.splice(draggedIdx, 1);
+      updatedWidgets.splice(targetIdx, 0, movedWidget);
+      setPages(prev => prev.map(p => p.id === activePage.id ? { ...p, widgets: updatedWidgets } : p));
+      toast.success('Widget reordered cleanly!');
+    }
+    
+    setDraggedWidgetId(null);
+    setDragOverWidgetId(null);
+  };
+
   // Add New Page Handler
   const handleAddPage = () => {
     if (!newPageTitle) {
@@ -579,12 +626,35 @@ export const SiteBuilderPage: React.FC = () => {
       toast.error('A site must have at least one page.');
       return;
     }
-    setPages(prev => prev.filter(p => p.id !== pageId && p.parentId !== pageId));
-    if (activePageId === pageId) {
-      const remaining = pages.filter(p => p.id !== pageId);
-      setActivePageId(remaining[0]?.id || '');
+    setDeletePageTarget({ id: pageId, title: pageTitle });
+  };
+
+  const handleConfirmDeletePage = () => {
+    if (!deletePageTarget) return;
+    const { id: pageId, title: pageTitle } = deletePageTarget;
+    if (pages.length <= 1) {
+      toast.error('A site must have at least one page.');
+      setDeletePageTarget(null);
+      return;
     }
-    toast.success(`Page "${pageTitle}" deleted.`);
+    const targetPage = pages.find(p => p.id === pageId);
+    const remainingPages = pages.filter(p => p.id !== pageId && p.parentId !== pageId);
+    
+    // Update pages array
+    setPages(remainingPages);
+
+    // Also update navigation links if matching deleted page slug
+    if (targetPage?.slug) {
+      setNavItems(prev => prev.filter(item => item.path !== targetPage.slug));
+    }
+
+    // Switch active page immediately to first remaining page if deleted page was active
+    if (activePageId === pageId || pages.some(p => p.parentId === pageId && p.id === activePageId)) {
+      setActivePageId(remainingPages[0]?.id || '');
+    }
+
+    setDeletePageTarget(null);
+    toast.success(`Page "${pageTitle}" deleted successfully.`);
   };
 
   const handleAddNavItem = () => {
@@ -648,23 +718,54 @@ export const SiteBuilderPage: React.FC = () => {
     }));
   };
 
-  const handleAddWidgetToActivePage = (type: SiteWidget['type']) => {
+  const handleAddWidgetToActivePage = (type: SiteWidget['type'], customTitle?: string) => {
     if (!activePage) return;
     const typeTitles: Record<string, string> = {
-      hero: 'Hero Section Header',
-      announcements: 'Broadcast News Feed',
-      ticket_form: 'Support Ticket Form',
-      kb_search: 'Knowledge Base Search',
-      status_widget: 'System Health Monitor',
-      form_embed: 'Embedded Workspace Form',
-      module_feed: 'Live Database Records Feed'
+      heading_block: 'Heading (H1 - H6)',
+      text_paragraph: 'Text & Paragraph Block',
+      horizontal_rule: 'Horizontal Divider Line (HR)',
+      content_panel: 'Visual Layout Panel',
+      vertical_spacer: 'Vertical Spacer & Gap',
+      cms_collection_list: 'Dynamic Repeater',
+      data_table: 'Dynamic Data Table',
+      record_card: 'Record Profile Card',
+      record_lookup: 'Reference Lookup Bar',
+      card_grid: 'Catalog Card Grid',
+      kanban_board: 'Kanban Pipeline Board',
+      event_calendar: 'Interactive Event Calendar',
+      file_vault: 'Document & File Vault',
+      kpi_stat_group: 'KPI Stat Counters',
+      custom_form: 'Dynamic Form Builder',
+      form_wizard: 'Multi-Step Form Wizard',
+      feedback_survey: 'NPS & Rating Survey',
+      calculator_widget: 'Pricing & Cost Calculator',
+      signature_pad: 'Digital E-Signature Pad',
+      auth_box: 'Member Login & SSO Card',
+      user_profile: 'User Account Profile',
+      access_guard: 'Role Access Guard',
+      team_directory: 'Team & Staff Directory',
+      chat_thread: 'Live Support Chat Thread',
+      activity_feed: 'Activity & Audit Stream',
+      announcements: 'Broadcast News Banner',
+      faq_accordion: 'FAQ Accordion List',
+      hero: 'Hero Header Banner',
+      feature_grid: 'Feature Grid Cards',
+      tabbed_content: 'Interactive Content Tabs',
+      pricing_table: 'Pricing & Plan Table',
+      testimonials: 'Testimonial Carousel',
+      cta_strip: 'CTA Highlight Strip',
+      embed_iframe: 'Embed Video & External Iframe',
+      bottom_nav_bar: 'Mobile Bottom Nav Bar',
+      floating_action_btn: 'Floating Action Button',
+      push_prompt: 'Push Notification Prompt',
+      infinite_stream: 'Infinite Scroll Feed'
     };
 
     const newWidget: SiteWidget = {
       id: `w-${type}-${Date.now()}`,
       type,
       enabled: true,
-      title: typeTitles[type] || 'New Layout Widget',
+      title: customTitle || typeTitles[type] || 'New Building Block Widget',
       targetModuleId: availableModules[0]?.id || ''
     };
 
@@ -1008,9 +1109,10 @@ export const SiteBuilderPage: React.FC = () => {
 
   // Preview viewport width classes
   const viewportWidthClass = {
-    desktop: 'w-full max-w-5xl',
-    tablet: 'w-[768px] max-w-full',
-    mobile: 'w-[375px] max-w-full'
+    desktop: 'w-full max-w-5xl rounded-2xl',
+    tablet: 'w-[768px] max-w-full rounded-2xl',
+    mobile: 'w-[375px] max-w-full rounded-[40px] border-4 border-zinc-700 shadow-2xl',
+    mobile_android: 'w-[360px] max-w-full rounded-[28px] border-4 border-emerald-900/60 shadow-2xl'
   }[viewport];
 
   const sampleArticles = [
@@ -1127,22 +1229,30 @@ export const SiteBuilderPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => window.open(`/public/portal/${site.id}`, '_blank')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-              isLight ? 'bg-zinc-100 hover:bg-zinc-200 border-zinc-300 text-zinc-800' : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700/60 text-white'
-            }`}
-          >
-            <span>Live Site</span>
-            <ExternalLink size={13} />
-          </button>
-
-          <button
             onClick={handleSave}
             disabled={saving}
             className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             <Save size={14} />
-            <span>{saving ? 'Saving...' : 'Save Site'}</span>
+            <span>{saving ? 'Saving...' : 'Save'}</span>
+          </button>
+
+          <button
+            onClick={() => window.open(`/public/portal/${site.id}`, '_blank')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              isLight ? 'bg-zinc-100 hover:bg-zinc-200 border-zinc-300 text-zinc-800' : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700/60 text-white'
+            }`}
+          >
+            <span>Launch</span>
+            <ExternalLink size={13} />
+          </button>
+
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer"
+          >
+            <Smartphone size={14} />
+            <span>Export</span>
           </button>
         </div>
       </header>
@@ -1591,70 +1701,93 @@ export const SiteBuilderPage: React.FC = () => {
                   <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Click any component below to add it to <span className="text-indigo-500 font-bold">{activePage?.title}</span>.</p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {[
-                    {
-                      type: 'hero',
-                      title: 'Hero Section Header',
-                      desc: 'High-impact banner with custom title, subtitle, accent glow, and CTA button.',
-                      icon: Sparkles,
-                      color: 'text-amber-500 bg-amber-500/10'
-                    },
-                    {
-                      type: 'form_embed',
-                      title: 'Embed Workspace Form',
-                      desc: 'Embed intake forms, surveys, or support request forms bound to modules.',
-                      icon: FormInput,
-                      color: 'text-emerald-500 bg-emerald-500/10'
-                    },
-                    {
-                      type: 'kb_search',
-                      title: 'Knowledge Base Search',
-                      desc: 'Search bar with real-time article lookup and topic cards.',
-                      icon: BookOpen,
-                      color: 'text-blue-500 bg-blue-500/10'
-                    },
-                    {
-                      type: 'status_widget',
-                      title: 'System Health Monitor',
-                      desc: 'Displays real-time uptime stats, latency metrics, and status badges.',
-                      icon: Activity,
-                      color: 'text-emerald-500 bg-emerald-500/10'
-                    },
-                    {
-                      type: 'announcements',
-                      title: 'Broadcast News Feed',
-                      desc: 'Broadcast announcement stream for system updates and notes.',
-                      icon: Radio,
-                      color: 'text-indigo-500 bg-indigo-500/10'
-                    }
-                  ].map(w => {
-                    const Icon = w.icon;
-                    return (
-                      <div
-                        key={w.type}
-                        onClick={() => handleAddWidgetToActivePage(w.type as any)}
-                        className={`p-4 rounded-2xl cursor-pointer transition-all flex items-start gap-3 group shadow-sm hover:shadow-lg border ${
-                          isLight 
-                            ? 'bg-zinc-50 border-zinc-200 hover:border-indigo-500' 
-                            : 'bg-zinc-950 border-zinc-800 hover:border-indigo-500'
-                        }`}
-                      >
-                        <div className={`p-2.5 rounded-xl ${w.color} shrink-0`}>
-                          <Icon size={18} />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className={`text-xs font-bold flex items-center justify-between transition-colors ${
-                            isLight ? 'text-zinc-900 group-hover:text-indigo-600' : 'text-white group-hover:text-indigo-400'
-                          }`}>
-                            <span>{w.title}</span>
-                            <Plus size={14} className="opacity-50 group-hover:opacity-100" />
-                          </h4>
-                          <p className={`text-[11px] mt-1 leading-relaxed ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{w.desc}</p>
-                        </div>
+                    { category: '📐 Typography & Layout Primitives', items: [
+                      { type: 'heading_block', title: 'Heading (H1 - H6)', desc: 'Custom text heading with level sizes (H1-H6) and alignment.', icon: Heading, color: 'text-amber-400 bg-amber-500/10' },
+                      { type: 'text_paragraph', title: 'Text & Paragraph Block', desc: 'Generic rich text paragraph block for articles & descriptions.', icon: Type, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'horizontal_rule', title: 'Horizontal Divider (HR)', desc: 'Visual divider line (solid, dashed, dotted, gradient).', icon: Minus, color: 'text-zinc-400 bg-zinc-500/10' },
+                      { type: 'content_panel', title: 'Visual Layout Panel', desc: 'Styled container box card panel for grouping child content.', icon: Box, color: 'text-teal-400 bg-teal-500/10' },
+                      { type: 'vertical_spacer', title: 'Vertical Spacer & Gap', desc: 'Configurable vertical spacing gap (16px to 96px).', icon: MoveVertical, color: 'text-purple-400 bg-purple-500/10' },
+                    ]},
+                    { category: '📊 Data, Records & Database', items: [
+                      { type: 'cms_collection_list', title: 'Dynamic Repeater', desc: 'Dynamic repeater linked to workspace modules or submodules with contextual data binding.', icon: Database, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'data_table', title: 'Dynamic Data Table', desc: 'Searchable data table with custom columns, filters, and record modal.', icon: Layers, color: 'text-cyan-400 bg-cyan-500/10' },
+                      { type: 'record_card', title: 'Record Profile Card', desc: 'Inspector card for key-value record attributes & avatars.', icon: ShieldCheck, color: 'text-blue-400 bg-blue-500/10' },
+                      { type: 'record_lookup', title: 'Reference Lookup Bar', desc: 'Universal search bar for tracking codes and reference IDs.', icon: Search, color: 'text-amber-400 bg-amber-500/10' },
+                      { type: 'card_grid', title: 'Catalog Card Grid', desc: 'Grid catalog of items, services, products, or portfolios.', icon: Building2, color: 'text-teal-400 bg-teal-500/10' },
+                      { type: 'kanban_board', title: 'Kanban Pipeline Board', desc: 'Status column board for task, lead, or application stages.', icon: LayoutGrid, color: 'text-purple-400 bg-purple-500/10' },
+                      { type: 'event_calendar', title: 'Interactive Calendar', desc: 'Monthly/weekly event scheduler and booking slot selector.', icon: Calendar, color: 'text-rose-400 bg-rose-500/10' },
+                      { type: 'file_vault', title: 'Document & File Vault', desc: 'Drag-and-drop file uploader, PDF viewer, and file library.', icon: FileText, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'kpi_stat_group', title: 'KPI Stat Counters', desc: 'Dashboard stat counter cards with delta indicators.', icon: Activity, color: 'text-emerald-400 bg-emerald-500/10' },
+                    ]},
+                    { category: '📝 Forms, Surveys & Inputs', items: [
+                      { type: 'custom_form', title: 'Dynamic Form Builder', desc: 'Configurable multi-field intake form.', icon: FormInput, color: 'text-emerald-400 bg-emerald-500/10' },
+                      { type: 'form_wizard', title: 'Multi-Step Form Wizard', desc: 'Step-by-step progress intake wizard with step navigation.', icon: Clock, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'feedback_survey', title: 'NPS & Rating Survey', desc: 'Star ratings, emoji satisfaction scale, and NPS score slider.', icon: Star, color: 'text-amber-400 bg-amber-500/10' },
+                      { type: 'calculator_widget', title: 'Pricing & Cost Calculator', desc: 'Dynamic quote builder with sliders and add-on toggles.', icon: Calculator, color: 'text-cyan-400 bg-cyan-500/10' },
+                      { type: 'signature_pad', title: 'Digital E-Signature Pad', desc: 'Touch and mouse signature capture pad.', icon: PenTool, color: 'text-rose-400 bg-rose-500/10' },
+                    ]},
+                    { category: '🔐 User Identity & Accounts', items: [
+                      { type: 'auth_box', title: 'Member Login & SSO Card', desc: 'Login, registration, and social SSO buttons.', icon: Lock, color: 'text-rose-400 bg-rose-500/10' },
+                      { type: 'user_profile', title: 'User Account Profile', desc: 'Member profile settings, avatar uploader, and preferences.', icon: UserCheck, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'access_guard', title: 'Role Access Guard', desc: 'Content container locked by user role/membership.', icon: ShieldCheck, color: 'text-amber-400 bg-amber-500/10' },
+                      { type: 'team_directory', title: 'Team & Staff Directory', desc: 'Member cards with job titles, departments, and contact buttons.', icon: Users, color: 'text-teal-400 bg-teal-500/10' },
+                    ]},
+                    { category: '💬 Engagement & Support', items: [
+                      { type: 'chat_thread', title: 'Live Support Chat Thread', desc: 'Real-time customer support chat box or comment stream.', icon: MessageSquare, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'activity_feed', title: 'Activity & Audit Stream', desc: 'Timeline log of comments, updates, and system events.', icon: History, color: 'text-purple-400 bg-purple-500/10' },
+                      { type: 'announcements', title: 'Broadcast News Banner', desc: 'Ticker newsfeed for urgent bulletins and releases.', icon: Radio, color: 'text-rose-400 bg-rose-500/10' },
+                      { type: 'faq_accordion', title: 'FAQ Accordion List', desc: 'Expandable Q&A list with category filters and search.', icon: HelpCircle, color: 'text-blue-400 bg-blue-500/10' },
+                    ]},
+                    { category: '🎨 Layout, Marketing & Structure', items: [
+                      { type: 'slider_carousel', title: 'Multi-Slide Banner Carousel', desc: 'Interactive image slider with auto-play, navigation arrows, and dots.', icon: Images, color: 'text-rose-400 bg-rose-500/10' },
+                      { type: 'hero', title: 'Hero Header Banner', desc: 'High-impact cover header with title, subtitle, and CTA.', icon: Sparkles, color: 'text-amber-400 bg-amber-500/10' },
+                      { type: 'feature_grid', title: 'Feature Grid Cards', desc: 'Multi-column icon cards highlighting features or services.', icon: LayoutGrid, color: 'text-emerald-400 bg-emerald-500/10' },
+                      { type: 'tabbed_content', title: 'Interactive Content Tabs', desc: 'Tab bar to switch between content panels.', icon: Sliders, color: 'text-cyan-400 bg-cyan-500/10' },
+                      { type: 'pricing_table', title: 'Pricing & Plan Table', desc: 'Tiered pricing cards with feature checklists and CTAs.', icon: CreditCard, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'testimonials', title: 'Testimonial Carousel', desc: 'Customer review quotes, rating stars, and logos.', icon: MessageCircle, color: 'text-teal-400 bg-teal-500/10' },
+                      { type: 'cta_strip', title: 'CTA Highlight Strip', desc: 'Full-width banner strip driving conversion actions.', icon: Sparkles, color: 'text-purple-400 bg-purple-500/10' },
+                      { type: 'embed_iframe', title: 'Embed Video & External Iframe', desc: 'Embed YouTube/Vimeo, Google Maps, or external apps.', icon: Globe, color: 'text-rose-400 bg-rose-500/10' },
+                    ]},
+                    { category: '📱 Mobile App Native UI', items: [
+                      { type: 'bottom_nav_bar', title: 'Mobile Bottom Nav Bar', desc: 'Fixed bottom navigation bar for iOS/Android app views.', icon: Smartphone, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'floating_action_btn', title: 'Floating Action Button (FAB)', desc: 'Circular floating action button (+ New Record).', icon: Plus, color: 'text-rose-400 bg-rose-500/10' },
+                      { type: 'push_prompt', title: 'Push Notification Prompt', desc: 'In-app permission card for mobile push alerts.', icon: Bell, color: 'text-amber-400 bg-amber-500/10' },
+                      { type: 'infinite_stream', title: 'Infinite Scroll Feed', desc: 'Mobile feed container with pull-to-refresh.', icon: Compass, color: 'text-teal-400 bg-teal-500/10' },
+                    ]}
+                  ].map(sec => (
+                    <div key={sec.category} className="space-y-2 pt-2 border-t border-zinc-500/20 first:border-0 first:pt-0">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-400">{sec.category}</p>
+                      <div className="space-y-2">
+                        {sec.items.map(w => {
+                          const Icon = w.icon;
+                          return (
+                            <div
+                              key={w.type}
+                              onClick={() => handleAddWidgetToActivePage(w.type as any, w.title)}
+                              className={`p-3 border rounded-2xl flex items-start gap-3 transition-all cursor-pointer group ${
+                                isLight 
+                                  ? 'bg-zinc-50 hover:bg-white border-zinc-200 hover:border-indigo-400 hover:shadow-md' 
+                                  : 'bg-zinc-950/70 hover:bg-zinc-900 border-zinc-800 hover:border-indigo-500/50 hover:shadow-lg'
+                              }`}
+                            >
+                              <div className={`p-2 rounded-xl shrink-0 ${w.color} border border-white/5 group-hover:scale-105 transition-transform`}>
+                                <Icon size={16} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
+                                  <h5 className={`text-xs font-bold truncate ${isLight ? 'text-zinc-900' : 'text-white'}`}>{w.title}</h5>
+                                  <span className="text-[9px] font-bold text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">+ Add</span>
+                                </div>
+                                <p className={`text-[11px] leading-tight mt-0.5 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{w.desc}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -2267,155 +2400,349 @@ export const SiteBuilderPage: React.FC = () => {
               transform: canvasZoom !== 100 ? `scale(${canvasZoom / 100})` : undefined,
               transformOrigin: 'top center'
             }}
-            className={`transition-all duration-300 shadow-2xl border ${getThemeBgClass()} ${getThemeFontClass()} overflow-hidden flex flex-col ${viewportWidthClass} h-[calc(100vh-6.5rem)] min-h-[500px] shrink-0`}
+            className={`transition-all duration-300 shadow-2xl border ${getThemeBgClass()} ${getThemeFontClass()} overflow-hidden ${viewportWidthClass} h-[calc(100vh-6.5rem)] min-h-[500px] shrink-0 ${
+              (headerLayout === 'sidebar_left' || headerLayout === 'sidebar_right') && viewport === 'desktop'
+                ? headerLayout === 'sidebar_left' 
+                  ? 'flex flex-row' 
+                  : 'flex flex-row-reverse'
+                : 'flex flex-col'
+            }`}
           >
-            
-            {/* Live Header with Nested Dropdowns & Hamburger */}
-            <header 
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedElement({ type: 'header' });
-              }}
-              className={`${getThemeHeaderClass()} px-6 py-4 flex items-center justify-between relative shrink-0 z-20 transition-all cursor-pointer ${
-                selectedElement?.type === 'header' 
-                  ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-zinc-950 shadow-xl' 
-                  : 'hover:ring-1 hover:ring-indigo-500/40'
-              } ${
-                headerLayout === 'pill_header' ? `m-4 ${getThemeRadiusClass()} shadow-lg border border-zinc-800` : ''
-              }`}
-            >
-              {selectedElement?.type === 'header' && (
-                <span className="absolute top-2 right-4 text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-500 text-white rounded font-mono z-30">
-                  HEADER / NAVBAR
-                </span>
-              )}
-              <div className="flex items-center gap-3">
-                <div 
-                  className="h-8 w-8 rounded-xl flex items-center justify-center font-extrabold text-white text-xs"
-                  style={{ backgroundColor: accentColor }}
-                >
-                  {headerTitle ? headerTitle.charAt(0) : 'S'}
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold">{headerTitle || name}</h2>
-                  <p className="text-[10px] opacity-70 font-mono">{domain}</p>
-                </div>
-              </div>
-
-              {/* Navbar Links (Visible on Desktop Viewport) */}
-              {viewport === 'desktop' && (
-                <div className="flex items-center gap-4 text-xs font-semibold">
-                  {rootPages.map(rootPage => {
-                    const children = getChildPages(rootPage.id);
-                    const hasChildren = children.length > 0;
-                    const isActive = activePage?.id === rootPage.id || children.some(c => c.id === activePage?.id);
-
-                    return (
-                      <div key={rootPage.id} className="relative group">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActivePageId(rootPage.id);
-                          }}
-                          className={`flex items-center gap-1 transition-all cursor-pointer relative ${getNavLinkStyleClass(isActive)}`}
-                          style={isActive && navLinkStyle === 'pills' ? { backgroundColor: accentColor } : {}}
-                        >
-                          <span>{rootPage.title}</span>
-                          {hasChildren && <ChevronDown size={12} className="opacity-60 group-hover:opacity-100" />}
-                          {navLinkStyle === 'underline' && isActive && (
-                            <span 
-                              className="absolute -bottom-1 left-0 right-0 h-[2.5px] rounded-full transition-all" 
-                              style={{ backgroundColor: accentColor }}
-                            />
-                          )}
-                        </button>
-
-                        {/* Dropdown Menu for Nested Child Pages */}
-                        {hasChildren && (
-                          <div className={`absolute top-full left-0 mt-2 w-48 ${getThemeCardClass()} ${getThemeRadiusClass()} p-1.5 shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-50`}>
-                            {children.map(child => (
-                              <button
-                                key={child.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActivePageId(child.id);
-                                }}
-                                className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium opacity-80 hover:opacity-100 hover:bg-indigo-500/10 transition-colors flex items-center justify-between"
-                              >
-                                <span>{child.title}</span>
-                                <ChevronRight size={12} className="opacity-40" />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Mobile Hamburger Toggle Button (Visible on Mobile/Tablet Viewport) */}
-              {viewport !== 'desktop' && (
-                <div className="flex items-center gap-2">
-                  <button
+            {/* RESPONSIVE SIDEBAR MENU */}
+            {(headerLayout === 'sidebar_left' || headerLayout === 'sidebar_right') && (
+              <>
+                {/* DESKTOP SIDEBAR VIEWPORT */}
+                {viewport === 'desktop' && (
+                  <aside
                     onClick={(e) => {
                       e.stopPropagation();
-                      setIsMobileMenuOpen(!isMobileMenuOpen);
+                      setSelectedElement({ type: 'header' });
                     }}
-                    className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
-                    title={isMobileMenuOpen ? "Close Menu" : "Open Navigation Menu"}
+                    className={`w-64 shrink-0 ${getThemeHeaderClass()} p-5 flex flex-col justify-between relative z-20 border-r border-zinc-800 transition-all cursor-pointer ${
+                      selectedElement?.type === 'header' 
+                        ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-zinc-950 shadow-xl' 
+                        : 'hover:ring-1 hover:ring-indigo-500/40'
+                    }`}
                   >
-                    {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
-                  </button>
-                </div>
-              )}
+                    {selectedElement?.type === 'header' && (
+                      <span className="absolute top-2 right-2 text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-500 text-white rounded font-mono z-30">
+                        VERTICAL SIDEBAR MENU
+                      </span>
+                    )}
 
-              {/* Mobile Navigation Drawer Overlay (supporting nesting) */}
-              {isMobileMenuOpen && viewport !== 'desktop' && (
-                <div className={`absolute top-full left-0 right-0 ${getThemeHeaderClass()} p-4 space-y-3 z-50 shadow-2xl animate-in slide-in-from-top duration-200 max-h-[60vh] overflow-y-auto`}>
-                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Site Navigation Tree</p>
-                  <div className="space-y-1">
-                    {rootPages.map(rootPage => {
-                      const children = getChildPages(rootPage.id);
-                      return (
-                        <div key={rootPage.id} className="space-y-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePageId(rootPage.id);
-                              if (children.length === 0) setIsMobileMenuOpen(false);
-                            }}
-                            className="w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold hover:bg-indigo-500/10 transition-all text-left"
-                          >
-                            <span>{rootPage.title}</span>
-                            <ChevronRight size={14} className="opacity-50" />
-                          </button>
+                    <div className="space-y-6">
+                      {/* Brand Header */}
+                      <div className="flex items-center gap-3 border-b border-zinc-800/80 pb-4">
+                        <div 
+                          className="h-9 w-9 rounded-xl flex items-center justify-center font-extrabold text-white text-xs shadow-md shrink-0"
+                          style={{ backgroundColor: accentColor }}
+                        >
+                          {headerTitle ? headerTitle.charAt(0) : 'S'}
+                        </div>
+                        <div className="overflow-hidden">
+                          <h2 className="text-sm font-bold truncate">{headerTitle || name}</h2>
+                          <p className="text-[10px] opacity-70 font-mono truncate">{domain}</p>
+                        </div>
+                      </div>
 
-                          {/* Nested Sub-Pages in Drawer */}
-                          {children.map(child => (
+                      {/* Vertical Navigation Menu */}
+                      <div className="space-y-1.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wider opacity-50 px-2">Navigation Menu</p>
+                        {rootPages.map(rootPage => {
+                          const children = getChildPages(rootPage.id);
+                          const hasChildren = children.length > 0;
+                          const isActive = activePage?.id === rootPage.id || children.some(c => c.id === activePage?.id);
+
+                          return (
+                            <div key={rootPage.id} className="space-y-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActivePageId(rootPage.id);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all cursor-pointer ${
+                                  isActive 
+                                    ? 'bg-indigo-600 text-white shadow-md' 
+                                    : 'opacity-80 hover:opacity-100 hover:bg-zinc-800/60'
+                                }`}
+                                style={isActive && navLinkStyle === 'pills' ? { backgroundColor: accentColor } : {}}
+                              >
+                                <span className="truncate">{rootPage.title}</span>
+                                {hasChildren && <ChevronDown size={12} className="opacity-70 shrink-0" />}
+                              </button>
+
+                              {/* Nested Sub-pages in Sidebar */}
+                              {hasChildren && (
+                                <div className="ml-3 pl-2 border-l border-zinc-800 space-y-1 my-1">
+                                  {children.map(child => {
+                                    const isChildActive = activePage?.id === child.id;
+                                    return (
+                                      <button
+                                        key={child.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActivePageId(child.id);
+                                        }}
+                                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-between cursor-pointer ${
+                                          isChildActive 
+                                            ? 'text-indigo-400 font-bold bg-indigo-500/10' 
+                                            : 'opacity-70 hover:opacity-100 hover:bg-zinc-800/40'
+                                        }`}
+                                      >
+                                        <span className="truncate">{child.title}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Sidebar Footer */}
+                    <div className="pt-4 border-t border-zinc-800/80 text-[10px] opacity-60 flex items-center justify-between">
+                      <span>{footerText || '© Aurora Platform'}</span>
+                      <span className="font-mono bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">Sidebar Nav</span>
+                    </div>
+                  </aside>
+                )}
+
+                {/* MOBILE / TABLET COLLAPSED TOP BAR WITH HAMBURGER DRAWER */}
+                {(viewport === 'mobile' || viewport === 'tablet') && (
+                  <header 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedElement({ type: 'header' });
+                    }}
+                    className={`px-4 py-3 ${getThemeHeaderClass()} border-b border-zinc-800 relative z-30 flex items-center justify-between shrink-0 transition-all cursor-pointer ${
+                      selectedElement?.type === 'header' ? 'ring-2 ring-indigo-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="h-8 w-8 rounded-xl flex items-center justify-center font-extrabold text-white text-xs shadow-md shrink-0"
+                        style={{ backgroundColor: accentColor }}
+                      >
+                        {headerTitle ? headerTitle.charAt(0) : 'S'}
+                      </div>
+                      <div className="overflow-hidden">
+                        <h2 className="text-xs font-bold truncate">{headerTitle || name}</h2>
+                        <p className="text-[9px] opacity-60 font-mono truncate">{domain}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsMobileMenuOpen(!isMobileMenuOpen);
+                      }}
+                      className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all cursor-pointer"
+                    >
+                      {isMobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
+                    </button>
+
+                    {/* Mobile Menu Drawer Overlay */}
+                    {isMobileMenuOpen && (
+                      <div className="absolute top-full left-0 right-0 bg-zinc-900 border-b border-zinc-800 p-4 space-y-3 z-50 shadow-2xl max-h-[60vh] overflow-y-auto">
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Navigation Tree</p>
+                        <div className="space-y-1">
+                          {rootPages.map(rootPage => {
+                            const children = getChildPages(rootPage.id);
+                            return (
+                              <div key={rootPage.id} className="space-y-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePageId(rootPage.id);
+                                    if (children.length === 0) setIsMobileMenuOpen(false);
+                                  }}
+                                  className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-bold text-white hover:bg-zinc-800 transition-all text-left"
+                                >
+                                  <span>{rootPage.title}</span>
+                                  <ChevronRight size={14} className="text-zinc-500" />
+                                </button>
+
+                                {children.map(child => (
+                                  <button
+                                    key={child.id}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActivePageId(child.id);
+                                      setIsMobileMenuOpen(false);
+                                    }}
+                                    className="w-full flex items-center justify-between pl-5 pr-2 py-1.5 rounded-lg text-xs font-medium text-indigo-400 hover:bg-zinc-800 transition-all text-left"
+                                  >
+                                    <span className="flex items-center gap-1">
+                                      <CornerDownRight size={12} className="text-indigo-400" />
+                                      {child.title}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </header>
+                )}
+              </>
+            )}
+
+            <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+              {/* Live Top Header (when headerLayout is top_right, top_center, pill_header, minimal) */}
+              {headerLayout !== 'sidebar_left' && headerLayout !== 'sidebar_right' && (
+                <header 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedElement({ type: 'header' });
+                  }}
+                  className={`${getThemeHeaderClass()} px-6 py-4 flex items-center justify-between relative shrink-0 z-20 transition-all cursor-pointer ${
+                    selectedElement?.type === 'header' 
+                      ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-zinc-950 shadow-xl' 
+                      : 'hover:ring-1 hover:ring-indigo-500/40'
+                  } ${
+                    headerLayout === 'pill_header' ? `m-4 ${getThemeRadiusClass()} shadow-lg border border-zinc-800` : ''
+                  }`}
+                >
+                  {selectedElement?.type === 'header' && (
+                    <span className="absolute top-2 right-4 text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-500 text-white rounded font-mono z-30">
+                      HEADER / NAVBAR
+                    </span>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="h-8 w-8 rounded-xl flex items-center justify-center font-extrabold text-white text-xs"
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      {headerTitle ? headerTitle.charAt(0) : 'S'}
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold">{headerTitle || name}</h2>
+                      <p className="text-[10px] opacity-70 font-mono">{domain}</p>
+                    </div>
+                  </div>
+
+                  {/* Navbar Links (Visible on Desktop Viewport) */}
+                  {viewport === 'desktop' && (
+                    <div className="flex items-center gap-4 text-xs font-semibold">
+                      {rootPages.map(rootPage => {
+                        const children = getChildPages(rootPage.id);
+                        const hasChildren = children.length > 0;
+                        const isActive = activePage?.id === rootPage.id || children.some(c => c.id === activePage?.id);
+
+                        return (
+                          <div key={rootPage.id} className="relative group">
                             <button
-                              key={child.id}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActivePageId(child.id);
-                                setIsMobileMenuOpen(false);
+                                setActivePageId(rootPage.id);
                               }}
-                              className="w-full flex items-center justify-between pl-6 pr-3 py-2 rounded-lg text-xs font-medium text-indigo-400 hover:bg-indigo-500/10 transition-all text-left"
+                              className={`flex items-center gap-1 transition-all cursor-pointer relative ${getNavLinkStyleClass(isActive)}`}
+                              style={isActive && navLinkStyle === 'pills' ? { backgroundColor: accentColor } : {}}
                             >
-                              <span className="flex items-center gap-1">
-                                <CornerDownRight size={12} className="text-indigo-400" />
-                                {child.title}
-                              </span>
-                              <ChevronRight size={12} className="opacity-40" />
+                              <span>{rootPage.title}</span>
+                              {hasChildren && <ChevronDown size={12} className="opacity-60 group-hover:opacity-100" />}
+                              {navLinkStyle === 'underline' && isActive && (
+                                <span 
+                                  className="absolute -bottom-1 left-0 right-0 h-[2.5px] rounded-full transition-all" 
+                                  style={{ backgroundColor: accentColor }}
+                                />
+                              )}
                             </button>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+
+                            {/* Dropdown Menu for Nested Child Pages */}
+                            {hasChildren && (
+                              <div className={`absolute top-full left-0 mt-2 w-48 ${getThemeCardClass()} ${getThemeRadiusClass()} p-1.5 shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-50`}>
+                                {children.map(child => (
+                                  <button
+                                    key={child.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActivePageId(child.id);
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium opacity-80 hover:opacity-100 hover:bg-indigo-500/10 transition-colors flex items-center justify-between"
+                                  >
+                                    <span>{child.title}</span>
+                                    <ChevronRight size={12} className="opacity-40" />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Mobile Hamburger Toggle Button (Visible on Mobile/Tablet Viewport) */}
+                  {viewport !== 'desktop' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsMobileMenuOpen(!isMobileMenuOpen);
+                        }}
+                        className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0"
+                        title={isMobileMenuOpen ? "Close Menu" : "Open Navigation Menu"}
+                      >
+                        {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Mobile Navigation Drawer Overlay (supporting nesting) */}
+                  {isMobileMenuOpen && viewport !== 'desktop' && (
+                    <div className={`absolute top-full left-0 right-0 ${getThemeHeaderClass()} p-4 space-y-3 z-50 shadow-2xl animate-in slide-in-from-top duration-200 max-h-[60vh] overflow-y-auto`}>
+                      <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Site Navigation Tree</p>
+                      <div className="space-y-1">
+                        {rootPages.map(rootPage => {
+                          const children = getChildPages(rootPage.id);
+                          return (
+                            <div key={rootPage.id} className="space-y-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActivePageId(rootPage.id);
+                                  if (children.length === 0) setIsMobileMenuOpen(false);
+                                }}
+                                className="w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold hover:bg-indigo-500/10 transition-all text-left"
+                              >
+                                <span>{rootPage.title}</span>
+                                <ChevronRight size={14} className="opacity-50" />
+                              </button>
+
+                              {/* Nested Sub-Pages in Drawer */}
+                              {children.map(child => (
+                                <button
+                                  key={child.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActivePageId(child.id);
+                                    setIsMobileMenuOpen(false);
+                                  }}
+                                  className="w-full flex items-center justify-between pl-6 pr-3 py-2 rounded-lg text-xs font-medium text-indigo-400 hover:bg-indigo-500/10 transition-all text-left"
+                                >
+                                  <span className="flex items-center gap-1">
+                                    <CornerDownRight size={12} className="text-indigo-400" />
+                                    {child.title}
+                                  </span>
+                                  <ChevronRight size={12} className="opacity-40" />
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </header>
               )}
-            </header>
 
             {/* Live Active Page Body */}
             <div 
@@ -2453,10 +2780,10 @@ export const SiteBuilderPage: React.FC = () => {
                 <p className="text-xs opacity-75">{activePage?.description}</p>
               </div>
 
-              {/* Active Page Widgets */}
-              <div className="space-y-6">
+              {/* Active Page Widgets Container (Flexbox & Grid Layout Support) */}
+              <div className="grid grid-cols-12 gap-6 items-start">
                 {(!activePage?.widgets || activePage.widgets.length === 0) && (
-                  <div className={`p-10 border-2 border-dashed rounded-3xl text-center space-y-3 transition-all ${
+                  <div className={`col-span-12 p-10 border-2 border-dashed rounded-3xl text-center space-y-3 transition-all ${
                     isLight 
                       ? 'bg-indigo-50/50 border-indigo-200 text-zinc-800' 
                       : 'bg-indigo-950/20 border-indigo-500/30 text-white'
@@ -2481,21 +2808,44 @@ export const SiteBuilderPage: React.FC = () => {
                     </div>
                   </div>
                 )}
+
                 {activePage?.widgets.map((w, index) => {
                   const isSelected = selectedElement?.type === 'widget' && selectedElement.id === w.id;
+                  const isDragOver = dragOverWidgetId === w.id;
                   return (
                     <div
                       key={w.id}
+                      draggable={true}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        e.dataTransfer.setData('text/plain', w.id);
+                        setDraggedWidgetId(w.id);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDragOverWidgetId(w.id);
+                      }}
+                      onDragLeave={() => setDragOverWidgetId(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDropWidgetOnCanvas(w.id);
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedElement({ type: 'widget', id: w.id });
                       }}
-                      className={`relative group ${getThemeRadiusClass()} transition-all cursor-pointer ${
+                      className={`relative group ${getWidgetGridClass(w.layoutColumns)} ${getThemeRadiusClass()} transition-all cursor-grab active:cursor-grabbing ${
                         isSelected 
                           ? 'ring-2 ring-indigo-500 ring-offset-4 ring-offset-zinc-950 shadow-2xl shadow-indigo-500/10' 
                           : 'hover:ring-1 hover:ring-indigo-500/40'
-                      } ${!w.enabled ? 'opacity-40 grayscale' : ''}`}
+                      } ${isDragOver ? 'ring-2 ring-dashed ring-amber-400 scale-[1.01] bg-amber-500/10' : ''} ${!w.enabled ? 'opacity-40 grayscale' : ''}`}
                     >
+                      {/* Visual Drag Handle Indicator */}
+                      <div className="absolute top-2 left-2 z-30 opacity-0 group-hover:opacity-100 bg-black/60 backdrop-blur-md text-white p-1 rounded-lg transition-all cursor-grab">
+                        <GripVertical size={14} />
+                      </div>
                       {/* Selection Overlay Action Bar */}
                       {isSelected && (
                         <div 
@@ -2717,11 +3067,742 @@ export const SiteBuilderPage: React.FC = () => {
                         </div>
                       )}
 
+                      {/* DYNAMIC DATA TABLE / GRID WIDGET */}
+                      {(w.type === 'data_table' || w.type === 'record_grid') && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-cyan-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <Layers size={18} className="text-cyan-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Dynamic Data Table'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+                              3 Active Records
+                            </span>
+                          </div>
+
+                          <div className="border border-zinc-800 rounded-2xl overflow-hidden text-xs">
+                            <div className="grid grid-cols-4 p-2.5 bg-zinc-950 font-bold text-zinc-400 border-b border-zinc-800 uppercase text-[10px] tracking-wider">
+                              <span>Record Identifier</span>
+                              <span>Entity / Contact</span>
+                              <span>Value / Metric</span>
+                              <span>Status Badge</span>
+                            </div>
+                            <div className="divide-y divide-zinc-800/60 bg-zinc-950/40">
+                              <div className="grid grid-cols-4 p-2.5 items-center">
+                                <span className="font-mono font-bold text-indigo-400">REC-9901</span>
+                                <span className="text-white">Jane Smith</span>
+                                <span className="font-mono text-emerald-400">$2,400</span>
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full w-max">Active</span>
+                              </div>
+                              <div className="grid grid-cols-4 p-2.5 items-center">
+                                <span className="font-mono font-bold text-indigo-400">REC-9902</span>
+                                <span className="text-white">Alex Chen</span>
+                                <span className="font-mono text-emerald-400">$3,100</span>
+                                <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full w-max">In Review</span>
+                              </div>
+                              <div className="grid grid-cols-4 p-2.5 items-center">
+                                <span className="font-mono font-bold text-indigo-400">REC-9903</span>
+                                <span className="text-white">Marcus Vance</span>
+                                <span className="font-mono text-emerald-400">$1,850</span>
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full w-max">Verified</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* RECORD & REFERENCE LOOKUP WIDGET */}
+                      {(w.type === 'record_lookup' || w.type === 'status_tracker') && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-5 border border-amber-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <Search size={18} className="text-amber-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Record Reference Lookup'}</h4>
+                            </div>
+                            <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                              Universal Query Engine
+                            </span>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              defaultValue="REF-9921"
+                              placeholder="Enter Reference Number or Search Query..."
+                              className="flex-1 px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs font-mono text-white"
+                            />
+                            <button className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md">
+                              <Search size={13} /> Lookup Record
+                            </button>
+                          </div>
+
+                          <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Matched Result</span>
+                                <h5 className="text-xs font-mono font-bold text-white">REF-9921-AU</h5>
+                              </div>
+                              <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-bold">
+                                Stage 3 of 4 Complete
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-2 text-center">
+                              {[
+                                { step: '1. Received', done: true },
+                                { step: '2. Processing', done: true },
+                                { step: '3. Inspection', done: true },
+                                { step: '4. Finalized', done: false }
+                              ].map((s, idx) => (
+                                <div key={idx} className={`p-2 rounded-xl border text-[10px] font-bold ${
+                                  s.done 
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                                }`}>
+                                  {s.step}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* DYNAMIC FORM BUILDER WIDGET */}
+                      {(w.type === 'custom_form') && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-emerald-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <FormInput size={18} className="text-emerald-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Dynamic Form Builder'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                              Configurable Fields
+                            </span>
+                          </div>
+
+                          <form onSubmit={e => { e.preventDefault(); toast.success('Form response submitted!'); }} className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Full Name / Entity</label>
+                                <input type="text" placeholder="Enter name..." className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white" />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Email Address</label>
+                                <input type="email" placeholder="user@domain.com" className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Category Selection</label>
+                              <select className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white">
+                                <option>Option A &bull; General Inquiry</option>
+                                <option>Option B &bull; Priority Request</option>
+                                <option>Option C &bull; Regulatory Lodgement</option>
+                              </select>
+                            </div>
+                            <button type="submit" className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer">
+                              <Send size={14} /> Submit Form Entry
+                            </button>
+                          </form>
+                        </div>
+                      )}
+
+                      {/* RECORD DETAIL CARD WIDGET */}
+                      {w.type === 'record_card' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-blue-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck size={18} className="text-blue-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Record Detail Profile'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                              Verified Entity
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                            <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
+                              <span className="text-[10px] font-bold uppercase text-zinc-400 block">Record Code</span>
+                              <span className="font-mono font-bold text-indigo-400 mt-1 block">REC-8842</span>
+                            </div>
+                            <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
+                              <span className="text-[10px] font-bold uppercase text-zinc-400 block">Primary Status</span>
+                              <span className="font-bold text-emerald-400 mt-1 block">Approved</span>
+                            </div>
+                            <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl">
+                              <span className="text-[10px] font-bold uppercase text-zinc-400 block">Assigned Module</span>
+                              <span className="font-bold text-zinc-200 mt-1 block">Tenancy Engine</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PIPELINE & PROGRESS STEPPER WIDGET */}
+                      {w.type === 'progress_stepper' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <Clock size={18} className="text-indigo-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Pipeline & Progress Stepper'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                              Step 2 of 4 Active
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 font-bold">1. Intake</div>
+                            <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-indigo-400 font-bold animate-pulse">2. Review</div>
+                            <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl text-zinc-500 font-medium opacity-60">3. Approval</div>
+                            <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl text-zinc-500 font-medium opacity-60">4. Complete</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ACTION BUTTON BAR WIDGET */}
+                      {(w.type === 'action_bar' || w.type === 'action_button') && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-purple-500/20`}>
+                          <h4 className="text-sm font-bold text-white mb-2">{w.title || 'Action Button Group'}</h4>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <button className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/20 cursor-pointer">
+                              <Sparkles size={14} /> {w.buttonLabel || 'Primary Action'}
+                            </button>
+                            <button className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/60 rounded-xl text-xs font-bold cursor-pointer">
+                              Secondary Action
+                            </button>
+                            <button className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 rounded-xl text-xs font-bold cursor-pointer">
+                              Learn More ↗
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* KPI STAT GROUP WIDGET */}
+                      {w.type === 'kpi_stat_group' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-emerald-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3">{w.title || 'KPI Metrics & Stat Counters'}</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-1">
+                              <span className="text-[10px] font-bold uppercase text-zinc-400">Total Submissions</span>
+                              <p className="text-xl font-black text-white mt-0.5">1,248</p>
+                              <span className="text-[10px] font-bold text-emerald-400">+12% vs last month</span>
+                            </div>
+                            <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-1">
+                              <span className="text-[10px] font-bold uppercase text-zinc-400">Average Turnaround</span>
+                              <p className="text-xl font-black text-indigo-400 mt-0.5">1.4 Days</p>
+                              <span className="text-[10px] font-bold text-indigo-400">Optimal Velocity</span>
+                            </div>
+                            <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-1">
+                              <span className="text-[10px] font-bold uppercase text-zinc-400">Resolution Rate</span>
+                              <p className="text-xl font-black text-amber-400 mt-0.5">99.4%</p>
+                              <span className="text-[10px] font-bold text-amber-400">Verified Quality</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CARD GRID CATALOG WIDGET */}
+                      {w.type === 'card_grid' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-teal-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3">{w.title || 'Card Grid Catalog'}</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {[1, 2, 3].map(i => (
+                              <div key={i} className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-2">
+                                <div className="h-20 bg-zinc-900 rounded-xl flex items-center justify-center border border-zinc-800">
+                                  <Building2 size={24} className="text-teal-400" />
+                                </div>
+                                <h5 className="text-xs font-bold text-white">Item Entry #{i}</h5>
+                                <p className="text-[11px] text-zinc-400">Description text for item catalog card entry #{i}.</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* LIVE CHAT & SUPPORT THREAD WIDGET */}
+                      {(w.type === 'chat_thread' || w.type === 'live_chat') && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <MessageSquare size={18} className="text-indigo-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Live Chat & Support Thread'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" /> Online Assistant
+                            </span>
+                          </div>
+
+                          <div className="h-40 bg-zinc-950/70 border border-zinc-800 rounded-2xl p-3 space-y-2 overflow-y-auto">
+                            <div className="max-w-[80%] p-2.5 bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none text-xs space-y-0.5">
+                              <span className="text-[9px] font-bold text-indigo-400 block">System Assistant</span>
+                              <p className="text-zinc-200">Hello! How can I assist you with your portal inquiry today?</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Type your message here..."
+                              className="flex-1 px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white"
+                            />
+                            <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md">
+                              <Send size={13} /> Send
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AUTH / SSO CARD WIDGET */}
+                      {(w.type === 'auth_box' || w.type === 'auth_widget') && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-rose-500/20 max-w-md mx-auto`}>
+                          <div className="text-center space-y-1">
+                            <div className="h-10 w-10 bg-rose-500/10 text-rose-400 rounded-2xl mx-auto flex items-center justify-center border border-rose-500/20">
+                              <Lock size={20} />
+                            </div>
+                            <h4 className="text-base font-bold text-white">{w.title || 'Member Authentication & SSO'}</h4>
+                            <p className="text-xs text-zinc-400">Sign in to access protected portal tools</p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Email Address</label>
+                              <input type="email" placeholder="user@domain.com" className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white" />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Password</label>
+                              <input type="password" placeholder="••••••••••••" className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white" />
+                            </div>
+                            <button className="w-full py-2.5 bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer">
+                              Sign In to Account
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* KANBAN BOARD WIDGET */}
+                      {w.type === 'kanban_board' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-purple-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3">{w.title || 'Kanban Pipeline Board'}</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {['To-Do (2)', 'In Progress (1)', 'Completed (4)'].map((col, idx) => (
+                              <div key={idx} className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-2">
+                                <span className="text-[10px] font-extrabold uppercase text-purple-400">{col}</span>
+                                <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs space-y-1">
+                                  <p className="font-bold text-white">Application #{101 + idx}</p>
+                                  <p className="text-[10px] text-zinc-400">Submitted 2 hours ago</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* EVENT CALENDAR WIDGET */}
+                      {w.type === 'event_calendar' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-rose-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                              <Calendar size={16} className="text-rose-400" /> {w.title || 'Event Scheduler'}
+                            </h4>
+                            <span className="text-xs font-bold text-rose-400">August 2026</span>
+                          </div>
+                          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-zinc-500">
+                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i}>{d}</div>)}
+                            {[...Array(14)].map((_, i) => (
+                              <div key={i} className={`p-2 rounded-lg border border-zinc-800/60 text-xs font-bold ${i === 4 ? 'bg-rose-500 text-white' : 'bg-zinc-950/60 text-zinc-300'}`}>
+                                {i + 1}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* FILE VAULT WIDGET */}
+                      {w.type === 'file_vault' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <FileText size={16} className="text-indigo-400" /> {w.title || 'Document & File Vault'}
+                          </h4>
+                          <div className="p-4 border-2 border-dashed border-zinc-800 rounded-2xl text-center space-y-2 bg-zinc-950/40">
+                            <FileText size={24} className="mx-auto text-indigo-400 opacity-80" />
+                            <p className="text-xs font-bold text-zinc-300">Drag & Drop Documents or PDF Files Here</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* FORM WIZARD WIDGET */}
+                      {w.type === 'form_wizard' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <h4 className="text-sm font-bold text-white">{w.title || 'Multi-Step Form Wizard'}</h4>
+                          <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+                            <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold">Step 1: Details</span>
+                            <span className="px-2.5 py-1 bg-zinc-800 text-zinc-400 rounded-lg text-[10px] font-bold">Step 2: Uploads</span>
+                          </div>
+                          <input type="text" placeholder="Full Legal Name" className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white" />
+                        </div>
+                      )}
+
+                      {/* FEEDBACK & NPS SURVEY WIDGET */}
+                      {w.type === 'feedback_survey' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 text-center border border-amber-500/20`}>
+                          <h4 className="text-sm font-bold text-white">{w.title || 'How would you rate your experience?'}</h4>
+                          <div className="flex justify-center gap-2">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <Star key={star} size={20} className="text-amber-400 fill-amber-400 cursor-pointer" />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CALCULATOR WIDGET */}
+                      {w.type === 'calculator_widget' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-cyan-500/20`}>
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            <Calculator size={16} className="text-cyan-400" /> {w.title || 'Pricing Calculator'}
+                          </h4>
+                          <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between text-xs font-bold text-white">
+                            <span>Estimated Total Quote</span>
+                            <span className="text-lg text-cyan-400">$1,450.00</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* E-SIGNATURE PAD WIDGET */}
+                      {w.type === 'signature_pad' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-rose-500/20`}>
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            <PenTool size={16} className="text-rose-400" /> {w.title || 'Digital E-Signature Canvas'}
+                          </h4>
+                          <div className="h-24 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center text-xs text-zinc-500 font-mono">
+                            Draw signature here...
+                          </div>
+                        </div>
+                      )}
+
+                      {/* USER PROFILE WIDGET */}
+                      {w.type === 'user_profile' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+                            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center">
+                              JD
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-white">Jane Doe</h4>
+                              <p className="text-[10px] text-zinc-400">jane.doe@company.com &bull; Enterprise Admin</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ACCESS GUARD WIDGET */}
+                      {w.type === 'access_guard' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 text-center space-y-2 border border-amber-500/30 bg-amber-500/5`}>
+                          <Lock size={24} className="mx-auto text-amber-400" />
+                          <h4 className="text-xs font-bold text-amber-300">{w.title || 'Restricted Access Container'}</h4>
+                          <p className="text-[10px] text-zinc-400">Content inside this container is locked for unauthorized user roles.</p>
+                        </div>
+                      )}
+
+                      {/* TEAM DIRECTORY WIDGET */}
+                      {w.type === 'team_directory' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-teal-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <Users size={16} className="text-teal-400" /> {w.title || 'Team & Staff Directory'}
+                          </h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            {['Alex Vance (Lead Architect)', 'Sarah Connor (Security Head)'].map((person, idx) => (
+                              <div key={idx} className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-1 text-xs font-bold text-white">
+                                <p>{person}</p>
+                                <span className="text-[9px] font-normal text-teal-400">Active Member</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ACTIVITY STREAM WIDGET */}
+                      {w.type === 'activity_feed' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-purple-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <History size={16} className="text-purple-400" /> {w.title || 'Activity & Audit Log Stream'}
+                          </h4>
+                          <div className="space-y-2 text-xs">
+                            <div className="p-2.5 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between">
+                              <span className="text-zinc-300">Document PDF signed by Alex</span>
+                              <span className="text-[10px] text-zinc-500 font-mono">10m ago</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* FAQ ACCORDION WIDGET */}
+                      {w.type === 'faq_accordion' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-blue-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <HelpCircle size={16} className="text-blue-400" /> {w.title || 'Frequently Asked Questions'}
+                          </h4>
+                          <div className="space-y-2 text-xs">
+                            <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between font-bold text-white cursor-pointer">
+                              <span>How do I lodge a new bond request?</span>
+                              <ChevronDown size={14} className="text-blue-400" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* FEATURE GRID WIDGET */}
+                      {w.type === 'feature_grid' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-emerald-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3">{w.title || 'Platform Value Features'}</h4>
+                          <div className="grid grid-cols-3 gap-3">
+                            {['Ultra Fast API', 'Bank-Grade SSO', '24/7 Support'].map((feat, idx) => (
+                              <div key={idx} className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-center space-y-1">
+                                <Sparkles size={16} className="mx-auto text-emerald-400" />
+                                <p className="text-xs font-bold text-white">{feat}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TABBED CONTENT WIDGET */}
+                      {w.type === 'tabbed_content' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-cyan-500/20`}>
+                          <div className="flex gap-2 border-b border-zinc-800 pb-2 text-xs font-bold">
+                            <span className="px-3 py-1 bg-indigo-600 text-white rounded-lg">Overview</span>
+                            <span className="px-3 py-1 text-zinc-400">Specifications</span>
+                          </div>
+                          <p className="text-xs text-zinc-400">Interactive tabbed panel content area.</p>
+                        </div>
+                      )}
+
+                      {/* PRICING TABLE WIDGET */}
+                      {w.type === 'pricing_table' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <h4 className="text-sm font-bold text-white border-b border-zinc-800 pb-3">{w.title || 'Pricing Tier Plans'}</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2">
+                              <h5 className="text-xs font-bold text-white">Starter Plan</h5>
+                              <p className="text-xl font-black text-indigo-400">$49/mo</p>
+                            </div>
+                            <div className="p-4 bg-indigo-600/10 border border-indigo-500/40 rounded-2xl space-y-2">
+                              <h5 className="text-xs font-bold text-white">Enterprise</h5>
+                              <p className="text-xl font-black text-indigo-300">$199/mo</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TESTIMONIAL CAROUSEL WIDGET */}
+                      {w.type === 'testimonials' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-teal-500/20 text-center`}>
+                          <MessageCircle size={20} className="mx-auto text-teal-400" />
+                          <p className="text-xs text-zinc-300 italic">"Aurora transformed our portal deployment speed by 10x!"</p>
+                          <span className="text-[10px] font-bold text-teal-400 block">- Chief Digital Officer</span>
+                        </div>
+                      )}
+
+                      {/* CTA STRIP WIDGET */}
+                      {w.type === 'cta_strip' && (
+                        <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between shadow-xl">
+                          <div>
+                            <h4 className="text-sm font-bold">{w.title || 'Ready to scale your enterprise portal?'}</h4>
+                            <p className="text-xs opacity-80">Get started today in under 2 minutes.</p>
+                          </div>
+                          <button className="px-4 py-2 bg-white text-indigo-600 rounded-xl text-xs font-bold cursor-pointer">
+                            Launch Now
+                          </button>
+                        </div>
+                      )}
+
+                      {/* EMBED IFRAME WIDGET */}
+                      {w.type === 'embed_iframe' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-rose-500/20`}>
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            <Globe size={16} className="text-rose-400" /> {w.title || 'Embedded Web Content Frame'}
+                          </h4>
+                          <div className="h-32 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center text-xs text-zinc-500 font-mono">
+                            [Iframe Media / Web Container]
+                          </div>
+                        </div>
+                      )}
+
+                      {/* MOBILE BOTTOM NAV BAR WIDGET */}
+                      {w.type === 'bottom_nav_bar' && (
+                        <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl flex justify-around text-center text-[10px] text-zinc-400 font-bold">
+                          <span className="text-indigo-400">Home</span>
+                          <span>Search</span>
+                          <span>Notifications</span>
+                          <span>Profile</span>
+                        </div>
+                      )}
+
+                      {/* FLOATING ACTION BUTTON WIDGET */}
+                      {w.type === 'floating_action_btn' && (
+                        <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">{w.title || 'Floating Action Button (FAB)'}</span>
+                          <button className="h-10 w-10 bg-indigo-600 text-white rounded-full flex items-center justify-center shadow-lg cursor-pointer">
+                            <Plus size={20} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* PUSH PROMPT WIDGET */}
+                      {w.type === 'push_prompt' && (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <Bell size={16} className="text-amber-400" />
+                            <span className="font-bold text-amber-300">Enable Push Alerts for live status updates</span>
+                          </div>
+                          <button className="px-3 py-1 bg-amber-500 text-black font-bold rounded-lg text-[10px]">Enable</button>
+                        </div>
+                      )}
+
+                      {/* INFINITE STREAM WIDGET */}
+                      {w.type === 'infinite_stream' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-3 border border-teal-500/20`}>
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            <Compass size={16} className="text-teal-400" /> {w.title || 'Infinite Mobile Stream'}
+                          </h4>
+                          <div className="space-y-2">
+                            {[1, 2].map(item => (
+                              <div key={item} className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl text-xs font-bold text-white">
+                                Stream Item Entry #{item}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* MULTI-SLIDE BANNER CAROUSEL WIDGET */}
+                      {w.type === 'slider_carousel' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-8 border border-rose-500/20 relative overflow-hidden space-y-4 bg-gradient-to-br from-rose-950/20 to-zinc-950`}>
+                          <div className="flex items-center justify-between">
+                            <span className="px-2.5 py-0.5 bg-rose-500/20 text-rose-300 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 font-mono">
+                              <Images size={12} /> Slide 1 of {(w.slides?.length || 2)}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button className="p-1 bg-zinc-900 border border-zinc-800 rounded-lg text-white opacity-70 hover:opacity-100 cursor-pointer">
+                                <ChevronLeft size={14} />
+                              </button>
+                              <button className="p-1 bg-zinc-900 border border-zinc-800 rounded-lg text-white opacity-70 hover:opacity-100 cursor-pointer">
+                                <ChevronRight size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <h3 className="text-2xl font-extrabold text-white">{w.slides?.[0]?.title || w.title || 'Multi-Slide Banner Carousel'}</h3>
+                            <p className="text-xs text-zinc-300 max-w-lg leading-relaxed">{w.slides?.[0]?.subtitle || w.subtitle || 'Interactive multi-slide presentation widget with auto-play & touch swipe support.'}</p>
+                          </div>
+                          <div className="flex items-center gap-2 pt-2">
+                            <button className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-600/20 cursor-pointer">
+                              {w.slides?.[0]?.buttonLabel || 'Explore Features'}
+                            </button>
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              {(w.slides || [1, 2, 3]).map((_, sIdx) => (
+                                <span key={sIdx} className={`h-2 rounded-full transition-all ${sIdx === 0 ? 'w-6 bg-rose-500' : 'w-2 bg-zinc-800'}`} />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CMS COLLECTION REPEATER WITH SUBMODULE & CONTEXT BINDING */}
+                      {w.type === 'cms_collection_list' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/30`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <Database size={16} className="text-indigo-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Dynamic Repeater Collection'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20 font-mono">
+                              Source: {w.targetModuleName || 'Tenancies'} {w.targetSubmoduleId ? `➔ ${w.targetSubmoduleId}` : ''} ({w.contextSource || 'all_records'})
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {[
+                              { title: 'Tenancy Agreement #1092', badge: 'Active', price: '$2,400/mo', date: 'Refined 2h ago' },
+                              { title: 'Property Bond Lodgement #881', badge: 'Verified', price: '$3,800.00', date: 'Refined 1d ago' },
+                              { title: 'Maintenance Request #402', badge: 'Pending Approval', price: '$450.00', date: 'Refined 3d ago' }
+                            ].map((item, idx) => (
+                              <div key={idx} className="p-4 bg-zinc-950 border border-zinc-800/90 rounded-2xl space-y-2.5 relative group hover:border-indigo-500/50 transition-all">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-md border border-indigo-500/20 font-mono">
+                                    {item.badge}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-zinc-500">{item.date}</span>
+                                </div>
+                                <div>
+                                  <h5 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">{item.title}</h5>
+                                  <p className="text-xs font-extrabold text-indigo-400 mt-1">{item.price}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* HEADING BLOCK (H1 - H6) */}
+                      {w.type === 'heading_block' && (
+                        <div className={`text-${w.textAlign || 'left'} py-2`}>
+                          {(w.headingLevel === 'h1' || !w.headingLevel) && <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{w.title || 'Main Page Heading (H1)'}</h1>}
+                          {w.headingLevel === 'h2' && <h2 className="text-2xl sm:text-3xl font-extrabold text-white">{w.title || 'Section Heading (H2)'}</h2>}
+                          {w.headingLevel === 'h3' && <h3 className="text-xl sm:text-2xl font-bold text-white">{w.title || 'Subheading (H3)'}</h3>}
+                          {w.headingLevel === 'h4' && <h4 className="text-lg font-bold text-white">{w.title || 'Card Header (H4)'}</h4>}
+                          {w.headingLevel === 'h5' && <h5 className="text-sm font-bold uppercase tracking-wider text-indigo-400">{w.title || 'Subsection Header (H5)'}</h5>}
+                          {w.headingLevel === 'h6' && <h6 className="text-xs font-mono font-extrabold uppercase text-zinc-500 tracking-widest">{w.title || 'Eyebrow Header (H6)'}</h6>}
+                        </div>
+                      )}
+
+                      {/* TEXT PARAGRAPH BLOCK */}
+                      {w.type === 'text_paragraph' && (
+                        <div className={`text-${w.textAlign || 'left'} text-sm text-zinc-300 leading-relaxed py-2`}>
+                          <p>{w.subtitle || w.title || 'Generic rich text paragraph block for portal content, instructions, and articles.'}</p>
+                        </div>
+                      )}
+
+                      {/* HORIZONTAL RULE (HR) */}
+                      {w.type === 'horizontal_rule' && (
+                        <div className="py-4">
+                          {w.dividerStyle === 'gradient' ? (
+                            <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
+                          ) : (
+                            <hr className={`border-zinc-800 ${
+                              w.dividerStyle === 'dashed' ? 'border-dashed' : w.dividerStyle === 'dotted' ? 'border-dotted' : 'border-solid'
+                            }`} />
+                          )}
+                        </div>
+                      )}
+
+                      {/* CONTENT PANEL primitive */}
+                      {w.type === 'content_panel' && (
+                        <div className={`p-6 rounded-2xl border ${
+                          w.panelStyle === 'subtle_tint' ? 'bg-indigo-500/5 border-indigo-500/20' :
+                          w.panelStyle === 'bordered_glass' ? 'bg-zinc-900/60 backdrop-blur-xl border-zinc-700/60 shadow-2xl' :
+                          w.panelStyle === 'gradient_glow' ? 'bg-gradient-to-br from-indigo-950/30 to-purple-950/30 border-indigo-500/30 shadow-indigo-500/10 shadow-2xl' :
+                          'bg-zinc-900 border-zinc-800'
+                        } space-y-2`}>
+                          <h4 className="text-sm font-bold text-white">{w.title || 'Content Panel Box Container'}</h4>
+                          <p className="text-xs text-zinc-400">{w.subtitle || 'Container box primitive for grouping nested widgets and content.'}</p>
+                        </div>
+                      )}
+
+                      {/* VERTICAL SPACER */}
+                      {w.type === 'vertical_spacer' && (
+                        <div className={`w-full ${
+                          w.spacerHeight === 'sm' ? 'h-4' :
+                          w.spacerHeight === 'lg' ? 'h-12' :
+                          w.spacerHeight === 'xl' ? 'h-16' :
+                          w.spacerHeight === '2xl' ? 'h-24' : 'h-8'
+                        } flex items-center justify-center`}>
+                          <div className="w-full border-t border-dashed border-zinc-800/40 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-center text-zinc-600 font-mono">
+                            Spacer ({w.spacerHeight || 'md'})
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
-
             </div>
 
             {/* Live Footer */}
@@ -2744,6 +3825,7 @@ export const SiteBuilderPage: React.FC = () => {
               {footerText}
             </footer>
           </div>
+        </div>
 
         </main>
 
@@ -2812,17 +3894,23 @@ export const SiteBuilderPage: React.FC = () => {
 
                 <div>
                   <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
-                    Navbar Layout Alignment
+                    Main Menu Navigation & Layout
                   </label>
                   <select
                     value={headerLayout}
                     onChange={e => setHeaderLayout(e.target.value as any)}
-                    className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                    className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
                   >
-                    <option value="top_right">Standard Top (Right Aligned Links)</option>
-                    <option value="top_center">Centered Top Navigation</option>
-                    <option value="pill_header">Floating Pill Bar</option>
-                    <option value="minimal">Minimal Header</option>
+                    <optgroup label="🔝 Top Header Navigation">
+                      <option value="top_right">Top Navbar &bull; Links Right Aligned</option>
+                      <option value="top_center">Top Navbar &bull; Links Centered</option>
+                      <option value="pill_header">Top Navbar &bull; Floating Pill Bar</option>
+                      <option value="minimal">Top Navbar &bull; Minimal Layout</option>
+                    </optgroup>
+                    <optgroup label="◀️ Vertical Sidebar Navigation">
+                      <option value="sidebar_left">Vertical Sidebar &bull; Left Navigation Panel</option>
+                      <option value="sidebar_right">Vertical Sidebar &bull; Right Navigation Panel</option>
+                    </optgroup>
                   </select>
                 </div>
 
@@ -3049,6 +4137,308 @@ export const SiteBuilderPage: React.FC = () => {
                       </div>
                     )}
 
+                    {/* HEADING BLOCK INSPECTOR */}
+                    {selWidget.type === 'heading_block' && (
+                      <div className="space-y-3 pt-3 border-t border-zinc-500/20">
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Heading Level Size
+                          </label>
+                          <select
+                            value={selWidget.headingLevel || 'h2'}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'headingLevel', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="h1">H1 - Page Title (Large Hero)</option>
+                            <option value="h2">H2 - Section Header (Medium Large)</option>
+                            <option value="h3">H3 - Subheading (Medium)</option>
+                            <option value="h4">H4 - Card Header (Standard)</option>
+                            <option value="h5">H5 - Small Subsection</option>
+                            <option value="h6">H6 - Micro Tag / Eyebrow Header</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Text Alignment
+                          </label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {['left', 'center', 'right'].map(align => (
+                              <button
+                                key={align}
+                                type="button"
+                                onClick={() => handleUpdateWidgetProp(selWidget.id, 'textAlign', align)}
+                                className={`py-1 rounded-lg text-xs font-bold capitalize transition-all ${
+                                  (selWidget.textAlign || 'left') === align
+                                    ? 'bg-indigo-600 text-white'
+                                    : isLight ? 'bg-zinc-100 text-zinc-700' : 'bg-zinc-900 text-zinc-400'
+                                }`}
+                              >
+                                {align}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* TEXT PARAGRAPH INSPECTOR */}
+                    {selWidget.type === 'text_paragraph' && (
+                      <div className="space-y-3 pt-3 border-t border-zinc-500/20">
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Paragraph Text Content
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={selWidget.subtitle || selWidget.title || ''}
+                            onChange={e => {
+                              handleUpdateWidgetProp(selWidget.id, 'title', e.target.value);
+                              handleUpdateWidgetProp(selWidget.id, 'subtitle', e.target.value);
+                            }}
+                            className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-indigo-500 ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                            placeholder="Type paragraph text or markdown content..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Text Alignment
+                          </label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {['left', 'center', 'right'].map(align => (
+                              <button
+                                key={align}
+                                type="button"
+                                onClick={() => handleUpdateWidgetProp(selWidget.id, 'textAlign', align)}
+                                className={`py-1 rounded-lg text-xs font-bold capitalize transition-all ${
+                                  (selWidget.textAlign || 'left') === align
+                                    ? 'bg-indigo-600 text-white'
+                                    : isLight ? 'bg-zinc-100 text-zinc-700' : 'bg-zinc-900 text-zinc-400'
+                                }`}
+                              >
+                                {align}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* HORIZONTAL RULE INSPECTOR */}
+                    {selWidget.type === 'horizontal_rule' && (
+                      <div className="space-y-3 pt-3 border-t border-zinc-500/20">
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Divider Line Style
+                          </label>
+                          <select
+                            value={selWidget.dividerStyle || 'solid'}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'dividerStyle', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="solid">Solid Line</option>
+                            <option value="dashed">Dashed Line</option>
+                            <option value="dotted">Dotted Line</option>
+                            <option value="gradient">Modern Neon Gradient</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CONTENT PANEL INSPECTOR */}
+                    {selWidget.type === 'content_panel' && (
+                      <div className="space-y-3 pt-3 border-t border-zinc-500/20">
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Panel Box Style
+                          </label>
+                          <select
+                            value={selWidget.panelStyle || 'card_surface'}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'panelStyle', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="card_surface">Standard Card Surface</option>
+                            <option value="subtle_tint">Subtle Tint Container</option>
+                            <option value="bordered_glass">Glassmorphic Bordered Glass</option>
+                            <option value="gradient_glow">Gradient Ambient Glow</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VERTICAL SPACER INSPECTOR */}
+                    {selWidget.type === 'vertical_spacer' && (
+                      <div className="space-y-3 pt-3 border-t border-zinc-500/20">
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Spacer Height Gap
+                          </label>
+                          <select
+                            value={selWidget.spacerHeight || 'md'}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'spacerHeight', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="sm">Small Gap (16px)</option>
+                            <option value="md">Medium Gap (32px)</option>
+                            <option value="lg">Large Gap (48px)</option>
+                            <option value="xl">Extra Large Gap (64px)</option>
+                            <option value="2xl">Huge Gap (96px)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DYNAMIC REPEATER FIELD MAPPER & SUBMODULE CONTEXT INSPECTOR */}
+                    {selWidget.type === 'cms_collection_list' && (
+                      <div className="space-y-4 pt-3 border-t border-zinc-500/20">
+                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
+                          <Database size={12} /> Dynamic Repeater Context & Field Binding Engine
+                        </p>
+
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Primary Module Collection
+                          </label>
+                          <select
+                            value={selWidget.targetModuleId || ''}
+                            onChange={e => {
+                              const mod = availableModules.find(m => m.id === e.target.value);
+                              handleUpdateWidgetProp(selWidget.id, 'targetModuleId', e.target.value);
+                              handleUpdateWidgetProp(selWidget.id, 'targetModuleName', mod?.name || '');
+                            }}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="">-- Select Module Collection --</option>
+                            {availableModules.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} ({m.type})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Submodule Collection Relationship
+                          </label>
+                          <select
+                            value={selWidget.targetSubmoduleId || ''}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'targetSubmoduleId', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="">-- None (Direct Module Collection) --</option>
+                            <option value="submod-maintenance">Maintenance Requests (Submodule)</option>
+                            <option value="submod-inspections">Property Inspections (Submodule)</option>
+                            <option value="submod-payouts">Claim Payout Ledger (Submodule)</option>
+                            <option value="submod-documents">Associated Document Vault (Submodule)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Context Binding Source
+                          </label>
+                          <select
+                            value={selWidget.contextSource || 'all_records'}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'contextSource', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="all_records">🌐 Fetch All Collection Records</option>
+                            <option value="parent_route_record">🔗 Filter by Active Route Record ID Context</option>
+                            <option value="filtered_subset">🔍 Filtered Subset (Custom Filter Criteria)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-zinc-800">
+                          <label className="block text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                            Dynamic Repeater Field Mapping
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[9px] font-bold text-zinc-400">Title Field</span>
+                              <input
+                                type="text"
+                                value={selWidget.fieldMapping?.titleField || 'title'}
+                                onChange={e => handleUpdateWidgetProp(selWidget.id, 'fieldMapping', { ...selWidget.fieldMapping, titleField: e.target.value })}
+                                className={`w-full px-2 py-1 border rounded-lg text-xs font-mono ${isLight ? 'bg-white border-zinc-300' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                                placeholder="name / address"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] font-bold text-zinc-400">Badge Field</span>
+                              <input
+                                type="text"
+                                value={selWidget.fieldMapping?.badgeField || 'status'}
+                                onChange={e => handleUpdateWidgetProp(selWidget.id, 'fieldMapping', { ...selWidget.fieldMapping, badgeField: e.target.value })}
+                                className={`w-full px-2 py-1 border rounded-lg text-xs font-mono ${isLight ? 'bg-white border-zinc-300' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                                placeholder="status / category"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MULTI-SLIDE CAROUSEL INSPECTOR */}
+                    {selWidget.type === 'slider_carousel' && (
+                      <div className="space-y-3 pt-3 border-t border-zinc-500/20">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-400 flex items-center gap-1">
+                            <Images size={12} /> Slide Items Manager
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const existing = selWidget.slides || [
+                                { id: 's-1', title: 'Welcome to Aurora Platform', subtitle: 'Build next-gen portals and mobile apps.', buttonLabel: 'Explore Portals' }
+                              ];
+                              const newSlides = [
+                                ...existing,
+                                { id: `s-${Date.now()}`, title: `Slide ${existing.length + 1}`, subtitle: 'Custom slider content presentation.', buttonLabel: 'Action CTA' }
+                              ];
+                              handleUpdateWidgetProp(selWidget.id, 'slides', newSlides);
+                            }}
+                            className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold cursor-pointer flex items-center gap-1"
+                          >
+                            <Plus size={10} /> Add Slide
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {(selWidget.slides || [
+                            { id: 's-1', title: 'Welcome to Aurora Platform', subtitle: 'Build next-gen portals and mobile apps.', buttonLabel: 'Explore Portals' },
+                            { id: 's-2', title: 'Enterprise Single Sign-On', subtitle: 'Bank-grade security and role-based access control.', buttonLabel: 'Learn More' }
+                          ]).map((slide) => (
+                            <div key={slide.id} className={`p-2.5 border rounded-xl space-y-2 ${isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <input
+                                  type="text"
+                                  value={slide.title}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    const updated = (selWidget.slides || []).map(s => s.id === slide.id ? { ...s, title: val } : s);
+                                    handleUpdateWidgetProp(selWidget.id, 'slides', updated);
+                                  }}
+                                  className={`flex-1 px-2 py-1 border rounded-lg text-xs font-bold ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-900 border-zinc-800 text-white'}`}
+                                  placeholder="Slide Title"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = (selWidget.slides || []).filter(s => s.id !== slide.id);
+                                    handleUpdateWidgetProp(selWidget.id, 'slides', updated);
+                                  }}
+                                  className="p-1 hover:bg-red-500/20 text-red-400 rounded cursor-pointer shrink-0"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {(selWidget.type === 'form_embed' || selWidget.type === 'ticket_form') && (
                       <div className="space-y-3 pt-2 border-t border-zinc-800">
                         <div className="flex items-center justify-between">
@@ -3120,6 +4510,85 @@ export const SiteBuilderPage: React.FC = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* PHASE 4: LOGIC & EVENT TRIGGER SYSTEM */}
+                    <div className="pt-3 border-t border-zinc-500/20 space-y-3">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-purple-400 flex items-center gap-1">
+                        <Zap size={12} /> Logic & Event Trigger System
+                      </p>
+                      <div>
+                        <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                          Click Event Trigger Action
+                        </label>
+                        <select
+                          value={selWidget.buttonAction || 'open_modal'}
+                          onChange={e => handleUpdateWidgetProp(selWidget.id, 'buttonAction', e.target.value)}
+                          className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                        >
+                          <option value="open_modal">⚡ OnClick ➔ Open Dynamic Modal</option>
+                          <option value="trigger_workflow">⚡ OnClick ➔ Trigger Aurora Workflow Rule</option>
+                          <option value="execute_api">⚡ OnClick ➔ Execute Custom Webhook API Call</option>
+                          <option value="navigate">⚡ OnClick ➔ Navigate Page / URL</option>
+                          <option value="download">⚡ OnClick ➔ Download File / Document</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                          Trigger Target / Route / Payload
+                        </label>
+                        <input
+                          type="text"
+                          value={selWidget.actionTarget || ''}
+                          onChange={e => handleUpdateWidgetProp(selWidget.id, 'actionTarget', e.target.value)}
+                          placeholder="e.g. /workspace/workflow-102 or ModalTitle"
+                          className={`w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* PHASE 4: FLEXBOX & GRID CANVAS BUILDER */}
+                    <div className="pt-3 border-t border-zinc-500/20 space-y-3">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-cyan-400 flex items-center gap-1">
+                        <LayoutGrid size={12} /> Flexbox & Grid Canvas Controls
+                      </p>
+                      <div>
+                        <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                          Widget Layout Grid Columns
+                        </label>
+                        <select
+                          value={selWidget.layoutColumns || '1_col'}
+                          onChange={e => handleUpdateWidgetProp(selWidget.id, 'layoutColumns', e.target.value)}
+                          className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                        >
+                          <option value="1_col">1 Full-Width Column (100%)</option>
+                          <option value="2_col">2 Equal Columns (50% / 50%)</option>
+                          <option value="3_col">3 Equal Columns (33% / 33% / 33%)</option>
+                          <option value="4_col">4 Equal Columns (25% Grid)</option>
+                          <option value="split_1_2">Split 1/3 Left &bull; 2/3 Right</option>
+                          <option value="split_2_1">Split 2/3 Left &bull; 1/3 Right</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* PHASE 4: CUSTOM CODE & SCHEMA ENGINE */}
+                    <div className="pt-3 border-t border-zinc-500/20 space-y-3">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                        <Code size={12} /> Custom Code & Component Extension
+                      </p>
+                      <div>
+                        <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                          Custom HTML / Tailwind / JS Snippet
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={selWidget.customSnippet || ''}
+                          onChange={e => handleUpdateWidgetProp(selWidget.id, 'customSnippet', e.target.value)}
+                          placeholder="<div className='p-4 bg-indigo-500/10 text-indigo-400 rounded-xl'>Custom Component Extension</div>"
+                          className={`w-full px-2.5 py-1.5 border rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500 resize-none ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-zinc-300'}`}
+                        />
+                      </div>
+                    </div>
 
                     <div className="pt-3 border-t border-zinc-500/20 flex items-center justify-between">
                       <button
@@ -3296,6 +4765,41 @@ export const SiteBuilderPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
               {
+                type: 'bond_lodgement',
+                title: 'Property Bond Lodgement Portal',
+                desc: 'Turnkey self-service portal for bond holders & residents to lodge, register, and manage property bonds directly in Aurora.',
+                icon: Building2,
+                color: 'text-emerald-400 bg-emerald-500/10'
+              },
+              {
+                type: 'status_tracker',
+                title: 'Application / Bond Status Tracker',
+                desc: 'Self-service progress timeline widget for visitors to track reference codes (e.g. BND-9921) and application stages.',
+                icon: Clock,
+                color: 'text-amber-400 bg-amber-500/10'
+              },
+              {
+                type: 'live_chat',
+                title: 'Online Customer Support Live Chat',
+                desc: 'Real-time support messaging component connecting portal visitors directly to workspace staff & AI agents.',
+                icon: MessageSquare,
+                color: 'text-indigo-400 bg-indigo-500/10'
+              },
+              {
+                type: 'auth_widget',
+                title: 'Portal Member Login & SSO Auth Card',
+                desc: 'Authentication card supporting Email/Password, Registration, and Google/Microsoft/Apple Third-Party SSO.',
+                icon: Lock,
+                color: 'text-rose-400 bg-rose-500/10'
+              },
+              {
+                type: 'record_grid',
+                title: 'Aurora Record Data Grid',
+                desc: 'Dynamic data grid displaying live records from an Aurora workspace module with search and detail view modal.',
+                icon: Layers,
+                color: 'text-cyan-400 bg-cyan-500/10'
+              },
+              {
                 type: 'hero',
                 title: 'Hero Section Header',
                 desc: 'High-impact banner with custom title, subtitle, accent glow, and call-to-action button.',
@@ -3440,6 +4944,199 @@ export const SiteBuilderPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* UNIVERSAL SINGLE-CODEBASE MOBILE APP & WEB EXPORTER WIZARD MODAL */}
+      <Modal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        title="Single-Codebase Mobile & Web App Exporter Wizard"
+        size="lg"
+      >
+        <div className="space-y-5">
+          <div className={`p-4 border rounded-2xl space-y-1 ${isLight ? 'bg-indigo-50/50 border-indigo-200 text-zinc-900' : 'bg-indigo-500/10 border-indigo-500/20 text-white'}`}>
+            <h4 className="text-sm font-bold flex items-center gap-2">
+              <Smartphone size={18} className="text-indigo-400" />
+              Compile & Export Native Mobile Application
+            </h4>
+            <p className="text-xs opacity-80 leading-relaxed">
+              Package your site configuration into a single-codebase mobile app for iOS (Apple App Store) and Android (Google Play) using Capacitor & Expo React Native.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                Mobile App Bundle Identifier (App ID)
+              </label>
+              <input
+                type="text"
+                value={appId}
+                onChange={e => setAppId(e.target.value)}
+                placeholder="com.aurora.tenancyportal"
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-mono ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                  App Name
+                </label>
+                <input
+                  type="text"
+                  value={appName || name}
+                  onChange={e => setAppName(e.target.value)}
+                  placeholder="Aurora Portal"
+                  className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                />
+              </div>
+              <div>
+                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                  Version
+                </label>
+                <input
+                  type="text"
+                  value={appVersion}
+                  onChange={e => setAppVersion(e.target.value)}
+                  placeholder="1.0.0"
+                  className={`w-full px-3 py-2 border rounded-xl text-xs font-mono ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                />
+              </div>
+              <div>
+                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                  Target Platform
+                </label>
+                <select
+                  value={appPlatform}
+                  onChange={e => setAppPlatform(e.target.value as any)}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                >
+                  <option value="all">iOS & Android (Universal Single Codebase)</option>
+                  <option value="ios">Apple iOS (.ipa)</option>
+                  <option value="android">Android (.apk / .aab)</option>
+                  <option value="web">PWA / Web Bundle Only</option>
+                </select>
+              </div>
+            </div>
+
+            <div className={`p-4 border rounded-2xl space-y-2 ${isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-950 border-zinc-800'}`}>
+              <span className={`block text-[11px] font-bold uppercase tracking-wider ${isLight ? 'text-zinc-900' : 'text-white'}`}>
+                Native Mobile Device Capabilities
+              </span>
+
+              <label className="flex items-center justify-between text-xs cursor-pointer">
+                <span className={isLight ? 'text-zinc-700' : 'text-zinc-300'}>Push Notifications Engine</span>
+                <input
+                  type="checkbox"
+                  checked={pushEnabled}
+                  onChange={e => setPushEnabled(e.target.checked)}
+                  className="rounded bg-zinc-900 border-zinc-700 text-indigo-600"
+                />
+              </label>
+            </div>
+
+            <button
+              onClick={async () => {
+                if (!site) return;
+                setExportingApp(true);
+                try {
+                  const res = await SiteService.exportMobileAppManifest(site.id, {
+                    appId: appId || `com.aurora.${site.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+                    appName: appName || site.name,
+                    platform: appPlatform,
+                    version: appVersion,
+                    buildNumber: 1,
+                    pushNotificationsEnabled: pushEnabled,
+                    cameraAccessEnabled: true,
+                    biometricsEnabled: true
+                  });
+                  setExportedManifest(res.manifest);
+                  toast.success('Mobile app bundle manifest compiled successfully!');
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to generate mobile export package');
+                } finally {
+                  setExportingApp(false);
+                }
+              }}
+              disabled={exportingApp}
+              className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 cursor-pointer disabled:opacity-50"
+            >
+              <Smartphone size={16} /> {exportingApp ? 'Compiling Mobile Package...' : 'Compile Single-Codebase App Bundle'}
+            </button>
+
+            {exportedManifest && (
+              <div className={`p-4 border rounded-2xl space-y-3 ${isLight ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Check size={16} /> Native Manifest Ready ({exportedManifest.app?.appName})
+                  </span>
+                  <button
+                    onClick={() => {
+                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportedManifest, null, 2));
+                      const downloadAnchor = document.createElement('a');
+                      downloadAnchor.setAttribute("href", dataStr);
+                      downloadAnchor.setAttribute("download", `aurora-mobile-app-${appId}.json`);
+                      document.body.appendChild(downloadAnchor);
+                      downloadAnchor.click();
+                      downloadAnchor.remove();
+                      toast.success('Mobile App Bundle JSON downloaded!');
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md"
+                  >
+                    Download App Bundle JSON
+                  </button>
+                </div>
+                <pre className="text-[10px] font-mono text-emerald-300 max-h-36 overflow-y-auto p-3 bg-black/40 rounded-xl">
+                  {JSON.stringify(exportedManifest.capacitorConfig, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* DELETE PAGE CONFIRMATION MODAL */}
+      {deletePageTarget && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md ${isLight ? 'bg-white text-zinc-900 border-zinc-200 shadow-2xl' : 'bg-zinc-900 text-white border-zinc-800 shadow-2xl'} border rounded-3xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150`}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center border border-rose-500/20">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold">Delete Page Confirmation</h3>
+                <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  Are you sure you want to delete <span className="font-bold text-rose-400 font-mono">"{deletePageTarget.title}"</span>?
+                </p>
+              </div>
+            </div>
+
+            <div className={`p-3.5 rounded-2xl text-xs space-y-1.5 ${isLight ? 'bg-zinc-100 text-zinc-700' : 'bg-zinc-950 text-zinc-400 border border-zinc-800'}`}>
+              <p className="font-bold text-rose-400 flex items-center gap-1">
+                <span>⚠️</span> Irreversible Action
+              </p>
+              <p>Deleting this page will permanently remove it along with all configured widgets and any child pages. The preview canvas will update immediately to show your remaining pages.</p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-500/10">
+              <button
+                type="button"
+                onClick={() => setDeletePageTarget(null)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold ${isLight ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'} cursor-pointer transition-all`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeletePage}
+                className="px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white rounded-xl text-xs font-bold cursor-pointer shadow-lg shadow-rose-600/20 flex items-center gap-1.5 transition-all"
+              >
+                <Trash2 size={13} /> Yes, Delete Page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
