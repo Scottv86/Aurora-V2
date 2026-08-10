@@ -42,7 +42,7 @@ import { Site, SiteService, SiteNavItem, SiteWidget, SitePage } from '../../serv
 import { usePlatform } from '../../hooks/usePlatform';
 import { Modal } from '../../components/UI/TabsAndModal';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 
 export const SiteBuilderPage: React.FC = () => {
