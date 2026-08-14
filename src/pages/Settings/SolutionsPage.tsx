@@ -1,98 +1,25 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Boxes, Plus, Search, Trash2, Layers, GitBranch, ArrowRight, FileText
+  Boxes, Plus, Search, Trash2, Layers, GitBranch, ArrowRight
 } from 'lucide-react';
-
 
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
-import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-
-
-export interface SolutionBlueprint {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  version: string;
-  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
-  modulesCount: number;
-  workflowsCount: number;
-  formsCount: number;
-  author: string;
-  updatedAt: string;
-  icon: string;
-}
-
-const INITIAL_SOLUTIONS: SolutionBlueprint[] = [
-  {
-    id: 'sol_case_management',
-    name: 'Enterprise Case & Incident Management',
-    description: 'Pre-configured blueprint combining triage modules, SLA escalation workflows, intake forms, and resolution analytics.',
-    category: 'Governance & Operations',
-    version: 'v2.4.0',
-    status: 'ACTIVE',
-    modulesCount: 4,
-    workflowsCount: 8,
-    formsCount: 5,
-    author: 'Aurora Platform Team',
-    updatedAt: '2 hours ago',
-    icon: 'Boxes'
-  },
-  {
-    id: 'sol_onboarding_portal',
-    name: 'Customer Onboarding & Intake Portal',
-    description: 'Complete solution bundle with self-service public intake, identity validation rulesets, and automated welcome triggers.',
-    category: 'Customer Experience',
-    version: 'v1.8.2',
-    status: 'ACTIVE',
-    modulesCount: 3,
-    workflowsCount: 5,
-    formsCount: 6,
-    author: 'Platform Architecture',
-    updatedAt: '1 day ago',
-    icon: 'Globe'
-  },
-  {
-    id: 'sol_workforce_governance',
-    name: 'Workforce Operations & Access Suite',
-    description: 'Integrated organizational hierarchy, position assignment rules, synthetic member provisioning, and audit tracking.',
-    category: 'HR & Workforce',
-    version: 'v3.1.0',
-    status: 'ACTIVE',
-    modulesCount: 5,
-    workflowsCount: 6,
-    formsCount: 4,
-    author: 'Governance Group',
-    updatedAt: '3 days ago',
-    icon: 'ShieldCheck'
-  },
-  {
-    id: 'sol_procurement_pipeline',
-    name: 'Financial Audit & Procurement Pipeline',
-    description: 'Multi-stage vendor registration, purchase order approval matrix, tax validation, and invoice document generation.',
-    category: 'Finance & Compliance',
-    version: 'v1.0.5',
-    status: 'DRAFT',
-    modulesCount: 3,
-    workflowsCount: 4,
-    formsCount: 3,
-    author: 'Finance Ops',
-    updatedAt: '5 days ago',
-    icon: 'Package'
-  }
-];
+import { SolutionBlueprint } from '../../types/solutions';
+import { NewSolutionModal, TEMPLATE_SOLUTIONS } from '../../components/Modals/NewSolutionModal';
+import { SolutionBuilderStudio } from '../../components/Builders/SolutionBuilder/SolutionBuilderStudio';
 
 export const SolutionsPage: React.FC = () => {
-  const [solutions, setSolutions] = useState<SolutionBlueprint[]>(INITIAL_SOLUTIONS);
+  const [solutions, setSolutions] = useState<SolutionBlueprint[]>(TEMPLATE_SOLUTIONS);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'ACTIVE' | 'DRAFTS'>('ALL');
 
-  
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
-  const [selectedSolution, setSelectedSolution] = useState<SolutionBlueprint | null>(null);
+  // Modal & Studio States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStudioActive, setIsStudioActive] = useState(false);
+  const [activeSolution, setActiveSolution] = useState<SolutionBlueprint | null>(null);
 
   const filteredSolutions = useMemo(() => {
     return solutions.filter(sol => {
@@ -105,14 +32,25 @@ export const SolutionsPage: React.FC = () => {
     });
   }, [solutions, search, activeTab]);
 
-  const handleCreateNew = () => {
-    setSelectedSolution(null);
-    setIsBuilderOpen(true);
+  const handleCreateNewClick = () => {
+    setIsModalOpen(true);
   };
 
-  const handleEditSolution = (sol: SolutionBlueprint) => {
-    setSelectedSolution(sol);
-    setIsBuilderOpen(true);
+  const handleSelectBlank = () => {
+    setIsModalOpen(false);
+    setActiveSolution(null);
+    setIsStudioActive(true);
+  };
+
+  const handleSelectTemplate = (template: SolutionBlueprint) => {
+    setIsModalOpen(false);
+    setActiveSolution(template);
+    setIsStudioActive(true);
+  };
+
+  const handleEditSolutionCard = (sol: SolutionBlueprint) => {
+    setActiveSolution(sol);
+    setIsStudioActive(true);
   };
 
   const handleDeleteSolution = (e: React.MouseEvent, id: string) => {
@@ -122,16 +60,33 @@ export const SolutionsPage: React.FC = () => {
     toast.success('Solution blueprint removed');
   };
 
+  if (isStudioActive) {
+    return (
+      <SolutionBuilderStudio
+        initialSolution={activeSolution}
+        onClose={() => setIsStudioActive(false)}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col w-full relative min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 overflow-y-auto">
+      {/* New Solution Modal */}
+      <NewSolutionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSelectBlank={handleSelectBlank}
+        onSelectTemplate={handleSelectTemplate}
+      />
+
       {/* Page Header */}
       <PageHeader
         title="Solution"
         description="Package, deploy, and manage end-to-end solution blueprints, application bundles, and multi-module configurations."
         actions={
           <Button
-            onClick={handleCreateNew}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
+            onClick={handleCreateNewClick}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
             <span>Create Solution</span>
@@ -186,7 +141,7 @@ export const SolutionsPage: React.FC = () => {
                 key={sol.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                onClick={() => handleEditSolution(sol)}
+                onClick={() => handleEditSolutionCard(sol)}
                 className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -214,7 +169,6 @@ export const SolutionsPage: React.FC = () => {
                           <Trash2 size={14} />
                         </button>
                       </div>
-
                     </div>
 
                     <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
@@ -237,18 +191,17 @@ export const SolutionsPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
-                      Edit in Builder <ArrowRight size={14} />
+                      Open Solution Studio <ArrowRight size={14} />
                     </div>
                   </div>
                 </div>
               </motion.div>
-
             ))}
 
             {/* Interactive Dashed + Create Solution Card */}
             <motion.div
               whileHover={{ y: -4 }}
-              onClick={handleCreateNew}
+              onClick={handleCreateNewClick}
               className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
             >
               <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
@@ -264,110 +217,6 @@ export const SolutionsPage: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* In-Context Solution Blueprint Builder Modal */}
-      <InContextBuilderModal
-        isOpen={isBuilderOpen}
-        onClose={() => setIsBuilderOpen(false)}
-        title={selectedSolution ? `Solution Blueprint: ${selectedSolution.name}` : 'New Solution Blueprint'}
-        subtitle="Configure application bundle properties, module dependencies, and deployment strategy."
-        builderContext={{ mode: 'in_context', hostType: 'workspace' }}
-      >
-
-
-        <div className="p-6 space-y-6 text-zinc-900 dark:text-zinc-100">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">
-                Solution Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Enterprise HR & Onboarding Blueprint"
-                defaultValue={selectedSolution?.name || ''}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/50 outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">
-                Description
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Provide an overview of what this solution bundle accomplishes..."
-                defaultValue={selectedSolution?.description || ''}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/50 outline-none"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">
-                  Category
-                </label>
-                <select 
-                  defaultValue={selectedSolution?.category || 'Governance & Operations'}
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/50 outline-none"
-                >
-                  <option value="Governance & Operations">Governance & Operations</option>
-                  <option value="Customer Experience">Customer Experience</option>
-                  <option value="HR & Workforce">HR & Workforce</option>
-                  <option value="Finance & Compliance">Finance & Compliance</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">
-                  Version
-                </label>
-                <input
-                  type="text"
-                  placeholder="v1.0.0"
-                  defaultValue={selectedSolution?.version || 'v1.0.0'}
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500/50 outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Bundled Assets</span>
-                <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">4 Modules Included</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-[11px] font-medium text-zinc-500">
-                <div className="p-2 bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-2">
-                  <Layers size={14} className="text-indigo-500" /> Modules
-                </div>
-                <div className="p-2 bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-2">
-                  <GitBranch size={14} className="text-teal-500" /> Workflows
-                </div>
-                <div className="p-2 bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-2">
-                  <FileText size={14} className="text-purple-500" /> Forms
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <Button
-              variant="secondary"
-              onClick={() => setIsBuilderOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                toast.success(selectedSolution ? 'Solution blueprint updated' : 'Solution blueprint created');
-                setIsBuilderOpen(false);
-              }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              Save Solution Blueprint
-            </Button>
-          </div>
-        </div>
-      </InContextBuilderModal>
     </div>
   );
 };

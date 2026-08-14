@@ -50,9 +50,11 @@ model Tenant {
   aiMetrics              AIUsageMetric[]
   recyclingBinItems      RecyclingBinItem[]
   sites                  Site[]
+  solutionBlueprints     SolutionBlueprint[]
 
   @@map("tenants")
 }
+
 
 model UsageLog {
   id        String   @id(map: "UsageLog_pkey") @default(cuid())
@@ -1018,6 +1020,36 @@ model Site {
   @@index([tenantId, category])
   @@map("sites")
 }
+
+model SolutionBlueprint {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  name             String
+  description      String?
+  category         String   @default("General")
+  version          String   @default("1.0.0")
+  status           String   @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  author           String?  @default("Platform Architecture")
+  icon             String   @default("Boxes")
+  activeArtifactId String?  @map("active_artifact_id")
+  
+  contextSources   Json?    @map("context_sources")
+  connectedModules Json?    @map("connected_modules")
+  artifacts        Json?
+  savedNotes       Json?    @map("saved_notes")
+  chatMessages     Json?    @map("chat_messages")
+  metadata         Json?
+
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("solution_blueprints")
+}
+
 
 
 

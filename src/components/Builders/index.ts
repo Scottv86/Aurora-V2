@@ -7,3 +7,4 @@ export * from './AutomationBuilder/AutomationBuilder';
 export * from './ValidationBuilder/ValidationBuilder';
 export * from './ConnectorBuilder/ConnectorBuilder';
 export * from './ReportBuilder/ReportBuilder';
+export * from './SolutionBuilder/SolutionBuilderStudio';
