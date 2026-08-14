@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { ArrowLeft, Trash2, Plus, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Loader2, ArrowRight } from 'lucide-react';
+
+
+
+
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Button } from '../../../components/UI/Primitives';
 import { motion } from 'motion/react';
@@ -81,8 +85,9 @@ export const PlatformModulesSettings = () => {
       {isIndex ? (
         <>
           <PageHeader 
-            title="Custom Modules"
+            title="Modules"
             description="Build, manage, and extend tenant-specific custom data structures, data models, and schemas."
+
             actions={
               <Button onClick={() => openNewModuleModal()} className="gap-2 shadow-lg shadow-indigo-500/10">
                 <Plus size={16} /> Create Module
@@ -106,7 +111,7 @@ export const PlatformModulesSettings = () => {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
                       onClick={() => navigate(`/workspace/settings/builder/${mod.id}`)}
-                      className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
+                      className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
                     >
                       <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       
@@ -114,6 +119,7 @@ export const PlatformModulesSettings = () => {
                         onClick={(e) => handleDeleteCustom(e, mod)}
                         disabled={deletingId === mod.id}
                         className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                        title="Delete Module"
                       >
                         {deletingId === mod.id ? <Loader2 size={14} className="animate-spin text-red-500" /> : <Trash2 size={14} />}
                       </button>
@@ -121,25 +127,32 @@ export const PlatformModulesSettings = () => {
                       <div className="relative z-10 flex flex-col h-full justify-between">
                         <div>
                           <div className="flex items-start justify-between mb-4">
-                            <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-                              <IconComponent size={24} />
+                            <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                              <IconComponent size={22} />
                             </div>
-                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold uppercase tracking-wider group-hover:opacity-0 transition-opacity duration-300">
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border bg-indigo-500/10 text-indigo-500 border-indigo-500/30">
                               Custom
                             </span>
                           </div>
-                          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
                             {mod.name}
                           </h3>
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
                             {mod.description || "No description provided."}
                           </p>
                         </div>
-                        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center text-sm font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0 transform duration-300">
-                          Configure Module <ArrowLeft size={16} className="ml-2 rotate-180" />
+                        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                          <div className="text-xs text-zinc-500 font-semibold">
+                            Module Schema
+                          </div>
+                          <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                            Edit in Builder <ArrowRight size={14} />
+
+                          </div>
                         </div>
                       </div>
                     </motion.div>
+
                   );
                 })}
 

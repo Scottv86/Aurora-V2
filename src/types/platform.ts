@@ -175,7 +175,12 @@ export interface ModuleField {
   // Calculation formatting
   showAsCurrency?: boolean;
   currencySymbol?: string;
+
+  // Cross-Builder Integration Mesh
+  validationRuleId?: string;
+  pdfTemplateId?: string;
 }
+
 
 export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';
 
@@ -410,3 +415,76 @@ export interface IndustryBlueprint {
   createdAt: string;
   updatedAt: string;
 }
+
+export type BuilderMode = 'global' | 'in_context';
+
+export interface StandaloneBuilderContext {
+  mode: BuilderMode;
+  hostType?: 'site' | 'module' | 'workspace' | 'portal';
+  hostId?: string;
+  onSaveSuccess?: (entityId: string, entityData?: any) => void;
+  onCancel?: () => void;
+}
+
+export interface FormEntity {
+  id: string;
+  tenantId: string;
+  moduleId?: string;
+  moduleName?: string;
+  name: string;
+  description?: string;
+  isGlobal: boolean;
+  schema: {
+    layout?: ModuleField[];
+    tabs?: Tab[];
+    settings?: Record<string, any>;
+  };
+  version: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkflowEntity {
+  id: string;
+  tenantId: string;
+  moduleId?: string;
+  moduleName?: string;
+  name: string;
+  description?: string;
+  isGlobal: boolean;
+  triggerType: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  version: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ValidationRulesetEntity {
+  id: string;
+  tenantId: string;
+  moduleId?: string;
+  moduleName?: string;
+  name: string;
+  description?: string;
+  scope: 'GLOBAL' | 'MODULE' | 'FORM';
+  rules: any[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+
+export interface ConnectorMappingEntity {
+  id: string;
+  tenantId: string;
+  connectorId: string;
+  moduleId?: string;
+  sourceEntity: string;
+  targetEntity: string;
+  fieldMappings: Record<string, string>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

@@ -36,6 +36,15 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   const [pendingConnector, setPendingConnector] = useState<any>(null);
   const [pendingTriggerType, setPendingTriggerType] = useState<'lookup' | 'rule'>('lookup');
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setView('selection');
+      setSearch('');
+      setIsProcessing(false);
+    }
+  }, [isOpen]);
+
+
   const filteredRegistry = registry.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase())
   );

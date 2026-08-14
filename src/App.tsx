@@ -58,6 +58,10 @@ import { MemberDetailView } from './pages/Settings/MemberDetailView';
 import { TeamDetailView } from './pages/Settings/TeamDetailView';
 import { PositionDetailView } from './pages/Settings/PositionDetailView';
 import { SubscriptionPage } from './pages/Settings/SubscriptionPage';
+import { FormsLibraryPage } from './pages/Settings/FormsLibraryPage';
+import { WorkflowsLibraryPage } from './pages/Settings/WorkflowsLibraryPage';
+import { ValidationsLibraryPage } from './pages/Settings/ValidationsLibraryPage';
+
 import { OrganizationPage } from './pages/Settings/OrganizationPage';
 import { AISettingsPage } from './pages/Settings/AISettingsPage';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
@@ -105,7 +109,9 @@ import { QueryExplorer } from './pages/Settings/QueryExplorer';
 import { RecordsManagement } from './pages/Platform/RecordsManagement';
 import { RecordsManagementSettings } from './pages/Settings/PlatformModules/RecordsManagementSettings';
 import { ReportManagementSettings } from './pages/Settings/PlatformModules/ReportManagementSettings';
+import { SolutionsPage } from './pages/Settings/SolutionsPage';
 import { DriveApp } from './pages/Apps/DriveApp';
+
 import { DocsApp } from './pages/Apps/DocsApp';
 import { DocEditor } from './pages/Apps/DocEditor';
 import { slugify } from './lib/utils';
@@ -347,16 +353,23 @@ const App = () => {
                    <Route path="workforce-management/member/:id" element={<MemberDetailView />} />
                    <Route path="workforce-management/teams/:id" element={<TeamDetailView />} />
                    <Route path="workforce-management/positions/:id" element={<PositionDetailView />} />
+                   <Route path="solutions" element={<SolutionsPage />} />
                    <Route path="integration-management" element={<ConnectorsPage />} />
                    <Route path="integration-management/:id" element={<ConnectorsPage />} />
                    <Route path="sites" element={<SitesPage />} />
                    <Route path="automation-management" element={<AutomationsPage />} />
+                   <Route path="forms-library" element={<FormsLibraryPage />} />
+                   <Route path="workflows-library" element={<WorkflowsLibraryPage />} />
+                   <Route path="validations-library" element={<ValidationsLibraryPage />} />
                    <Route path="document-generation" element={<DocumentAutomation />} />
+
                    <Route path="report-management" element={<ReportManagementSettings />} />
                    <Route path="api-management" element={<APISettings />} />
                    <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
                 </Route>
+                 <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
+                 <Route path="solution" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="templates" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />
                  <Route path="automations" element={<Navigate to="/workspace/settings/platform-modules/automation-management" replace />} />
                  <Route path="reports" element={<Navigate to="/workspace/settings/platform-modules/report-management" replace />} />

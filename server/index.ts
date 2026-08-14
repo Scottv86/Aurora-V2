@@ -27,6 +27,10 @@ import aiSettingsRoutes from './routes/aiSettingsRoutes';
 import trashRoutes from './routes/trashRoutes';
 import digitalTwinRoutes from './routes/digitalTwin';
 import siteRoutes from './routes/siteRoutes';
+import formRoutes from './routes/formRoutes';
+import workflowRoutes from './routes/workflowRoutes';
+import validationRoutes from './routes/validationRoutes';
+
 
 
 import { authenticate, requireSuperAdmin } from './middleware/authMiddleware';
@@ -126,6 +130,10 @@ app.use('/api/ai', authenticate, requireTenantAccess, aiSettingsRoutes);
 app.use('/api/trash', authenticate, requireTenantAccess, trashRoutes);
 app.use('/api/digital-twin', digitalTwinRoutes);
 app.use('/api/sites', siteRoutes);
+app.use('/api/forms', authenticate, requireTenantAccess, formRoutes);
+app.use('/api/workflows', authenticate, requireTenantAccess, workflowRoutes);
+app.use('/api/validations', authenticate, requireTenantAccess, validationRoutes);
+
 
 
 

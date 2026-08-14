@@ -34,7 +34,7 @@ const PATH_MAP: Record<string, string> = {
   billing: 'Billing & Plans',
   usage: 'Model Usage',
   subscription: 'Subscription',
-  'platform-modules': 'Custom Modules',
+  'platform-modules': 'Modules',
   pages: 'Pages',
   apps: 'Apps',
   docs: 'Documents',
@@ -63,15 +63,20 @@ const PATH_MAP: Record<string, string> = {
   connectors: 'Integrations',
   'workforce-management': 'Workforce Management',
   'integration-management': 'Integrations',
-  'automation-management': 'Automation Management',
-  'document-generation': 'Document Generation',
-  'report-management': 'Report Management',
+  'automation-management': 'Automations',
+  'document-generation': 'Templates',
+  'report-management': 'Reports',
   'api-management': 'API Management',
   'financial-management': 'Financial Management',
   'global-lists': 'Global Lists',
   'records-management': 'Records Management',
+  'forms-library': 'Forms',
+  'workflows-library': 'Workflows',
+  'validations-library': 'Validations',
   queues: 'Queues'
 };
+
+
 
 export const Breadcrumbs = () => {
   const location = useLocation();

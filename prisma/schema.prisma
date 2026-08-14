@@ -699,6 +699,77 @@ model AutomationRun {
   @@map("automation_runs")
 }
 
+model Form {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  moduleId    String?  @map("module_id")
+  name        String
+  description String?
+  isGlobal    Boolean  @default(true) @map("is_global")
+  schema      Json     @default("{}")
+  version     Int      @default(1)
+  status      String   @default("PUBLISHED")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([moduleId])
+  @@map("forms")
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  moduleId    String?  @map("module_id")
+  name        String
+  description String?
+  isGlobal    Boolean  @default(true) @map("is_global")
+  triggerType String   @default("RECORD_EVENT") @map("trigger_type")
+  nodes       Json     @default("[]")
+  edges       Json     @default("[]")
+  version     Int      @default(1)
+  status      String   @default("PUBLISHED")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([moduleId])
+  @@map("workflows")
+}
+
+model ValidationRuleset {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  moduleId    String?  @map("module_id")
+  name        String
+  description String?
+  scope       String   @default("GLOBAL")
+  rules       Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([moduleId])
+  @@map("validation_rulesets")
+}
+
+model ConnectorMapping {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  connectorId   String   @map("connector_id")
+  moduleId      String?  @map("module_id")
+  sourceEntity  String   @map("source_entity")
+  targetEntity  String   @map("target_entity")
+  fieldMappings Json     @default("{}") @map("field_mappings")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([connectorId])
+  @@map("connector_mappings")
+}
+
+
 model QuarantineRecord {
   id            String   @id @default(uuid())
   tenantId      String   @map("tenant_id")

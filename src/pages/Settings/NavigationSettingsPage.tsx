@@ -109,6 +109,7 @@ export const NavigationSettingsPage = () => {
   const { session } = useAuth();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };

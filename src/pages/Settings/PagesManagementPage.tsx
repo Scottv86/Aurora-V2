@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Trash2, Plus, Loader2, Layout, ChevronRight } from 'lucide-react';
+import { Trash2, Plus, Loader2, Layout, ArrowRight } from 'lucide-react';
+
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
 import { motion, AnimatePresence } from 'motion/react';
@@ -215,7 +216,7 @@ export const PagesManagementPage = () => {
                     e.stopPropagation();
                     handleSetHomePage(page.id);
                   }}
-                  className="absolute top-4 right-14 p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-505 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                  className="absolute top-4 right-14 p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
                   title="Set as Workspace Home Page"
                 >
                   <Icons.Home size={14} />
@@ -236,7 +237,7 @@ export const PagesManagementPage = () => {
                 className={cn(
                   "absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 text-zinc-500 transition-all opacity-0 group-hover:opacity-100 z-20",
                   isHomePage
-                    ? "hover:bg-zinc-200/50 text-zinc-400 dark:bg-zinc-805/80 dark:text-zinc-600 cursor-not-allowed"
+                    ? "hover:bg-zinc-200/50 text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-600 cursor-not-allowed"
                     : "hover:bg-red-500/10 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20"
                 )}
                 title={isHomePage ? "Nominated Home Page (Cannot Delete)" : "Delete Page"}
@@ -248,33 +249,37 @@ export const PagesManagementPage = () => {
                 <div>
                   <div className="flex items-start justify-between mb-4">
                     <div className={cn(
-                      "p-3 rounded-xl transition-transform group-hover:scale-110",
+                      "p-3 rounded-2xl border transition-all",
                       isHomePage 
-                        ? "bg-teal-50 dark:bg-teal-500/10 text-teal-600 dark:text-teal-400" 
-                        : "bg-indigo-55 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                        ? "bg-teal-500/10 border-teal-500/20 text-teal-500" 
+                        : "bg-zinc-100 dark:bg-white/5 border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30"
                     )}>
-                      <IconComponent size={24} />
+                      <IconComponent size={22} />
                     </div>
                     {isHomePage ? (
-                      <span className="text-[9px] px-2.5 py-1 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 font-extrabold uppercase tracking-wider flex items-center gap-1 border border-teal-500/20">
+
                         <Icons.Home size={10} />
                         Home Page
                       </span>
-                    ) : (
-                      <span className="text-[9px] px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-500 font-extrabold uppercase tracking-wider group-hover:opacity-0 transition-opacity duration-300">
-                        {widgetsCount} {widgetsCount === 1 ? 'Widget' : 'Widgets'}
-                      </span>
-                    )}
+                    ) : null}
+
                   </div>
-                  <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
                     {page.name}
                   </h3>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    Custom workspace page. Accessible at <code className="text-xs text-indigo-500 dark:text-indigo-400">/workspace/pages/{slugify(page.name)}</code>.
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                    Custom page. Route: <code className="text-[11px] text-indigo-500">/workspace/pages/{slugify(page.name)}</code>
                   </p>
                 </div>
-                <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center text-xs font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0 transform duration-300">
-                  Open Page Builder <ChevronRight size={16} className="ml-1" />
+                <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                  <div className="text-xs text-zinc-500 font-semibold">
+                    {widgetsCount} Widgets
+                  </div>
+                  <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                    Edit in Builder <ArrowRight size={14} />
+
+                  </div>
                 </div>
               </div>
             </motion.div>

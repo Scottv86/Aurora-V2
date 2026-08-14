@@ -17,8 +17,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Maximize2,
-  Minimize2
+  Minimize2,
+  ArrowLeft
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -45,10 +47,12 @@ interface SchemaData {
 }
 
 export const QueryExplorer = () => {
+  const navigate = useNavigate();
   const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
@@ -324,8 +328,22 @@ export const QueryExplorer = () => {
       <div className="w-80 flex flex-col border-r border-zinc-800 bg-zinc-950 select-none">
         <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-2 text-zinc-200 font-bold text-xs tracking-wider uppercase">
+            <button 
+              onClick={() => {
+                setIsBuilderFullscreen(false);
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/workspace/settings');
+                }
+              }}
+              className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 transition-colors cursor-pointer mr-0.5"
+              title="Back to Previous Page"
+            >
+              <ArrowLeft size={14} />
+            </button>
             <Database size={14} className="text-blue-400" />
-            Object Explorer
+            <span>Object Explorer</span>
           </div>
           <button 
             onClick={fetchSchema} 
@@ -495,6 +513,24 @@ export const QueryExplorer = () => {
         {/* Top Control Bar */}
         <div className="h-11 border-b border-zinc-800 bg-zinc-950 flex items-center px-4 justify-between select-none">
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setIsBuilderFullscreen(false);
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/workspace/settings');
+                }
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 rounded text-xs transition-all cursor-pointer font-medium mr-1.5 shadow-xs"
+              title="Exit Query Explorer and return to previous page"
+            >
+              <ArrowLeft size={13} />
+              <span>Back</span>
+            </button>
+
+            <div className="w-[1px] h-5 bg-zinc-800 mr-1.5" />
+
             <button
               onClick={handleExecuteQuery}
               disabled={executing || !sqlQuery.trim()}

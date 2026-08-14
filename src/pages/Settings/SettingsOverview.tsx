@@ -59,34 +59,25 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'General & Security',
     tags: ['ai', 'byok', 'openai', 'anthropic', 'gemini', 'grok', 'deepseek', 'privacy', 'keys', 'tokens']
   },
+  {
+    id: 'branding',
+    label: 'Branding',
+    description: 'Logo, brand colors, and customization themes.',
+    icon: 'Palette',
+    to: '/workspace/settings/branding',
+    category: 'General & Security',
+    tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
+  },
 
-  // App Builder & Customization
+  // Build & Customize (All Platform Builders)
   {
-    id: 'platform-modules',
-    label: 'Custom Modules',
-    description: 'Build and configure custom data modules, tables, and schemas.',
-    icon: 'Layers',
-    to: '/workspace/settings/platform-modules',
-    category: 'App Builder & Customization',
-    tags: ['system', 'custom', 'modules', 'builder', 'data models', 'entities']
-  },
-  {
-    id: 'sites',
-    label: 'Sites & Portals',
-    description: 'Manage external web pages, citizen portals, and public forms.',
-    icon: 'Globe',
-    to: '/workspace/settings/platform-modules/sites',
-    category: 'App Builder & Customization',
-    tags: ['sites', 'portals', 'pages', 'public', 'external', 'builder']
-  },
-  {
-    id: 'pages',
-    label: 'Pages',
-    description: 'Manage custom pages, dashboard widgets, and layouts.',
-    icon: 'Layout',
-    to: '/workspace/settings/pages',
-    category: 'App Builder & Customization',
-    tags: ['pages', 'dashboards', 'widgets', 'layouts']
+    id: 'solutions',
+    label: 'Solution',
+    description: 'Package, deploy, and manage end-to-end solution blueprints and application bundles.',
+    icon: 'Boxes',
+    to: '/workspace/settings/platform-modules/solutions',
+    category: 'Build & Customize',
+    tags: ['solutions', 'blueprints', 'bundles', 'packages', 'deploy']
   },
   {
     id: 'navigation',
@@ -94,30 +85,102 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Layout style and navigation menu architect.',
     icon: 'Compass',
     to: '/workspace/settings/navigation',
-    category: 'App Builder & Customization',
+    category: 'Build & Customize',
     tags: ['layout', 'menu', 'sidebar', 'top menu', 'navigation']
   },
+
   {
-    id: 'branding',
-    label: 'Branding',
-    description: 'Logo, brand colors, and customization themes.',
-    icon: 'Palette',
-    to: '/workspace/settings/branding',
-    category: 'App Builder & Customization',
-    tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
+    id: 'platform-modules',
+    label: 'Modules',
+    description: 'Build and configure custom data modules, tables, and schemas.',
+    icon: 'Layers',
+    to: '/workspace/settings/platform-modules',
+    category: 'Build & Customize',
+    tags: ['system', 'custom', 'modules', 'builder', 'data models', 'entities']
   },
-
-
-  // Logic & Workflows
+  {
+    id: 'pages',
+    label: 'Pages',
+    description: 'Manage custom pages, dashboard widgets, and layouts.',
+    icon: 'Layout',
+    to: '/workspace/settings/pages',
+    category: 'Build & Customize',
+    tags: ['pages', 'dashboards', 'widgets', 'layouts']
+  },
+  {
+    id: 'sites',
+    label: 'Sites',
+    description: 'Manage external web pages, citizen portals, and public forms.',
+    icon: 'Globe',
+    to: '/workspace/settings/platform-modules/sites',
+    category: 'Build & Customize',
+    tags: ['sites', 'portals', 'pages', 'public', 'external', 'builder']
+  },
+  {
+    id: 'forms-library',
+    label: 'Forms',
+    description: 'Centralized hub for managing standalone embeddable forms across your workspace, site pages, and portals.',
+    icon: 'FileText',
+    to: '/workspace/settings/platform-modules/forms-library',
+    category: 'Build & Customize',
+    tags: ['forms', 'builder', 'intake', 'fields', 'inputs']
+  },
+  {
+    id: 'workflows-library',
+    label: 'Workflows',
+    description: 'Visual graph studio for building and managing automated process chains across your platform.',
+    icon: 'GitBranch',
+    to: '/workspace/settings/platform-modules/workflows-library',
+    category: 'Build & Customize',
+    tags: ['workflows', 'process', 'graph', 'approval', 'automation']
+  },
+  {
+    id: 'validations-library',
+    label: 'Validations',
+    description: 'Create and maintain reusable field and cross-entity validation rulesets.',
+    icon: 'ShieldCheck',
+    to: '/workspace/settings/platform-modules/validations-library',
+    category: 'Build & Customize',
+    tags: ['validations', 'rules', 'governance', 'checks', 'data quality']
+  },
   {
     id: 'automation-management',
     label: 'Automations',
     description: 'Build automated workflow rules, triggers, actions, and audit logs.',
     icon: 'Zap',
     to: '/workspace/settings/platform-modules/automation-management',
-    category: 'Logic & Workflows',
+    category: 'Build & Customize',
     tags: ['automations', 'workflows', 'triggers', 'actions', 'logic', 'rules']
   },
+  {
+    id: 'integration-management',
+    label: 'Integrations',
+    description: 'Connect and sync data with third-party tools, APIs, and databases.',
+    icon: 'Plug',
+    to: '/workspace/settings/platform-modules/integration-management',
+    category: 'Build & Customize',
+    tags: ['connectors', 'integrations', 'third-party', 'sync', 'webhooks']
+  },
+  {
+    id: 'report-management',
+    label: 'Reports',
+    description: 'Create custom data visualizations, scheduled reports, and export dashboards.',
+    icon: 'BarChart2',
+    to: '/workspace/settings/platform-modules/report-management',
+    category: 'Build & Customize',
+    tags: ['reports', 'analytics', 'visualizations', 'charts', 'exports', 'dashboards']
+  },
+  {
+    id: 'document-generation',
+    label: 'Templates',
+    description: 'Configure automated document templates, PDF creation, and email merging.',
+    icon: 'FileText',
+    to: '/workspace/settings/platform-modules/document-generation',
+    category: 'Build & Customize',
+    tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
+  },
+
+  // Logic & Workflows
   {
     id: 'work-distribution',
     label: 'Work Distribution',
@@ -127,25 +190,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Logic & Workflows',
     tags: ['intake', 'routing', 'triage', 'work distribution', 'queues']
   },
+  // Data Exchange & APIs
   {
     id: 'migration',
     label: 'Data Migration',
     description: 'Import and export platform data and schema definitions.',
     icon: 'ArrowRightLeft',
     to: '/workspace/settings/migration',
-    category: 'Logic & Workflows',
+    category: 'Data Exchange & APIs',
     tags: ['import', 'export', 'transfer', 'migration']
-  },
-
-  // Integrations & APIs
-  {
-    id: 'integration-management',
-    label: 'Integrations',
-    description: 'Connect and sync data with third-party tools, APIs, and databases.',
-    icon: 'Plug',
-    to: '/workspace/settings/platform-modules/integration-management',
-    category: 'Integrations & APIs',
-    tags: ['connectors', 'integrations', 'third-party', 'sync', 'webhooks']
   },
   {
     id: 'api-management',
@@ -153,9 +206,10 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Manage programmatic API keys, endpoints, and developer access logs.',
     icon: 'Key',
     to: '/workspace/settings/platform-modules/api-management',
-    category: 'Integrations & APIs',
+    category: 'Data Exchange & APIs',
     tags: ['api', 'developer', 'keys', 'endpoints', 'rest', 'access']
   },
+
 
   // Finance & Catalogs
   {
@@ -206,15 +260,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
 
   // Analytics & Content
   {
-    id: 'report-management',
-    label: 'Report Management',
-    description: 'Create custom data visualizations, scheduled reports, and export dashboards.',
-    icon: 'BarChart2',
-    to: '/workspace/settings/platform-modules/report-management',
-    category: 'Analytics & Content',
-    tags: ['reports', 'analytics', 'visualizations', 'charts', 'exports', 'dashboards']
-  },
-  {
     id: 'knowledge-base',
     label: 'Knowledge Base',
     description: 'Central repository for institutional knowledge, documentation, training materials, and AI agent reference context.',
@@ -224,31 +269,13 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['knowledge', 'documentation', 'wiki', 'training', 'ai context']
   },
   {
-    id: 'sites',
-    label: 'Sites & Portals',
-    description: 'Manage external pages, citizen portals, and public forms.',
-    icon: 'Globe',
-    to: '/workspace/settings/platform-modules/sites',
-    category: 'Analytics & Content',
-    tags: ['sites', 'portals', 'public', 'forms', 'citizen']
-  },
-  {
-    id: 'document-generation',
-    label: 'Document Generation',
-    description: 'Configure automated document templates, PDF creation, and email merging.',
-    icon: 'FileText',
-    to: '/workspace/settings/platform-modules/document-generation',
-    category: 'Analytics & Content',
-    tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
-  },
-  {
     id: 'records-management',
     label: 'Records Management',
     description: 'Configure compliance retention schedules, legal holds, and auto-disposition policies.',
     icon: 'Archive',
     to: '/workspace/settings/platform-modules/records-management',
     category: 'Analytics & Content',
-    tags: ['records', 'compliance', 'retention', 'legal hold', 'governance']
+    tags: ['records', 'retention', 'compliance', 'legal hold', 'archive']
   }
 ];
 
@@ -257,7 +284,7 @@ import { useNewModuleModal } from '../../context/NewModuleModalContext';
 const CategoryIcon = ({ category }: { category: string }) => {
   switch (category) {
     case 'General & Security': return <LucideIcons.ShieldCheck className="w-4 h-4" />;
-    case 'App Builder & Customization': return <LucideIcons.Layout className="w-4 h-4" />;
+    case 'Build & Customize': return <LucideIcons.Layout className="w-4 h-4" />;
     case 'Logic & Workflows': return <LucideIcons.Zap className="w-4 h-4" />;
     case 'Integrations & APIs': return <LucideIcons.Plug className="w-4 h-4" />;
     case 'Finance & Catalogs': return <LucideIcons.Banknote className="w-4 h-4" />;
@@ -289,7 +316,7 @@ export const SettingsOverview = () => {
     const cats = Array.from(new Set(filteredItems.map(item => item.category)));
     const order = [
       'General & Security',
-      'App Builder & Customization',
+      'Build & Customize',
       'Logic & Workflows',
       'Integrations & APIs',
       'Finance & Catalogs',

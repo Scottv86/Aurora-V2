@@ -153,7 +153,11 @@ import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
 import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
 import { ConnectorsTab } from './Builder/ConnectorsTab';
-import { AutomationsTab } from './Builder/AutomationsTab';
+import { AutomationBuilder } from './Builders';
+
+
+
+
 
 
 const METADATA_FIELDS = [
@@ -1571,6 +1575,7 @@ export const ModuleEditor = () => {
   const { session, user } = useAuth();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
@@ -9276,7 +9281,12 @@ export const ModuleEditor = () => {
               handleCreateCustomConnector={handleCreateCustomConnector}
             />
           ) : activeTab === 'automation' ? (
-            <AutomationsTab 
+            <AutomationBuilder
+              builderContext={{
+                mode: 'in_context',
+                hostType: 'module',
+                hostId: routeId
+              }}
               moduleId={routeId}
               fields={flattenFields(layout)}
               automations={localAutomations}
@@ -9284,6 +9294,7 @@ export const ModuleEditor = () => {
               deletedAutomationIds={deletedAutomationIds}
               setDeletedAutomationIds={setDeletedAutomationIds}
             />
+
           ) : activeTab === 'deployment' ? (
             <div className="flex h-full w-full overflow-hidden">
               {/* Deployment Sidebar */}

@@ -17,6 +17,9 @@ import { PageAIBuilderModal } from './PageAIBuilderModal';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed } from './WorkspacePageView';
+export { PageBuilderEngine } from '../../components/PageEngine';
+
+
 
 export const getWidgetDefaultDimensions = (type: string) => {
   switch (type) {
@@ -28,6 +31,8 @@ export const getWidgetDefaultDimensions = (type: string) => {
     case 'rich-text': return { w: 12, h: 4, minW: 4, minH: 2 };
     case 'chart': return { w: 6, h: 5, minW: 4, minH: 3 };
     case 'report': return { w: 12, h: 8, minW: 6, minH: 4 };
+    case 'standalone-form': return { w: 6, h: 6, minW: 4, minH: 4 };
+
     default: return { w: 6, h: 5, minW: 4, minH: 3 };
   }
 };
@@ -82,6 +87,7 @@ export const PageBuilder = () => {
   const { session } = useAuth();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
@@ -446,6 +452,8 @@ export const PageBuilder = () => {
               { type: 'rich-text', label: 'Noticeboard / Rich Text', icon: Layout, desc: 'Provide HTML or instruction text blocks.' },
               { type: 'chart', label: 'Volume Chart', icon: Icons.BarChart, desc: 'Visualize case volume charts.' },
               { type: 'report', label: 'BI Report Dashboard', icon: Icons.BarChart3, desc: 'Embed a published visual report.' },
+              { type: 'standalone-form', label: 'Standalone Form Embed', icon: Icons.FileText, desc: 'Embed a standalone form from your library.' },
+
             ].map((item) => {
               return (
                 <button

@@ -45,6 +45,7 @@ export const DocEditor = () => {
   const { user, session } = useAuth();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };

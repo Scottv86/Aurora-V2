@@ -36,6 +36,7 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   const { tenant, user, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };

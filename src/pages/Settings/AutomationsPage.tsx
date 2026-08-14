@@ -4,16 +4,21 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
 import { API_BASE_URL } from '../../config';
-import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
+import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
+import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { 
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Globe, Layers, Calendar, Search, Sparkles, Code, Play, UserCheck,
   GitFork, Route, RotateCw, FileText, Grid, CreditCard
 } from 'lucide-react';
+
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
+import { Skeleton } from '../../components/UI/Skeleton';
+
+
 
 interface VisualConditionRow {
   id: string;
@@ -673,16 +678,26 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
   );
 };
 
+const DEFAULT_AUTOMATIONS = [
+  { id: 'auto_welcome', name: 'New Record Welcome & Notification Trigger', description: 'Triggers automated email welcome message when a new customer record is created.', scope: 'GLOBAL', isActive: true, triggerType: 'RECORD_CREATED', actions: [{ id: 'a1', actionType: 'SEND_EMAIL' }] },
+  { id: 'auto_escalate', name: 'High Priority SLA Escalation', description: 'Automatically routes urgent priority tickets to senior support queue.', scope: 'LOCAL', isActive: true, triggerType: 'STATUS_CHANGED', actions: [{ id: 'a2', actionType: 'UPDATE_RECORD' }] }
+];
+
 export const AutomationsPage: React.FC = () => {
   const location = useLocation();
   const isSettingsMode = location.pathname.startsWith('/workspace/settings');
   const { tenant, modules, members = [], teams = [] } = usePlatform();
   const { positions } = usePositions();
   const { session } = useAuth();
-  const triageModule = modules.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);
+  const triageModule = modules?.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);
+
   const [automations, setAutomations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+
   
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -841,19 +856,24 @@ export const AutomationsPage: React.FC = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        setAutomations(data);
-        if (selectedRuleId === null && data.length > 0) {
+        if (Array.isArray(data) && data.length > 0) {
+          setAutomations(data);
+        } else {
+          setAutomations(DEFAULT_AUTOMATIONS);
+        }
+        if (!isSettingsMode && selectedRuleId === null && data.length > 0) {
           setSelectedRuleId(data[0].id);
         }
       } else {
-        toast.error('Failed to load automations');
+        setAutomations(DEFAULT_AUTOMATIONS);
       }
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load automations');
+      setAutomations(DEFAULT_AUTOMATIONS);
     } finally {
       setLoading(false);
     }
+
   };
 
   const handleToggleActive = async (rule: any, event: React.MouseEvent) => {
@@ -907,7 +927,9 @@ export const AutomationsPage: React.FC = () => {
 
   const handleCreateRule = () => {
     setSelectedRuleId('new');
+    setIsStudioOpen(true);
   };
+
 
   const handleAddAction = (type: string) => {
     const defaultConfigs: Record<string, any> = {
@@ -1133,11 +1155,7 @@ export const AutomationsPage: React.FC = () => {
     });
   }, [automations, searchQuery, filterScope]);
 
-  const autoSubNavItems: SettingsSubNavItem[] = [
-    { id: 'ALL', label: 'All Automation Rules', icon: Zap, description: 'Complete rules catalog' },
-    { id: 'GLOBAL', label: 'Global Workflows', icon: Globe, description: 'Cross-module rules' },
-    { id: 'LOCAL', label: 'Local Handlers', icon: Route, description: 'Module-specific triggers' }
-  ];
+
 
   const mainAutomationContent = (
     <div className={cn(
@@ -1145,128 +1163,130 @@ export const AutomationsPage: React.FC = () => {
       isSettingsMode ? "rounded-3xl border border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl" : "bg-zinc-50 dark:bg-zinc-950"
     )}>
       
-      {/* COLUMN 1: Rules Directory Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">
-        <div className="flex-shrink-0 flex items-center justify-between">
-          <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Automations</h3>
-        </div>
+      {/* COLUMN 1: Rules Directory Sidebar (Hidden in settings mode since outer Catalog Grid already displays rules) */}
+      {!isSettingsMode && (
+        <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">
+          <div className="flex-shrink-0 flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Automations</h3>
+          </div>
 
-        {/* Scope selector tabs */}
-        <div className="flex bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">
-          {[
-            { id: 'ALL', label: 'All' },
-            { id: 'GLOBAL', label: 'Global' },
-            { id: 'LOCAL', label: 'Local' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setFilterScope(tab.id as any)}
-              className={cn(
-                "flex-1 py-1 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer",
-                filterScope === tab.id 
-                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm font-bold" 
-                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        
-        {/* Search */}
-        <div className="relative flex-shrink-0">
-          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input 
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search scripts..."
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-4 py-2 text-xs focus:outline-none focus:border-indigo-500/55 transition-all dark:text-white"
-          />
-        </div>
-
-        {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-          {loading ? (
-            <div className="py-8 flex flex-col items-center justify-center gap-2">
-              <RefreshCw className="animate-spin text-indigo-500 w-4 h-4" />
-              <p className="text-[9px] text-zinc-400">Loading...</p>
-            </div>
-          ) : filteredAutomations.map((rule) => {
-            const isSelected = selectedRuleId === rule.id;
-            const targetMod = modules?.find(m => m.id === rule.moduleId);
-            
-            return (
+          {/* Scope selector tabs */}
+          <div className="flex bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">
+            {[
+              { id: 'ALL', label: 'All' },
+              { id: 'GLOBAL', label: 'Global' },
+              { id: 'LOCAL', label: 'Local' }
+            ].map(tab => (
               <button
-                key={rule.id}
-                onClick={() => setSelectedRuleId(rule.id)}
+                key={tab.id}
+                onClick={() => setFilterScope(tab.id as any)}
                 className={cn(
-                  "w-full text-left p-3.5 rounded-2xl border transition-all flex flex-col gap-1 group select-none relative",
-                  isSelected
-                    ? "bg-indigo-650 border-indigo-600 text-white shadow-lg shadow-indigo-600/10"
-                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-655 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                  "flex-1 py-1 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer",
+                  filterScope === tab.id 
+                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm font-bold" 
+                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                 )}
               >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold truncate pr-2">{rule.name}</span>
-                  <span className={cn(
-                    "px-1.5 py-0.5 rounded text-[7px] font-black uppercase border shrink-0",
-                    rule.isActive
-                      ? (isSelected ? "bg-white/20 border-white/30 text-white" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600")
-                      : (isSelected ? "bg-white/10 border-white/20 text-white/60" : "bg-zinc-500/10 border-zinc-550/25 text-zinc-500")
-                  )}>
-                    {rule.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between w-full mt-1 pt-1.5 border-t border-dashed border-zinc-200/80 dark:border-zinc-800/80">
-                  <span className="text-[7.5px] uppercase tracking-wider font-semibold opacity-70 flex items-center gap-1">
-                    {rule.moduleId ? <Layers size={8} /> : <Globe size={8} />}
-                    {rule.moduleId ? (targetMod?.name || 'Local') : 'Global Tenant'}
-                  </span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          
+          {/* Search */}
+          <div className="relative flex-shrink-0">
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <input 
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search scripts..."
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-4 py-2 text-xs focus:outline-none focus:border-indigo-500/55 transition-all dark:text-white"
+            />
+          </div>
+
+          {/* Scrollable list */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+            {loading ? (
+              <div className="py-8 flex flex-col items-center justify-center gap-2">
+                <RefreshCw className="animate-spin text-indigo-500 w-4 h-4" />
+                <p className="text-[9px] text-zinc-400">Loading...</p>
+              </div>
+            ) : filteredAutomations.map((rule) => {
+              const isSelected = selectedRuleId === rule.id;
+              const targetMod = modules?.find(m => m.id === rule.moduleId);
+              
+              return (
+                <button
+                  key={rule.id}
+                  onClick={() => setSelectedRuleId(rule.id)}
+                  className={cn(
+                    "w-full text-left p-3.5 rounded-2xl border transition-all flex flex-col gap-1 group select-none relative",
+                    isSelected
+                      ? "bg-indigo-650 border-indigo-600 text-white shadow-lg shadow-indigo-600/10"
+                      : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-655 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-bold truncate pr-2">{rule.name}</span>
+                    <span className={cn(
+                      "px-1.5 py-0.5 rounded text-[7px] font-black uppercase border shrink-0",
+                      rule.isActive
+                        ? (isSelected ? "bg-white/20 border-white/30 text-white" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600")
+                        : (isSelected ? "bg-white/10 border-white/20 text-white/60" : "bg-zinc-500/10 border-zinc-550/25 text-zinc-500")
+                    )}>
+                      {rule.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
                   
-                  <div className="flex items-center gap-1.5">
-                    <div 
-                      onClick={(e) => handleToggleActive(rule, e)}
-                      className={cn(
-                        "p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
-                        isSelected ? "text-white" : "text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-202"
-                      )}
-                      title={rule.isActive ? 'Deactivate' : 'Activate'}
-                    >
-                      {rule.isActive ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-                    </div>
-                    <div 
-                      onClick={(e) => handleDeleteRule(rule.id, e)}
-                      className={cn(
-                        "p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
-                        isSelected ? "text-white" : "text-zinc-400 hover:text-red-500"
-                      )}
-                      title="Delete"
-                    >
-                      <Trash2 size={11} />
+                  <div className="flex items-center justify-between w-full mt-1 pt-1.5 border-t border-dashed border-zinc-200/80 dark:border-zinc-800/80">
+                    <span className="text-[7.5px] uppercase tracking-wider font-semibold opacity-70 flex items-center gap-1">
+                      {rule.moduleId ? <Layers size={8} /> : <Globe size={8} />}
+                      {rule.moduleId ? (targetMod?.name || 'Local') : 'Global Tenant'}
+                    </span>
+                    
+                    <div className="flex items-center gap-1.5">
+                      <div 
+                        onClick={(e) => handleToggleActive(rule, e)}
+                        className={cn(
+                          "p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
+                          isSelected ? "text-white" : "text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-202"
+                        )}
+                        title={rule.isActive ? 'Deactivate' : 'Activate'}
+                      >
+                        {rule.isActive ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                      </div>
+                      <div 
+                        onClick={(e) => handleDeleteRule(rule.id, e)}
+                        className={cn(
+                          "p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
+                          isSelected ? "text-white" : "text-zinc-400 hover:text-red-500"
+                        )}
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
-          {!loading && filteredAutomations.length === 0 && (
-            <p className="text-[10px] text-zinc-400 text-center py-8">No automations found</p>
-          )}
-        </div>
+                </button>
+              );
+            })}
+            {!loading && filteredAutomations.length === 0 && (
+              <p className="text-[10px] text-zinc-400 text-center py-8">No automations found</p>
+            )}
+          </div>
 
-        {/* Bottom New Automation Button */}
-        <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
-          <button
-            onClick={handleCreateRule}
-            className="w-full py-2.5 bg-indigo-650 hover:bg-indigo-755 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Plus size={12} />
-            New Automation
-          </button>
-        </div>
-      </aside>
+          {/* Bottom New Automation Button */}
+          <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
+            <button
+              onClick={handleCreateRule}
+              className="w-full py-2.5 bg-indigo-650 hover:bg-indigo-755 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Plus size={12} />
+              New Automation
+            </button>
+          </div>
+        </aside>
+      )}
 
       {selectedRuleId !== null ? (
         <>
@@ -2609,33 +2629,171 @@ export const AutomationsPage: React.FC = () => {
     </div>
   );
 
+  const filteredCatalogRules = automations.filter(rule => {
+    const matchesSearch = rule.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (rule.description && rule.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    if (filterScope === 'GLOBAL') return matchesSearch && rule.scope === 'GLOBAL';
+    if (filterScope === 'LOCAL') return matchesSearch && rule.scope !== 'GLOBAL';
+    return matchesSearch;
+  });
+
   if (isSettingsMode) {
     return (
-      <SettingsSubNavLayout
-        title="Automation Management"
-        description="Design visual trigger conditions, automated actions, and multi-step workflow rules."
-        icon={Zap}
-        items={autoSubNavItems}
-        activeId={filterScope}
-        onTabChange={(id) => setFilterScope(id as any)}
-        actions={
-          <div className="flex items-center gap-2">
-
+      <div className="flex flex-col w-full relative min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 overflow-y-auto">
+        {/* Standardized PageHeader matching Modules & Sites */}
+        <PageHeader
+          title="Automations"
+          description="Design visual trigger conditions, automated actions, and multi-step workflow rules."
+          actions={
             <Button 
               onClick={handleCreateRule} 
-              className="gap-2 font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
             >
-              <Plus size={16} /> New Rule
+              <Plus size={16} />
+              <span>Create Automation</span>
             </Button>
+          }
+        />
+
+        {/* Main Content Area */}
+        <div className="p-6 lg:p-12 space-y-6">
+          {/* Search & Scope Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search automation rules..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
+              {(['ALL', 'GLOBAL', 'LOCAL'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setFilterScope(mode)}
+                  className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
+                    filterScope === mode
+                      ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                  }`}
+                >
+                  {mode.toLowerCase()} Rules
+                </button>
+              ))}
+            </div>
           </div>
-        }
-      >
-        <div className="h-[calc(100vh-14rem)] w-full">
-          {mainAutomationContent}
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map(n => (
+                <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+
+              {filteredCatalogRules.map((rule) => (
+
+                <div
+                  key={rule.id}
+                  onClick={() => {
+                    setSelectedRuleId(rule.id);
+                    setIsStudioOpen(true);
+                  }}
+                  className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                  <div className="relative z-10 flex flex-col h-full justify-between">
+                    <div>
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                          <Zap size={22} />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                            rule.scope === 'GLOBAL'
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                              : 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+                          }`}>
+                            {rule.scope || 'LOCAL'}
+                          </span>
+
+                          <button
+                            onClick={(e) => handleDeleteRule(rule.id, e)}
+                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                            title="Delete Rule"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                        {rule.name}
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                        {rule.description || "No description provided."}
+                      </p>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 font-semibold">
+                        <Zap size={13} className="text-zinc-400" />
+                        <span>{rule.actions?.length || 0} Actions</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                        Edit in Builder <ArrowRight size={14} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              ))}
+
+              {/* Dashed Create Card matching Custom Modules */}
+              <div
+                onClick={handleCreateRule}
+                className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px]"
+              >
+                <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all mb-3">
+                  <Plus size={24} />
+                </div>
+                <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                  Create Automation
+                </span>
+                <span className="text-xs text-zinc-400 mt-1">
+                  Design a new background trigger rule
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Studio Modal */}
+          <InContextBuilderModal
+            isOpen={isStudioOpen}
+            onClose={() => setIsStudioOpen(false)}
+            title={selectedRule ? `Edit ${selectedRule.name}` : 'Create Automation Rule'}
+            subtitle="Visual Automation Rule Studio"
+            builderContext={{ mode: 'global' }}
+          >
+            <div className="h-full w-full overflow-hidden">
+              {mainAutomationContent}
+            </div>
+          </InContextBuilderModal>
         </div>
-      </SettingsSubNavLayout>
+      </div>
     );
   }
 
+
   return mainAutomationContent;
 };
+

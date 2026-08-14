@@ -485,36 +485,44 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Workforce & Access', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/workforce-management' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
         { label: 'AI Services', icon: Sparkles, to: '/workspace/settings/ai-services' },
-      ]
-    },
-    {
-      category: 'App Builder & Customization',
-      icon: Layout,
-      items: [
-        { label: 'Custom Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
-        { label: 'Sites & Portals', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
-        { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
-        { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
         { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
       ]
     },
     {
+      category: 'Build & Customize',
+      icon: Layout,
+      items: [
+        { label: 'Solution', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/solutions' },
+        { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
+        { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
+        { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
+        { label: 'Sites', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
+        { label: 'Forms', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/forms-library' },
+        { label: 'Workflows', icon: LucideIcons.GitBranch, to: '/workspace/settings/platform-modules/workflows-library' },
+        { label: 'Validations', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
+        { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },
+        { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
+        { label: 'Reports', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
+        { label: 'Templates', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
+      ]
+    },
+
+    {
       category: 'Logic & Workflows',
       icon: LucideIcons.Zap,
       items: [
-        { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },
         { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
-        { label: 'Data Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
       ]
     },
     {
-      category: 'Integrations & APIs',
-      icon: LucideIcons.Plug,
+      category: 'Data Exchange & APIs',
+      icon: ArrowRightLeft,
       items: [
-        { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
+        { label: 'Data Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
         { label: 'API Management', icon: LucideIcons.Key, to: '/workspace/settings/platform-modules/api-management' },
       ]
     },
+
     {
       category: 'Finance & Catalogs',
       icon: LucideIcons.Banknote,
@@ -530,14 +538,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Analytics & Content',
       icon: LucideIcons.BarChart2,
       items: [
-        { label: 'Report Management', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
         { label: 'Knowledge Base', icon: LucideIcons.BookOpen, to: '/workspace/settings/platform-modules/knowledge-base' },
-        { label: 'Document Generation', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
         { label: 'Records Management', icon: LucideIcons.Archive, to: '/workspace/settings/platform-modules/records-management' },
       ]
     }
 
   ];
+
 
   const filteredSettingsGroups = useMemo(() => {
     if (!settingsSearchQuery) return SETTINGS_NAV_GROUPS;

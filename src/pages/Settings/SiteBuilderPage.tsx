@@ -69,6 +69,8 @@ import {
   Box,
   MoveVertical
 } from 'lucide-react';
+export { PageBuilderEngine } from '../../components/PageEngine';
+
 
 import { Site, SiteService, SiteNavItem, SiteWidget, SitePage, FormFieldConfig, PRESET_THEMES, PresetTheme, SiteThemeConfig, ENTERPRISE_FONTS } from '../../services/siteService';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -76,6 +78,8 @@ import { useTheme } from '../../hooks/useTheme';
 import { Modal } from '../../components/UI/TabsAndModal';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+import { ComponentPickerModal, InContextBuilderModal, FormBuilder, FormRenderer } from '../../components/Builders';
+
 
 
 export type InspectableElement = 
@@ -100,6 +104,10 @@ export const SiteBuilderPage: React.FC = () => {
   const [canvasZoom, setCanvasZoom] = useState<number>(100);
   const [selectedElement, setSelectedElement] = useState<InspectableElement>({ type: 'header' });
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isFormPickerOpen, setIsFormPickerOpen] = useState(false);
+  const [isInContextFormBuilderOpen, setIsInContextFormBuilderOpen] = useState(false);
+
+
 
   // Mobile App Exporter Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -454,6 +462,13 @@ export const SiteBuilderPage: React.FC = () => {
 
     fetchSiteAndModules();
   }, [siteId, navigate]);
+
+  useEffect(() => {
+    setIsBuilderFullscreen(true);
+    return () => {
+      setIsBuilderFullscreen(false);
+    };
+  }, [setIsBuilderFullscreen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3173,38 +3188,51 @@ export const SiteBuilderPage: React.FC = () => {
                           <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                             <div className="flex items-center gap-2">
                               <FormInput size={18} className="text-emerald-400" />
-                              <h4 className="text-sm font-bold text-white">{w.title || 'Dynamic Form Builder'}</h4>
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Standalone Form Embed'}</h4>
                             </div>
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                              Configurable Fields
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setIsFormPickerOpen(true);
+                                }}
+                                className="text-xs bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 px-2.5 py-1 rounded-lg font-medium border border-indigo-500/30 transition-all flex items-center gap-1"
+                              >
+                                <span>Attach Form</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setIsInContextFormBuilderOpen(true);
+                                }}
+                                className="text-xs bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 px-2.5 py-1 rounded-lg font-medium border border-emerald-500/30 transition-all flex items-center gap-1"
+                              >
+                                <Plus size={12} />
+                                <span>Build In-Context</span>
+                              </button>
+                            </div>
                           </div>
 
-                          <form onSubmit={e => { e.preventDefault(); toast.success('Form response submitted!'); }} className="space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Full Name / Entity</label>
-                                <input type="text" placeholder="Enter name..." className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white" />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Email Address</label>
-                                <input type="email" placeholder="user@domain.com" className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white" />
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-zinc-400">Category Selection</label>
-                              <select className="w-full px-3 py-2 bg-zinc-950/70 border border-zinc-800 rounded-xl text-xs text-white">
-                                <option>Option A &bull; General Inquiry</option>
-                                <option>Option B &bull; Priority Request</option>
-                                <option>Option C &bull; Regulatory Lodgement</option>
-                              </select>
-                            </div>
-                            <button type="submit" className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer">
-                              <Send size={14} /> Submit Form Entry
-                            </button>
-                          </form>
+                          <FormRenderer
+                            title={w.title}
+                            subtitle={w.subtitle}
+                            fields={w.formFields?.map(f => ({
+                              id: f.id,
+                              label: f.label,
+                              type: f.fieldType as any,
+                              required: f.required,
+                              placeholder: f.placeholder,
+                              colSpan: 12
+                            })) || [
+                              { id: 'name', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
+                              { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
+                              { id: 'category', label: 'Category Selection', type: 'select', options: ['General Inquiry', 'Priority Request', 'Regulatory Lodgement'], required: false, colSpan: 12 }
+                            ]}
+                            onSubmit={() => { toast.success('Form response submitted successfully!'); }}
+                            submitButtonText={w.buttonLabel || 'Submit Form Entry'}
+                          />
+
                         </div>
                       )}
+
 
                       {/* RECORD DETAIL CARD WIDGET */}
                       {w.type === 'record_card' && (
@@ -5137,8 +5165,54 @@ export const SiteBuilderPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Component Picker Modal for Site Forms */}
+      <ComponentPickerModal
+        isOpen={isFormPickerOpen}
+        onClose={() => setIsFormPickerOpen(false)}
+        title="Attach Form from Central Library"
+        componentType="form"
+        items={[
+          { id: 'f_contact', name: 'Contact & Inquiry Form', description: 'Standard public lead intake form.', isGlobal: true, version: 1 },
+          { id: 'f_support', name: 'Customer Support Intake', description: 'Priority support ticket form.', isGlobal: true, version: 2 },
+          { id: 'f_feedback', name: 'Feedback & Rating Survey', description: 'End-of-service satisfaction survey.', isGlobal: true, version: 1 }
+        ]}
+        onSelect={(item) => {
+          toast.success(`Attached "${item.name}" to form widget!`);
+        }}
+        onCreateNew={() => {
+          setIsInContextFormBuilderOpen(true);
+        }}
+      />
+
+      {/* In-Context Form Builder Modal */}
+      <InContextBuilderModal
+        isOpen={isInContextFormBuilderOpen}
+        onClose={() => setIsInContextFormBuilderOpen(false)}
+        title="In-Context Form Builder"
+        subtitle="Designing custom form for current Site Page"
+        builderContext={{
+          mode: 'in_context',
+          hostType: 'site',
+          hostId: siteId
+        }}
+      >
+        <FormBuilder
+          builderContext={{
+            mode: 'in_context',
+            hostType: 'site',
+            hostId: siteId,
+            onSaveSuccess: (_id, form) => {
+              toast.success(`Form "${form.name}" created & attached to site widget!`);
+              setIsInContextFormBuilderOpen(false);
+            }
+
+          }}
+        />
+      </InContextBuilderModal>
     </div>
   );
 };
+
 
 

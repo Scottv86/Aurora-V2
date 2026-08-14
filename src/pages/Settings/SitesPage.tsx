@@ -173,8 +173,9 @@ export const SitesPage = () => {
         
         {/* Page Header matching Custom Modules Page */}
         <PageHeader 
-          title="Sites & Portals"
+          title="Sites"
           description="Build, manage, and extend tenant-specific intranet hubs, client-facing submission portals, and public marketing sites."
+
           actions={
             <div className="flex items-center gap-2">
               <button
@@ -261,57 +262,49 @@ export const SitesPage = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
                     onClick={() => handleOpenBuilder(site.id)}
-                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden"
+                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden"
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                    <div>
-                      {/* Card Header: Icon + Category Badge + Actions */}
-                      <div className="relative z-10 flex items-start justify-between mb-4">
-                        <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
-                          <SiteIcon size={24} />
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                            site.status === 'active' 
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
-                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-                          }`}>
-                            {site.status}
-                          </span>
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                      <div>
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                            <SiteIcon size={22} />
+                          </div>
                           
-                          <button
-                            onClick={(e) => { e.stopPropagation(); window.open(`/public/portal/${site.id}`, '_blank'); }}
-                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
-                            title="Visit Live Site"
-                          >
-                            <ExternalLink size={14} />
-                          </button>
-                          
-                          <button
-                            onClick={(e) => handleDeleteSite(e, site.id, site.name)}
-                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
-                            title="Delete Site"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                              site.status === 'active' 
+                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700'
+                            }`}>
+                              {site.status}
+                            </span>
+                            
+                            <button
+                              onClick={(e) => { e.stopPropagation(); window.open(`/public/portal/${site.id}`, '_blank'); }}
+                              className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                              title="Visit Live Site"
+                            >
+                              <ExternalLink size={14} />
+                            </button>
+                            
+                            <button
+                              onClick={(e) => handleDeleteSite(e, site.id, site.name)}
+                              className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                              title="Delete Site"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Card Content: Title & Description */}
-                      <div className="relative z-10">
-                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                          <h3 className="text-lg font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                            {site.name}
-                          </h3>
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-400 font-mono">
-                            {site.type || site.category}
-                          </span>
-                        </div>
-                        
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed mb-3 line-clamp-2">
-                          {site.description || "No description provided."}
+                        <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                          {site.name}
+                        </h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                          {site.description || 'No description provided.'}
                         </p>
 
                         <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 dark:bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/10">
@@ -319,18 +312,17 @@ export const SitesPage = () => {
                           <span className="truncate">{site.domain}</span>
                         </div>
                       </div>
-                    </div>
+                        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                          <div className="text-xs text-zinc-500 font-semibold font-mono">
+                            {site.domain}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                            Edit in Builder <ArrowRight size={14} />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
 
-                    {/* Card Footer Action */}
-                    <div className="relative z-10 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-sm font-bold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-4 group-hover:translate-x-0 transform duration-300">
-                      <span className="flex items-center gap-2">
-                        Configure Site Studio <ArrowRight size={15} />
-                      </span>
-                      <span className="text-[10px] font-mono text-zinc-400">
-                        {site.pages?.length || 1} {site.pages?.length === 1 ? 'Page' : 'Pages'}
-                      </span>
-                    </div>
-                  </motion.div>
                 );
               })}
 

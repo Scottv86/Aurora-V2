@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { createFormulaContext } from '../../lib/formulaEngine';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
 import { getWidgetDefaultDimensions } from './PageBuilder';
+import { FormRenderer } from '../../components/Builders';
+
 
 const useMyContainerWidth = (loading: boolean) => {
   const [width, setWidth] = useState(1280);
@@ -431,6 +433,24 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
 
     case 'report':
       return <ReportWidgetEmbed widget={widget} tenant={tenant} session={session} />;
+
+    case 'standalone-form':
+      return (
+        <div className="bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm p-6 overflow-hidden">
+          <FormRenderer
+            title={widget.title}
+            subtitle={widget.properties?.subtitle}
+            fields={widget.properties?.fields || [
+              { id: 'name', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
+              { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
+              { id: 'comments', label: 'Comments / Notes', type: 'textarea', required: false, colSpan: 12 }
+            ]}
+            onSubmit={() => { toast.success('Form response submitted!'); }}
+
+          />
+        </div>
+      );
+
 
 
     default:

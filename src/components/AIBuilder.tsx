@@ -3,6 +3,7 @@ import {
   Cpu, 
   CloudUpload, 
   ArrowRight, 
+  ArrowLeft,
   CheckCircle2, 
   Loader2,
   Workflow,
@@ -13,6 +14,7 @@ import {
   Minimize2
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { generateSolution, AISolution } from '../services/aiService';
@@ -21,9 +23,11 @@ import { useAuth } from '../hooks/useAuth';
 import { toast } from 'sonner';
 
 export const AIBuilder = () => {
+  const navigate = useNavigate();
   const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
 
   useEffect(() => {
+    setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
@@ -160,8 +164,27 @@ export const AIBuilder = () => {
       "flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 transition-all duration-300 relative",
       isBuilderFullscreen && "py-4 px-4 h-screen overflow-y-auto"
     )}>
-      {/* Top Header Fullscreen Action */}
-      <div className="flex justify-end items-center">
+      {/* Top Header Controls */}
+      <div className="flex justify-between items-center">
+        <button 
+          onClick={() => {
+            setIsBuilderFullscreen(false);
+            if (window.history.length > 1) {
+              navigate(-1);
+            } else {
+              navigate('/workspace/settings');
+            }
+          }}
+          className={cn(
+            "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01] flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs cursor-pointer",
+            isBuilderFullscreen ? "px-3 py-1.5" : "px-3 py-2"
+          )}
+          title="Back to Previous Page"
+        >
+          <ArrowLeft size={16} />
+          <span>Back</span>
+        </button>
+
         <button
           onClick={toggleBuilderFullscreen}
           className={cn(
