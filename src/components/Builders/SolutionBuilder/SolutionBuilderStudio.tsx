@@ -9,7 +9,6 @@ import {
   FileText,
   PanelLeftOpen,
   PanelRightOpen,
-  Database,
   Layers,
   Zap,
   Eye,
@@ -44,30 +43,20 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   const navigate = useNavigate();
   const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, tenant, refreshModules } = usePlatform();
 
-  const [solutionId] = useState(initialSolution?.id || 'sol_enterprise_intake');
-  const [solutionName, setSolutionName] = useState(initialSolution?.name || 'New Enterprise Solution Blueprint');
+  const [solutionId] = useState(initialSolution?.id || `sol_blank_${Date.now()}`);
+  const [solutionName, setSolutionName] = useState(initialSolution?.name || 'Untitled Solution Blueprint');
   const [solutionVersion] = useState(initialSolution?.version || 'v1.0.0');
   const [solutionStatus] = useState<SolutionStatus>(initialSolution?.status || 'DRAFT');
 
   const [isLeftPaneCollapsed, setIsLeftPaneCollapsed] = useState(false);
   const [isRightPaneCollapsed, setIsRightPaneCollapsed] = useState(false);
 
-
-
   const [contextSources, setContextSources] = useState<ContextSource[]>(
-    initialSolution?.contextSources || [
-      { id: 'src_1', name: 'Project_Vision.docx', type: 'docx', size: '245 KB', uploadedAt: '10 mins ago', status: 'PROCESSED', contentSummary: 'Project specification document' },
-      { id: 'src_2', name: 'Client_Form_Wireframe.png', type: 'png', size: '1.2 MB', uploadedAt: '8 mins ago', status: 'PROCESSED', contentSummary: 'Intake form wireframe sketch' },
-      { id: 'src_3', name: 'CRM_Integration_Spec.pdf', type: 'pdf', size: '512 KB', uploadedAt: '5 mins ago', status: 'PROCESSED', contentSummary: 'API Integration spec sheet' }
-    ]
+    initialSolution?.contextSources || []
   );
 
   const [connectedModules, setConnectedModules] = useState<ConnectedModule[]>(
-    initialSolution?.connectedModules || [
-      { id: 'mod_clients', name: 'Clients', type: 'RECORD', fieldsCount: 12, linked: true },
-      { id: 'mod_services', name: 'Services', type: 'REGISTRY', fieldsCount: 8, linked: true },
-      { id: 'mod_crm', name: 'CRM Integration', type: 'CUSTOM', fieldsCount: 6, linked: true }
-    ]
+    initialSolution?.connectedModules || []
   );
 
   const [chatMessages, setChatMessages] = useState<SolutionChatMessage[]>(
@@ -75,176 +64,47 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
       {
         id: 'msg_1',
         role: 'aurora',
-        text: "I've analyzed your documents. Based on 'Project_Vision', you need a complex workflow. Let's start by designing the Client Onboarding Module.",
-        timestamp: '10:42 AM',
-        suggestedActions: ['Add dynamic service selection', 'Configure SLA escalation', 'Connect CRM API']
+        text: "Welcome to Solution Studio! Upload project specifications, wireframes, or API docs in Context & Inputs, or prompt me to generate your full solution blueprint.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        suggestedActions: ['Upload Project Specification', 'Add Custom Data Module', 'Generate Intake Form']
       }
     ]
   );
 
   const [savedNotes, setSavedNotes] = useState<SavedNote[]>(
-    initialSolution?.savedNotes || [
-      { 
-        id: 'note_1', 
-        title: 'The Gemini Response Limitation Paradox', 
-        text: 'On the front it reads: "What is the core philosophical question answered by every character in the REMNANT series?" The answer on the back reads: "What do humans do with suffering that cannot be repaired?"', 
-        createdAt: '1m ago' 
-      }
-    ]
+    initialSolution?.savedNotes || []
   );
 
   const [artifacts, setArtifacts] = useState<SolutionArtifact[]>(
-    initialSolution?.artifacts || [
-      {
-        id: 'art_spec_vision',
-        name: 'Solution Design',
-
-        type: 'PAGE',
-        description: 'Comprehensive technical blueprint & enterprise vision plan',
-        content: {
-          title: 'Solution Architecture & Vision Specification',
-          markdown: `# Solution Architecture & Vision: New Enterprise Solution Blueprint
-**Lead Solution Architect**: Aurora AI Systems Designer  
-**Target Solution**: New Enterprise Solution Blueprint  
-**Status**: APPROVED_FOR_PROVISIONING  
-**Grounded Context Sources**: Project_Vision.docx, Client_Form_Wireframe.png, CRM_Integration_Spec.pdf
-
----
-
-## 1. Executive Summary & System Purpose
-This solution blueprint establishes an enterprise-grade operational architecture for multi-module & workflow orchestration, designed in response to grounded project specifications and user directives.
-
-The architecture provides high-capacity record management, automated SLA triage, role-based access control (RBAC), and OpenAPI integration hooks.
-
----
-
-## 2. Business Objectives & SLA Metrics
-- **Zero-Trust Multi-Tenancy**: Strict database partition per enterprise tenant namespace.
-- **Automated Processing**: Instant form submission routing & SLA escalation threshold (4 Hours).
-- **Audit Compliance**: Immutable log entries for all data modifications.
-
----
-
-## 3. Data Dictionary & Relational Schema
-The solution provisions the following primary data modules:
-- **Clients** (RECORD): Primary client record collection [12 Fields]
-- **Services** (REGISTRY): Shared service catalog & SLA registry [8 Fields]
-- **CRM Integration** (CUSTOM): External API webhook payload adapter [6 Fields]
-
----
-
-## 4. Workflows & Execution Topology
-- **Trigger**: \`ON_FORM_SUBMIT\` via \`Client Intake Form\`
-- **Action**: Evaluate SLA Thresholds & Assign Service Team
-- **Automation**: Provision Workspace & Dispatch Notification Payload
-
----
-
-## 5. Security & Integration Specifications
-- **API Endpoint**: \`POST /api/v1/client_intake/intake\`
-- **Data Encryption**: AES-256 at rest, TLS 1.3 in transit
-`
-        }
-      },
-      {
-        id: 'art_form_1',
-        name: 'Client Intake Form',
-        type: 'FORM',
-        description: 'Interactive client onboarding form',
-        content: {
-          title: 'Client Intake Form',
-
-          subtitle: 'Full screen, well-designed built-in components built.',
-          fields: [
-            { id: 'f_fname', label: 'First Name', type: 'text', placeholder: 'First name', required: true, colSpan: 6 },
-            { id: 'f_lname', label: 'Last Name', type: 'text', placeholder: 'Last name', required: true, colSpan: 6 },
-            { id: 'f_email', label: 'Email', type: 'email', placeholder: 'client@company.com', required: true, colSpan: 12 },
-            { id: 'f_tier', label: 'Desired Service Tier', type: 'select', colSpan: 12, options: ['Standard Support', 'Premium Onboarding', 'Enterprise SLA'] }
-          ]
-        }
-      },
-      {
-        id: 'art_flow_1',
-        name: 'Automated Intake Flow',
-        type: 'WORKFLOW',
-        description: 'Process graph workflow',
-        content: {
-          nodes: [
-            { id: 'node_1', label: 'Form Submitted', type: 'TRIGGER' },
-            { id: 'node_2', label: 'Assign Service', type: 'ACTION' },
-            { id: 'node_3', label: 'Generate Welcome Pack', type: 'AUTOMATION' }
-          ]
-        }
-      },
-      {
-        id: 'art_nav_1',
-        name: 'Portal Navigation Tree',
-        type: 'NAVIGATION',
-        description: 'Header and sidebar portal navigation menu',
-        content: {
-          items: [
-            { label: 'Client Dashboard', path: '/workspace/dashboard' },
-            { label: 'Submit Ticket Intake', path: '/workspace/intake' },
-            { label: 'SLA Escalation Queue', path: '/workspace/triage' },
-            { label: 'Executive Analytics', path: '/workspace/reports' }
-          ]
-        }
-      },
-      {
-        id: 'art_list_1',
-        name: 'Service Tiers Picklist',
-        type: 'GLOBAL_LIST',
-        description: 'Shared enum picklist values',
-        content: {
-          options: ['Standard Support', 'Premium Onboarding', 'Enterprise SLA', '24/7 Managed Support']
-        }
-      },
-      {
-        id: 'art_api_1',
-        name: 'Client Intake REST API',
-        type: 'API',
-        description: 'OpenAPI endpoint for webhook integration',
-        content: {
-          path: '/api/v1/intake',
-          method: 'POST',
-          payload: { event: 'CLIENT_INTAKE_SUBMITTED', tier: 'Enterprise SLA' }
-        }
-      },
-      {
-        id: 'art_report_1',
-        name: 'Executive SLA Dashboard',
-        type: 'REPORT',
-        description: 'KPI summary dashboard',
-        content: {
-          metrics: { totalSubmissions: 1248, avgSlaHours: 1.4, resolutionPct: 98.6 }
-        }
-      },
-      {
-        id: 'art_tpl_1',
-        name: 'Welcome Email Spec',
-        type: 'TEMPLATE',
-        description: 'Mustache email notification template',
-        content: {
-          subject: 'Welcome to Aurora - {{client_name}}',
-          body: 'Hello {{client_name}}, your {{service_tier}} onboarding is active.'
-        }
-      }
-    ]
+    initialSolution?.artifacts || []
   );
-
-
 
   const [activeArtifactId, setActiveArtifactId] = useState<string>(
-    initialSolution?.activeArtifactId || 'art_form_1'
+    initialSolution?.activeArtifactId || ''
   );
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingSteps, setThinkingSteps] = useState<{ id: string; label: string; status: 'pending' | 'active' | 'completed' }[]>([]);
 
-  // Auto-enable fullscreen studio mode
+  // Sync initial solution props if updated
+  useEffect(() => {
+    if (initialSolution) {
+      if (initialSolution.name) setSolutionName(initialSolution.name);
+      if (initialSolution.contextSources) setContextSources(initialSolution.contextSources);
+      if (initialSolution.connectedModules) setConnectedModules(initialSolution.connectedModules);
+      if (initialSolution.chatHistory) setChatMessages(initialSolution.chatHistory);
+      if (initialSolution.artifacts) setArtifacts(initialSolution.artifacts);
+      if (initialSolution.savedNotes) setSavedNotes(initialSolution.savedNotes);
+    }
+  }, [initialSolution]);
+
+  // Set fullscreen studio mode on mount and reset on unmount
   useEffect(() => {
     setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
   }, [setIsBuilderFullscreen]);
+
 
   // Handle escape key
   useEffect(() => {
@@ -266,12 +126,6 @@ The solution provisions the following primary data modules:
     toast.success('Context source removed.');
   };
 
-  const handleToggleModuleLink = (id: string) => {
-    setConnectedModules(prev =>
-      prev.map(m => (m.id === id ? { ...m, linked: !m.linked } : m))
-    );
-  };
-
   const handleSendMessage = async (text: string, model: string) => {
     const userMsg: SolutionChatMessage = {
       id: `msg_${Date.now()}`,
@@ -281,10 +135,17 @@ The solution provisions the following primary data modules:
     };
 
     setChatMessages(prev => [...prev, userMsg]);
+    setIsThinking(true);
     toast.info(`Aurora AI (${model}) processing prompt and context documents...`);
 
     try {
-      const result = await orchestrateSolutionBlueprint(text, contextSources, connectedModules, model);
+      const result = await orchestrateSolutionBlueprint(
+        text, 
+        contextSources, 
+        artifacts, 
+        model,
+        (steps) => setThinkingSteps(steps)
+      );
 
 
       const aiReply: SolutionChatMessage = {
@@ -346,6 +207,19 @@ The solution provisions the following primary data modules:
           else updatedArtifacts.push(newFlowArt);
         }
 
+        if (result.permissionArtifact) {
+          const permIdx = updatedArtifacts.findIndex(a => a.type === 'PERMISSION');
+          const newPermArt: SolutionArtifact = {
+            id: result.permissionArtifact.id || 'art_perm_gen',
+            name: result.permissionArtifact.name || 'Roles & Security Matrix',
+            type: 'PERMISSION',
+            description: 'Role-Based Access Control (RBAC) & Data Scope Policy',
+            content: result.permissionArtifact
+          };
+          if (permIdx >= 0) updatedArtifacts[permIdx] = newPermArt;
+          else updatedArtifacts.push(newPermArt);
+        }
+
         setArtifacts(updatedArtifacts);
       }
 
@@ -364,6 +238,8 @@ The solution provisions the following primary data modules:
         suggestedActions: ['Configure AI Keys', 'Retry Prompt']
       };
       setChatMessages(prev => [...prev, errReply]);
+    } finally {
+      setIsThinking(false);
     }
   };
 
@@ -550,9 +426,9 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
   };
 
   return (
-    <div className={`flex flex-col w-full bg-zinc-50/50 dark:bg-zinc-950/50 relative backdrop-blur-2xl ${
-      isBuilderFullscreen ? 'h-screen fixed inset-0 z-50 p-4' : 'h-[calc(100vh-4rem)] p-4 lg:p-6'
-    } overflow-hidden font-sans space-y-4`}>
+    <div className="fixed inset-0 z-[9999] flex flex-col w-full h-full bg-zinc-950 p-4 space-y-3 overflow-hidden font-sans backdrop-blur-2xl">
+
+
       {/* Ambient Aurora Radial Background Glows */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-teal-500/5 dark:bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -637,7 +513,8 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
       </div>
 
       {/* Main 3-Column Studio Workspace Flex Layout */}
-      <div className="flex-1 flex items-center gap-3 min-h-0 relative z-10 w-full overflow-hidden">
+      <div className="flex-1 flex items-stretch gap-3 min-h-0 relative z-10 w-full h-full overflow-hidden">
+
         {/* Column 1: Context & Inputs (Left Pane) */}
         <motion.div 
           initial={false}
@@ -646,7 +523,7 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
             minWidth: isLeftPaneCollapsed ? 52 : 270
           }}
           transition={{ duration: 0.3, ease: 'easeInOut' }}
-          className="h-full shrink-0 min-h-0"
+          className="h-full shrink-0 min-h-0 flex flex-col"
         >
 
           {isLeftPaneCollapsed ? (
@@ -679,35 +556,26 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
                   ))}
                 </div>
               </div>
-
-              {/* Bottom Database Icon */}
-              <button
-                onClick={() => setIsLeftPaneCollapsed(false)}
-                className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all cursor-pointer"
-                title={`Connected Modules (${connectedModules.filter(m => m.linked).length})`}
-              >
-                <Database size={16} />
-              </button>
             </div>
           ) : (
             <ContextInputsPanel
               sources={contextSources}
-              connectedModules={connectedModules}
               onAddSource={handleAddSource}
               onRemoveSource={handleRemoveSource}
-              onToggleModuleLink={handleToggleModuleLink}
               onToggleCollapse={() => setIsLeftPaneCollapsed(true)}
             />
           )}
         </motion.div>
 
         {/* Column 2: Orchestrator AI Chat (Middle Pane - Expands to Fill Space) */}
-        <div className="flex-1 h-full min-w-0 min-h-0">
+        <div className="flex-1 h-full min-w-0 min-h-0 flex flex-col">
           <OrchestratorChatPanel
             messages={chatMessages}
             onSendMessage={handleSendMessage}
             onApplySuggestedAction={handleApplySuggestedAction}
             onSaveToNote={handleSaveToNote}
+            isThinking={isThinking}
+            thinkingSteps={thinkingSteps}
           />
         </div>
 
@@ -719,8 +587,9 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
             minWidth: isRightPaneCollapsed ? 52 : 310
           }}
           transition={{ duration: 0.3, ease: 'easeInOut' }}
-          className="h-full shrink-0 min-h-0"
+          className="h-full shrink-0 min-h-0 flex flex-col"
         >
+
 
           {isRightPaneCollapsed ? (
             /* Collapsed Right Sidebar (NotebookLM Style) */
@@ -776,6 +645,7 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
               savedNotes={savedNotes}
               onDeleteNote={handleDeleteNote}
               onToggleCollapse={() => setIsRightPaneCollapsed(true)}
+              onPromptRefine={(promptText) => handleSendMessage(promptText, 'default')}
             />
           )}
         </motion.div>

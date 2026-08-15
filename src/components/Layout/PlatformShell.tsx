@@ -564,11 +564,14 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const searchParams = new URLSearchParams(location.search);
   const isReportBuilder = (location.pathname.includes('/report-management') || location.pathname.includes('/reports')) && 
                           searchParams.get('mode') === 'builder';
+  const isSolutionBuilder = (location.pathname.includes('/solutions') || location.pathname.includes('/solution')) &&
+                           (searchParams.get('mode') === 'studio' || searchParams.get('mode') === 'builder' || searchParams.has('id') || searchParams.has('solutionId'));
 
   const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
                           location.pathname.includes('/workspace/settings/ai-builder') ||
                           location.pathname.includes('/workspace/settings/navigation/builder') ||
-                          isReportBuilder;
+                          isReportBuilder ||
+                          isSolutionBuilder;
 
   const rawLayoutStyle = tenant?.branding?.layout_style || 'sidebar';
   const layoutStyle = (isSettingsMode || isAdminPath) ? 'sidebar' : rawLayoutStyle;
@@ -718,8 +721,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             style={{ width: `${currentWidth}px` }}
             className={cn(
               "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl z-45 overflow-y-auto overflow-x-hidden",
-              (isModuleBuilder || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
-              !isResizing && !isModuleBuilder && "transition-all duration-300"
+              (isModuleBuilder || isBuilderFullscreen || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
+              !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300"
             )}
           >
             <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "p-4" : "p-2")}>
@@ -973,7 +976,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           style={{ marginLeft: `${currentWidth}px` }}
           className={cn(
             "flex-1 flex flex-col overflow-y-auto",
-            !isResizing && !isModuleBuilder && "transition-all duration-300",
+            !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300",
             isBuilderFullscreen 
               ? "h-screen" 
               : (layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
@@ -983,7 +986,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         >
           <div className={cn(
             "mx-auto flex flex-col min-h-full",
-            (fullBleed || isAdminPath) ? "w-full flex-1" : "max-w-7xl w-full"
+            (fullBleed || isAdminPath || isBuilderFullscreen) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
+
           )}>
             {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">

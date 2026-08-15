@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Boxes, Plus, Search, Trash2, Layers, GitBranch, ArrowRight
 } from 'lucide-react';
@@ -12,14 +13,22 @@ import { NewSolutionModal, TEMPLATE_SOLUTIONS } from '../../components/Modals/Ne
 import { SolutionBuilderStudio } from '../../components/Builders/SolutionBuilder/SolutionBuilderStudio';
 
 export const SolutionsPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [solutions, setSolutions] = useState<SolutionBlueprint[]>(TEMPLATE_SOLUTIONS);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'ACTIVE' | 'DRAFTS'>('ALL');
 
-  // Modal & Studio States
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isStudioActive, setIsStudioActive] = useState(false);
-  const [activeSolution, setActiveSolution] = useState<SolutionBlueprint | null>(null);
+
+  // Derived Studio States directly from searchParams
+  const isStudioActive = searchParams.get('mode') === 'studio' || searchParams.get('mode') === 'builder' || searchParams.has('id');
+  const solutionParamId = searchParams.get('id');
+
+  const activeSolution = useMemo(() => {
+    if (!solutionParamId) return null;
+    return solutions.find(s => s.id === solutionParamId) || TEMPLATE_SOLUTIONS.find(s => s.id === solutionParamId) || null;
+  }, [solutionParamId, solutions]);
 
   const filteredSolutions = useMemo(() => {
     return solutions.filter(sol => {
@@ -38,19 +47,20 @@ export const SolutionsPage: React.FC = () => {
 
   const handleSelectBlank = () => {
     setIsModalOpen(false);
-    setActiveSolution(null);
-    setIsStudioActive(true);
+    setSearchParams({ mode: 'studio' });
   };
 
   const handleSelectTemplate = (template: SolutionBlueprint) => {
     setIsModalOpen(false);
-    setActiveSolution(template);
-    setIsStudioActive(true);
+    setSearchParams({ mode: 'studio', id: template.id });
   };
 
   const handleEditSolutionCard = (sol: SolutionBlueprint) => {
-    setActiveSolution(sol);
-    setIsStudioActive(true);
+    setSearchParams({ mode: 'studio', id: sol.id });
+  };
+
+  const handleCloseStudio = () => {
+    setSearchParams({});
   };
 
   const handleDeleteSolution = (e: React.MouseEvent, id: string) => {
@@ -62,12 +72,21 @@ export const SolutionsPage: React.FC = () => {
 
   if (isStudioActive) {
     return (
-      <SolutionBuilderStudio
-        initialSolution={activeSolution}
-        onClose={() => setIsStudioActive(false)}
-      />
+      <div className="fixed inset-0 z-[9999] bg-zinc-950 w-screen h-screen overflow-hidden">
+        <NewSolutionModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSelectBlank={handleSelectBlank}
+          onSelectTemplate={handleSelectTemplate}
+        />
+        <SolutionBuilderStudio
+          initialSolution={activeSolution}
+          onClose={handleCloseStudio}
+        />
+      </div>
     );
   }
+
 
   return (
     <div className="flex flex-col w-full relative min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 overflow-y-auto">

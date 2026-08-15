@@ -151,9 +151,12 @@ export const PagesManagementPage = () => {
         title="Workspace Pages"
         description="Design and manage responsive workspace dashboards, personal queues, or custom workflow tracking pages."
         actions={
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2 shadow-lg shadow-indigo-500/10">
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+          >
             <Plus size={16} />
-            Create Workspace Page
+            <span>Create Workspace Page</span>
           </Button>
         }
       />

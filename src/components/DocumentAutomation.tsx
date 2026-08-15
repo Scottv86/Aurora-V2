@@ -269,7 +269,7 @@ export const DocumentAutomation = () => {
           actions={
             <Button 
               onClick={handleCreateNew} 
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all"
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
             >
               <Plus size={16} />
               <span>Create Template</span>
@@ -413,13 +413,13 @@ export const DocumentAutomation = () => {
         title="Templates"
         description="Create and manage reusable document templates for your platform."
         actions={
-          <button
+          <Button
             onClick={handleCreateNew}
-            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-500/20"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
-            <Plus size={20} />
-            Create Template
-          </button>
+            <Plus size={16} />
+            <span>Create Template</span>
+          </Button>
         }
       />
       {mainContent}

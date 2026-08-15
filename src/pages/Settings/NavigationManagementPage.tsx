@@ -228,9 +228,12 @@ export const NavigationManagementPage = () => {
         title="Navigation"
         description="Design and manage global workspace navigation menus, horizontal/vertical shell layouts, and role/team navigation schemes."
         actions={
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2 shadow-lg shadow-indigo-500/10">
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+          >
             <Plus size={16} />
-            Create Navigation
+            <span>Create Navigation</span>
           </Button>
         }
       />

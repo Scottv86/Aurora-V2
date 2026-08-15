@@ -1457,7 +1457,7 @@ setView('LIST');
             title="Reports"
             description="Build, customize, publish, and embed custom analytics dashboards across platform modules."
             actions={
-              <Button onClick={() => setShowCreatorModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all">
+              <Button onClick={() => setShowCreatorModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer">
                 <Plus size={16} />
                 <span>Create Report</span>
               </Button>

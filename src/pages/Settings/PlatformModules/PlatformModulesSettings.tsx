@@ -34,7 +34,8 @@ export const PlatformModulesSettings = () => {
   }, [location.search, openNewModuleModal]);
 
   const isIndex = location.pathname === '/workspace/settings/platform-modules' || location.pathname === '/workspace/settings/platform-modules/';
-  const isBuilderActive = location.pathname.includes('report-management') && location.search.includes('mode=builder');
+  const isBuilderActive = (location.pathname.includes('report-management') && location.search.includes('mode=builder')) ||
+                          (location.pathname.includes('solutions') && (location.search.includes('mode=studio') || location.search.includes('mode=builder') || location.search.includes('id=')));
 
   // Filter out any custom database modules that represent system-level services (like Work Distribution or People & Organisations)
   const displayCustomModules = modules.filter((mod: any) => {
@@ -79,7 +80,7 @@ export const PlatformModulesSettings = () => {
 
   return (
     <div className={cn(
-      "flex flex-col w-full relative min-h-0",
+      "flex flex-col w-full relative min-h-0 transition-all duration-200",
       isBuilderActive ? "h-[calc(100vh-4rem)] p-0 overflow-hidden" : "min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50"
     )}>
       {isIndex ? (
@@ -89,8 +90,12 @@ export const PlatformModulesSettings = () => {
             description="Build, manage, and extend tenant-specific custom data structures, data models, and schemas."
 
             actions={
-              <Button onClick={() => openNewModuleModal()} className="gap-2 shadow-lg shadow-indigo-500/10">
-                <Plus size={16} /> Create Module
+              <Button
+                onClick={() => openNewModuleModal()}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                <Plus size={16} />
+                <span>Create Module</span>
               </Button>
             }
           />

@@ -180,7 +180,12 @@ export const NewSolutionModal: React.FC<NewSolutionModalProps> = ({
   const [view, setView] = useState<'choices' | 'templates'>('choices');
   const [searchQuery, setSearchQuery] = useState('');
 
-  if (!isOpen) return null;
+  React.useEffect(() => {
+    if (isOpen) {
+      setView('choices');
+      setSearchQuery('');
+    }
+  }, [isOpen]);
 
   const filteredTemplates = TEMPLATE_SOLUTIONS.filter(t =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -189,25 +194,27 @@ export const NewSolutionModal: React.FC<NewSolutionModalProps> = ({
   );
 
   const modalNode = (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-        {/* Backdrop overlay */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 bg-zinc-950/70 backdrop-blur-xl transition-opacity"
-        />
+    <AnimatePresence mode="wait">
+      {isOpen && (
+        <div key="new-solution-modal-container" className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          {/* Backdrop overlay */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-zinc-950/70 backdrop-blur-xl"
+          />
 
-        {/* Modal Window Container */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="relative w-full max-w-3xl bg-white/95 dark:bg-zinc-900/95 border border-zinc-200/80 dark:border-zinc-800/80 rounded-[32px] shadow-2xl shadow-indigo-500/10 backdrop-blur-2xl overflow-hidden z-10 flex flex-col my-auto max-h-[90vh]"
-        >
+          {/* Modal Window Container */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="relative w-full max-w-3xl bg-white/95 dark:bg-zinc-900/95 border border-zinc-200/80 dark:border-zinc-800/80 rounded-[32px] shadow-2xl shadow-indigo-500/10 backdrop-blur-2xl overflow-hidden z-10 flex flex-col my-auto max-h-[90vh]"
+          >
           {/* Ambient Radial Glows */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none -mr-20 -mt-20" />
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-teal-500/10 rounded-full blur-[100px] pointer-events-none -ml-20 -mb-20" />
@@ -372,6 +379,7 @@ export const NewSolutionModal: React.FC<NewSolutionModalProps> = ({
           </div>
         </motion.div>
       </div>
+      )}
     </AnimatePresence>
   );
 

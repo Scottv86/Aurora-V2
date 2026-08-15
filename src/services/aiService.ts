@@ -551,13 +551,19 @@ export interface SolutionOrchestrationResult {
     name: string;
     nodes: { id: string; label: string; type: 'TRIGGER' | 'ACTION' | 'AUTOMATION' | 'APPROVAL'; status?: string }[];
   };
+  permissionArtifact?: {
+    id: string;
+    name: string;
+    roles: { name: string; level: string; color: string; description: string }[];
+    matrix: { resource: string; read: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; scope: string }[];
+  };
 }
 
 
 export const buildDynamicSolutionFromPrompt = (
   prompt: string,
   contextSources: { name: string; rawText?: string; contentSummary?: string }[],
-  connectedModules: any[]
+  connectedModules: any[] = []
 ): SolutionOrchestrationResult => {
   const cleanPrompt = prompt.toLowerCase();
 
@@ -668,8 +674,82 @@ ${customModules.map(m => `- **${m.name}** (${m.type}): ${m.description || 'Core 
       id: `art_flow_${Date.now()}`,
       name: `${topic} Automated Flow`,
       nodes: workflowNodes
+    },
+    permissionArtifact: {
+      id: `art_perm_${Date.now()}`,
+      name: `${topic} Roles & Security Matrix`,
+      roles: [
+        { name: 'Workspace Admin', level: 'Full Control', color: 'indigo', description: 'Unrestricted administrative access to all records & configuration.' },
+        { name: 'Department Manager', level: 'Scoped Management', color: 'emerald', description: 'Can create, edit, & export records within assigned department.' },
+        { name: 'Standard Agent', level: 'Operational Access', color: 'sky', description: 'Can view & update assigned cases, submit intake requests.' },
+        { name: 'Client Portal User', level: 'Restricted Self-Service', color: 'amber', description: 'Read-only access to own profile & submitted tickets.' }
+      ],
+      matrix: [
+        { resource: 'Intake Forms & Records', read: true, create: true, edit: true, delete: true, export: true, scope: 'Workspace-wide' },
+        { resource: 'SLA Escalation Workflows', read: true, create: false, edit: true, delete: false, export: true, scope: 'Department' },
+        { resource: 'Customer PII Data', read: true, create: true, edit: true, delete: false, export: false, scope: 'Record Owner' },
+        { resource: 'Analytics Dashboards', read: true, create: false, edit: false, delete: false, export: true, scope: 'Workspace-wide' }
+      ]
     }
   };
+};
+
+export interface ThinkingStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'active' | 'completed';
+}
+
+/**
+ * Dynamically generates intent-aware thinking steps based on user prompt analysis.
+ */
+export const generateThinkingStepsForPrompt = (
+  prompt: string, 
+  contextSourcesCount: number
+): ThinkingStep[] => {
+  const p = prompt.toLowerCase();
+
+  // Scenario 1: Questions / Explanations / Clarifications
+  if (p.includes('?') || p.includes('why') || p.includes('how') || p.includes('explain') || p.includes('agree') || p.includes('should we') || p.includes('what about') || p.includes('can you')) {
+    return [
+      { id: 's1', label: 'Analyzing user question & architectural intent', status: 'active' },
+      { id: 's2', label: 'Evaluating Aurora workspace configuration & system requirements', status: 'pending' },
+      { id: 's3', label: 'Formulating architectural response & clarification options', status: 'pending' }
+    ];
+  }
+
+  // Scenario 2: Refinement / Specific Artifact Tweak (Form, Workflow, Report, Module, Automation, etc.)
+  if (p.includes('add') || p.includes('remove') || p.includes('update') || p.includes('change') || p.includes('modify') || p.includes('field') || p.includes('node') || p.includes('title')) {
+    let target = 'solution artifact';
+    if (p.includes('form')) target = 'Form Layout';
+    else if (p.includes('workflow') || p.includes('flow')) target = 'Workflow Diagram';
+    else if (p.includes('report') || p.includes('chart')) target = 'Report Dashboard';
+    else if (p.includes('module') || p.includes('table')) target = 'Data Module Schema';
+    else if (p.includes('automation') || p.includes('rule')) target = 'Automation Pipeline';
+
+    return [
+      { id: 's1', label: `Locating target ${target} in current solution blueprint`, status: 'active' },
+      { id: 's2', label: `Evaluating requested schema modifications & validations`, status: 'pending' },
+      { id: 's3', label: `Applying changes to ${target} & updating live studio preview`, status: 'pending' }
+    ];
+  }
+
+  // Scenario 3: Deployment & Exporting
+  if (p.includes('deploy') || p.includes('export') || p.includes('save') || p.includes('publish')) {
+    return [
+      { id: 's1', label: 'Compiling solution bundle & validating component integrity', status: 'active' },
+      { id: 's2', label: 'Building deployment manifest & database schema migrations', status: 'pending' },
+      { id: 's3', label: 'Finalizing workspace provisioning instructions', status: 'pending' }
+    ];
+  }
+
+  // Scenario 4: Full Solution Blueprint Generation / Creation (Default)
+  return [
+    { id: 's1', label: `Ingesting ${contextSourcesCount > 0 ? `${contextSourcesCount} context document(s)` : 'workspace requirements'} & evaluating prompt intent`, status: 'active' },
+    { id: 's2', label: 'Architecting solution vision, RBAC security model & API endpoints', status: 'pending' },
+    { id: 's3', label: 'Generating relational database modules, tables & validation schemas', status: 'pending' },
+    { id: 's4', label: 'Constructing interactive forms, process workflows & analytics dashboards', status: 'pending' }
+  ];
 };
 
 /**
@@ -678,15 +758,55 @@ ${customModules.map(m => `- **${m.name}** (${m.type}): ${m.description || 'Core 
 export const orchestrateSolutionBlueprint = async (
   prompt: string,
   contextSources: { name: string; rawText?: string; contentSummary?: string }[],
-  connectedModules: any[],
-  model?: string
+  existingArtifacts: any[] = [],
+  model?: string,
+  onThinkingStep?: (steps: ThinkingStep[]) => void
 ): Promise<SolutionOrchestrationResult> => {
+  const initialSteps = generateThinkingStepsForPrompt(prompt, contextSources.length);
+
+  let currentSteps = [...initialSteps];
+  const updateSteps = (stepId: string, status: 'active' | 'completed') => {
+    currentSteps = currentSteps.map(s => {
+      if (s.id === stepId) return { ...s, status };
+      return s;
+    });
+    if (onThinkingStep) onThinkingStep([...currentSteps]);
+  };
+
+  if (onThinkingStep) onThinkingStep([...currentSteps]);
+
   const contextSummaryText = contextSources
     .map(c => `Document [${c.name}]: ${c.rawText || c.contentSummary || 'No text extracted'}`)
     .join('\n\n');
 
+  const existingArtifactsSummary = existingArtifacts.map(a => `- [${a.type}] ${a.name} (ID: ${a.id}): ${a.description || ''}`).join('\n');
+
+  // Progressive Step Timers
+  if (currentSteps.length > 1) {
+    setTimeout(() => {
+      updateSteps('s1', 'completed');
+      if (currentSteps[1]) updateSteps('s2', 'active');
+    }, 400);
+  }
+
+  if (currentSteps.length > 2) {
+    setTimeout(() => {
+      if (currentSteps[1]) updateSteps('s2', 'completed');
+      if (currentSteps[2]) updateSteps('s3', 'active');
+    }, 900);
+  }
+
+  if (currentSteps.length > 3) {
+    setTimeout(() => {
+      if (currentSteps[2]) updateSteps('s3', 'completed');
+      if (currentSteps[3]) updateSteps('s4', 'active');
+    }, 1400);
+  }
+
   const systemInstruction = `You are Aurora AI Solution Orchestrator. 
 Your job is to analyze user prompts and context documents to design/update an enterprise application solution bundle in Aurora.
+Assume full awareness of all existing workspace modules in Aurora.
+If the user requests changes to an existing artifact, update that artifact while maintaining its structure and fields.
 
 OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
 {
@@ -701,8 +821,6 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
     "description": "Comprehensive technical architecture specification plan.",
     "markdownContent": "# Solution Architecture & Vision\\n\\n## Executive Summary..."
   },
-
-
   "formArtifact": {
     "id": "art_form_1",
     "name": "Client Intake Form",
@@ -723,21 +841,22 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   }
 }`;
 
-
   const fullUserPrompt = `
 CONTEXT DOCUMENTS:
 ${contextSummaryText || 'No attached context documents.'}
 
-CURRENT CONNECTED MODULES:
-${JSON.stringify(connectedModules)}
+CURRENT EXISTING ARTIFACTS IN THIS SOLUTION BLUEPRINT:
+${existingArtifactsSummary || 'No artifacts generated yet.'}
 
-USER REQUEST:
+USER REQUEST / REFINEMENT PROMPT:
 "${prompt}"
 
 Generate the complete updated solution blueprint JSON object.`;
 
   try {
     const text = await executeServerCompletion(fullUserPrompt, systemInstruction, 'application/json', model);
+
+    updateSteps('s4', 'completed');
 
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr) as SolutionOrchestrationResult;
@@ -746,8 +865,9 @@ Generate the complete updated solution blueprint JSON object.`;
     }
     return parsed;
   } catch (error) {
+    updateSteps('s4', 'completed');
     console.warn("Server AI Completion unavailable or returned error, executing Smart Dynamic Solution Engine:", error);
-    return buildDynamicSolutionFromPrompt(prompt, contextSources, connectedModules);
+    return buildDynamicSolutionFromPrompt(prompt, contextSources, existingArtifacts);
   }
 };
 

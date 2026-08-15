@@ -4,7 +4,6 @@ import {
   Image as ImageIcon, 
   FileCode, 
   Plus, 
-  Database, 
   Trash2, 
   FileCheck,
   BookOpen,
@@ -15,27 +14,26 @@ import {
   Sparkles,
   Copy,
   CheckCircle2,
-  PanelLeftClose
+  PanelLeftClose,
+  Globe
 } from 'lucide-react';
-import { ContextSource, ConnectedModule } from '../../../types/solutions';
+
+import { ContextSource } from '../../../types/solutions';
+
 import { AddContextSourceModal } from '../../Modals/AddContextSourceModal';
 import { toast } from 'sonner';
 
 export interface ContextInputsPanelProps {
   sources: ContextSource[];
-  connectedModules: ConnectedModule[];
   onAddSource: (file: ContextSource) => void;
   onRemoveSource: (id: string) => void;
-  onToggleModuleLink: (id: string) => void;
   onToggleCollapse?: () => void;
 }
 
 export const ContextInputsPanel: React.FC<ContextInputsPanelProps> = ({
   sources,
-  connectedModules,
   onAddSource,
   onRemoveSource,
-  onToggleModuleLink,
   onToggleCollapse
 }) => {
 
@@ -104,6 +102,9 @@ export const ContextInputsPanel: React.FC<ContextInputsPanelProps> = ({
     if (src.sourceOrigin === 'REPORT' || src.sourceOrigin === 'APP') {
       return <div className={`${boxClass} bg-indigo-500/10 text-indigo-500 border border-indigo-500/20`}><BarChart2 size={size} /></div>;
     }
+    if (src.sourceOrigin === 'WEBSITE') {
+      return <div className={`${boxClass} bg-sky-500/10 text-sky-500 border border-sky-500/20`}><Globe size={size} /></div>;
+    }
 
     switch (src.type) {
       case 'docx':
@@ -130,10 +131,13 @@ export const ContextInputsPanel: React.FC<ContextInputsPanelProps> = ({
         return <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-indigo-500/10 text-indigo-500 uppercase shrink-0">Report</span>;
       case 'APP':
         return <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-500/10 text-amber-500 uppercase shrink-0">App</span>;
+      case 'WEBSITE':
+        return <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-sky-500/10 text-sky-500 uppercase shrink-0">Web</span>;
       default:
         return <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase shrink-0">File</span>;
     }
   };
+
 
   const handleCopyText = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -257,18 +261,27 @@ export const ContextInputsPanel: React.FC<ContextInputsPanelProps> = ({
               </h3>
             </div>
 
-
-            {onToggleCollapse && (
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={onToggleCollapse}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
-                title="Collapse Left Pane (Sidebar Mode)"
+                onClick={() => setIsAddModalOpen(true)}
+                className="px-2.5 py-1 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                title="Add new context source"
               >
-                <PanelLeftClose size={16} />
+                <Plus size={13} />
+                <span>Add Source</span>
               </button>
-            )}
-          </div>
 
+              {onToggleCollapse && (
+                <button
+                  onClick={onToggleCollapse}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                  title="Collapse Left Pane (Sidebar Mode)"
+                >
+                  <PanelLeftClose size={16} />
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* Search Bar */}
           <div className="relative">
@@ -327,51 +340,9 @@ export const ContextInputsPanel: React.FC<ContextInputsPanelProps> = ({
                 ))}
               </div>
             )}
-
-
-            {/* Signature Aurora Add Context Source Button */}
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 via-indigo-500 to-teal-500 hover:from-indigo-500 hover:via-indigo-400 hover:to-teal-400 text-white font-black text-xs rounded-2xl transition-all duration-200 shadow-md shadow-indigo-500/25 hover:shadow-lg hover:shadow-indigo-500/35 hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 group cursor-pointer shrink-0 border border-white/20"
-            >
-              <div className="w-5 h-5 rounded-lg bg-white/20 flex items-center justify-center group-hover:rotate-90 transition-transform duration-300">
-                <Plus size={14} className="text-white" />
-              </div>
-              <span className="tracking-wide">Add Context Source</span>
-              <Sparkles size={13} className="text-amber-300 opacity-90 animate-pulse ml-0.5" />
-            </button>
           </div>
-
         </>
       )}
-
-      {/* Sleek 1-Line Connected Modules Strip */}
-      <div className="pt-3 border-t border-zinc-200/60 dark:border-white/5 flex items-center justify-between text-xs shrink-0">
-        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar py-0.5">
-          <span className="font-bold text-zinc-700 dark:text-zinc-300 text-[11px] shrink-0 flex items-center gap-1">
-            <Database size={13} className="text-indigo-500" /> Modules ({connectedModules.filter(m => m.linked).length}):
-          </span>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {connectedModules.map((mod) => (
-              <button
-                key={mod.id}
-                onClick={() => onToggleModuleLink(mod.id)}
-                className={`px-2.5 py-1 rounded-xl text-[10.5px] font-semibold flex items-center gap-1 transition-all border cursor-pointer ${
-                  mod.linked
-                    ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-500 dark:text-indigo-400'
-                    : 'bg-zinc-100 dark:bg-zinc-800/60 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-400 line-through'
-                }`}
-                title={mod.linked ? `Click to unlink ${mod.name}` : `Click to link ${mod.name}`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${mod.linked ? 'bg-indigo-500 animate-pulse' : 'bg-zinc-400'}`} />
-                <span>{mod.name}</span>
-                <span className="opacity-60 text-[9px]">({mod.fieldsCount})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

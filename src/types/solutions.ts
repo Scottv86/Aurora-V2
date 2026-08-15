@@ -13,6 +13,7 @@ export type SolutionArtifactType =
   | 'REPORT' 
   | 'TEMPLATE' 
   | 'GLOBAL_LIST' 
+  | 'PERMISSION'
   | 'API' 
   | 'RECORDS';
 
@@ -25,7 +26,8 @@ export interface ContextSource {
   status: 'PROCESSED' | 'INDEXING' | 'ERROR';
   contentSummary?: string;
   rawText?: string;
-  sourceOrigin?: 'LOCAL_FILE' | 'KNOWLEDGE_BASE' | 'DRIVE' | 'REPORT' | 'APP' | 'GENERATED';
+  sourceOrigin?: 'LOCAL_FILE' | 'KNOWLEDGE_BASE' | 'DRIVE' | 'REPORT' | 'APP' | 'GENERATED' | 'WEBSITE';
+
 }
 
 export interface ConnectedModule {

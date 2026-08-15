@@ -6,7 +6,9 @@ import {
   Sparkles, 
   ChevronDown, 
   Settings,
-  Check
+  Check,
+  Loader2,
+  Brain
 } from 'lucide-react';
 
 
@@ -21,13 +23,17 @@ export interface OrchestratorChatPanelProps {
   onSendMessage: (text: string, model: string) => void;
   onApplySuggestedAction: (actionText: string) => void;
   onSaveToNote?: (text: string) => void;
+  isThinking?: boolean;
+  thinkingSteps?: { id: string; label: string; status: 'pending' | 'active' | 'completed' }[];
 }
 
 export const OrchestratorChatPanel: React.FC<OrchestratorChatPanelProps> = ({
   messages,
   onSendMessage,
   onApplySuggestedAction,
-  onSaveToNote
+  onSaveToNote,
+  isThinking = false,
+  thinkingSteps = []
 }) => {
   const { user: platformUser } = usePlatform();
   const { user: authUser } = useAuth();
@@ -78,10 +84,10 @@ export const OrchestratorChatPanel: React.FC<OrchestratorChatPanelProps> = ({
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isThinking, thinkingSteps]);
 
   const handleSend = () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || isThinking) return;
     onSendMessage(inputText.trim(), selectedModel);
     setInputText('');
   };
@@ -174,15 +180,18 @@ export const OrchestratorChatPanel: React.FC<OrchestratorChatPanelProps> = ({
                 }`}>
                   {msg.text}
 
-                  {/* Source Grounding Badges */}
-                  {isAurora && (
-                    <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center gap-1.5 text-[9px] font-bold text-zinc-400">
-                      <span className="uppercase text-indigo-500">Grounded in:</span>
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
-                        {msg.groundedSources?.join(', ') || 'Project_Vision.docx & KB Article'}
-                      </span>
+                  {/* Source Badges */}
+                  {isAurora && msg.groundedSources && msg.groundedSources.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex flex-wrap items-center gap-1.5 text-[9px] font-bold">
+                      {msg.groundedSources.map((sourceName, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                          {sourceName}
+                        </span>
+                      ))}
                     </div>
                   )}
+
+
                 </div>
 
                 {/* Save to Note Action Button (Matching Gemini Notebook) */}
@@ -219,6 +228,55 @@ export const OrchestratorChatPanel: React.FC<OrchestratorChatPanelProps> = ({
           );
         })}
 
+        {/* DYNAMIC AI THINKING & ARCHITECTING ANIMATED BUBBLE WITH REAL-TIME STEPS */}
+        {isThinking && (
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-500 flex items-center justify-center shrink-0 text-xs font-bold shadow-md shadow-emerald-500/10 animate-pulse">
+              A
+            </div>
+            <div className="space-y-1.5 max-w-[85%]">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-zinc-900 dark:text-white">Aurora AI Orchestrator</span>
+                <span className="text-[10px] text-indigo-400 font-mono font-bold animate-pulse">Thinking...</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/90 dark:bg-zinc-900/90 border border-indigo-500/30 text-zinc-800 dark:text-zinc-200 shadow-lg space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />
+                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                    <Brain className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{thinkingSteps.find(s => s.status === 'active')?.label || 'Processing Solution Request...'}</span>
+                  </span>
+                </div>
+
+                <div className="space-y-2 pl-6 border-l-2 border-indigo-500/30 text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                  {thinkingSteps.map((step) => (
+                    <div key={step.id} className="flex items-center gap-2 transition-all">
+                      {step.status === 'completed' ? (
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 border border-emerald-500/30 text-[10px] font-bold">
+                          ✓
+                        </div>
+                      ) : step.status === 'active' ? (
+                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 shrink-0 ml-1" />
+                      )}
+                      <span className={`text-xs ${
+                        step.status === 'completed' 
+                          ? 'text-emerald-500 font-semibold' 
+                          : step.status === 'active' 
+                          ? 'text-indigo-400 font-bold' 
+                          : 'text-zinc-500'
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div ref={chatEndRef} />
       </div>
