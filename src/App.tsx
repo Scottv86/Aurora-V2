@@ -61,6 +61,8 @@ import { SubscriptionPage } from './pages/Settings/SubscriptionPage';
 import { FormsLibraryPage } from './pages/Settings/FormsLibraryPage';
 import { WorkflowsLibraryPage } from './pages/Settings/WorkflowsLibraryPage';
 import { ValidationsLibraryPage } from './pages/Settings/ValidationsLibraryPage';
+import { QueuesLibraryPage } from './pages/Settings/QueuesLibraryPage';
+import { QueriesLibraryPage } from './pages/Settings/QueriesLibraryPage';
 
 import { OrganizationPage } from './pages/Settings/OrganizationPage';
 import { AISettingsPage } from './pages/Settings/AISettingsPage';
@@ -266,6 +268,8 @@ const App = () => {
                 <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
                 <Route path="platform" element={<NavigateWithSearch to="/workspace/platform/people-organisations" replace />} />
                 <Route path="modules" element={<NavigateWithSearch to="/workspace/settings/modules" replace />} />
+                <Route path="pages" element={<NavigateWithSearch to="/workspace/settings/pages" replace />} />
+                <Route path="queues" element={<NavigateWithSearch to="/workspace/settings/queues" replace />} />
                 
                 {/* Dynamic Module Routes */}
                 <Route path="modules/:moduleId" element={<ModuleView />} />
@@ -366,11 +370,13 @@ const App = () => {
                    <Route path="report-management" element={<ReportManagementSettings />} />
                    <Route path="api-management" element={<APISettings />} />
                    <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
-                   <Route path="queues-management" element={<ComingSoon title="Queues" description="Build and configure work queues, unified queue views, filter rules, and display columns for your platform." />} />
+                   <Route path="queues-management" element={<QueuesLibraryPage />} />
+                   <Route path="queries-library" element={<QueriesLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
                 </Route>
                  <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="solution" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
+                 <Route path="queries" element={<Navigate to="/workspace/settings/platform-modules/queries-library" replace />} />
                  <Route path="templates" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />
                  <Route path="automations" element={<Navigate to="/workspace/settings/platform-modules/automation-management" replace />} />
                  <Route path="reports" element={<Navigate to="/workspace/settings/platform-modules/report-management" replace />} />

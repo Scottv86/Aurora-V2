@@ -488,3 +488,28 @@ export interface ConnectorMappingEntity {
   updatedAt?: string;
 }
 
+export interface QueueEntity {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug?: string;
+  description?: string;
+  iconName?: string;
+  isGlobal?: boolean;
+  isUnifiedQueue?: boolean;
+  moduleId?: string;
+  moduleName?: string;
+  moduleIds?: string[];
+  queueConfig?: {
+    conditions?: any;
+    columns?: string[];
+    defaultSort?: { key: string; direction: 'asc' | 'desc' };
+    slaMinutes?: number;
+    actions?: any[];
+  };
+  version?: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  createdAt?: string;
+  updatedAt?: string;
+}
+

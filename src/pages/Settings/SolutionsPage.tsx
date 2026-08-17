@@ -12,39 +12,41 @@ import { SolutionBlueprint } from '../../types/solutions';
 import { NewSolutionModal, TEMPLATE_SOLUTIONS } from '../../components/Modals/NewSolutionModal';
 import { SolutionBuilderStudio } from '../../components/Builders/SolutionBuilder/SolutionBuilderStudio';
 import { EmptyState } from '../../components/UI/EmptyState';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../context/PlatformContext';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { supabase } from '../../lib/supabase';
+import { builderCache } from '../../utils/builderCache';
 
 const getAuthToken = async (): Promise<string> => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) return session.access_token;
-  } catch (e) {}
-
   const authDataStr = localStorage.getItem('aurora_auth');
   if (authDataStr) {
     try {
       const authData = JSON.parse(authDataStr);
-      return authData?.access_token || authData?.token || '';
+      if (authData?.access_token || authData?.token) return authData.access_token || authData.token;
     } catch (e) {}
   }
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) return session.access_token;
+  } catch (e) {}
   return '';
 };
 
 export const SolutionsPage: React.FC = () => {
   const { tenant } = usePlatform();
+  const cacheKey = `solutions_${tenant?.id || 'default'}`;
   const [searchParams, setSearchParams] = useSearchParams();
-  const [solutions, setSolutions] = useState<SolutionBlueprint[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [solutions, setSolutions] = useState<SolutionBlueprint[]>(() => builderCache.get<SolutionBlueprint[]>(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'ACTIVE' | 'DRAFTS'>('ALL');
 
   const fetchSolutions = React.useCallback(async () => {
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const token = await getAuthToken();
 
@@ -58,6 +60,7 @@ export const SolutionsPage: React.FC = () => {
         const data = await res.json();
         if (Array.isArray(data.solutions)) {
           setSolutions(data.solutions);
+          builderCache.set(cacheKey, data.solutions);
         }
       }
     } catch (err) {
@@ -65,7 +68,7 @@ export const SolutionsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [tenant?.id]);
+  }, [tenant?.id, cacheKey]);
 
   useEffect(() => {
     fetchSolutions();
@@ -132,7 +135,11 @@ export const SolutionsPage: React.FC = () => {
     if (!solutionToDelete) return;
     const sol = solutionToDelete;
     setIsDeleting(true);
-    setSolutions(prev => prev.filter(s => s.id !== sol.id));
+    setSolutions(prev => {
+      const next = prev.filter(s => s.id !== sol.id);
+      builderCache.set(cacheKey, next);
+      return next;
+    });
     try {
       if (tenant?.id) {
         await TrashService.softDelete({
@@ -242,13 +249,7 @@ export const SolutionsPage: React.FC = () => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map(n => (
-              <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-            ))}
-          </div>
-        ) : filteredSolutions.length === 0 ? (
+        {loading ? null : filteredSolutions.length === 0 ? (
           <EmptyState
             icon={Boxes}
             title="No solutions found"
@@ -260,20 +261,21 @@ export const SolutionsPage: React.FC = () => {
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredSolutions.map((sol) => (
+            {filteredSolutions.map((sol, i) => (
               <motion.div
                 key={sol.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                 onClick={() => handleEditSolutionCard(sol)}
-                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                 <div className="relative z-10 flex flex-col h-full justify-between">
                   <div>
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                         <Boxes size={22} />
                       </div>
                       <div className="flex items-center gap-2">
@@ -287,7 +289,7 @@ export const SolutionsPage: React.FC = () => {
                         )}
                         <button
                           onClick={(e) => handleDeleteClick(e, sol)}
-                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Delete Solution"
                         >
                           <Trash2 size={14} />
@@ -295,7 +297,7 @@ export const SolutionsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                       {sol.name}
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -318,7 +320,7 @@ export const SolutionsPage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                       Edit in Builder <ArrowRight size={14} />
                     </div>
                   </div>
@@ -328,14 +330,16 @@ export const SolutionsPage: React.FC = () => {
 
             {/* Interactive Dashed + Create Solution Card */}
             <motion.div
-              whileHover={{ y: -4 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: filteredSolutions.length * 0.03, ease: 'easeOut' }}
               onClick={handleCreateNewClick}
-              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
+              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-[border-color,background-color] duration-200 text-center hover:bg-indigo-500/[0.01]"
             >
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                 <Plus size={24} />
               </div>
-              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                 Create Solution
               </span>
               <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">

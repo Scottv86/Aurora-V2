@@ -423,7 +423,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         return renderConfigureButton('Configure Inventory', () => navigate('/workspace/settings/platform-modules/inventory-manager'), 'Boxes');
       }
       if (feature === 'global-lists') {
-        return renderConfigureButton('Configure Global Lists', () => navigate('/workspace/settings/platform-modules/global-lists'), 'ListTodo');
+        return renderConfigureButton('Configure Lists', () => navigate('/workspace/settings/platform-modules/global-lists'), 'ListTodo');
       }
       if (feature === 'workforce') {
         return renderConfigureButton('Configure Workforce', () => navigate('/workspace/settings/platform-modules/workforce-management'), 'Users');
@@ -496,15 +496,17 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Menus', icon: Compass, to: '/workspace/settings/navigation' },
         { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
+        { label: 'Queues', icon: LucideIcons.ListOrdered, to: '/workspace/settings/platform-modules/queues-management' },
         { label: 'Sites', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
         { label: 'Forms', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/forms-library' },
         { label: 'Workflows', icon: LucideIcons.GitBranch, to: '/workspace/settings/platform-modules/workflows-library' },
-        { label: 'Validations', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
+        { label: 'Rules', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
         { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },
         { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
         { label: 'Reports', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
+        { label: 'Queries', icon: LucideIcons.Database, to: '/workspace/settings/platform-modules/queries-library' },
         { label: 'Templates', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
-        { label: 'Queues', icon: LucideIcons.ListOrdered, to: '/workspace/settings/platform-modules/queues-management' },
+        { label: 'Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
       ]
     },
 
@@ -516,8 +518,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       ]
     },
     {
-      category: 'Data Exchange & APIs',
-      icon: ArrowRightLeft,
+      category: 'Develop',
+      icon: LucideIcons.Code2,
       items: [
         { label: 'Data Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
         { label: 'API Management', icon: LucideIcons.Key, to: '/workspace/settings/platform-modules/api-management' },
@@ -525,13 +527,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     },
 
     {
-      category: 'Finance & Catalogs',
-      icon: LucideIcons.Banknote,
+      category: 'Configure',
+      icon: LucideIcons.Sliders,
       items: [
         { label: 'Financial Management', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
         { label: 'Pricing Catalog', icon: LucideIcons.Tag, to: '/workspace/settings/platform-modules/pricing-catalog' },
         { label: 'Inventory Manager', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/inventory-manager' },
-        { label: 'Global Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
         { label: 'People & Organisations', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/people-organisations' },
       ]
     },

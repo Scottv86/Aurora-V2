@@ -19,10 +19,11 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/UI/Primitives';
 import { PageHeader } from '../../../components/UI/PageHeader';
-import { Skeleton } from '../../../components/UI/Skeleton';
 import { EmptyState } from '../../../components/UI/EmptyState';
 import { TrashService } from '../../../services/trashService';
 import { DeleteConfirmationModal } from '../../../components/Common/DeleteConfirmationModal';
+import { API_BASE_URL } from '../../../config';
+import { builderCache } from '../../../utils/builderCache';
 
 
 
@@ -503,8 +504,9 @@ setView('LIST');
     }
   }, [location.search, setIsBuilderFullscreen]);
 
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `reports_${tenant?.id || 'default'}`;
+  const [reports, setReports] = useState<Report[]>(() => builderCache.get<Report[]>(cacheKey) || DEFAULT_REPORTS);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
 
   const [activeTab, setActiveTab] = useState<'ALL' | 'PUBLISHED' | 'DRAFTS'>('ALL');
 
@@ -543,12 +545,10 @@ setView('LIST');
   const [newRelPrimaryKey, setNewRelPrimaryKey] = useState('');
   const [newRelForeignKey, setNewRelForeignKey] = useState('');
   const [newRelType, setNewRelType] = useState<'left' | 'inner'>('left');
+  const [isAiBuilding, setIsAiBuilding] = useState(false);
 
-  // Live Database Datasets (Local Cache)
-  const [records, setRecords] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
-  const [automations, setAutomations] = useState<any[]>([]);
+  const [availableModules, setAvailableModules] = useState<any[]>([]);
+  const [dataSources, setDataSources] = useState<any[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
 
@@ -556,10 +556,12 @@ setView('LIST');
   // Fetch all reports
   const fetchReports = async () => {
     if (!tenant?.id) return;
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`http://localhost:3001/api/reports`, {
+      const res = await fetch(`${API_BASE_URL}/api/reports`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
@@ -569,15 +571,20 @@ setView('LIST');
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setReports(data);
+          builderCache.set(cacheKey, data);
         } else {
           setReports(DEFAULT_REPORTS);
+          builderCache.set(cacheKey, DEFAULT_REPORTS);
         }
       } else {
         setReports(DEFAULT_REPORTS);
+        builderCache.set(cacheKey, DEFAULT_REPORTS);
       }
     } catch (err: any) {
       console.error(err);
-      setReports(DEFAULT_REPORTS);
+      if (!builderCache.has(cacheKey)) {
+        setReports(DEFAULT_REPORTS);
+      }
     } finally {
       setLoading(false);
     }
@@ -1518,13 +1525,7 @@ setView('LIST');
               </div>
             </div>
 
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map(n => (
-                <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-              ))}
-            </div>
-          ) : filteredReports.length === 0 ? (
+          {loading ? null : filteredReports.length === 0 ? (
             <EmptyState
               icon={BarChart2}
               title="No reports found"
@@ -1539,16 +1540,16 @@ setView('LIST');
               {filteredReports.map((report, i) => (
                 <motion.div
                   key={report.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
+                  transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                   onClick={() => {
                     setCurrentReport(report);
                     setSelectedWidgetId(null);
                     setIsPreview(true);
                     navigate('?mode=builder');
                   }}
-                  className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                  className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -1557,7 +1558,7 @@ setView('LIST');
                       e.stopPropagation();
                       setDeletingReport(report);
                     }}
-                    className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                    className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                     title="Delete Report"
                   >
                     <Trash2 size={14} />
@@ -1566,7 +1567,7 @@ setView('LIST');
                   <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
                       <div className="flex items-start justify-between mb-4">
-                        <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                        <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                           <BarChart2 size={22} />
                         </div>
                         <span className={cn(
@@ -1579,7 +1580,7 @@ setView('LIST');
                         </span>
                       </div>
 
-                      <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                         {report.name}
                       </h3>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -1594,7 +1595,7 @@ setView('LIST');
 
                       </div>
 
-                      <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                      <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                         Edit in Builder <ArrowRight size={14} />
                       </div>
                     </div>
@@ -1605,16 +1606,16 @@ setView('LIST');
 
               {/* Dash creator card */}
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: filteredReports.length * 0.03 }}
+                transition={{ duration: 0.25, delay: filteredReports.length * 0.03, ease: 'easeOut' }}
                 onClick={() => setShowCreatorModal(true)}
-                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
+                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-[border-color,background-color] duration-200 text-center hover:bg-indigo-500/[0.01]"
               >
-                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                   <Plus size={24} />
                 </div>
-                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                   Create Report
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">

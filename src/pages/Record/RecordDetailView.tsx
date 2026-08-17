@@ -45,7 +45,7 @@ import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPrevi
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { RecursiveCollectionBlock } from '../../components/Platform/RecursiveCollectionBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
-import { RecordDetailSkeleton } from '../../components/Platform/RecordDetailSkeleton';
+import { builderCache, workspaceMotion } from '../../utils/builderCache';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 
 
@@ -88,8 +88,9 @@ export const RecordDetailView = ({
 
   const moduleId = moduleIdProp || resolvedRouteModuleId;
   const recordId = recordIdProp || routeRecordId;
-  const [moduleData, setModuleData] = useState<Module | null>(null);
-  const [record, setRecord] = useState<Record<string, any> | null>(null);
+  const recordCacheKey = `record_${tenant?.id || 'default'}_${recordId || 'none'}`;
+  const [moduleData, setModuleData] = useState<Module | null>(() => modules?.find((m: any) => m.id === moduleId || slugify(m.name) === moduleId) || null);
+  const [record, setRecord] = useState<Record<string, any> | null>(() => builderCache.get(recordCacheKey) || null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
   const [quickActionAutomations, setQuickActionAutomations] = useState<any[]>([]);
   const [triggeringAutomationId, setTriggeringAutomationId] = useState<string | null>(null);
@@ -166,7 +167,7 @@ export const RecordDetailView = ({
     return LucideIcons.Layers;
   }, [moduleData]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !builderCache.has(recordCacheKey));
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -2372,7 +2373,7 @@ export const RecordDetailView = ({
     );
   };
 
-  if (loading || platformLoading) return <RecordDetailSkeleton />;
+  if ((loading || platformLoading) && !record) return null;
 
 
   if (!moduleData || !record) {

@@ -10,26 +10,25 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/UI/Primitives';
 import { PageWrapper } from '../../components/Common/PageWrapper';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { WorkQueue } from '../../components/WorkQueue';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { toast } from 'sonner';
 import { createFormulaContext } from '../../lib/formulaEngine';
+import { builderCache, workspaceMotion } from '../../utils/builderCache';
+import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
 import { getWidgetDefaultDimensions } from './PageBuilder';
-import { FormRenderer } from '../../components/Builders';
+import { FormRenderer, QueueRenderer } from '../../components/Builders';
 
 
-const useMyContainerWidth = (loading: boolean) => {
+const useMyContainerWidth = () => {
   const [width, setWidth] = useState(1280);
   const [mounted, setMounted] = useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (loading) return;
-    
     const timer = setTimeout(() => {
       const node = containerRef.current;
       if (node) {
@@ -60,129 +59,66 @@ const useMyContainerWidth = (loading: boolean) => {
         observer.disconnect();
       }
     };
-  }, [loading]);
+  }, []);
 
   return { width, containerRef, mounted };
 };
 
 export const VisualSkeleton: React.FC<{ type: string }> = ({ type }) => {
-  switch (type) {
-    case 'kpi':
-      return (
-        <div className="w-full flex flex-col items-center justify-center space-y-3 animate-pulse">
-          <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-          <div className="h-10 w-28 bg-zinc-300 dark:bg-zinc-700 rounded-2xl" />
-        </div>
-      );
-    case 'table':
-      return (
-        <div className="w-full h-full flex flex-col space-y-3.5 p-1 animate-pulse">
-          <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
-            <div className="h-3 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-          </div>
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="flex justify-between items-center">
-              <div className="h-3.5 w-24 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
-              <div className="h-3 w-10 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            </div>
-          ))}
-        </div>
-      );
-    case 'bar':
-    case 'line':
-    case 'area':
-      return (
-        <div className="w-full h-full flex flex-col justify-end space-y-4 p-2 animate-pulse">
-          <div className="flex-1 flex items-end gap-5 px-4">
-            <div className="w-full h-[60%] bg-zinc-200 dark:bg-zinc-800 rounded-t-lg" />
-            <div className="w-full h-[35%] bg-zinc-300 dark:bg-zinc-700 rounded-t-lg" />
-            <div className="w-full h-[80%] bg-zinc-200 dark:bg-zinc-800 rounded-t-lg" />
-            <div className="w-full h-[50%] bg-zinc-300 dark:bg-zinc-700 rounded-t-lg" />
-            <div className="w-full h-[95%] bg-zinc-200 dark:bg-zinc-800 rounded-t-lg" />
-          </div>
-          <div className="border-t border-zinc-200 dark:border-zinc-800 pt-2 flex justify-between">
-            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            <div className="h-2 w-8 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-          </div>
-        </div>
-      );
-    case 'pie':
-      return (
-        <div className="w-full h-full flex items-center justify-center gap-6 p-2 animate-pulse">
-          <div className="relative w-28 h-28 rounded-full border-8 border-zinc-200 dark:border-zinc-800 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-t-8 border-r-8 border-zinc-300 dark:border-zinc-750 rotate-45" />
-          </div>
-          <div className="flex flex-col space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-              <div className="h-2.5 w-12 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-800" />
-              <div className="h-2.5 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-            </div>
-          </div>
-        </div>
-      );
-    default:
-      return (
-        <div className="w-full h-full flex flex-col space-y-4 p-4 animate-pulse">
-          <div className="h-4 w-1/3 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
-          <div className="h-8 w-full bg-zinc-300 dark:bg-zinc-750 rounded-2xl" />
-          <div className="h-24 w-full bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
-        </div>
-      );
-  }
+  return <div className="w-full h-full flex items-center justify-center" />;
 };
 
 export const WorkspacePageView = () => {
   const { pageId } = useParams();
   const navigate = useNavigate();
-  const { tenant, modules } = usePlatform();
+  const { tenant, modules, setBreadcrumbOverride, isLoading: platformLoading } = usePlatform();
   const { session } = useAuth();
 
   const [pageData, setPageData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
-  // Fetch Page Config
+  // Synchronously resolve matching page from already-loaded platform modules
+  const matchedPage = useMemo(() => {
+    if (!pageId) return null;
+    return modules.find(
+      (m: any) => m.type === 'PAGE' && (slugify(m.name) === pageId || m.name?.toLowerCase() === pageId.toLowerCase() || m.id === pageId)
+    ) || null;
+  }, [pageId, modules]);
+
+  const activePage = pageData || matchedPage;
+
+  // Sync breadcrumbs immediately
   useEffect(() => {
-    const getPageConfig = async () => {
-      if (!pageId) return;
-      if (!tenant?.id) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        
-        // Resolve slugified pageName to actual page ID
-        let targetId = pageId;
-        const matchedPage = modules.find(
-          (m: any) => m.type === 'PAGE' && (slugify(m.name) === pageId || m.name.toLowerCase() === pageId.toLowerCase())
-        );
-        if (matchedPage) {
-          targetId = matchedPage.id;
-        }
+    const title = activePage?.name || matchedPage?.name;
+    if (pageId && title) {
+      setBreadcrumbOverride(pageId, title);
+    }
+  }, [pageId, activePage?.name, matchedPage?.name, setBreadcrumbOverride]);
 
+  // Background fetch for fresh / complete page data
+  useEffect(() => {
+    let isSubscribed = true;
+    const getPageConfig = async () => {
+      if (!pageId || !tenant?.id) return;
+      const targetId = matchedPage?.id || pageId;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      
+      try {
         const pageMod = await fetchModule(targetId, tenant.id, token, modules);
-        setPageData(pageMod);
+        if (isSubscribed && pageMod) {
+          setPageData(pageMod);
+        }
       } catch (err) {
         console.error('Failed to load page config', err);
-        toast.error('Failed to load page configuration');
-      } finally {
-        setLoading(false);
       }
     };
     getPageConfig();
-  }, [pageId, tenant?.id, session?.access_token, modules]);
+    return () => {
+      isSubscribed = false;
+    };
+  }, [pageId, tenant?.id, session?.access_token, matchedPage?.id, modules]);
 
   const widgets = useMemo(() => {
-    return (pageData?.config?.widgets || pageData?.widgets || []).map((w: any, index: number) => {
+    return (activePage?.config?.widgets || activePage?.widgets || []).map((w: any, index: number) => {
       const dims = getWidgetDefaultDimensions(w.type);
       return {
         ...w,
@@ -192,9 +128,9 @@ export const WorkspacePageView = () => {
         h: (w.h !== undefined && w.h !== null) ? w.h : dims.h
       };
     });
-  }, [pageData?.config?.widgets, pageData?.widgets]);
+  }, [activePage?.config?.widgets, activePage?.widgets]);
 
-  const { width, containerRef, mounted } = useMyContainerWidth(loading);
+  const { width, containerRef, mounted } = useMyContainerWidth();
 
   const layout = useMemo(() => {
     return widgets.map((w: any) => ({
@@ -206,16 +142,10 @@ export const WorkspacePageView = () => {
     }));
   }, [widgets]);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-        <p className="text-zinc-500 text-sm">Loading workspace page layout...</p>
-      </div>
-    );
-  }
-
-  if (!pageData) {
+  if (!activePage) {
+    if (platformLoading) {
+      return null;
+    }
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 text-center">
         <Layout size={48} className="text-zinc-300 dark:text-zinc-700" />
@@ -230,7 +160,7 @@ export const WorkspacePageView = () => {
     );
   }
 
-  const PageIcon = (Icons as any)[pageData.iconName] || (Icons as any)[pageData.icon] || Layout;
+  const PageIcon = (Icons as any)[activePage.iconName] || (Icons as any)[activePage.icon] || Layout;
 
   return (
     <PageWrapper className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
@@ -245,7 +175,7 @@ export const WorkspacePageView = () => {
             <PageIcon size={24} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{pageData.name}</h1>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{activePage.name}</h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">Workspace Page</p>
           </div>
         </div>
@@ -300,7 +230,9 @@ export const WorkspacePageView = () => {
 
 // --- WIDGET RENDERER CONTROLLER ---
 const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any, session: any }) => {
-  const [stats, setStats] = useState<any>(null);
+  const statsCacheKey = `stats_${tenant?.id || 'default'}`;
+  const defaultStats = { activeRecords: 12, totalRecords: 48, aiAutomations: 128, health: '99.9%' };
+  const [stats, setStats] = useState<any>(() => builderCache.get(statsCacheKey) || defaultStats);
   const [statsLoading, setStatsLoading] = useState(false);
 
   // Stats Grid Widget Fetcher
@@ -319,6 +251,7 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
         if (res.ok) {
           const json = await res.json();
           setStats(json);
+          builderCache.set(statsCacheKey, json);
         }
       } catch (err) {
         console.error('Failed to fetch widget stats', err);
@@ -327,39 +260,38 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
       }
     };
     fetchStats();
-  }, [widget.type, tenant?.id, session?.access_token]);
+  }, [widget.type, tenant?.id, session?.access_token, statsCacheKey]);
 
   switch (widget.type) {
-    case 'stats-grid':
+    case 'stats-grid': {
+      const currentStats = stats || defaultStats;
       return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statsLoading || !stats ? (
-            [1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} height={110} variant="rounded" className="rounded-3xl" />
-            ))
-          ) : (
-            [
-              { label: 'Active Cases', value: stats.activeRecords?.toString() || '0', icon: <Database size={20} />, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
-              { label: 'Portal Submissions', value: stats.totalRecords?.toString() || '0', icon: <Globe size={20} />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-              { label: 'AI Automations', value: stats.aiAutomations?.toString() || '0', icon: <Cpu size={20} />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-              { label: 'System Health', value: stats.health || '99.9%', icon: <ShieldCheck size={20} />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-            ].map((stat, i) => (
-              <div 
-                key={i}
-                className="p-5 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl group shadow-sm flex flex-col justify-between"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">{stat.label}</span>
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${stat.bg} ${stat.color}`}>
-                    {stat.icon}
-                  </div>
+          {[
+            { label: 'Active Cases', value: currentStats.activeRecords?.toString() || '0', icon: <Database size={20} />, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+            { label: 'Portal Submissions', value: currentStats.totalRecords?.toString() || '0', icon: <Globe size={20} />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+            { label: 'AI Automations', value: currentStats.aiAutomations?.toString() || '0', icon: <Cpu size={20} />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+            { label: 'System Health', value: currentStats.health || '99.9%', icon: <ShieldCheck size={20} />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+          ].map((stat, i) => (
+            <motion.div 
+              key={i}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: i * 0.02, ease: 'easeOut' }}
+              className="p-5 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl group shadow-sm flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">{stat.label}</span>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${stat.bg} ${stat.color}`}>
+                  {stat.icon}
                 </div>
-                <p className="text-2xl font-black text-zinc-950 dark:text-white">{stat.value}</p>
               </div>
-            ))
-          )}
+              <p className="text-2xl font-black text-zinc-950 dark:text-white">{stat.value}</p>
+            </motion.div>
+          ))}
         </div>
       );
+    }
 
     case 'active-workflows':
       return (
@@ -401,9 +333,22 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
       );
 
     case 'work-queue':
+    case 'queue':
       return (
         <div className="bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm p-4 overflow-hidden">
-          <WorkQueue />
+          {widget.properties?.queueId || widget.properties?.queueConfig ? (
+            <QueueRenderer
+              queueId={widget.properties.queueId}
+              queueConfig={widget.properties.queueConfig}
+              moduleId={widget.properties?.moduleId}
+              moduleIds={widget.properties?.moduleIds}
+              isUnifiedQueue={widget.properties?.isUnifiedQueue}
+              showHeader={widget.properties?.showHeader ?? true}
+              pageSize={widget.properties?.pageSize || 10}
+            />
+          ) : (
+            <WorkQueue />
+          )}
         </div>
       );
 
@@ -464,19 +409,22 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
 
 // --- WIDGET: MODULE TABLE ---
 const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {
-  const [records, setRecords] = useState<any[]>([]);
+  const moduleId = widget.properties?.moduleId;
+  const recordsCacheKey = `records_${tenant?.id || 'default'}_${moduleId || 'none'}`;
+  const [records, setRecords] = useState<any[]>(() => builderCache.get(recordsCacheKey) || []);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const moduleId = widget.properties?.moduleId;
 
   useEffect(() => {
     const loadRecords = async () => {
       if (!tenant?.id || !moduleId) return;
-      setLoading(true);
+      if (!builderCache.has(recordsCacheKey)) setLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const res = await fetchRecords(moduleId, tenant.id, token, 1, 10);
-        setRecords(res.records || []);
+        const data = res.records || [];
+        setRecords(data);
+        builderCache.set(recordsCacheKey, data);
       } catch (err) {
         console.error('Failed to fetch widget records', err);
       } finally {
@@ -484,7 +432,7 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
       }
     };
     loadRecords();
-  }, [moduleId, tenant?.id, session?.access_token]);
+  }, [moduleId, tenant?.id, session?.access_token, recordsCacheKey]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return records;
@@ -513,10 +461,8 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
 
       {!moduleId ? (
         <p className="text-xs text-zinc-400 italic">No module selected. Please configure in settings.</p>
-      ) : loading ? (
-        <div className="space-y-2 flex-1 overflow-hidden">
-          {[1, 2, 3].map(i => <Skeleton key={i} height={40} className="rounded-xl" />)}
-        </div>
+      ) : loading && records.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center min-h-[100px]" />
       ) : filtered.length === 0 ? (
         <p className="text-xs text-zinc-400 italic py-4 text-center">No records found.</p>
       ) : (
@@ -531,26 +477,29 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
               </tr>
             </thead>
             <tbody>
-              {filtered.map((record) => {
+              {filtered.map((record, i) => {
                 const keys = Object.keys(record.data || {});
-                const summary = keys.length > 0 
-                  ? `${record.data[keys[0]]} ${keys[1] ? `(${record.data[keys[1]]})` : ''}`
-                  : 'Empty Record';
-
+                const summaryVal = keys.length > 0 ? record.data[keys[0]] : '-';
                 return (
-                  <tr key={record.id} className="border-b border-zinc-100/50 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 text-zinc-700 dark:text-zinc-300 transition-colors">
-                    <td className="py-2.5 pl-2 font-mono text-[10px] text-zinc-400">#{record.id.substring(0, 8)}</td>
-                    <td className="py-2.5 font-bold truncate max-w-xs">{summary}</td>
-                    <td className="py-2.5 text-zinc-500">{new Date(record.createdAt).toLocaleDateString()}</td>
+                  <motion.tr 
+                    key={record.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, delay: Math.min(i, 8) * 0.02, ease: 'easeOut' }}
+                    className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-white/[0.02] transition-colors"
+                  >
+                    <td className="py-2.5 pl-2 font-mono text-[10px] text-zinc-500">{record.id.slice(0, 8)}...</td>
+                    <td className="py-2.5 font-medium text-zinc-900 dark:text-zinc-100">{summaryVal?.toString() || '-'}</td>
+                    <td className="py-2.5 text-zinc-400 text-[10px]">{new Date(record.createdAt || Date.now()).toLocaleDateString()}</td>
                     <td className="py-2.5 pr-2 text-right">
                       <Link 
                         to={`/workspace/modules/${moduleId}/records/${record.id}`}
-                        className="text-indigo-500 hover:text-indigo-600 font-bold flex items-center gap-0.5 justify-end"
+                        className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider"
                       >
-                        Details <ChevronRight size={12} />
+                        View
                       </Link>
                     </td>
-                  </tr>
+                  </motion.tr>
                 );
               })}
             </tbody>
@@ -648,12 +597,8 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
 
       {!moduleId ? (
         <p className="text-xs text-zinc-400 italic">No module selected. Please configure in settings.</p>
-      ) : loading ? (
-        <div className="space-y-3 flex-1 overflow-hidden">
-          <Skeleton height={35} className="rounded-xl" />
-          <Skeleton height={35} className="rounded-xl" />
-          <Skeleton height={45} className="rounded-xl animate-pulse" />
-        </div>
+      ) : loading && fields.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center min-h-[100px]" />
       ) : fields.length === 0 ? (
         <p className="text-xs text-zinc-400 italic text-center">Module has no fields to input.</p>
       ) : (
@@ -733,15 +678,16 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
 
 // --- WIDGET: CHART ---
 const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const moduleId = widget.properties?.moduleId;
   const chartType = widget.properties?.chartType || 'bar';
+  const chartCacheKey = `chart_data_${tenant?.id || 'default'}_${moduleId || 'none'}`;
+  const [chartData, setChartData] = useState<any[]>(() => builderCache.get(chartCacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(chartCacheKey));
 
   useEffect(() => {
     const loadChartData = async () => {
       if (!tenant?.id || !moduleId) return;
-      setLoading(true);
+      if (!builderCache.has(chartCacheKey)) setLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const res = await fetchRecords(moduleId, tenant.id, token, 1, 100);
@@ -760,6 +706,7 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
         })).reverse(); // Oldest first
 
         setChartData(formatted);
+        builderCache.set(chartCacheKey, formatted);
       } catch (err) {
         console.error('Failed to load chart records', err);
       } finally {
@@ -767,7 +714,7 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
       }
     };
     loadChartData();
-  }, [moduleId, tenant?.id, session?.access_token]);
+  }, [moduleId, tenant?.id, session?.access_token, chartCacheKey]);
 
   return (
     <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
@@ -826,82 +773,92 @@ export interface ReportEmbedWidget {
 }
 
 export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {
-  const { modules } = usePlatform();
-  const [report, setReport] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [sourcesLoading, setSourcesLoading] = useState(true);
+  const { modules, members: contextMembers, teams: contextTeams } = usePlatform();
+  const reportId = widget.properties?.reportId;
+  const reportCacheKey = `report_${tenant?.id || 'default'}_${reportId || 'none'}`;
+  const sourcesCacheKey = `sources_recs_${tenant?.id || 'default'}`;
+
+  const [report, setReport] = useState<any>(() => builderCache.get(reportCacheKey) || null);
+  const [loading, setLoading] = useState(() => !builderCache.has(reportCacheKey));
+  const [sourcesLoading, setSourcesLoading] = useState(() => !builderCache.has(sourcesCacheKey));
   
   // Database datasets cache
-  const [records, setRecords] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
-  const [automations, setAutomations] = useState<any[]>([]);
-  const [catalogItems, setCatalogItems] = useState<any[]>([]);
+  const [records, setRecords] = useState<any[]>(() => builderCache.get(sourcesCacheKey) || []);
+  const [members, setMembers] = useState<any[]>(contextMembers || []);
+  const [teams, setTeams] = useState<any[]>(contextTeams || []);
+  const [automations, setAutomations] = useState<any[]>(() => builderCache.get(`automations_${tenant?.id || 'default'}`) || []);
+  const [catalogItems, setCatalogItems] = useState<any[]>(() => builderCache.get(`pricing_catalog_${tenant?.id || 'default'}`) || []);
 
   // Filtering states
   const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
 
-  const reportId = widget.properties?.reportId;
-
-  // 1. Fetch report configuration
+  // Sync members & teams from platform context
   useEffect(() => {
-    const fetchReportConfig = async () => {
-      if (!tenant?.id || !reportId) {
-        setLoading(false);
-        return;
-      }
+    if (contextMembers?.length) setMembers(contextMembers);
+  }, [contextMembers]);
+
+  useEffect(() => {
+    if (contextTeams?.length) setTeams(contextTeams);
+  }, [contextTeams]);
+
+  // Fetch report configuration and sources concurrently
+  useEffect(() => {
+    if (!tenant?.id || !reportId) {
+      setLoading(false);
+      setSourcesLoading(false);
+      return;
+    }
+    let isSubscribed = true;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+    const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
+
+    if (!builderCache.has(reportCacheKey)) {
       setLoading(true);
-      try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const res = await fetch(`http://localhost:3001/api/reports/${reportId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-id': tenant.id
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setReport(data);
-        }
-      } catch (err) {
-        console.error('Failed to load report embed configuration', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchReportConfig();
-  }, [reportId, tenant?.id, session?.access_token]);
-
-  // 2. Fetch cache database source datasets
-  useEffect(() => {
-    if (!tenant?.id || !report) return;
-    const fetchSources = async () => {
       setSourcesLoading(true);
-      try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
+    }
 
-        const [recsRes, memsRes, teamsRes, autosRes, catalogRes] = await Promise.all([
-          fetch(`http://localhost:3001/api/data/records`, { headers }).then(res => res.json()).catch(() => ({ records: [] as any[] })),
-          fetch(`http://localhost:3001/api/members`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-          fetch(`http://localhost:3001/api/teams`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-          fetch(`http://localhost:3001/api/automations`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-          fetch(`http://localhost:3001/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[])
+    const loadAll = async () => {
+      try {
+        const [reportRes, recsRes, autosRes, catalogRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/reports/${reportId}`, { headers }).then((r: Response): Promise<any> | null => r.ok ? r.json() : null).catch((): null => null),
+          fetch(`${DATA_API_URL}/records`, { headers }).then(r => r.ok ? r.json() : ({ records: [] as any[] })).catch((): { records: any[] } => ({ records: [] })),
+          fetch(`${API_BASE_URL}/api/automations`, { headers }).then(r => r.ok ? r.json() : ([] as any[])).catch((): any[] => []),
+          fetch(`${API_BASE_URL}/api/pricing-catalog`, { headers }).then(r => r.ok ? r.json() : ([] as any[])).catch((): any[] => [])
         ]);
 
-        setRecords(recsRes.records || []);
-        setMembers(memsRes || []);
-        setTeams(teamsRes || []);
-        setAutomations(autosRes || []);
-        setCatalogItems(catalogRes || []);
+        if (isSubscribed) {
+          if (reportRes) {
+            setReport(reportRes);
+            builderCache.set(reportCacheKey, reportRes);
+          }
+          if (recsRes?.records) {
+            setRecords(recsRes.records);
+            builderCache.set(sourcesCacheKey, recsRes.records);
+          }
+          if (autosRes) {
+            setAutomations(autosRes);
+            builderCache.set(`automations_${tenant?.id || 'default'}`, autosRes);
+          }
+          if (catalogRes) {
+            setCatalogItems(catalogRes);
+            builderCache.set(`pricing_catalog_${tenant?.id || 'default'}`, catalogRes);
+          }
+        }
       } catch (err) {
-        console.error("Failed to load source datasets for report embed", err);
+        console.error('Failed to load report and sources', err);
       } finally {
-        setSourcesLoading(false);
+        if (isSubscribed) {
+          setLoading(false);
+          setSourcesLoading(false);
+        }
       }
     };
-    fetchSources();
-  }, [report, tenant?.id, session?.access_token]);
+
+    loadAll();
+    return () => {
+      isSubscribed = false;
+    };
+  }, [reportId, tenant?.id, session?.access_token, reportCacheKey, sourcesCacheKey]);
 
   // Formula evaluation engine
   const evaluateFormulaOnRow = (formula: string, row: any): any => {
@@ -1110,21 +1067,26 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
     });
   };
 
-  if (loading) {
-    return (
-      <div className="p-12 border border-zinc-200 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] rounded-3xl flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
-        <span className="text-zinc-500 text-[10px] uppercase font-black tracking-wider">Syncing BI Visuals...</span>
-      </div>
-    );
-  }
-
-  if (!reportId || !report) {
+  if (!reportId) {
     return (
       <div className="p-8 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-3xl text-center space-y-2 bg-white/20 dark:bg-white/[0.005]">
         <Icons.TrendingUp size={24} className="text-zinc-400 mx-auto" />
         <p className="text-xs font-bold text-zinc-650 dark:text-zinc-300">BI Report Widget</p>
         <p className="text-[10px] text-zinc-550">No report configured or target report was deleted.</p>
+      </div>
+    );
+  }
+
+  if (loading && !report) {
+    return null;
+  }
+
+  if (!report) {
+    return (
+      <div className="p-8 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-3xl text-center space-y-2 bg-white/20 dark:bg-white/[0.005]">
+        <Icons.TrendingUp size={24} className="text-zinc-400 mx-auto" />
+        <p className="text-xs font-bold text-zinc-650 dark:text-zinc-300">BI Report Widget</p>
+        <p className="text-[10px] text-zinc-550">Target report was not found or deleted.</p>
       </div>
     );
   }
@@ -1210,9 +1172,7 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                 </div>
 
                 <div className="flex-1 w-full flex items-center justify-center min-h-0 pt-4 text-xs">
-                  {sourcesLoading ? (
-                    <VisualSkeleton type={w.type} />
-                  ) : aggData.length === 0 ? (
+                  {sourcesLoading ? null : aggData.length === 0 ? (
                     <span className="text-[10px] text-zinc-400 italic">No dataset rows found.</span>
                   ) : w.type === 'kpi' ? (
                     <div className="text-center">

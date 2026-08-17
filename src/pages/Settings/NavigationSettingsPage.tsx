@@ -23,6 +23,7 @@ import {
   Search,
   Maximize2,
   Minimize2,
+  ExternalLink,
   X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -32,35 +33,16 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { NavigationArchitect } from '../../components/Settings/NavigationArchitect';
 import { systemDefaultMenuConfig } from '../../config/menuDefaults';
-import { cn, flattenFields, slugify } from '../../lib/utils';
+import { cn, slugify } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { PLATFORM_MODULES } from '../../config/platformModules';
+import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
+import { QueueBuilder } from '../../components/Builders/QueueBuilder/QueueBuilder';
+import { QueueEntity } from '../../types/platform';
+import { MenuItem, MenuSection } from '../../types/menu';
 
 // Types
 type LayoutStyle = 'sidebar' | 'slim' | 'top';
-
-interface MenuItem {
-  id: string;
-  label: string;
-  iconName: string;
-  to?: string;
-  isVisible?: boolean;
-  isSubtitle?: boolean;
-  children?: MenuItem[];
-  moduleId?: string;
-  moduleIds?: string[];
-  isUnifiedQueue?: boolean;
-  queueConfig?: {
-    conditions: any;
-    columns: string[];
-  };
-}
-
-interface MenuSection {
-  id: string;
-  title: string;
-  items: MenuItem[];
-}
 
 interface AdvancedMenuConfig {
   default: { sections: MenuSection[] };
@@ -174,18 +156,34 @@ export const NavigationSettingsPage = () => {
   const [customIcon, setCustomIcon] = useState('Link2');
   const [customIconInput, setCustomIconInput] = useState('');
 
-  // Queue form state
-  const [queueItemType, setQueueItemType] = useState<'single' | 'unified'>('single');
-  const [queueLabel, setQueueLabel] = useState('');
-  const [queueIcon, setQueueIcon] = useState('ClipboardList');
-  const [queueModuleId, setQueueModuleId] = useState('');
-  const [queueModuleIds, setQueueModuleIds] = useState<string[]>([]);
-  const [queueRules, setQueueRules] = useState<{ fieldId: string; operator: string; value: string }[]>([
-    { fieldId: '', operator: 'equals', value: '' }
-  ]);
-  const [queueColumns, setQueueColumns] = useState<string[]>([
-    'id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'
-  ]);
+  // Queue library state
+  const [libraryQueues, setLibraryQueues] = useState<QueueEntity[]>([]);
+  const [selectedLibraryQueueId, setSelectedLibraryQueueId] = useState<string>('');
+  const [isQueueStudioOpen, setIsQueueStudioOpen] = useState(false);
+  const [editingQueueForStudio, setEditingQueueForStudio] = useState<QueueEntity | null>(null);
+
+  const fetchLibraryQueues = async () => {
+    if (!tenant?.id) return;
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${API_BASE_URL}/api/queues`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLibraryQueues((data || []).filter((q: any) => q.id !== 'queue_support_priority' && q.id !== 'queue_global_triage'));
+      }
+    } catch (err) {
+      console.error('Failed to fetch library queues', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchLibraryQueues();
+  }, [tenant?.id, session?.access_token]);
 
   // Fetch Positions on Mount
   useEffect(() => {
@@ -457,154 +455,176 @@ export const NavigationSettingsPage = () => {
     });
   }, [modules]);
 
-  const queueAvailableFields = useMemo(() => {
-    const list: { id: string; label: string; origin?: string }[] = [
-      { id: 'currentUser.teamName', label: 'Current User: Team Name' },
-      { id: 'currentUser.teamId', label: 'Current User: Team ID' },
-      { id: 'currentUser.role', label: 'Current User: Role' },
-      { id: 'currentUser.id', label: 'Current User: Member ID' },
-      { id: 'status', label: 'Status' },
-      { id: 'priority', label: 'Priority' },
-      { id: 'assigneeId', label: 'Assignee ID' }
-    ];
+  const allAvailableLibraryQueues = useMemo(() => {
+    const list: QueueEntity[] = [];
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+    const seenSlugs = new Set<string>();
 
-    const targetModuleIds = queueItemType === 'single' 
-      ? (queueModuleId ? [queueModuleId] : []) 
-      : queueModuleIds;
-
-    targetModuleIds.forEach(mId => {
-      const mod = modules.find(m => m.id === mId);
-      if (mod?.layout) {
-        const flat = flattenFields(mod.layout);
-        flat.forEach(f => {
-          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
-            if (!list.some(item => item.id === f.id)) {
-              list.push({ id: f.id, label: `${f.label || f.name} (${mod.name})`, origin: mod.name });
-            }
-          }
-        });
+    // 1. Authoritative API library queues
+    (libraryQueues || []).forEach(q => {
+      if (q.id === 'queue_support_priority' || q.id === 'queue_global_triage') return;
+      const slug = q.slug || slugify(q.name || '');
+      const nameKey = (q.name || '').trim().toLowerCase();
+      if (!seenIds.has(q.id) && !seenNames.has(nameKey) && !seenSlugs.has(slug)) {
+        seenIds.add(q.id);
+        if (nameKey) seenNames.add(nameKey);
+        if (slug) seenSlugs.add(slug);
+        list.push(q);
       }
     });
 
-    return list;
-  }, [queueItemType, queueModuleId, queueModuleIds, modules]);
+    // 2. Discover inline queues from active navigation items that are not in the library
+    const walk = (items: any[]) => {
+      if (!Array.isArray(items)) return;
+      for (const it of items) {
+        const isQ = Boolean(
+          it.queueConfig ||
+          it.isUnifiedQueue ||
+          (it.moduleIds && it.moduleIds.length > 0) ||
+          it.to?.startsWith('/workspace/queues/') ||
+          it.to?.includes('queueId=')
+        );
 
-  const queueColumnOptions = useMemo(() => {
-    const list: { id: string; label: string; group: string }[] = [
-      { id: 'id', label: 'Record ID', group: 'System' },
-      { id: 'moduleId', label: 'Module Name', group: 'System' },
-      { id: 'title', label: 'Title/Key', group: 'System' },
-      { id: 'status', label: 'Status', group: 'System' },
-      { id: 'priority', label: 'Priority', group: 'System' },
-      { id: 'assigneeId', label: 'Assignee', group: 'System' },
-      { id: 'createdAt', label: 'Created At', group: 'System' },
-      { id: 'updatedAt', label: 'Updated At', group: 'System' }
-    ];
+        if (isQ) {
+          const name = it.label || 'Work Queue';
+          const nameKey = name.trim().toLowerCase();
+          const slug = slugify(name);
+          const queueParam = it.to?.includes('queueId=') ? it.to.split('queueId=')[1]?.split('&')[0] : null;
+          const directQueueSlug = it.to?.startsWith('/workspace/queues/') ? it.to.replace('/workspace/queues/', '') : null;
 
-    const targetModuleIds = queueItemType === 'single' 
-      ? (queueModuleId ? [queueModuleId] : []) 
-      : queueModuleIds;
+          const isAlreadyKnown = 
+            seenIds.has(it.id) ||
+            seenNames.has(nameKey) ||
+            seenSlugs.has(slug) ||
+            Boolean(queueParam && (seenIds.has(queueParam) || seenSlugs.has(queueParam))) ||
+            Boolean(directQueueSlug && (seenIds.has(directQueueSlug) || seenSlugs.has(directQueueSlug)));
 
-    targetModuleIds.forEach(mId => {
-      const mod = modules.find(m => m.id === mId);
-      if (mod?.layout) {
-        const flat = flattenFields(mod.layout);
-        flat.forEach(f => {
-          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
-            if (!list.some(item => item.id === f.id)) {
-              list.push({ id: f.id, label: f.label || f.name, group: mod.name });
-            }
+          if (!isAlreadyKnown) {
+            seenIds.add(it.id);
+            if (nameKey) seenNames.add(nameKey);
+            if (slug) seenSlugs.add(slug);
+            list.push({
+              id: it.id,
+              tenantId: tenant?.id || 't1',
+              name: name,
+              slug: slug,
+              description: it.description || (it.isUnifiedQueue ? 'Unified Multi-Module Queue' : 'Single Module Queue'),
+              iconName: it.iconName || 'ListOrdered',
+              isGlobal: true,
+              isUnifiedQueue: Boolean(it.isUnifiedQueue),
+              moduleId: it.moduleId,
+              moduleIds: it.moduleIds || (it.moduleId ? [it.moduleId] : []),
+              queueConfig: it.queueConfig || {
+                conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
+                columns: ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']
+              },
+              status: 'PUBLISHED'
+            });
           }
-        });
+        }
+        if (it.children) walk(it.children);
       }
-    });
+    };
+    activeSections.forEach(s => walk(s.items || []));
 
     return list;
-  }, [queueItemType, queueModuleId, queueModuleIds, modules]);
+  }, [libraryQueues, activeSections, tenant?.id]);
 
-  const handleAddQueueItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!queueLabel.trim()) {
-      toast.error('Please enter a queue label.');
+  const handleAddQueueItem = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedLibraryQueueId) {
+      toast.error('Please select a queue from your library or create a new one.');
       return;
     }
 
-    if (queueItemType === 'single' && !queueModuleId) {
-      toast.error('Please select a target module.');
+    const selectedQueue = allAvailableLibraryQueues.find(q => q.id === selectedLibraryQueueId);
+    if (!selectedQueue) {
+      toast.error('Selected queue could not be found.');
       return;
     }
 
-    if (queueItemType === 'unified' && queueModuleIds.length === 0) {
-      toast.error('Please select at least one module.');
-      return;
-    }
+    const targetMod = selectedQueue.moduleId ? (modules || []).find((m: any) => m.id === selectedQueue.moduleId) : undefined;
+    const targetSlug = selectedQueue.slug || slugify(selectedQueue.name);
 
-    const validRules = queueRules
-      .filter(r => r.fieldId)
-      .map(r => {
-        const isVar = r.fieldId.startsWith('currentUser.');
-        return {
-          fieldId: r.fieldId,
-          fieldType: isVar ? 'variable' : 'field',
-          operator: r.operator,
-          value: r.value,
-          valueType: 'literal'
-        };
-      });
-
-    const conditions = {
-      type: 'group',
-      logicalOperator: 'AND',
-      rules: validRules
-    };
-
-    if (!tenant?.id) return;
-
-    const newSlug = slugify(queueLabel);
-    const getAllQueues = (items: any[]): any[] => {
-      const q: any[] = [];
-      items.forEach(it => {
-        if (it.isUnifiedQueue || it.to?.startsWith('/workspace/queues/')) {
-          q.push(it);
-        }
-        if (it.children) {
-          q.push(...getAllQueues(it.children));
-        }
-      });
-      return q;
-    };
-    const existingQueues = getAllQueues(activeSections.flatMap(s => s.items || []));
-    const isDuplicate = existingQueues.some(q => slugify(q.label) === newSlug);
-    if (isDuplicate) {
-      toast.error(`A queue with the label "${queueLabel}" (slug: "${newSlug}") already exists.`);
-      return;
-    }
-
-    const queueId = `queue_${Date.now()}`;
     const newItem: MenuItem = {
-      id: queueId,
-      label: queueLabel,
-      iconName: queueIcon,
+      id: `nav_queue_${selectedQueue.id}_${Date.now()}`,
+      label: selectedQueue.name,
+      iconName: selectedQueue.iconName || (selectedQueue.isUnifiedQueue ? 'Inbox' : 'ListOrdered'),
+      description: selectedQueue.description,
       isVisible: true,
-      moduleId: queueItemType === 'single' ? queueModuleId : undefined,
-      moduleIds: queueItemType === 'unified' ? queueModuleIds : undefined,
-      isUnifiedQueue: queueItemType === 'unified',
-      to: queueItemType === 'single' 
-        ? `/workspace/modules/${(() => {
-            const mod = modules.find((m: any) => m.id === queueModuleId);
-            return mod ? slugify(mod.name) : queueModuleId;
-          })()}?queueId=${slugify(queueLabel)}`
-        : `/workspace/queues/${slugify(queueLabel)}`,
-      queueConfig: {
-        conditions,
-        columns: queueItemType === 'unified' ? queueColumns : []
+      moduleId: selectedQueue.moduleId,
+      moduleIds: selectedQueue.moduleIds,
+      isUnifiedQueue: selectedQueue.isUnifiedQueue,
+      to: selectedQueue.isUnifiedQueue
+        ? `/workspace/queues/${targetSlug}`
+        : (targetMod ? `/workspace/modules/${slugify(targetMod.name)}?queueId=${targetSlug}` : `/workspace/queues/${targetSlug}`),
+      queueConfig: selectedQueue.queueConfig || {
+        conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
+        columns: ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']
       }
     };
 
     addItemToActiveSection(newItem);
-    setQueueLabel('');
-    setQueueRules([{ fieldId: '', operator: 'equals', value: '' }]);
     setActiveAddTool(null);
+    setSelectedLibraryQueueId('');
+    toast.success(`Added queue "${selectedQueue.name}" to navigation`);
+  };
+
+  const handleSaveFromStudio = async (queueData: QueueEntity) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const apiRes = await fetch(`${API_BASE_URL}/api/queues`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(queueData)
+      });
+
+      if (!apiRes.ok) {
+        const errJson = await apiRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server responded with ${apiRes.status}`);
+      }
+
+      await fetchLibraryQueues();
+
+      if (editingQueueForStudio) {
+        handleSectionsChange(activeSections.map(sec => ({
+          ...sec,
+          items: (sec.items || []).map(item => {
+            if (item.id === editingQueueForStudio.id || (item.to && item.to.includes(editingQueueForStudio.slug))) {
+              const targetMod = queueData.moduleId ? (modules || []).find((m: any) => m.id === queueData.moduleId) : undefined;
+              const targetSlug = queueData.slug || slugify(queueData.name);
+              return {
+                ...item,
+                label: queueData.name,
+                iconName: queueData.iconName || item.iconName,
+                description: queueData.description,
+                moduleId: queueData.moduleId,
+                moduleIds: queueData.moduleIds,
+                isUnifiedQueue: queueData.isUnifiedQueue,
+                to: queueData.isUnifiedQueue
+                  ? `/workspace/queues/${targetSlug}`
+                  : (targetMod ? `/workspace/modules/${slugify(targetMod.name)}?queueId=${targetSlug}` : `/workspace/queues/${targetSlug}`),
+                queueConfig: queueData.queueConfig
+              };
+            }
+            return item;
+          })
+        })));
+      } else {
+        setSelectedLibraryQueueId(queueData.id);
+      }
+
+      toast.success(`Queue "${queueData.name}" saved!`);
+      setIsQueueStudioOpen(false);
+      setEditingQueueForStudio(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save queue');
+    }
   };
 
   const PLATFORM_MODULES_LIST = PLATFORM_MODULES.map(mod => ({
@@ -686,76 +706,31 @@ export const NavigationSettingsPage = () => {
     selectedItemInfo?.item.to?.includes('queueId=')
   );
 
-  const selectedItemAvailableFields = useMemo(() => {
-    if (!selectedItemInfo) return [];
-    const item = selectedItemInfo.item;
-    const isUnified = item.isUnifiedQueue;
-    const targetModuleIds = isUnified 
-      ? (item.moduleIds || []) 
-      : (item.moduleId ? [item.moduleId] : []);
-
-    const list: { id: string; label: string; origin?: string }[] = [
-      { id: 'currentUser.teamName', label: 'Current User: Team Name' },
-      { id: 'currentUser.teamId', label: 'Current User: Team ID' },
-      { id: 'currentUser.role', label: 'Current User: Role' },
-      { id: 'currentUser.id', label: 'Current User: Member ID' },
-      { id: 'status', label: 'Status' },
-      { id: 'priority', label: 'Priority' },
-      { id: 'assigneeId', label: 'Assignee ID' }
-    ];
-
-    targetModuleIds.forEach(mId => {
-      const mod = modules.find((m: any) => m.id === mId);
-      if (mod?.layout) {
-        const flat = flattenFields(mod.layout);
-        flat.forEach((f: any) => {
-          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
-            if (!list.some(entry => entry.id === f.id)) {
-              list.push({ id: f.id, label: `${f.label || f.name} (${mod.name})`, origin: mod.name });
-            }
-          }
-        });
-      }
-    });
-
-    return list;
+  const selectedItemPage = useMemo(() => {
+    if (!selectedItemInfo?.item) return null;
+    const it = selectedItemInfo.item;
+    return (modules || []).find((m: any) => 
+      m.type === 'PAGE' && (
+        `module:${m.id}` === it.id ||
+        m.id === it.id ||
+        (it.to && (
+          it.to === `/workspace/pages/${slugify(m.name)}` ||
+          it.to === `/workspace/pages/${m.id}` ||
+          it.to.replace('/workspace/pages/', '') === slugify(m.name) ||
+          it.to.replace('/workspace/pages/', '').toLowerCase() === m.name.toLowerCase()
+        )) ||
+        (it.to?.startsWith('/workspace/pages/') && slugify(m.name) === slugify(it.label))
+      )
+    ) || (it.to?.startsWith('/workspace/pages/') ? { id: it.id, name: it.label, type: 'PAGE' } : null);
   }, [selectedItemInfo, modules]);
 
-  const selectedItemColumnOptions = useMemo(() => {
-    if (!selectedItemInfo) return [];
-    const item = selectedItemInfo.item;
-    const isUnified = item.isUnifiedQueue;
-    const targetModuleIds = isUnified 
-      ? (item.moduleIds || []) 
-      : (item.moduleId ? [item.moduleId] : []);
-
-    const list: { id: string; label: string; group: string }[] = [
-      { id: 'id', label: 'Record ID', group: 'System' },
-      { id: 'moduleId', label: 'Module Name', group: 'System' },
-      { id: 'title', label: 'Title/Key', group: 'System' },
-      { id: 'status', label: 'Status', group: 'System' },
-      { id: 'priority', label: 'Priority', group: 'System' },
-      { id: 'assigneeId', label: 'Assignee', group: 'System' },
-      { id: 'createdAt', label: 'Created At', group: 'System' },
-      { id: 'updatedAt', label: 'Updated At', group: 'System' }
-    ];
-
-    targetModuleIds.forEach(mId => {
-      const mod = modules.find((m: any) => m.id === mId);
-      if (mod?.layout) {
-        const flat = flattenFields(mod.layout);
-        flat.forEach((f: any) => {
-          if (f.type && !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)) {
-            if (!list.some(entry => entry.id === f.id)) {
-              list.push({ id: f.id, label: f.label || f.name, group: mod.name });
-            }
-          }
-        });
-      }
-    });
-
-    return list;
-  }, [selectedItemInfo, modules]);
+  const isSelectedItemPage = Boolean(
+    !isSelectedItemQueue && (
+      selectedItemPage || 
+      selectedItemInfo?.item.to?.startsWith('/workspace/pages/') ||
+      (selectedItemInfo?.item.id && modules?.some((m: any) => m.type === 'PAGE' && (`module:${m.id}` === selectedItemInfo.item.id || m.id === selectedItemInfo.item.id)))
+    )
+  );
 
   if (loading) {
     return (
@@ -1195,19 +1170,104 @@ export const NavigationSettingsPage = () => {
                 </div>
 
                 {/* Work Queue Configuration Section */}
-                {!selectedItemInfo.item.isSubtitle && (
+                {!selectedItemInfo.item.isSubtitle && isSelectedItemQueue && (
                   <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <label className="font-bold text-zinc-500 uppercase tracking-wider block flex items-center gap-1.5">
-                        <Cpu size={13} className="text-purple-500" /> Work Queue Settings
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block flex items-center gap-1.5 text-[11px]">
+                        <Cpu size={13} className="text-indigo-500" /> Work Queue Configuration
                       </label>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                        {isSelectedItemQueue ? (selectedItemInfo.item.isUnifiedQueue ? 'Unified' : 'Single') : 'Disabled'}
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                        {selectedItemInfo.item.isUnifiedQueue ? 'Unified' : 'Single Module'}
                       </span>
                     </div>
 
-                    {/* Queue Mode Selector Buttons */}
-                    <div className="grid grid-cols-3 gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl text-[10px]">
+                    <div className="p-3.5 bg-indigo-500/[0.04] border border-indigo-500/20 rounded-2xl space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                            {selectedItemInfo.item.label}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                          Query rules, target schema, and display columns are managed centrally in Queue Studio.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-[10px] text-zinc-400 font-medium">
+                        <span>{(selectedItemInfo.item.queueConfig?.conditions?.rules || []).length} Filter Rules</span>
+                        <span>•</span>
+                        <span>{(selectedItemInfo.item.queueConfig?.columns || []).length} Columns</span>
+                      </div>
+
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const queueEntity: QueueEntity = {
+                            id: selectedItemInfo.item.id,
+                            tenantId: tenant?.id || 't1',
+                            name: selectedItemInfo.item.label,
+                            slug: slugify(selectedItemInfo.item.label),
+                            description: selectedItemInfo.item.description,
+                            iconName: selectedItemInfo.item.iconName || 'ListOrdered',
+                            isGlobal: true,
+                            isUnifiedQueue: Boolean(selectedItemInfo.item.isUnifiedQueue),
+                            moduleId: selectedItemInfo.item.moduleId,
+                            moduleIds: selectedItemInfo.item.moduleIds,
+                            queueConfig: selectedItemInfo.item.queueConfig || {
+                              conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
+                              columns: ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']
+                            },
+                            status: 'PUBLISHED'
+                          };
+                          setEditingQueueForStudio(queueEntity);
+                          setIsQueueStudioOpen(true);
+                        }}
+                        className="w-full gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 cursor-pointer"
+                      >
+                        <Sliders size={13} /> Edit in Queue Studio
+                      </Button>
+
+                      {/* Switch Queue from Library */}
+                      <div className="pt-2 border-t border-zinc-200/60 dark:border-white/5 space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Switch Queue</label>
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const qId = e.target.value;
+                            if (!qId) return;
+                            const targetQ = allAvailableLibraryQueues.find(q => q.id === qId);
+                            if (targetQ) {
+                              const newSlug = targetQ.slug || slugify(targetQ.name);
+                              let newTo = `/workspace/queues/${newSlug}`;
+                              if (!targetQ.isUnifiedQueue && targetQ.moduleId) {
+                                const mod = modules.find((m: any) => m.id === targetQ.moduleId);
+                                const modSlug = mod ? slugify(mod.name) : targetQ.moduleId;
+                                newTo = `/workspace/modules/${modSlug}?queueId=${newSlug}`;
+                              }
+                              updateSelectedItemInSections({
+                                label: targetQ.name,
+                                iconName: targetQ.iconName || selectedItemInfo.item.iconName,
+                                description: targetQ.description,
+                                isUnifiedQueue: targetQ.isUnifiedQueue,
+                                moduleId: targetQ.moduleId,
+                                moduleIds: targetQ.moduleIds,
+                                queueConfig: targetQ.queueConfig,
+                                to: newTo
+                              });
+                              toast.success(`Switched to "${targetQ.name}"`);
+                            }
+                          }}
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 text-[11px] outline-none text-zinc-700 dark:text-zinc-300"
+                        >
+                          <option value="">Select from library to switch...</option>
+                          {allAvailableLibraryQueues.map(q => (
+                            <option key={q.id} value={q.id}>{q.name} ({q.isUnifiedQueue ? 'Unified' : 'Single'})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Detach Option */}
                       <button
                         type="button"
                         onClick={() => {
@@ -1217,292 +1277,90 @@ export const NavigationSettingsPage = () => {
                             moduleIds: undefined,
                             queueConfig: undefined
                           });
+                          toast.info('Item detached from queue.');
                         }}
-                        className={cn(
-                          "py-1 rounded-lg font-bold transition-all text-center",
-                          !isSelectedItemQueue ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        )}
+                        className="text-[10px] text-zinc-400 hover:text-red-500 underline block text-center w-full pt-1 cursor-pointer"
                       >
-                        Plain Link
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const defaultMod = activeCustomModules[0]?.id || '';
-                          const labelSlug = slugify(selectedItemInfo.item.label || 'queue');
-                          const mod = modules.find((m: any) => m.id === defaultMod);
-                          const modSlug = mod ? slugify(mod.name) : defaultMod;
-                          updateSelectedItemInSections({
-                            isUnifiedQueue: false,
-                            moduleId: selectedItemInfo.item.moduleId || defaultMod,
-                            moduleIds: undefined,
-                            to: `/workspace/modules/${modSlug}?queueId=${labelSlug}`,
-                            queueConfig: selectedItemInfo.item.queueConfig || {
-                              conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
-                              columns: []
-                            }
-                          });
-                        }}
-                        className={cn(
-                          "py-1 rounded-lg font-bold transition-all text-center",
-                          isSelectedItemQueue && !selectedItemInfo.item.isUnifiedQueue ? "bg-purple-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        )}
-                      >
-                        Single Queue
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const defaultMods = selectedItemInfo.item.moduleIds?.length ? selectedItemInfo.item.moduleIds : (activeCustomModules[0]?.id ? [activeCustomModules[0].id] : []);
-                          const labelSlug = slugify(selectedItemInfo.item.label || 'queue');
-                          updateSelectedItemInSections({
-                            isUnifiedQueue: true,
-                            moduleId: undefined,
-                            moduleIds: defaultMods,
-                            to: `/workspace/queues/${labelSlug}`,
-                            queueConfig: selectedItemInfo.item.queueConfig || {
-                              conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
-                              columns: ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt']
-                            }
-                          });
-                        }}
-                        className={cn(
-                          "py-1 rounded-lg font-bold transition-all text-center",
-                          isSelectedItemQueue && selectedItemInfo.item.isUnifiedQueue ? "bg-purple-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        )}
-                      >
-                        Unified Queue
+                        Detach queue (convert to regular link)
                       </button>
                     </div>
+                  </div>
+                )}
 
-                    {/* Single Queue Module Selector */}
-                    {isSelectedItemQueue && !selectedItemInfo.item.isUnifiedQueue && (
+                {/* Workspace Page Configuration Section */}
+                {!selectedItemInfo.item.isSubtitle && isSelectedItemPage && (
+                  <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block flex items-center gap-1.5 text-[11px]">
+                        <Layout size={13} className="text-indigo-500" /> Linked Workspace Page
+                      </label>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                        Workspace Page
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 bg-indigo-500/[0.04] border border-indigo-500/20 rounded-2xl space-y-3">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase block">Target Custom Module</label>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                            {selectedItemPage?.name || selectedItemInfo.item.label}
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            {(selectedItemPage as any)?.status || 'Active'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                          {(selectedItemPage as any)?.description || 'Custom interactive page with embedded widgets and workspace layouts.'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-[10px] text-zinc-400 font-medium">
+                        <span>{((selectedItemPage as any)?.config?.widgets || []).length} Widgets</span>
+                        <span>•</span>
+                        <span className="font-mono truncate max-w-[140px]">{selectedItemInfo.item.to}</span>
+                      </div>
+
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const targetSlug = slugify(selectedItemPage?.name || selectedItemInfo.item.label);
+                          navigate(`/workspace/pages/${targetSlug}`);
+                        }}
+                        className="w-full gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 cursor-pointer"
+                      >
+                        <ExternalLink size={13} /> Open in Page View
+                      </Button>
+
+                      {/* Switch Page from Library */}
+                      <div className="pt-2 border-t border-zinc-200/60 dark:border-white/5 space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Switch Linked Page</label>
                         <select
-                          value={selectedItemInfo.item.moduleId || ''}
+                          value={selectedItemPage?.id || ''}
                           onChange={(e) => {
-                            const newModId = e.target.value;
-                            const mod = modules.find((m: any) => m.id === newModId);
-                            const modSlug = mod ? slugify(mod.name) : newModId;
-                            const labelSlug = slugify(selectedItemInfo.item.label || 'queue');
-                            updateSelectedItemInSections({
-                              moduleId: newModId,
-                              to: `/workspace/modules/${modSlug}?queueId=${labelSlug}`
-                            });
+                            const targetPageId = e.target.value;
+                            if (!targetPageId) return;
+                            const targetPage = modules.find((m: any) => m.id === targetPageId && m.type === 'PAGE');
+                            if (targetPage) {
+                              const pageSlug = slugify(targetPage.name);
+                              updateSelectedItemInSections({
+                                id: `module:${targetPage.id}`,
+                                label: targetPage.name,
+                                iconName: (targetPage as any).iconName || (targetPage as any).icon || selectedItemInfo.item.iconName || 'Layers',
+                                to: `/workspace/pages/${pageSlug}`
+                              });
+                              toast.success(`Switched to page "${targetPage.name}"`);
+                            }
                           }}
-                          className="w-full bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs outline-none"
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 text-[11px] outline-none text-zinc-700 dark:text-zinc-300"
                         >
-                          <option value="">Select custom module...</option>
-                          {activeCustomModules.map(m => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
+                          <option value="">Select page to switch...</option>
+                          {modules.filter((m: any) => m.type === 'PAGE').map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </select>
                       </div>
-                    )}
-
-                    {/* Unified Multi-Module Selector */}
-                    {isSelectedItemQueue && selectedItemInfo.item.isUnifiedQueue && (
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase block">Target Custom Modules</label>
-                        <div className="bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
-                          {activeCustomModules.map(m => {
-                            const isChecked = (selectedItemInfo.item.moduleIds || []).includes(m.id);
-                            return (
-                              <label key={m.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(e) => {
-                                    const currentIds = selectedItemInfo.item.moduleIds || [];
-                                    const updatedIds = e.target.checked
-                                      ? [...currentIds, m.id]
-                                      : currentIds.filter(id => id !== m.id);
-                                    updateSelectedItemInSections({ moduleIds: updatedIds });
-                                  }}
-                                  className="rounded border-zinc-300 dark:border-zinc-700 text-purple-600 focus:ring-purple-500"
-                                />
-                                <span className="truncate">{m.name}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Queue Filter Rules Editor */}
-                    {isSelectedItemQueue && (
-                      <div className="space-y-2 pt-2 border-t border-zinc-200/50 dark:border-white/5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase block">Filter Rules (AND)</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
-                              const currentRules = currentConfig.conditions?.rules || [];
-                              const newRule = { fieldId: '', fieldType: 'field', operator: 'equals', value: '', valueType: 'literal' };
-                              updateSelectedItemInSections({
-                                queueConfig: {
-                                  ...currentConfig,
-                                  conditions: {
-                                    ...currentConfig.conditions,
-                                    rules: [...currentRules, newRule]
-                                  }
-                                }
-                              });
-                            }}
-                            className="flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold uppercase hover:underline"
-                          >
-                            <Plus size={11} /> Add Rule
-                          </button>
-                        </div>
-
-                        <div className="space-y-2">
-                          {(selectedItemInfo.item.queueConfig?.conditions?.rules || []).length === 0 ? (
-                            <div className="text-[10px] text-zinc-400 italic p-2 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-center">
-                              No filter rules defined. Queue matches all records.
-                            </div>
-                          ) : (
-                            (selectedItemInfo.item.queueConfig?.conditions?.rules || []).map((rule: any, rIdx: number) => (
-                              <div key={rIdx} className="flex flex-col gap-1.5 p-2 bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs">
-                                <div className="flex items-center gap-1.5">
-                                  <select
-                                    value={rule.fieldId || ''}
-                                    onChange={(e) => {
-                                      const fieldId = e.target.value;
-                                      const isVar = fieldId.startsWith('currentUser.');
-                                      const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
-                                      const rules = [...(currentConfig.conditions?.rules || [])];
-                                      rules[rIdx] = { ...rules[rIdx], fieldId, fieldType: isVar ? 'variable' : 'field' };
-                                      updateSelectedItemInSections({
-                                        queueConfig: {
-                                          ...currentConfig,
-                                          conditions: { ...currentConfig.conditions, rules }
-                                        }
-                                      });
-                                    }}
-                                    className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] outline-none"
-                                  >
-                                    <option value="">Select Field...</option>
-                                    {selectedItemAvailableFields.map(f => (
-                                      <option key={f.id} value={f.id}>{f.label}</option>
-                                    ))}
-                                  </select>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const currentConfig = selectedItemInfo.item.queueConfig!;
-                                      const rules = (currentConfig.conditions?.rules || []).filter((_: any, i: number) => i !== rIdx);
-                                      updateSelectedItemInSections({
-                                        queueConfig: {
-                                          ...currentConfig,
-                                          conditions: { ...currentConfig.conditions, rules }
-                                        }
-                                      });
-                                    }}
-                                    className="text-zinc-400 hover:text-red-500 p-1"
-                                    title="Delete rule"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-
-                                <div className="flex items-center gap-1.5">
-                                  <select
-                                    value={rule.operator || 'equals'}
-                                    onChange={(e) => {
-                                      const operator = e.target.value;
-                                      const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
-                                      const rules = [...(currentConfig.conditions?.rules || [])];
-                                      rules[rIdx] = { ...rules[rIdx], operator };
-                                      updateSelectedItemInSections({
-                                        queueConfig: {
-                                          ...currentConfig,
-                                          conditions: { ...currentConfig.conditions, rules }
-                                        }
-                                      });
-                                    }}
-                                    className="w-28 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] outline-none"
-                                  >
-                                    <option value="equals">equals</option>
-                                    <option value="not_equals">not equals</option>
-                                    <option value="contains">contains</option>
-                                    <option value="is_empty">is empty</option>
-                                    <option value="not_empty">not empty</option>
-                                  </select>
-
-                                  {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
-                                    <input
-                                      type="text"
-                                      placeholder="Value"
-                                      value={rule.value || ''}
-                                      onChange={(e) => {
-                                        const value = e.target.value;
-                                        const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
-                                        const rules = [...(currentConfig.conditions?.rules || [])];
-                                        rules[rIdx] = { ...rules[rIdx], value };
-                                        updateSelectedItemInSections({
-                                          queueConfig: {
-                                            ...currentConfig,
-                                            conditions: { ...currentConfig.conditions, rules }
-                                          }
-                                        });
-                                      }}
-                                      className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[11px] outline-none"
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Display Columns Selection (for Unified Queues) */}
-                    {isSelectedItemQueue && selectedItemInfo.item.isUnifiedQueue && (
-                      <div className="space-y-1.5 pt-2 border-t border-zinc-200/50 dark:border-white/5">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase block">Display Columns</label>
-                        <div className="bg-zinc-50/50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
-                          {Array.from(new Set(selectedItemColumnOptions.map(c => c.group))).map(groupName => (
-                            <div key={groupName} className="space-y-1">
-                              <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800 pb-0.5">
-                                {groupName} Fields
-                              </div>
-                              <div className="grid grid-cols-1 gap-1 pl-1">
-                                {selectedItemColumnOptions.filter(c => c.group === groupName).map(col => {
-                                  const currentCols = selectedItemInfo.item.queueConfig?.columns || [];
-                                  const isChecked = currentCols.includes(col.id);
-                                  return (
-                                    <label key={col.id} className="flex items-center gap-1.5 text-[11px] text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-                                      <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={(e) => {
-                                          const currentConfig = selectedItemInfo.item.queueConfig || { conditions: { type: 'group', logicalOperator: 'AND', rules: [] }, columns: [] };
-                                          const updatedCols = e.target.checked
-                                            ? [...(currentConfig.columns || []), col.id]
-                                            : (currentConfig.columns || []).filter((c: string) => c !== col.id);
-                                          updateSelectedItemInSections({
-                                            queueConfig: {
-                                              ...currentConfig,
-                                              columns: updatedCols
-                                            }
-                                          });
-                                        }}
-                                        className="rounded border-zinc-300 dark:border-zinc-700 text-purple-600 focus:ring-purple-500 h-3 w-3"
-                                      />
-                                      <span className="truncate">{col.label}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -1619,209 +1477,90 @@ export const NavigationSettingsPage = () => {
 
       {activeAddTool === 'queue' && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleAddQueueItem} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <Cpu size={18} className="text-indigo-500" /> Work Queue Builder
-            </h3>
-            
-            <div className="flex gap-2 text-xs">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <ListPlus size={18} className="text-indigo-500" /> Add Work Queue
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Select an existing queue from your library or build a new one in the Queue Studio.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setQueueItemType('single')}
-                className={cn("flex-1 py-1.5 rounded-xl font-bold uppercase border transition-all", queueItemType === 'single' ? "bg-indigo-600 text-white border-indigo-600" : "border-zinc-200 dark:border-zinc-800 text-zinc-400")}
+                onClick={() => setActiveAddTool(null)}
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-xl"
               >
-                Single Module
-              </button>
-              <button
-                type="button"
-                onClick={() => setQueueItemType('unified')}
-                className={cn("flex-1 py-1.5 rounded-xl font-bold uppercase border transition-all", queueItemType === 'unified' ? "bg-indigo-600 text-white border-indigo-600" : "border-zinc-200 dark:border-zinc-800 text-zinc-400")}
-              >
-                Unified Multi-Module
+                <X size={16} />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              {queueItemType === 'single' ? (
-                <div>
-                  <label className="font-bold text-zinc-500 uppercase block mb-1">Target Module</label>
-                  <select
-                    value={queueModuleId}
-                    onChange={(e) => setQueueModuleId(e.target.value)}
-                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 outline-none"
-                  >
-                    <option value="">Select custom module...</option>
-                    {activeCustomModules.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div>
-                  <label className="font-bold text-zinc-500 uppercase block mb-1">Target Modules</label>
-                  <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 max-h-32 overflow-y-auto space-y-1 custom-scrollbar">
-                    {activeCustomModules.map(m => {
-                      const isChecked = queueModuleIds.includes(m.id);
-                      return (
-                        <label key={m.id} className="flex items-center gap-2 text-xs font-medium cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) setQueueModuleIds([...queueModuleIds, m.id]);
-                              else setQueueModuleIds(queueModuleIds.filter(id => id !== m.id));
-                            }}
-                            className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600"
-                          />
-                          <span>{m.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
+            <div className="space-y-3 pt-2">
               <div>
-                <label className="font-bold text-zinc-500 uppercase block mb-1">Queue Name</label>
-                <input
-                  type="text"
-                  placeholder="E.g., Priority Admissions Inbox"
-                  value={queueLabel}
-                  onChange={(e) => setQueueLabel(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-zinc-500 uppercase block mb-1">Queue Icon</label>
+                <label className="font-bold text-zinc-500 uppercase block mb-1 text-[11px]">Select Queue from Library</label>
                 <select
-                  value={queueIcon}
-                  onChange={(e) => setQueueIcon(e.target.value)}
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 outline-none"
+                  value={selectedLibraryQueueId}
+                  onChange={(e) => setSelectedLibraryQueueId(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-800 dark:text-zinc-200 outline-none focus:border-indigo-500"
                 >
-                  {COMMON_ICONS.map(i => (
-                    <option key={i} value={i}>{i}</option>
+                  <option value="">Choose a queue...</option>
+                  {allAvailableLibraryQueues.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.name} ({q.isUnifiedQueue ? 'Unified Multi-Module' : 'Single Module'})
+                    </option>
                   ))}
                 </select>
               </div>
 
-              {/* Filtering Rules */}
-              <div className="border-t border-zinc-200/50 dark:border-white/10 pt-3 space-y-2">
-                <label className="font-bold text-zinc-500 uppercase block">Filter Rules (AND)</label>
-                <div className="space-y-2">
-                  {queueRules.map((rule, idx) => (
-                    <div key={idx} className="flex gap-2 items-center">
-                      <select
-                        className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs outline-none"
-                        value={rule.fieldId}
-                        onChange={(e) => {
-                          const updated = [...queueRules];
-                          updated[idx].fieldId = e.target.value;
-                          setQueueRules(updated);
-                        }}
-                      >
-                        <option value="">Select Field...</option>
-                        {queueAvailableFields.map(f => (
-                          <option key={f.id} value={f.id}>{f.label}</option>
-                        ))}
-                      </select>
-
-                      <select
-                        className="w-24 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs outline-none"
-                        value={rule.operator}
-                        onChange={(e) => {
-                          const updated = [...queueRules];
-                          updated[idx].operator = e.target.value;
-                          setQueueRules(updated);
-                        }}
-                      >
-                        <option value="equals">equals</option>
-                        <option value="not_equals">not equals</option>
-                        <option value="contains">contains</option>
-                        <option value="is_empty">is empty</option>
-                        <option value="not_empty">not empty</option>
-                      </select>
-
-                      {rule.operator !== 'is_empty' && rule.operator !== 'not_empty' && (
-                        <input
-                          type="text"
-                          placeholder="Value"
-                          className="w-24 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs outline-none"
-                          value={rule.value}
-                          onChange={(e) => {
-                            const updated = [...queueRules];
-                            updated[idx].value = e.target.value;
-                            setQueueRules(updated);
-                          }}
-                        />
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setQueueRules(queueRules.filter((_, i) => i !== idx))}
-                        disabled={queueRules.length === 1}
-                        className="text-zinc-400 hover:text-red-500 disabled:opacity-30 p-1"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+              {selectedLibraryQueueId && (() => {
+                const selectedQ = allAvailableLibraryQueues.find(q => q.id === selectedLibraryQueueId);
+                if (!selectedQ) return null;
+                const ruleCount = selectedQ.queueConfig?.conditions?.rules?.length || 0;
+                const colCount = selectedQ.queueConfig?.columns?.length || 0;
+                return (
+                  <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-800 dark:text-zinc-200">{selectedQ.name}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                        {selectedQ.isUnifiedQueue ? 'Unified' : 'Single Module'}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{selectedQ.description || 'Dynamic work queue with visual condition filtering.'}</p>
+                    <div className="flex items-center gap-3 pt-1 text-[10px] text-zinc-400">
+                      <span>{ruleCount} {ruleCount === 1 ? 'Rule' : 'Rules'}</span>
+                      <span>•</span>
+                      <span>{colCount} Columns</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
-                <button
-                  type="button"
-                  onClick={() => setQueueRules([...queueRules, { fieldId: '', operator: 'equals', value: '' }])}
-                  className="flex items-center gap-1 text-xs text-indigo-500 font-bold uppercase mt-1 hover:underline"
-                >
-                  <Plus size={12} /> Add Rule
-                </button>
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
+                <span className="flex-shrink mx-3 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">or</span>
+                <div className="flex-grow border-t border-zinc-200 dark:border-zinc-800"></div>
               </div>
 
-              {/* Display Columns Selection (Unified Queues) */}
-              {queueItemType === 'unified' && (
-                <div className="border-t border-zinc-200/50 dark:border-white/10 pt-3 space-y-2">
-                  <label className="font-bold text-zinc-500 uppercase block">Display Columns</label>
-                  <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 max-h-36 overflow-y-auto space-y-2 custom-scrollbar">
-                    {Array.from(new Set(queueColumnOptions.map(c => c.group))).map(groupName => (
-                      <div key={groupName} className="space-y-1">
-                        <div className="text-[9px] font-black text-zinc-400 uppercase tracking-widest border-b border-zinc-200 dark:border-zinc-800 pb-0.5">
-                          {groupName} Fields
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5 pl-1">
-                          {queueColumnOptions.filter(c => c.group === groupName).map(col => {
-                            const isChecked = queueColumns.includes(col.id);
-                            return (
-                              <label key={col.id} className="flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setQueueColumns([...queueColumns, col.id]);
-                                    } else {
-                                      setQueueColumns(queueColumns.filter(c => c !== col.id));
-                                    }
-                                  }}
-                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                                />
-                                <span className="truncate">{col.label}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingQueueForStudio(null);
+                  setIsQueueStudioOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] rounded-2xl text-xs font-bold text-indigo-600 dark:text-indigo-400 transition-all cursor-pointer"
+              >
+                <Plus size={16} /> Create New in Queue Studio
+              </button>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-zinc-200/50 dark:border-white/10">
-              <Button type="button" variant="ghost" onClick={() => setActiveAddTool(null)}>Cancel</Button>
-              <Button type="submit">Create Queue Item</Button>
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <Button variant="ghost" onClick={() => setActiveAddTool(null)}>Cancel</Button>
+              <Button onClick={() => handleAddQueueItem()} disabled={!selectedLibraryQueueId}>
+                Add to Navigation
+              </Button>
             </div>
-          </form>
+          </div>
         </div>
       )}
 
@@ -1994,6 +1733,28 @@ export const NavigationSettingsPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* In-Context Queue Studio Modal */}
+      {isQueueStudioOpen && (
+        <InContextBuilderModal
+          isOpen={isQueueStudioOpen}
+          onClose={() => {
+            setIsQueueStudioOpen(false);
+            setEditingQueueForStudio(null);
+          }}
+          builderContext={{ mode: 'global' }}
+          title={editingQueueForStudio ? `Edit ${editingQueueForStudio.name}` : 'Create New Work Queue'}
+        >
+          <QueueBuilder
+            initialQueue={editingQueueForStudio || undefined}
+            onSave={handleSaveFromStudio}
+            onCancel={() => {
+              setIsQueueStudioOpen(false);
+              setEditingQueueForStudio(null);
+            }}
+          />
+        </InContextBuilderModal>
       )}
 
     </div>

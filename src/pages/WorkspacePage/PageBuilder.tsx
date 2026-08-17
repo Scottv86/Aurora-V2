@@ -15,8 +15,10 @@ import { toast } from 'sonner';
 import { fetchModule } from '../../services/dataService';
 import { PageAIBuilderModal } from './PageAIBuilderModal';
 import { PLATFORM_MODULES } from '../../config/platformModules';
+import { API_BASE_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed } from './WorkspacePageView';
+import { QueueRenderer } from '../../components/Builders';
 export { PageBuilderEngine } from '../../components/PageEngine';
 
 
@@ -25,7 +27,8 @@ export const getWidgetDefaultDimensions = (type: string) => {
   switch (type) {
     case 'stats-grid': return { w: 12, h: 2, minW: 6, minH: 2 };
     case 'active-workflows': return { w: 6, h: 5, minW: 4, minH: 3 };
-    case 'work-queue': return { w: 12, h: 6, minW: 6, minH: 4 };
+    case 'work-queue':
+    case 'queue': return { w: 12, h: 6, minW: 6, minH: 4 };
     case 'module-table': return { w: 6, h: 6, minW: 4, minH: 3 };
     case 'module-creator': return { w: 6, h: 6, minW: 4, minH: 3 };
     case 'rich-text': return { w: 12, h: 4, minW: 4, minH: 2 };
@@ -83,7 +86,7 @@ const useMyContainerWidth = (loading: boolean) => {
 export const PageBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { tenant, refreshModules, modules, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, refreshModules, modules, menuConfig, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, setBreadcrumbOverride } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {
@@ -123,6 +126,9 @@ export const PageBuilder = () => {
         const pageMod = await fetchModule(targetId, tenant.id, token, modules);
         setName(pageMod.name || '');
         setIconName(pageMod.iconName || pageMod.icon || 'Layers');
+        if (id && pageMod?.name) {
+          setBreadcrumbOverride(id, pageMod.name);
+        }
         
         const loadedWidgets = (pageMod.config?.widgets || pageMod.widgets || []).map((w: any, index: number) => {
           const dims = getWidgetDefaultDimensions(w.type);
@@ -143,7 +149,7 @@ export const PageBuilder = () => {
       }
     };
     loadPage();
-  }, [id, tenant?.id, session?.access_token, modules]);
+  }, [id, tenant?.id, session?.access_token, modules, setBreadcrumbOverride]);
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -446,14 +452,14 @@ export const PageBuilder = () => {
             {[
               { type: 'stats-grid', label: 'Stats Metrics Grid', icon: Cpu, desc: 'Display summaries of key tenant parameters.' },
               { type: 'active-workflows', label: 'Active Workflows', icon: Icons.Workflow, desc: 'Show currently executing workflows.' },
-              { type: 'work-queue', label: 'My Work Inbox', icon: Icons.ClipboardList, desc: 'Embed the personal work queue for cases.' },
+              { type: 'queue', label: 'Work Queue Embed', icon: Icons.ListOrdered, desc: 'Embed any standalone or unified queue from your library.' },
+              { type: 'work-queue', label: 'My Work Inbox', icon: Icons.ClipboardList, desc: 'Embed the personal work inbox for cases.' },
               { type: 'module-table', label: 'Module Records Table', icon: Icons.Database, desc: 'Display a paginated list of records from a module.' },
               { type: 'module-creator', label: 'Module Submission Form', icon: Icons.FileText, desc: 'Render a form to create entries in a module.' },
               { type: 'rich-text', label: 'Noticeboard / Rich Text', icon: Layout, desc: 'Provide HTML or instruction text blocks.' },
               { type: 'chart', label: 'Volume Chart', icon: Icons.BarChart, desc: 'Visualize case volume charts.' },
               { type: 'report', label: 'BI Report Dashboard', icon: Icons.BarChart3, desc: 'Embed a published visual report.' },
               { type: 'standalone-form', label: 'Standalone Form Embed', icon: Icons.FileText, desc: 'Embed a standalone form from your library.' },
-
             ].map((item) => {
               return (
                 <button
@@ -566,6 +572,16 @@ export const PageBuilder = () => {
                               Configure Embedded BI Report...
                             </div>
                           )
+                        ) : (widget.type === 'queue' || widget.type === 'work-queue') && widget.properties?.queueId ? (
+                          <div className="w-full h-full pointer-events-none scale-[0.90] origin-top bg-zinc-50/50 dark:bg-white/[0.01] rounded-2xl p-2 border border-zinc-200/30 dark:border-white/5 overflow-hidden">
+                            <QueueRenderer queueId={widget.properties.queueId} queueConfig={widget.properties.queueConfig} showHeader={false} readOnly={true} />
+                          </div>
+                        ) : (widget.type === 'queue' || widget.type === 'work-queue') ? (
+                          <div className="h-full flex flex-col items-center justify-center border border-dashed border-indigo-500/30 rounded-xl bg-indigo-500/[0.02] p-4 text-center">
+                            <Icons.ListOrdered size={22} className="text-indigo-500 mb-1" />
+                            <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{widget.title || 'Work Queue'}</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">Select a queue in the right panel to bind live records.</p>
+                          </div>
                         ) : (
                           <div className="h-full flex items-center justify-center border border-dashed border-zinc-200/50 dark:border-white/5 rounded-xl bg-white/30 dark:bg-white/[0.01] text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">
                             Widget Preview ({widget.w}x{widget.h})
@@ -652,6 +668,33 @@ export const PageBuilder = () => {
                       tenant={tenant}
                       session={session}
                     />
+                  </div>
+                )}
+
+                {/* Work Queue selection properties */}
+                {(selectedWidget.type === 'work-queue' || selectedWidget.type === 'queue') && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Bound Work Queue</label>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/workspace/settings/platform-modules/queues-management')}
+                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                      >
+                        Manage Queues
+                      </button>
+                    </div>
+                    <QueueDropdown 
+                      selectedWidget={selectedWidget} 
+                      setWidgets={setWidgets}
+                      tenant={tenant}
+                      modules={modules}
+                      menuConfig={menuConfig}
+                      session={session}
+                    />
+                    <p className="text-[10px] text-zinc-400">
+                      Bind this widget to a configured queue from the Queues Library.
+                    </p>
                   </div>
                 )}
 
@@ -796,6 +839,156 @@ const ReportDropdown = ({ selectedWidget, setWidgets, tenant, session }: any) =>
             </option>
           ))}
         </>
+      )}
+    </select>
+  );
+};
+
+const QueueDropdown = ({ selectedWidget, setWidgets, tenant, modules, menuConfig, session }: any) => {
+  const [apiQueues, setApiQueues] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchQueuesList = async () => {
+      if (!tenant?.id) return;
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/queues`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setApiQueues(data || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch queues list for builder', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchQueuesList();
+  }, [tenant?.id, session?.access_token]);
+
+  const allAvailableQueues = useMemo(() => {
+    const extracted: any[] = [];
+
+    const walk = (items: any[]) => {
+      if (!Array.isArray(items)) return;
+      for (const item of items) {
+        const isDemo = item.id === 'queue_support_priority' || item.id === 'queue_global_triage';
+        const isGenericPersonal = (item.to === '/workspace/my-work' || item.to === '/workspace/queue') && !item.queueConfig && !item.moduleId && (!item.moduleIds || item.moduleIds.length === 0);
+
+        const isQ = !isDemo && !isGenericPersonal && Boolean(
+          item.queueConfig ||
+          item.isUnifiedQueue ||
+          (item.moduleIds && item.moduleIds.length > 0) ||
+          item.to?.startsWith('/workspace/queues/') ||
+          item.to?.includes('queueId=') ||
+          (item.moduleId && item.to?.includes('queue'))
+        );
+
+        if (isQ) {
+          extracted.push({
+            id: item.id || `queue_${slugify(item.label || 'queue')}`,
+            name: item.label || 'Work Queue',
+            isUnifiedQueue: Boolean(item.isUnifiedQueue || item.to?.startsWith('/workspace/queues/') || (item.moduleIds && item.moduleIds.length > 1)),
+            moduleId: item.moduleId,
+            moduleIds: item.moduleIds || (item.moduleId ? [item.moduleId] : []),
+            queueConfig: item.queueConfig
+          });
+        }
+        if (item.children) walk(item.children);
+      }
+    };
+
+    if (menuConfig?.sections) {
+      menuConfig.sections.forEach((sec: any) => walk(sec.items || []));
+    }
+    if ((tenant?.menuConfig as any)?.sections) {
+      (tenant.menuConfig as any).sections.forEach((sec: any) => walk(sec.items || []));
+    }
+
+    // Also check modules
+    (modules || []).forEach((m: any) => {
+      if (m.config?.queues && Array.isArray(m.config.queues)) {
+        m.config.queues.forEach((q: any) => {
+          extracted.push({
+            id: q.id || `mod_queue_${m.id}`,
+            name: q.name || `${m.name} Queue`,
+            isUnifiedQueue: false,
+            moduleId: m.id,
+            moduleIds: [m.id],
+            queueConfig: q.queueConfig
+          });
+        });
+      }
+    });
+
+    const list: any[] = [];
+    const seenIds = new Set<string>();
+    const seenNames = new Set<string>();
+
+    apiQueues
+      .filter((q: any) => q.id !== 'queue_support_priority' && q.id !== 'queue_global_triage')
+      .forEach((q: any) => {
+        const nameKey = (q.name || '').trim().toLowerCase();
+        if (!seenIds.has(q.id) && !seenNames.has(nameKey)) {
+          seenIds.add(q.id);
+          if (nameKey) seenNames.add(nameKey);
+          list.push(q);
+        }
+      });
+
+    extracted.forEach((q: any) => {
+      const nameKey = (q.name || '').trim().toLowerCase();
+      if (!seenIds.has(q.id) && !seenNames.has(nameKey)) {
+        seenIds.add(q.id);
+        if (nameKey) seenNames.add(nameKey);
+        list.push(q);
+      }
+    });
+
+    return list;
+  }, [apiQueues, menuConfig, tenant?.menuConfig, modules]);
+
+  return (
+    <select
+      value={selectedWidget.properties?.queueId || ''}
+      onChange={(e) => {
+        const qId = e.target.value;
+        const selectedQ = allAvailableQueues.find(q => q.id === qId);
+        setWidgets((prev: any[]) => prev.map(w => {
+          if (w.id === selectedWidget.id) {
+            return {
+              ...w,
+              title: selectedQ ? selectedQ.name : (w.title || 'Work Queue'),
+              properties: { 
+                ...w.properties, 
+                queueId: qId || undefined, 
+                queueConfig: selectedQ?.queueConfig,
+                moduleId: selectedQ?.moduleId,
+                moduleIds: selectedQ?.moduleIds
+              }
+            };
+          }
+          return w;
+        }));
+      }}
+      disabled={loading}
+      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20"
+    >
+      <option value="">Personal Inbox (Default My Work)</option>
+      {loading ? (
+        <option disabled>Loading queues from library...</option>
+      ) : (
+        allAvailableQueues.map((q: any) => (
+          <option key={q.id} value={q.id}>
+            {q.name} ({q.isUnifiedQueue ? 'Unified Multi-Module' : 'Single Module'})
+          </option>
+        ))
       )}
     </select>
   );

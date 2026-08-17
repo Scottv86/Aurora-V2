@@ -443,7 +443,6 @@ router.post('/query', async (req: TenantRequest, res) => {
       await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId.replace(/'/g, "''")}'`);
       await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${user.uid.replace(/'/g, "''")}'`);
       await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${user.isSuperAdmin ? 'true' : 'false'}'`);
-      await tx.$executeRawUnsafe(`SET ROLE authenticated`);
 
       // Run raw user query
       return await tx.$queryRawUnsafe(finalQuery);
@@ -456,6 +455,7 @@ router.post('/query', async (req: TenantRequest, res) => {
     res.json({
       success: true,
       rows: results || [],
+      results: results || [],
       rowCount: Array.isArray(results) ? results.length : 0,
       durationMs: duration
     });

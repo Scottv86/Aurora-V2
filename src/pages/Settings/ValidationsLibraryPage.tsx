@@ -4,7 +4,6 @@ import { ShieldCheck, Plus, Search, Trash2, ArrowRight } from 'lucide-react';
 import { ValidationRulesetEntity } from '../../types/platform';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { ValidationBuilder } from '../../components/Builders/ValidationBuilder/ValidationBuilder';
 import { toast } from 'sonner';
@@ -15,25 +14,31 @@ import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
 import { EmptyState } from '../../components/UI/EmptyState';
+import { builderCache } from '../../utils/builderCache';
 
 export const ValidationsLibraryPage: React.FC = () => {
   const { tenant, modules } = usePlatform();
-  const [rulesets, setRulesets] = useState<ValidationRulesetEntity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `validations_${tenant?.id || 'default'}`;
+  const [rulesets, setRulesets] = useState<ValidationRulesetEntity[]>(() => builderCache.get<ValidationRulesetEntity[]>(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
   const [search, setSearch] = useState('');
   
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [selectedRuleset, setSelectedRuleset] = useState<ValidationRulesetEntity | null>(null);
 
   const fetchRulesets = async () => {
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/validations`, {
         headers: { 'x-tenant-id': tenant?.id || '' }
       });
       if (res.ok) {
         const data = await res.json();
-        setRulesets(data);
+        const next = Array.isArray(data) ? data : [];
+        setRulesets(next);
+        builderCache.set(cacheKey, next);
       } else {
         setRulesets([
           {
@@ -87,7 +92,11 @@ export const ValidationsLibraryPage: React.FC = () => {
         headers: { 'x-tenant-id': tenant?.id || '' }
       }).catch(() => {});
       toast.success('Validation ruleset moved to Recycling Bin');
-      setRulesets(prev => prev.filter(r => r.id !== ruleset.id));
+      setRulesets(prev => {
+        const next = prev.filter(r => r.id !== ruleset.id);
+        builderCache.set(cacheKey, next);
+        return next;
+      });
     } catch (err) {
       toast.error('Failed to delete validation ruleset');
     } finally {
@@ -137,7 +146,7 @@ export const ValidationsLibraryPage: React.FC = () => {
     <div className="flex flex-col w-full relative min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 overflow-y-auto">
       {/* Standardized PageHeader matching Modules & Sites */}
       <PageHeader
-        title="Validations"
+        title="Rules"
         description="Create and maintain reusable field and cross-entity validation rulesets."
         actions={
           <Button
@@ -161,7 +170,7 @@ export const ValidationsLibraryPage: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
             <input
               type="text"
-              placeholder="Search"
+              placeholder="Search rules..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
@@ -190,19 +199,17 @@ export const ValidationsLibraryPage: React.FC = () => {
         </div>
 
         {/* Glassmorphic 3-Column Grid matching Modules & Sites */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map(n => (
-              <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-            ))}
-          </div>
-        ) : filteredRulesets.length === 0 ? (
+        {loading ? null : filteredRulesets.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
-            title="No validation rulesets found"
-            description="Configure enterprise validation constraints, regex patterns, and compliance rulesets."
+            title={search ? "No rules match your search" : "No rules found"}
+            description={
+              search
+                ? "Try searching for a different keyword or clear your search query."
+                : "Configure enterprise validation constraints, regex patterns, and compliance rulesets."
+            }
             action={{
-              label: "Create",
+              label: "Create Rule",
               onClick: () => {
                 setSelectedRuleset(null);
                 setIsBuilderOpen(true);
@@ -214,21 +221,21 @@ export const ValidationsLibraryPage: React.FC = () => {
             {filteredRulesets.map((ruleset, i) => (
               <motion.div
                 key={ruleset.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
+                transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                 onClick={() => {
                   setSelectedRuleset(ruleset);
                   setIsBuilderOpen(true);
                 }}
-                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                 <div className="relative z-10 flex flex-col h-full justify-between">
                   <div>
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                         <ShieldCheck size={22} />
                       </div>
 
@@ -239,7 +246,7 @@ export const ValidationsLibraryPage: React.FC = () => {
 
                         <button
                           onClick={(e) => handleDeleteClick(e, ruleset)}
-                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Delete Ruleset"
                         >
                           <Trash2 size={14} />
@@ -247,7 +254,7 @@ export const ValidationsLibraryPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                       {ruleset.name}
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -261,7 +268,7 @@ export const ValidationsLibraryPage: React.FC = () => {
                       <span>{ruleset.rules?.length || 0} Rules</span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                       Edit in Builder <ArrowRight size={14} />
                     </div>
                   </div>
@@ -272,19 +279,19 @@ export const ValidationsLibraryPage: React.FC = () => {
 
             {/* Dashed Create Card matching Custom Modules */}
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: filteredRulesets.length * 0.03 }}
+              transition={{ duration: 0.25, delay: filteredRulesets.length * 0.03, ease: 'easeOut' }}
               onClick={() => {
                 setSelectedRuleset(null);
                 setIsBuilderOpen(true);
               }}
-              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
+              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-[border-color,background-color] duration-200 cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
             >
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                 <Plus size={24} />
               </div>
-              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                 Create Validation
               </span>
               <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePlatform } from './usePlatform';
 import { useAuth } from './useAuth';
 import { io, Socket } from 'socket.io-client';
+import { builderCache } from '../utils/builderCache';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/data';
 const WS_BASE_URL = 'http://127.0.0.1:3001';
@@ -9,13 +10,13 @@ const WS_BASE_URL = 'http://127.0.0.1:3001';
 export const useData = (collectionName: 'records' | 'modules', options: { page?: number, limit?: number, append?: boolean } = {}) => {
   const { tenant } = usePlatform();
   const { user, session } = useAuth();
-  const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { page = 1, limit = 50, append = false } = options;
+  const cacheKey = `usedata_${tenant?.id || 'default'}_${collectionName}_${page}_${limit}`;
+  const [data, setData] = useState<any[]>(() => (!append ? (builderCache.get(cacheKey) || []) : []));
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-
-  const { page = 1, limit = 50, append = false } = options;
 
   const fetchItems = useCallback(async (isManualRefetch = false) => {
     if (!tenant?.id || !user) {
@@ -59,11 +60,16 @@ export const useData = (collectionName: 'records' | 'modules', options: { page?:
       }
 
       setData(prev => {
-        if (!append) return newItems;
+        if (!append) {
+          builderCache.set(cacheKey, newItems);
+          return newItems;
+        }
         // Filter out items that already exist in the previous state to prevent duplicates
         const existingIds = new Set(prev.map((item: any) => item.id));
         const uniqueNewItems = newItems.filter((item: any) => !existingIds.has(item.id));
-        return [...prev, ...uniqueNewItems];
+        const combined = [...prev, ...uniqueNewItems];
+        builderCache.set(cacheKey, combined);
+        return combined;
       });
       
       setTotal(totalCount);

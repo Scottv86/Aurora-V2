@@ -470,7 +470,7 @@ export const ValidationRuleModal: React.FC<ValidationRuleModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-black text-zinc-900 dark:text-white tracking-tight">
-                {rule ? 'Edit Validation Rule' : 'New Validation Rule'}
+                {rule ? 'Edit Rule' : 'New Rule'}
               </h3>
               <p className="text-[10px] text-zinc-500 font-medium">Create expressions to ensure field data meets constraint rules.</p>
             </div>

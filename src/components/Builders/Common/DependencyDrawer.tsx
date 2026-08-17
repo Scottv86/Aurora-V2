@@ -14,7 +14,7 @@ export interface DependencyDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   entityName: string;
-  entityType: 'Form' | 'Workflow' | 'Validation Ruleset';
+  entityType: 'Form' | 'Workflow' | 'Validation Ruleset' | 'Queue' | string;
   dependencies: DependencyItem[];
 }
 

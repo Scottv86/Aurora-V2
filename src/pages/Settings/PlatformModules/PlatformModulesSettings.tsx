@@ -8,7 +8,6 @@ import { Trash2, Plus, Loader2, ArrowRight, Search } from 'lucide-react';
 
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Button } from '../../../components/UI/Primitives';
-import { Skeleton } from '../../../components/UI/Skeleton';
 import { motion } from 'motion/react';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
 import { usePlatform } from '../../../hooks/usePlatform';
@@ -26,16 +25,11 @@ export const PlatformModulesSettings = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { openNewModuleModal } = useNewModuleModal();
-  const { tenant, modules, refreshModules } = usePlatform();
+  const { tenant, modules, refreshModules, isLoading } = usePlatform();
   const { session } = useAuth();
   
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(false);
-  }, [tenant?.id, modules?.length]);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -167,13 +161,7 @@ export const PlatformModulesSettings = () => {
                 ))}
               </div>
             </div>
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[1, 2, 3, 4, 5, 6].map(n => (
-                  <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-                ))}
-              </div>
-            ) : displayCustomModules.length === 0 ? (
+            {isLoading ? null : displayCustomModules.length === 0 ? (
               <EmptyState
                 icon={Icons.Layers}
                 title="No custom modules found"
@@ -185,28 +173,24 @@ export const PlatformModulesSettings = () => {
               />
             ) : (
               <div className="flex-1 relative z-10">
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                >
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {displayCustomModules.map((mod: any, i: number) => {
                     const IconComponent = (Icons as any)[mod.iconName] || (Icons as any)[mod.icon] || Icons.Layers;
                     return (
                       <motion.div
                         key={mod.id}
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.03 }}
+                        transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                         onClick={() => navigate(`/workspace/settings/builder/${mod.id}`)}
-                        className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
+                        className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden"
                       >
                         <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         
                         <button
                           onClick={(e) => handleDeleteClick(e, mod)}
                           disabled={deletingId === mod.id}
-                          className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                          className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20"
                           title="Delete Module"
                         >
                           {deletingId === mod.id ? <Loader2 size={14} className="animate-spin text-red-500" /> : <Trash2 size={14} />}
@@ -215,14 +199,14 @@ export const PlatformModulesSettings = () => {
                         <div className="relative z-10 flex flex-col h-full justify-between">
                           <div>
                             <div className="flex items-start justify-between mb-4">
-                              <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                              <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                                 <IconComponent size={22} />
                               </div>
                               <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border bg-indigo-500/10 text-indigo-500 border-indigo-500/30">
                                 Custom
                               </span>
                             </div>
-                            <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                            <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                               {mod.name}
                             </h3>
                             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -233,7 +217,7 @@ export const PlatformModulesSettings = () => {
                             <div className="text-xs text-zinc-500 font-semibold">
                               Module Schema
                             </div>
-                            <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                            <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                               Edit in Builder <ArrowRight size={14} />
 
                             </div>
@@ -246,23 +230,23 @@ export const PlatformModulesSettings = () => {
 
                   {/* Create Custom dashed button */}
                   <motion.div
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: displayCustomModules.length * 0.03 }}
+                    transition={{ duration: 0.25, delay: displayCustomModules.length * 0.03, ease: 'easeOut' }}
                     onClick={() => openNewModuleModal()}
-                    className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
+                    className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[220px] transition-[border-color,background-color] duration-200 text-center hover:bg-indigo-500/[0.01]"
                   >
-                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                       <Plus size={24} />
                     </div>
-                    <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                    <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                       Create Custom Module
                     </span>
                     <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
                       Build, manage, and extend tenant-specific data structures.
                     </p>
                   </motion.div>
-                </motion.div>
+                </div>
               </div>
             )}
           </div>

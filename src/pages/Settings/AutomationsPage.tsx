@@ -17,10 +17,10 @@ import {
 import { toast } from 'sonner';
 import { TrashService } from '../../services/trashService';
 import { cn, flattenFields } from '../../lib/utils';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { EmptyState } from '../../components/UI/EmptyState';
 import { motion } from 'motion/react';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { builderCache } from '../../utils/builderCache';
 
 
 
@@ -695,8 +695,9 @@ export const AutomationsPage: React.FC = () => {
   const { session } = useAuth();
   const triageModule = modules?.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);
 
-  const [automations, setAutomations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `automations_${tenant?.id || 'default'}`;
+  const [automations, setAutomations] = useState<any[]>(() => builderCache.get<any[]>(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
 
 
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
@@ -849,7 +850,9 @@ export const AutomationsPage: React.FC = () => {
 
   const fetchAutomations = async () => {
     if (!tenant?.id) return;
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
       const res = await fetch(`${API_BASE_URL}/api/automations`, {
@@ -862,18 +865,23 @@ export const AutomationsPage: React.FC = () => {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setAutomations(data);
+          builderCache.set(cacheKey, data);
         } else {
           setAutomations(DEFAULT_AUTOMATIONS);
+          builderCache.set(cacheKey, DEFAULT_AUTOMATIONS);
         }
         if (!isSettingsMode && selectedRuleId === null && data.length > 0) {
           setSelectedRuleId(data[0].id);
         }
       } else {
         setAutomations(DEFAULT_AUTOMATIONS);
+        builderCache.set(cacheKey, DEFAULT_AUTOMATIONS);
       }
     } catch (err) {
       console.error(err);
-      setAutomations(DEFAULT_AUTOMATIONS);
+      if (!builderCache.has(cacheKey)) {
+        setAutomations(DEFAULT_AUTOMATIONS);
+      }
     } finally {
       setLoading(false);
     }
@@ -944,7 +952,11 @@ export const AutomationsPage: React.FC = () => {
       if (res.ok) {
         toast.success('Automation moved to Recycling Bin');
         if (selectedRuleId === ruleId) setSelectedRuleId(null);
-        fetchAutomations();
+        setAutomations(prev => {
+          const next = prev.filter(r => r.id !== ruleId);
+          builderCache.set(cacheKey, next);
+          return next;
+        });
       }
     } catch (err) {
       console.error(err);
@@ -2721,13 +2733,7 @@ export const AutomationsPage: React.FC = () => {
             </div>
           </div>
 
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map(n => (
-                <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-              ))}
-            </div>
-          ) : filteredCatalogRules.length === 0 ? (
+          {loading ? null : filteredCatalogRules.length === 0 ? (
             <EmptyState
               icon={Zap}
               title="No automations found"
@@ -2742,21 +2748,21 @@ export const AutomationsPage: React.FC = () => {
               {filteredCatalogRules.map((rule, i) => (
                 <motion.div
                   key={rule.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
+                  transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                   onClick={() => {
                     setSelectedRuleId(rule.id);
                     setIsStudioOpen(true);
                   }}
-                  className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                  className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                   <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
                       <div className="flex items-start justify-between mb-4">
-                        <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                        <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                           <Zap size={22} />
                         </div>
 
@@ -2771,7 +2777,7 @@ export const AutomationsPage: React.FC = () => {
 
                           <button
                             onClick={(e) => handleDeleteRule(rule.id, e)}
-                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                            className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                             title="Delete Rule"
                           >
                             <Trash2 size={14} />
@@ -2779,7 +2785,7 @@ export const AutomationsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                         {rule.name}
                       </h3>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -2793,7 +2799,7 @@ export const AutomationsPage: React.FC = () => {
                         <span>{rule.actions?.length || 0} Actions</span>
                       </div>
 
-                      <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                      <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                         Edit in Builder <ArrowRight size={14} />
                       </div>
                     </div>
@@ -2803,16 +2809,16 @@ export const AutomationsPage: React.FC = () => {
 
               {/* Dashed Create Card matching Custom Modules */}
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: filteredCatalogRules.length * 0.03 }}
+                transition={{ duration: 0.25, delay: filteredCatalogRules.length * 0.03, ease: 'easeOut' }}
                 onClick={handleCreateRule}
-                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
+                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-[border-color,background-color] duration-200 cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
               >
-                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                   <Plus size={24} />
                 </div>
-                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                   Create Automation
                 </span>
                 <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">

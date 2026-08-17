@@ -16,33 +16,37 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { EmptyState } from '../../components/UI/EmptyState';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
 import { SiteService, Site } from '../../services/siteService';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { builderCache } from '../../utils/builderCache';
 
 export const SitesPage = () => {
   const navigate = useNavigate();
   const { tenant } = usePlatform();
+  const cacheKey = `sites_${tenant?.id || 'default'}`;
+  const [sites, setSites] = useState<Site[]>(() => builderCache.get<Site[]>(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
   const [activeTab, setActiveTab] = useState<string>('all');
-  const [sites, setSites] = useState<Site[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchSites = async () => {
-    try {
+    if (!builderCache.has(cacheKey)) {
       setLoading(true);
+    }
+    try {
       const data = await SiteService.getSites();
       setSites(data);
+      builderCache.set(cacheKey, data);
     } catch (err: any) {
       toast.error(err.message || 'Failed to fetch sites.');
     } finally {
-      setTimeout(() => setLoading(false), 300);
+      setLoading(false);
     }
   };
 
@@ -74,7 +78,11 @@ export const SitesPage = () => {
         });
       }
       await SiteService.deleteSite(site.id).catch(() => {});
-      setSites(prev => prev.filter(s => s.id !== site.id));
+      setSites(prev => {
+        const next = prev.filter(s => s.id !== site.id);
+        builderCache.set(cacheKey, next);
+        return next;
+      });
       toast.success(`Site "${site.name}" moved to Recycling Bin.`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete site.');
@@ -187,98 +195,7 @@ export const SitesPage = () => {
           </div>
 
           {/* Glassmorphic 3-Column Grid matching Custom Modules */}
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map(n => (
-                <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredSites.map((site, i) => {
-                const SiteIcon = getSiteIcon(site.type || '', site.category);
-
-                return (
-                  <motion.div
-                    key={site.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    onClick={() => handleOpenBuilder(site.id)}
-                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden min-h-[240px]"
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                    <button
-                      onClick={(e) => handleDeleteClick(e, site)}
-                      className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
-                      title="Delete Site"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-
-                    <div className="relative z-10 flex flex-col h-full justify-between">
-                      <div>
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
-                            <SiteIcon size={22} />
-                          </div>
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
-                            site.status === 'active'
-                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                              : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                          }`}>
-                            {site.status || 'Draft'}
-                          </span>
-                        </div>
-
-                        <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
-                          {site.name}
-                        </h3>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
-                          {site.description || 'No description provided.'}
-                        </p>
-
-                        <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 dark:bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/10 mt-4">
-                          <Globe size={13} className="shrink-0" />
-                          <span className="truncate">{site.domain}</span>
-                        </div>
-                      </div>
-                      <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
-                        <div className="text-xs text-zinc-500 font-semibold font-mono">
-                          {site.domain}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
-                          Edit in Builder <ArrowRight size={14} />
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-
-              {/* Dashed Create Card matching Custom Modules */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: filteredSites.length * 0.03 }}
-                onClick={() => setIsModalOpen(true)}
-                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
-                  <Plus size={24} />
-                </div>
-                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
-                  Create Site
-                </span>
-                <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
-                  Build an intranet hub, portal, or public web site.
-                </p>
-              </motion.div>
-            </div>
-          )}
-
-          {filteredSites.length === 0 && !loading && (
+          {loading ? null : filteredSites.length === 0 ? (
             <EmptyState
               icon={Globe}
               title="No sites deployed"
@@ -288,6 +205,89 @@ export const SitesPage = () => {
                 onClick: () => setIsModalOpen(true)
               }}
             />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredSites.map((site, i) => {
+                const SiteIcon = getSiteIcon(site.type || '', site.category);
+
+                return (
+                  <motion.div
+                    key={site.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
+                    onClick={() => handleOpenBuilder(site.id)}
+                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden min-h-[240px]"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    <button
+                      onClick={(e) => handleDeleteClick(e, site)}
+                      className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20"
+                      title="Delete Site"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+
+                    <div className="relative z-10 flex flex-col h-full justify-between">
+                      <div>
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
+                            <SiteIcon size={22} />
+                          </div>
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                            site.status === 'active'
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                          }`}>
+                            {site.status || 'Active'}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
+                          {site.name}
+                        </h3>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                          {site.description || "No description provided."}
+                        </p>
+                        {site.domain && (
+                          <div className="mt-3 flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 bg-zinc-100/60 dark:bg-white/5 px-2.5 py-1 rounded-lg w-fit">
+                            <Globe size={11} className="text-indigo-400" />
+                            <span>{site.domain}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                        <div className="text-xs text-zinc-400">
+                          {site.pages?.length || 1} {site.pages?.length === 1 ? 'Page' : 'Pages'}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
+                          Launch Site Studio <ArrowRight size={14} />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+
+              {/* Create New Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: filteredSites.length * 0.03, ease: 'easeOut' }}
+                onClick={() => setIsModalOpen(true)}
+                className="p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,background-color] duration-200 cursor-pointer flex flex-col items-center justify-center text-center group min-h-[240px] bg-zinc-50/50 dark:bg-zinc-900/20"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
+                  <Plus size={24} />
+                </div>
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
+                  Create Site
+                </span>
+                <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                  Build an intranet hub, portal, or public web site.
+                </p>
+              </motion.div>
+            </div>
           )}
         </div>
       </div>

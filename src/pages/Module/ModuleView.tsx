@@ -28,7 +28,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
-import { Skeleton } from '../../components/UI/Skeleton';
+import { builderCache, workspaceMotion } from '../../utils/builderCache';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify } from '../../lib/utils';
@@ -565,11 +565,16 @@ export const ModuleView = () => {
   }, [activeQueue, queueIdRaw]);
 
   useModalStack();
-  const [moduleData, setModuleData] = useState<Module | null>(null);
-  const [records, setRecords] = useState<Record<string, any>[]>([]);
-  // Use TanStack Query states instead
-  // const [loading, setLoading] = useState(true);
-  // const [recordsLoading, setRecordsLoading] = useState(true);
+  const matchedModuleInitial = useMemo(() => {
+    if (!moduleId || !modules) return null;
+    return modules.find(
+      (m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name?.toLowerCase() === moduleId.toLowerCase())
+    ) || null;
+  }, [moduleId, modules]);
+
+  const recordsCacheKey = `records_${tenant?.id || 'default'}_${moduleId || 'none'}`;
+  const [moduleData, setModuleData] = useState<Module | null>(() => matchedModuleInitial);
+  const [records, setRecords] = useState<Record<string, any>[]>(() => builderCache.get(recordsCacheKey) || []);
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
@@ -685,12 +690,16 @@ export const ModuleView = () => {
     enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
   });
 
-  // Clear data when moduleId changes to prevent stale UI
+  // Fast switch when moduleId changes
   useEffect(() => {
-    setModuleData(null);
-    setRecords([]);
+    const nextMod = (modules || []).find(
+      (m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name?.toLowerCase() === moduleId.toLowerCase())
+    );
+    if (nextMod) setModuleData(nextMod);
+    const cached = builderCache.get<Record<string, any>[]>(recordsCacheKey);
+    setRecords(cached || []);
     setPage(1);
-  }, [moduleId]);
+  }, [moduleId, modules, recordsCacheKey]);
 
   useEffect(() => {
     if (moduleResult) setModuleData(moduleResult);
@@ -698,13 +707,15 @@ export const ModuleView = () => {
 
   useEffect(() => {
     if (recordsResult) {
-      setRecords(recordsResult.records);
+      const recs = recordsResult.records || [];
+      setRecords(recs);
+      builderCache.set(recordsCacheKey, recs);
       if (!queueId) {
         setTotalRecords(recordsResult.total);
         setTotalPages(recordsResult.totalPages);
       }
     }
-  }, [recordsResult, queueId]);
+  }, [recordsResult, queueId, recordsCacheKey]);
 
   // Combined loading state for progressive rendering
   const isSessionReady = !!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN;
@@ -3897,28 +3908,7 @@ export const ModuleView = () => {
     );
   };
 
-  if ((loading || platformLoading) && !moduleData) return (
-    <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <Skeleton width={180} height={32} variant="rounded" />
-          <Skeleton width={350} height={20} variant="text" />
-        </div>
-        <div className="flex gap-4">
-          <Skeleton width={100} height={40} variant="rounded" />
-          <Skeleton width={120} height={40} variant="rounded" />
-        </div>
-      </div>
-
-      <div className="space-y-4 pt-6">
-        <div className="flex items-center gap-4">
-          <Skeleton width={200} height={40} variant="rounded" />
-          <Skeleton width={40} height={40} variant="rounded" />
-        </div>
-        <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
-      </div>
-    </div>
-  );
+  if ((loading || platformLoading) && !moduleData) return null;
 
   if (!moduleData && !loading) {
     if (moduleError) {
@@ -4076,15 +4066,7 @@ export const ModuleView = () => {
 
 
 
-      {recordsLoading ? (
-        <div className="space-y-4 pt-6">
-          <div className="flex items-center gap-4">
-            <Skeleton width={200} height={40} variant="rounded" />
-            <Skeleton width={40} height={40} variant="rounded" />
-          </div>
-          <Skeleton height={400} variant="rounded" className="rounded-[2.5rem]" />
-        </div>
-      ) : records.length > 0 ? (
+      {recordsLoading && records.length === 0 ? null : records.length > 0 ? (
         interfaceSettings.master.layoutType === 'pipeline' ? (
           renderPipelineView()
         ) : interfaceSettings.master.layoutType === 'kanban' ? (

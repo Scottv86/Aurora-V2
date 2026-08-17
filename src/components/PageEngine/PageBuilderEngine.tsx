@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Layout, Cpu, Workflow, FileText, 
-  HelpCircle, Sparkles, Monitor, Tablet, Smartphone
+  HelpCircle, Sparkles, Monitor, Tablet, Smartphone, ListOrdered
 } from 'lucide-react';
 import { UniversalWidgetRenderer } from './UniversalWidgetRenderer';
 import { cn } from '../../lib/utils';
@@ -102,10 +102,11 @@ export const PageBuilderEngine: React.FC<PageBuilderEngineProps> = ({
             <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Universal Toolbox</h4>
             <div className="space-y-1.5">
               {[
+                { type: 'queue', label: 'Work Queue Embed', icon: ListOrdered },
                 { type: 'standalone-form', label: 'Standalone Form', icon: FileText },
                 { type: 'stats-grid', label: 'Stats Metrics Grid', icon: Cpu },
                 { type: 'active-workflows', label: 'Active Workflows', icon: Workflow },
-                { type: 'work-queue', label: 'Work Inbox', icon: Layout },
+                { type: 'work-queue', label: 'My Work Inbox', icon: Layout },
                 { type: 'rich-text', label: 'Rich Text Block', icon: FileText },
                 { type: 'hero', label: 'Hero Section', icon: Sparkles },
                 { type: 'faq', label: 'FAQ Accordion', icon: HelpCircle }

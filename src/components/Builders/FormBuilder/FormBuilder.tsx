@@ -29,11 +29,15 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   const { tenant } = usePlatform();
   const [name, setName] = useState(initialForm?.name || 'Untitled Form');
   const [description, setDescription] = useState(initialForm?.description || '');
-  const [fields, setFields] = useState<ModuleField[]>(initialForm?.schema?.layout || [
-    { id: 'f_1', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
-    { id: 'f_2', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
-    { id: 'f_3', label: 'Inquiry / Comments', type: 'textarea', required: false, colSpan: 12 }
-  ]);
+  const [fields, setFields] = useState<ModuleField[]>(
+    initialForm?.schema?.layout !== undefined
+      ? initialForm.schema.layout
+      : [
+          { id: 'f_1', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
+          { id: 'f_2', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
+          { id: 'f_3', label: 'Inquiry / Comments', type: 'textarea', required: false, colSpan: 12 }
+        ]
+  );
   const [tabs] = useState<Tab[]>(initialForm?.schema?.tabs || [
     { id: 'tab_default', label: 'General Information' }
   ]);
@@ -42,6 +46,17 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   const [viewMode, setViewMode] = useState<'editor' | 'preview'>('editor');
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(fields[0]?.id || null);
   const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (initialForm) {
+      setName(initialForm.name || 'Untitled Form');
+      setDescription(initialForm.description || '');
+      if (initialForm.schema?.layout !== undefined) {
+        setFields(initialForm.schema.layout);
+        setSelectedFieldId(initialForm.schema.layout[0]?.id || null);
+      }
+    }
+  }, [initialForm]);
 
   // Sub-Modals & Drawers from ModuleBuilder Engine
   const [showFieldSelector, setShowFieldSelector] = useState(false);

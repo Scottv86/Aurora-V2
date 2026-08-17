@@ -5,7 +5,6 @@ import { Trash2, Plus, Loader2, Layout, ArrowRight, Search } from 'lucide-react'
 
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -20,7 +19,7 @@ const COMMON_ICONS = [
 
 export const PagesManagementPage = () => {
   const navigate = useNavigate();
-  const { tenant, modules, refreshModules, updateTenant } = usePlatform();
+  const { tenant, modules, refreshModules, updateTenant, isLoading } = usePlatform();
   const { session } = useAuth();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -32,11 +31,6 @@ export const PagesManagementPage = () => {
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'custom' | 'home'>('all');
-  const [loading, setLoading] = useState(true);
-
-  React.useEffect(() => {
-    setLoading(false);
-  }, [tenant?.id, modules?.length]);
 
   // Filter modules to only show workspace pages (type === 'PAGE')
   const pages = modules.filter((mod: any) => {
@@ -253,13 +247,7 @@ export const PagesManagementPage = () => {
         </div>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map(n => (
-            <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-          ))}
-        </div>
-      ) : pages.length === 0 ? (
+      {isLoading ? null : pages.length === 0 ? (
         <EmptyState
           icon={Layout}
           title="No workspace pages found"
@@ -279,12 +267,12 @@ export const PagesManagementPage = () => {
           return (
             <motion.div
               key={page.id}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
+              transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
               onClick={() => navigate(`/workspace/settings/builder/page/${page.id}`)}
               className={cn(
-                "group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none cursor-pointer flex flex-col h-full relative overflow-hidden",
+                "group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none cursor-pointer flex flex-col h-full relative overflow-hidden",
                 isHomePage 
                   ? "border-teal-500/50 shadow-teal-550/5 dark:border-teal-500/30" 
                   : "border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-indigo-500/10"
@@ -299,7 +287,7 @@ export const PagesManagementPage = () => {
                     e.stopPropagation();
                     handleSetHomePage(page.id);
                   }}
-                  className="absolute top-4 right-14 p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                  className="absolute top-4 right-14 p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20"
                   title="Set as Workspace Home Page"
                 >
                   <Icons.Home size={14} />
@@ -318,7 +306,7 @@ export const PagesManagementPage = () => {
                 }}
                 disabled={deletingId === page.id}
                 className={cn(
-                  "absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 text-zinc-500 transition-all opacity-0 group-hover:opacity-100 z-20",
+                  "absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 text-zinc-500 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20",
                   isHomePage
                     ? "hover:bg-zinc-200/50 text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-600 cursor-not-allowed"
                     : "hover:bg-red-500/10 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20"
@@ -332,7 +320,7 @@ export const PagesManagementPage = () => {
                 <div>
                   <div className="flex items-start justify-between mb-4">
                     <div className={cn(
-                      "p-3 rounded-2xl border transition-all",
+                      "p-3 rounded-2xl border transition-colors duration-200",
                       isHomePage 
                         ? "bg-teal-500/10 border-teal-500/20 text-teal-500" 
                         : "bg-zinc-100 dark:bg-white/5 border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30"
@@ -348,7 +336,7 @@ export const PagesManagementPage = () => {
                     ) : null}
 
                   </div>
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                     {page.name}
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -359,7 +347,7 @@ export const PagesManagementPage = () => {
                   <div className="text-xs text-zinc-500 font-semibold">
                     {widgetsCount} Widgets
                   </div>
-                  <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                  <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                     Edit in Builder <ArrowRight size={14} />
 
                   </div>
@@ -371,16 +359,16 @@ export const PagesManagementPage = () => {
 
         {/* Dash creator card */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: pages.length * 0.03 }}
+          transition={{ duration: 0.25, delay: pages.length * 0.03, ease: 'easeOut' }}
           onClick={() => setShowCreateModal(true)}
-          className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
+          className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[220px] transition-[border-color,background-color] duration-200 text-center hover:bg-indigo-500/[0.01]"
         >
-          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
             <Plus size={24} />
           </div>
-          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
             Create Page
           </span>
           <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">

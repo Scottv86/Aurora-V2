@@ -8,3 +8,6 @@ export * from './ValidationBuilder/ValidationBuilder';
 export * from './ConnectorBuilder/ConnectorBuilder';
 export * from './ReportBuilder/ReportBuilder';
 export * from './SolutionBuilder/SolutionBuilderStudio';
+export * from './QueueBuilder/QueueBuilder';
+export * from './QueueBuilder/QueueRenderer';
+export * from './QueryBuilder/QueryBuilder';

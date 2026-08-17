@@ -31,6 +31,8 @@ import formRoutes from './routes/formRoutes';
 import workflowRoutes from './routes/workflowRoutes';
 import validationRoutes from './routes/validationRoutes';
 import solutionRoutes from './routes/solutionRoutes';
+import queueRoutes from './routes/queueRoutes';
+import savedQueryRoutes from './routes/savedQueryRoutes';
 
 
 
@@ -135,6 +137,8 @@ app.use('/api/forms', authenticate, requireTenantAccess, formRoutes);
 app.use('/api/workflows', authenticate, requireTenantAccess, workflowRoutes);
 app.use('/api/validations', authenticate, requireTenantAccess, validationRoutes);
 app.use('/api/solutions', authenticate, requireTenantAccess, solutionRoutes);
+app.use('/api/queues', authenticate, requireTenantAccess, queueRoutes);
+app.use('/api/saved-queries', authenticate, requireTenantAccess, savedQueryRoutes);
 
 
 
@@ -170,4 +174,4 @@ httpServer.listen(PORT, () => {
   console.log(`🚀 Aurora Platform Server (with Real-time) running on http://localhost:${PORT}`);
   AutomationScheduler.start();
 });
-// Trigger restart to reload server port 3001 with generated Prisma Site client
+// Server reload trigger timestamp: 2026-08-17T22:30:00Z

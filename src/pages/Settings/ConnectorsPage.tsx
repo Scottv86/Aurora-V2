@@ -33,11 +33,11 @@ import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { flattenFields } from '../../lib/utils';
+import { builderCache } from '../../utils/builderCache';
 
 export interface Connector {
   id: string;
@@ -207,9 +207,10 @@ export const ConnectorsPage = () => {
   const { id: selectedConnectorId } = useParams();
   const navigate = useNavigate();
 
-  const [registry, setRegistry] = useState<Connector[]>([]);
-  const [activeConnectors, setActiveConnectors] = useState<TenantConnector[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `connectors_${tenant?.id || 'default'}`;
+  const [registry, setRegistry] = useState<Connector[]>(() => builderCache.get<Connector[]>(cacheKey) || DEFAULT_CONNECTORS);
+  const [activeConnectors, setActiveConnectors] = useState<TenantConnector[]>(() => builderCache.get<TenantConnector[]>(`${cacheKey}_active`) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
   const [searchQuery, setSearchQuery] = useState('');
 
   const [activeTab, setActiveTab] = useState<'setup' | 'mapping' | 'usage' | 'test' | 'logs'>('setup');
@@ -222,7 +223,9 @@ export const ConnectorsPage = () => {
 
   const fetchData = async () => {
     if (!tenant?.id) return;
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/api/connectors`, {
@@ -233,18 +236,22 @@ export const ConnectorsPage = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.registry && data.registry.length > 0) {
-          setRegistry(data.registry);
-        } else {
-          setRegistry(DEFAULT_CONNECTORS);
+        const nextRegistry = data.registry && data.registry.length > 0 ? data.registry : DEFAULT_CONNECTORS;
+        setRegistry(nextRegistry);
+        builderCache.set(cacheKey, nextRegistry);
+        if (data.active) {
+          setActiveConnectors(data.active);
+          builderCache.set(`${cacheKey}_active`, data.active);
         }
-        if (data.active) setActiveConnectors(data.active);
       } else {
         setRegistry(DEFAULT_CONNECTORS);
+        builderCache.set(cacheKey, DEFAULT_CONNECTORS);
       }
     } catch (err) {
       console.error('Failed to fetch connectors:', err);
-      setRegistry(DEFAULT_CONNECTORS);
+      if (!builderCache.has(cacheKey)) {
+        setRegistry(DEFAULT_CONNECTORS);
+      }
     } finally {
       setLoading(false);
     }
@@ -571,13 +578,7 @@ export const ConnectorsPage = () => {
             </div>
 
             {/* Integration Catalog Grid */}
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[1, 2, 3, 4, 5, 6].map(n => (
-                  <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-                ))}
-              </div>
-            ) : filteredRegistry.length === 0 ? (
+            {loading ? null : filteredRegistry.length === 0 ? (
               <EmptyState
                 icon={Plug}
                 title="No integrations found"
@@ -596,17 +597,17 @@ export const ConnectorsPage = () => {
                   return (
                     <motion.div
                       key={conn.id}
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.03 }}
+                      transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                       onClick={() => navigate(`${basePath}/${conn.id}`)}
-                      className="group border border-white/20 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-6 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                      className="group border border-white/20 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-6 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
                     >
                       <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                       <button
                         onClick={(e) => handleDeleteClick(e, conn)}
-                        className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                        className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                         title="Delete Integration"
                       >
                         <Trash2 size={14} />
@@ -615,7 +616,7 @@ export const ConnectorsPage = () => {
                       <div className="relative z-10 flex flex-col h-full justify-between">
                         <div>
                           <div className="flex items-center justify-between mb-4">
-                            <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                            <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                               <DynamicIcon name={activeIconName} size={22} />
                             </div>
                             {isActive && (
@@ -624,13 +625,13 @@ export const ConnectorsPage = () => {
                               </span>
                             )}
                           </div>
-                          <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">{conn.name}</h3>
+                          <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">{conn.name}</h3>
                           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">{conn.description}</p>
                         </div>
 
                         <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
                           <div className="text-xs text-zinc-500 font-semibold">{conn.category}</div>
-                          <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                          <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                             Edit in Builder <ArrowRight size={14} />
                           </div>
                         </div>
@@ -642,16 +643,16 @@ export const ConnectorsPage = () => {
 
                 {/* Dashed Interactive Add Integration Card */}
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: filteredRegistry.length * 0.03 }}
+                  transition={{ duration: 0.25, delay: filteredRegistry.length * 0.03, ease: 'easeOut' }}
                   onClick={() => setIsModalOpen(true)}
-                  className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
+                  className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-[border-color,background-color] duration-200 text-center hover:bg-indigo-500/[0.01]"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+                  <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                     <Plus size={24} />
                   </div>
-                  <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                  <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                     Create Integration
                   </span>
                   <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">

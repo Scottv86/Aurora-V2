@@ -51,6 +51,7 @@ model Tenant {
   recyclingBinItems      RecyclingBinItem[]
   sites                  Site[]
   solutionBlueprints     SolutionBlueprint[]
+  savedQueries           SavedQuery[]
 
   @@map("tenants")
 }
@@ -1048,6 +1049,30 @@ model SolutionBlueprint {
   @@index([tenantId])
   @@index([tenantId, status])
   @@map("solution_blueprints")
+}
+
+model SavedQuery {
+  id                    String   @id @default(cuid())
+  tenantId              String   @map("tenant_id")
+  name                  String
+  slug                  String
+  description           String?
+  category              String   @default("General")
+  tags                  Json     @default("[]")
+  iconName              String?  @default("Database") @map("icon_name")
+  sql                   String
+  parameters            Json     @default("[]")
+  columnsConfig         Json     @default("[]") @map("columns_config")
+  status                String   @default("DRAFT")
+  cacheTtlSeconds       Int      @default(0) @map("cache_ttl_seconds")
+  downstreamUsagesCount Int      @default(0) @map("downstream_usages_count")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("saved_queries")
 }
 
 

@@ -351,7 +351,7 @@ router.get('/records', async (req: TenantRequest, res) => {
             array_contains: [{ record_id: associationId as string }]
           }
         },
-        include: { createdByMember: true },
+        include: { createdByMember: true, module: true },
         orderBy: { createdAt: 'desc' },
         skip,
         take: l
@@ -390,7 +390,7 @@ router.get('/records', async (req: TenantRequest, res) => {
       total = await db.record.count({ where: whereClause });
       records = await db.record.findMany({
         where: whereClause,
-        include: { createdByMember: true },
+        include: { createdByMember: true, module: true },
         orderBy: { createdAt: 'desc' },
         skip,
         take: l
@@ -401,6 +401,8 @@ router.get('/records', async (req: TenantRequest, res) => {
     const formatted = (records as any[]).map((r: any) => ({
       id: r.id,
       moduleId: r.moduleId,
+      moduleName: r.module?.name,
+      moduleIcon: r.module?.icon,
       status: r.status,
       associations: r.associations,
       path: r.path,
@@ -430,7 +432,7 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
     const { id } = req.params;
     const record = await db.record.findUnique({ 
       where: { id },
-      include: { createdByMember: true }
+      include: { createdByMember: true, module: true }
     });
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
@@ -438,6 +440,8 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
     res.json({
       id: record.id,
       moduleId: record.moduleId,
+      moduleName: (record as any).module?.name,
+      moduleIcon: (record as any).module?.icon,
       status: record.status,
       associations: record.associations,
       path: record.path,

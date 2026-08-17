@@ -19,24 +19,30 @@ import { usePlatform } from '../hooks/usePlatform';
 import { useData } from '../hooks/useData';
 import { DocumentList } from './DocumentList';
 import { DocumentGeneratorModal } from './DocumentGeneratorModal';
-import { Skeleton } from './UI/Skeleton';
+import { builderCache, workspaceMotion } from '../utils/builderCache';
 import { UserAvatarWithPresence } from './Common/UserPresenceBadge';
 
 export const WorkQueue = () => {
-  const { tenant, user: platformUser, isLoading: platformLoading, members } = usePlatform();
+  const { tenant, user: platformUser, isLoading: platformLoading, members, modules: platformModules } = usePlatform();
   const [page, setPage] = useState(1);
   const { data: cases, loading: casesLoading, hasMore, mutate: mutateCases } = useData('records', { page, limit: 20, append: true });
-  const { data: modules, loading: modulesLoading } = useData('modules');
+  const modules = platformModules || [];
   
   const [selectedCase, setSelectedCase] = useState<any>(null);
   const [processing, setProcessing] = useState(false);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'documents'>('details');
-  const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(new Set());
+  const [activeModuleIds, setActiveModuleIds] = useState<Set<string>>(() => {
+    const activeIds = new Set<string>();
+    (platformModules || []).forEach((m: any) => {
+      if (m.enabled !== false) activeIds.add(m.id);
+    });
+    return activeIds;
+  });
   const [assigneeFilter, setAssigneeFilter] = useState<'mine' | 'unassigned' | 'all'>('mine');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loading = (casesLoading && page === 1) || modulesLoading;
+  const loading = casesLoading && cases.length === 0 && page === 1;
 
   const myMemberId = platformUser?.memberId || platformUser?.cuid;
 
@@ -124,49 +130,8 @@ export const WorkQueue = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-10 space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton width={120} height={32} variant="rounded" />
-            <Skeleton width={300} height={20} variant="text" />
-          </div>
-          <div className="flex gap-3">
-            <Skeleton width={256} height={40} variant="rounded" />
-            <Skeleton width={40} height={40} variant="rounded" />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="p-4 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Skeleton width={40} height={40} variant="rounded" />
-                  <div className="space-y-2">
-                    <Skeleton width={80} height={12} variant="text" />
-                    <Skeleton width={200} height={16} variant="text" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className="space-y-1">
-                    <Skeleton width={40} height={10} variant="text" />
-                    <Skeleton width={60} height={14} variant="text" />
-                  </div>
-                  <div className="space-y-1">
-                    <Skeleton width={40} height={10} variant="text" />
-                    <Skeleton width={60} height={14} variant="text" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-6">
-            <Skeleton height={400} variant="rounded" className="rounded-3xl" />
-          </div>
-        </div>
-      </div>
-    );
+  if (loading && (!cases || cases.length === 0)) {
+    return null;
   }
 
   if (!tenant && !platformLoading) {

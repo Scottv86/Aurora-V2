@@ -466,7 +466,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
       {/* 1. Rules Sidebar (Left) */}
       <aside className="w-72 flex-shrink-0 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Validation Rules</h3>
+          <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Rules</h3>
           <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-[9px] font-bold text-zinc-500">
             {validationRules.length}
           </span>
@@ -656,7 +656,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
             {/* Header / Actions */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">Configure Validation</h2>
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">Configure Rule</h2>
                 <p className="text-zinc-500 text-xs mt-0.5">Edit formula rules and severity properties.</p>
               </div>
             </div>
@@ -888,7 +888,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
                 <ShieldCheck size={32} />
               </div>
               <div className="space-y-1">
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Validation Workspace</h3>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Rules Workspace</h3>
                 <p className="text-zinc-500 text-xs leading-relaxed">
                   Select a rule from the left sidebar or click **+ New Rule** to configure data constraints and expressions.
                 </p>

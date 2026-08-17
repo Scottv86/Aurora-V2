@@ -9,8 +9,10 @@ import { DATA_API_URL } from '../../config';
 import { fetchRecords } from '../../services/dataService';
 import { checkCondition, getFieldValue, cn, flattenFields, slugify } from '../../lib/utils';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
+import { PLATFORM_MODULES } from '../../config/platformModules';
+import { builderCache, workspaceMotion } from '../../utils/builderCache';
+import { motion } from 'motion/react';
 
 export const QueueView = () => {
   const { queueId } = useParams<{ queueId: string }>();
@@ -23,6 +25,55 @@ export const QueueView = () => {
   const [page, setPage] = useState(1);
   const pageSize = 15;
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Helper to dynamically resolve module metadata (by id, slug, table name, or platform module)
+  const getRecordModule = (recOrId: any) => {
+    if (!recOrId) return null;
+    const mId = typeof recOrId === 'string' ? recOrId : (recOrId.moduleId || recOrId._moduleId || recOrId.module_id);
+    if (!mId) return null;
+
+    const match = (modules || []).find((m: any) => 
+      m.id === mId || 
+      m.slug === mId || 
+      slugify(m.name || '') === slugify(mId) || 
+      m.tableName === mId || 
+      m.name?.toLowerCase() === mId.toLowerCase()
+    );
+    if (match) return match;
+
+    const platMatch = (PLATFORM_MODULES as any[] || []).find((m: any) => 
+      m.id === mId || 
+      m.slug === mId || 
+      slugify(m.name || '') === slugify(mId) || 
+      m.name?.toLowerCase() === mId.toLowerCase()
+    );
+    if (platMatch) return platMatch;
+
+    return null;
+  };
+
+  const getRecordModuleName = (rec: any) => {
+    if (!rec) return 'Module';
+    const mod = getRecordModule(rec);
+    if (mod?.name) return mod.name;
+    if (rec.moduleName && rec.moduleName !== 'Unknown Module') return rec.moduleName;
+    if (rec._moduleName && rec._moduleName !== 'Unknown Module') return rec._moduleName;
+    if (activeQueue?.moduleIds?.length === 1) {
+      const singleMod = getRecordModule(activeQueue.moduleIds[0]);
+      if (singleMod?.name) return singleMod.name;
+    }
+    const mId = typeof rec === 'string' ? rec : (rec.moduleId || rec._moduleId);
+    if (mId && typeof mId === 'string' && !mId.startsWith('cm_') && !mId.startsWith('mod_')) {
+      return mId.charAt(0).toUpperCase() + mId.slice(1).replace(/[-_]/g, ' ');
+    }
+    return 'Module';
+  };
+
+  const getRecordModuleIcon = (rec: any) => {
+    if (!rec) return 'Box';
+    const mod = getRecordModule(rec);
+    return mod?.icon || mod?.iconName || rec.moduleIcon || rec._moduleIcon || 'Box';
+  };
 
   const handleSort = (colId: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -56,7 +107,7 @@ export const QueueView = () => {
 
   // Fetch all records for the target modules of this unified queue
   const { data: rawRecords = [], isLoading: recordsQueryLoading } = useQuery({
-    queryKey: ['queue-records', tenant?.id, queueId, activeQueue?.moduleIds],
+    queryKey: ['queue-records', tenant?.id, queueId, activeQueue?.moduleIds, modules?.length],
     queryFn: async () => {
       if (!tenant?.id || !activeQueue?.moduleIds || activeQueue.moduleIds.length === 0) return [];
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -68,12 +119,12 @@ export const QueueView = () => {
       
       return results.flatMap((res: any, idx) => {
         const mId = activeQueue.moduleIds![idx];
-        const mod = modules.find(m => m.id === mId);
+        const mod = getRecordModule(mId);
         return (res?.records || []).map((r: any) => ({
           ...r,
-          moduleId: mId,
-          _moduleName: mod?.name || 'Unknown Module',
-          _moduleIcon: mod?.icon || 'Box'
+          moduleId: r.moduleId || mId,
+          _moduleName: r.moduleName || mod?.name || getRecordModuleName(r.moduleId || mId),
+          _moduleIcon: r.moduleIcon || mod?.icon || mod?.iconName || 'Box'
         }));
       });
     },
@@ -120,16 +171,16 @@ export const QueueView = () => {
 
         // Custom getters for special columns
         if (key === 'moduleId') {
-          valA = a._moduleName;
-          valB = b._moduleName;
+          valA = getRecordModuleName(a);
+          valB = getRecordModuleName(b);
         } else if (key === 'assigneeId') {
           const userA = members.find((m: any) => m.cuid === a.assigneeId || m.memberId === a.assigneeId);
           const userB = members.find((m: any) => m.cuid === b.assigneeId || m.memberId === b.assigneeId);
           valA = userA ? userA.name : '';
           valB = userB ? userB.name : '';
         } else if (key === 'title') {
-          valA = a.data?.title || a.data?.name || a.id;
-          valB = b.data?.title || b.data?.name || b.id;
+          valA = a.data?.title || a.data?.name || a.title || a.name || a.id;
+          valB = b.data?.title || b.data?.name || b.title || b.name || b.id;
         } else if (key === 'createdAt' || key === 'updatedAt') {
           valA = new Date(valA || 0).getTime();
           valB = new Date(valB || 0).getTime();
@@ -154,9 +205,9 @@ export const QueueView = () => {
     }
 
     return result;
-  }, [rawRecords, activeQueue, searchQuery, visibilityContext, sortConfig, members]);
+  }, [rawRecords, activeQueue, searchQuery, visibilityContext, sortConfig, members, modules]);
 
-  // Paginated Slicing
+  // Paginated records
   const totalRecords = filteredRecords.length;
   const totalPages = Math.ceil(totalRecords / pageSize) || 1;
   const paginatedRecords = useMemo(() => {
@@ -175,17 +226,14 @@ export const QueueView = () => {
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant?.id || ''
         },
-        body: JSON.stringify({
-          moduleId,
-          assigneeId
-        })
+        body: JSON.stringify({ moduleId, assigneeId })
       });
       if (!res.ok) throw new Error('Failed to update assignee');
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['queue-records', tenant?.id, queueId] });
-      toast.success('Assignee updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['queue-records'] });
+      toast.success('Assignee updated');
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to update assignee');
@@ -193,7 +241,7 @@ export const QueueView = () => {
   });
 
   const handleClaim = (record: any) => {
-    const me = platformUser?.memberId || platformUser?.cuid;
+    const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
     if (!me) return;
     updateMutation.mutate({ recordId: record.id, moduleId: record.moduleId, assigneeId: me });
   };
@@ -202,10 +250,10 @@ export const QueueView = () => {
     updateMutation.mutate({ recordId: record.id, moduleId: record.moduleId, assigneeId: null });
   };
 
-  // Columns definition mapping
+  // Columns definition: use activeQueue config or default
   const columnsToRender = useMemo(() => {
-    const configCols = activeQueue?.queueConfig?.columns || [];
-    if (configCols.length > 0) return configCols;
+    const configCols = activeQueue?.queueConfig?.columns;
+    if (configCols && configCols.length > 0) return configCols;
     
     // Default columns
     return ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'];
@@ -224,10 +272,10 @@ export const QueueView = () => {
       default: {
         // Search custom field labels
         for (const mId of activeQueue?.moduleIds || []) {
-          const mod = modules.find(m => m.id === mId);
+          const mod = getRecordModule(mId);
           if (mod?.layout) {
             const flat = flattenFields(mod.layout);
-            const field = flat.find(f => f.id === colId);
+            const field = flat.find((f: any) => f.id === colId);
             if (field) return field.label || field.name;
           }
         }
@@ -250,9 +298,9 @@ export const QueueView = () => {
         return (
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-indigo-500">
-              <DynamicIcon name={record._moduleIcon} size={11} />
+              <DynamicIcon name={getRecordModuleIcon(record)} size={11} />
             </div>
-            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{record._moduleName}</span>
+            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{getRecordModuleName(record)}</span>
           </div>
         );
       case 'title':
@@ -323,24 +371,8 @@ export const QueueView = () => {
     }
   };
 
-  if (platformLoading || recordsQueryLoading) {
-    return (
-      <div className="flex flex-col w-full h-[calc(100vh-4rem)] p-6 lg:p-12 space-y-6 bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
-        <div className="flex items-center justify-between shrink-0">
-          <div className="space-y-2">
-            <Skeleton width={200} height={28} variant="rounded" />
-            <Skeleton width={320} height={16} variant="text" />
-          </div>
-          <Skeleton width={250} height={40} variant="rounded" />
-        </div>
-        <div className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-4">
-          <Skeleton width="100%" height={40} variant="rounded" />
-          {[1, 2, 3, 4, 5].map(i => (
-            <Skeleton key={i} width="100%" height={56} variant="rounded" />
-          ))}
-        </div>
-      </div>
-    );
+  if (platformLoading && !activeQueue) {
+    return null;
   }
 
   if (!activeQueue) {
@@ -360,61 +392,53 @@ export const QueueView = () => {
   return (
     <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden">
       
-      {/* Header Panel */}
-      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex items-center justify-between gap-4 z-20">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
             <DynamicIcon name={activeQueue.iconName || 'ClipboardList'} size={24} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{activeQueue.label}</h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
-              Unified Queue containing records across {activeQueue.moduleIds?.length || 0} modules.
-            </p>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{activeQueue.label || activeQueue.name}</h1>
+            <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">{activeQueue.description || 'Workspace Work Queue'}</p>
           </div>
         </div>
 
-        {/* Toolbar Controls */}
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <LucideIcons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
-            <input 
-              type="text" 
-              placeholder="Search in queue..." 
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              className="bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500 w-60 transition-all shadow-sm"
-            />
-          </div>
+        {/* Search */}
+        <div className="relative w-64">
+          <LucideIcons.Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input
+            type="text"
+            placeholder="Search in queue..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl text-xs outline-none focus:border-indigo-500/50 transition-colors shadow-xs"
+          />
         </div>
       </div>
 
-      {/* Main Grid View */}
-      <div className="flex-1 p-6 lg:p-8 overflow-hidden min-h-0 flex flex-col">
-        <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col">
+      {/* Main Content Area */}
+      <div className="flex-1 p-6 lg:p-12 overflow-hidden flex flex-col">
+        <div className="flex-1 bg-white/60 dark:bg-zinc-900/30 backdrop-blur-xl border border-zinc-200/60 dark:border-white/5 rounded-3xl overflow-hidden flex flex-col shadow-xl shadow-black/5">
+          
+          {/* Table Container */}
           <div className="flex-1 overflow-auto custom-scrollbar">
-            {paginatedRecords.length > 0 ? (
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50/20 dark:bg-zinc-900/10 sticky top-0 z-10">
+            {recordsQueryLoading && rawRecords.length === 0 ? null : paginatedRecords.length > 0 ? (
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-zinc-50/90 dark:bg-zinc-900/90 backdrop-blur-md z-10 border-b border-zinc-200/40 dark:border-zinc-800/40">
+                  <tr>
                     {columnsToRender.map((colId: string) => {
                       const isSorted = sortConfig?.key === colId;
                       return (
-                        <th 
-                          key={colId} 
+                        <th
+                          key={colId}
                           onClick={() => handleSort(colId)}
-                          className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 cursor-pointer hover:bg-zinc-100/10 dark:hover:bg-white/[0.02] select-none transition-colors group"
+                          className="px-5 py-3 text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider cursor-pointer select-none hover:text-zinc-900 dark:hover:text-white transition-colors"
                         >
-                          <div className="flex items-center gap-1.5">
-                            <span>{columnLabel(colId)}</span>
-                            {isSorted ? (
-                              sortConfig.direction === 'asc' ? (
-                                <LucideIcons.ChevronUp size={11} className="text-indigo-500 shrink-0" />
-                              ) : (
-                                <LucideIcons.ChevronDown size={11} className="text-indigo-500 shrink-0" />
-                              )
-                            ) : (
-                              <LucideIcons.ArrowUpDown size={10} className="text-zinc-400 dark:text-zinc-650 opacity-0 group-hover:opacity-100 transition-all shrink-0" />
+                          <div className="flex items-center gap-1">
+                            <span>{colId === 'id' ? 'ID' : colId === 'moduleId' ? 'Module' : colId.replace(/([A-Z])/g, ' $1')}</span>
+                            {isSorted && (
+                              sortConfig.direction === 'asc' ? <LucideIcons.ArrowUp size={10} /> : <LucideIcons.ArrowDown size={10} />
                             )}
                           </div>
                         </th>
@@ -423,9 +447,12 @@ export const QueueView = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200/30 dark:divide-zinc-800/40">
-                  {paginatedRecords.map(record => (
-                    <tr
+                  {paginatedRecords.map((record, i) => (
+                    <motion.tr
                       key={record.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: Math.min(i, 8) * 0.02, ease: 'easeOut' }}
                       onClick={() => navigate(`/workspace/modules/${record.moduleId}/records/${record.id}`)}
                       className="hover:bg-zinc-50/50 dark:hover:bg-white/[0.02] cursor-pointer transition-all group"
                     >
@@ -434,7 +461,7 @@ export const QueueView = () => {
                           {renderCell(record, colId)}
                         </td>
                       ))}
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>

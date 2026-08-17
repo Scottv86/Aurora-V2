@@ -143,5 +143,14 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     isCore: true,
     description: 'Configure compliance retention schedules, legal holds, and auto-disposition policies.',
     path: '/workspace/platform/records-management'
+  },
+  {
+    id: 'queries-library',
+    name: 'Queries',
+    slug: 'queries-library',
+    iconName: 'Database',
+    isCore: true,
+    description: 'Author, parameterize, and save reusable multi-table queries and virtual datasets.',
+    path: '/workspace/settings/platform-modules/queries-library'
   }
 ];

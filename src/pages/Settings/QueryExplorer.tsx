@@ -18,14 +18,17 @@ import {
   CheckCircle2,
   Maximize2,
   Minimize2,
-  ArrowLeft
+  ArrowLeft,
+  Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
+import { supabase } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
+import { SqlEditor } from '../../components/Builders/QueryBuilder/SqlEditor';
 
 interface ColumnSchema {
   name: string;
@@ -57,7 +60,7 @@ export const QueryExplorer = () => {
       setIsBuilderFullscreen(false);
     };
   }, [setIsBuilderFullscreen]);
-  const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+  const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || 'dev-token';
 
   // UI State
   const [activeTab, setActiveTab] = useState<'results' | 'messages'>('results');
@@ -94,10 +97,12 @@ export const QueryExplorer = () => {
   const fetchSchema = async () => {
     try {
       setSchemaLoading(true);
+      const { data: sessData } = await supabase.auth.getSession();
+      const activeToken = sessData?.session?.access_token || token;
       const res = await fetch(`${API_BASE_URL}/api/query-explorer/schema`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant?.id || ''
+          'Authorization': `Bearer ${activeToken}`,
+          'x-tenant-id': tenant?.id || 't1'
         }
       });
       const data = await res.json();
@@ -160,12 +165,14 @@ export const QueryExplorer = () => {
     setConsoleMessage('Executing query...');
 
     try {
+      const { data: sessData } = await supabase.auth.getSession();
+      const activeToken = sessData?.session?.access_token || token;
       const res = await fetch(`${API_BASE_URL}/api/query-explorer/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant?.id || ''
+          'Authorization': `Bearer ${activeToken}`,
+          'x-tenant-id': tenant?.id || 't1'
         },
         body: JSON.stringify({ query: sqlQuery })
       });
@@ -565,6 +572,22 @@ export const QueryExplorer = () => {
               <Download size={12} />
               <span>Export CSV</span>
             </button>
+
+            <div className="w-[1px] h-5 bg-zinc-800 mx-2" />
+
+            <button
+              onClick={() => {
+                setIsBuilderFullscreen(false);
+                navigate('/workspace/settings/platform-modules/queries-library', {
+                  state: { prefillSql: sqlQuery }
+                });
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-indigo-400 hover:text-indigo-200 bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-500/30 text-xs rounded-lg transition-all font-medium cursor-pointer shadow-xs"
+              title="Open in Query Builder to save as a reusable dataset"
+            >
+              <Sparkles size={12} />
+              <span>Save to Query Builder</span>
+            </button>
           </div>
 
           {/* Indicators & Fullscreen Toggle */}
@@ -609,29 +632,14 @@ export const QueryExplorer = () => {
         {/* 3. Monospace Code Editor (Variable Height) */}
         <div 
           style={{ height: editorHeight }}
-          className="relative flex overflow-hidden border-b border-zinc-800 bg-zinc-950 font-mono text-[13px] leading-relaxed"
+          className="relative flex flex-col overflow-hidden border-b border-zinc-800 bg-zinc-950 font-mono text-[13px] leading-relaxed"
         >
-          {/* Scroll Synchronized Line Numbers */}
-          <div 
-            ref={lineNumbersRef}
-            className="w-10 select-none text-right pr-2 py-3 bg-zinc-950 border-r border-zinc-900 text-zinc-650 overflow-hidden"
-          >
-            {lineNumbers.map(line => (
-              <div key={`line-${line}`}>{line}</div>
-            ))}
-          </div>
-
-          {/* Monospace Code Input */}
-          <textarea
-            ref={textareaRef}
+          <SqlEditor
             value={sqlQuery}
-            onChange={(e) => setSqlQuery(e.target.value)}
-            onScroll={handleScroll}
-            onKeyDown={handleKeyDown}
-            className="flex-1 resize-none bg-zinc-950 text-zinc-200 p-3 py-3 w-full border-none focus:outline-none focus:ring-0 placeholder-zinc-750 font-mono caret-blue-400 selection:bg-zinc-800 overflow-y-auto"
-            placeholder="-- Write your SQL query here..."
-            spellCheck={false}
-            autoFocus
+            onChange={setSqlQuery}
+            tables={schema.physicalTables}
+            customModules={schema.customModules}
+            onRun={handleExecuteQuery}
           />
         </div>
 

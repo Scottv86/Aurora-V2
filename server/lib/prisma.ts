@@ -70,7 +70,13 @@ export const getScopedPrisma = (
             'AntigravitySession',
             'AntigravityMessage',
             'TenantAIKey',
-            'TenantAIMapping'
+            'TenantAIMapping',
+            'SavedQuery',
+            'Site',
+            'SolutionBlueprint',
+            'Form',
+            'Workflow',
+            'ValidationRuleset'
           ];
 
           const isScopedModel = TENANT_SCOPED_MODELS.includes(model);

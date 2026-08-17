@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Search, Trash2, Eye, Layers, ArrowRight } from 'lucide-react';
 
-
-
 import { FormEntity } from '../../types/platform';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
-import { Skeleton } from '../../components/UI/Skeleton';
 import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { DependencyDrawer } from '../../components/Builders/Common/DependencyDrawer';
 import { ShareEmbedModal } from '../../components/Builders/Common/ShareEmbedModal';
@@ -19,16 +16,19 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { motion } from 'motion/react';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
-
 import { EmptyState } from '../../components/UI/EmptyState';
+import { NewFormModal, FormTemplateItem } from '../../components/Modals/NewFormModal';
+import { builderCache } from '../../utils/builderCache';
 
 export const FormsLibraryPage: React.FC = () => {
   const { tenant, modules } = usePlatform();
-  const [forms, setForms] = useState<FormEntity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `forms_${tenant?.id || 'default'}`;
+  const [forms, setForms] = useState<FormEntity[]>(() => builderCache.get<FormEntity[]>(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'global' | 'module'>('all');
   
+  const [isNewFormModalOpen, setIsNewFormModalOpen] = useState(false);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [selectedForm, setSelectedForm] = useState<FormEntity | null>(null);
   const [previewForm, setPreviewForm] = useState<FormEntity | null>(null);
@@ -36,53 +36,24 @@ export const FormsLibraryPage: React.FC = () => {
   const [depForm, setDepForm] = useState<FormEntity | null>(null);
 
   const fetchForms = async () => {
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/forms`, {
         headers: { 'x-tenant-id': tenant?.id || '' }
       });
       if (res.ok) {
         const data = await res.json();
-        setForms(data);
+        const next = Array.isArray(data) ? data : [];
+        setForms(next);
+        builderCache.set(cacheKey, next);
       } else {
-        setForms([
-          {
-            id: 'form_contact',
-            tenantId: tenant?.id || 't1',
-            name: 'Standard Contact & Inquiry Form',
-            description: 'Public intake form for general customer inquiries.',
-            isGlobal: true,
-            version: 1,
-            status: 'PUBLISHED',
-            schema: {
-              layout: [
-                { id: 'name', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
-                { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
-                { id: 'subject', label: 'Inquiry Subject', type: 'text', required: true, colSpan: 12 },
-                { id: 'message', label: 'Message Body', type: 'textarea', required: true, colSpan: 12 }
-              ]
-            }
-          },
-          {
-            id: 'form_support',
-            tenantId: tenant?.id || 't1',
-            name: 'Customer Support Ticket Intake',
-            description: 'Priority support request form for logged-in users.',
-            isGlobal: true,
-            version: 2,
-            status: 'PUBLISHED',
-            schema: {
-              layout: [
-                { id: 'user', label: 'User Email', type: 'email', required: true, colSpan: 6 },
-                { id: 'priority', label: 'Severity Level', type: 'select', options: ['Low', 'Medium', 'High', 'Urgent'], required: true, colSpan: 6 },
-                { id: 'issue', label: 'Issue Description', type: 'textarea', required: true, colSpan: 12 }
-              ]
-            }
-          }
-        ]);
+        if (!builderCache.has(cacheKey)) setForms([]);
       }
     } catch (err) {
       console.error('Failed to fetch forms:', err);
+      if (!builderCache.has(cacheKey)) setForms([]);
     } finally {
       setLoading(false);
     }
@@ -91,6 +62,70 @@ export const FormsLibraryPage: React.FC = () => {
   useEffect(() => {
     fetchForms();
   }, [tenant?.id]);
+
+  // Modal Handlers
+  const handleSelectBlank = () => {
+    setSelectedForm({
+      id: '',
+      tenantId: tenant?.id || 't1',
+      name: 'Untitled Form',
+      description: '',
+      isGlobal: true,
+      version: 1,
+      status: 'PUBLISHED',
+      schema: { layout: [] }
+    });
+    setIsNewFormModalOpen(false);
+    setIsBuilderOpen(true);
+  };
+
+  const handleSelectTemplate = (template: FormTemplateItem) => {
+    setSelectedForm({
+      id: '',
+      tenantId: tenant?.id || 't1',
+      name: template.name,
+      description: template.description,
+      isGlobal: true,
+      version: 1,
+      status: 'PUBLISHED',
+      schema: { layout: template.schema.layout }
+    });
+    setIsNewFormModalOpen(false);
+    setIsBuilderOpen(true);
+  };
+
+  const handleSelectModule = (mod: any) => {
+    const layout = mod.layout || mod.config?.layout || [];
+    setSelectedForm({
+      id: '',
+      tenantId: tenant?.id || 't1',
+      name: `${mod.name} Form`,
+      description: `Data intake form generated from ${mod.name} module.`,
+      moduleId: mod.id,
+      moduleName: mod.name,
+      isGlobal: false,
+      version: 1,
+      status: 'PUBLISHED',
+      schema: { layout: layout }
+    });
+    setIsNewFormModalOpen(false);
+    setIsBuilderOpen(true);
+  };
+
+  const handleSelectAIGenerated = (generated: { name: string; description: string; schema: { layout: any[] } }) => {
+    setSelectedForm({
+      id: '',
+      tenantId: tenant?.id || 't1',
+      name: generated.name,
+      description: generated.description,
+      isGlobal: true,
+      version: 1,
+      status: 'PUBLISHED',
+      schema: generated.schema
+    });
+    setIsNewFormModalOpen(false);
+    setIsBuilderOpen(true);
+  };
 
   const [formToDelete, setFormToDelete] = useState<FormEntity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -120,7 +155,11 @@ export const FormsLibraryPage: React.FC = () => {
         headers: { 'x-tenant-id': tenant?.id || '' }
       }).catch(() => {});
       toast.success('Form moved to Recycling Bin');
-      setForms(prev => prev.filter(f => f.id !== form.id));
+      setForms(prev => {
+        const next = prev.filter(f => f.id !== form.id);
+        builderCache.set(cacheKey, next);
+        return next;
+      });
     } catch (err) {
       toast.error('Failed to delete form');
     } finally {
@@ -129,11 +168,38 @@ export const FormsLibraryPage: React.FC = () => {
     }
   };
 
-  // Combine standalone forms with custom module form layouts
+  // Combine standalone created forms with custom user-created module forms
   const allForms = React.useMemo(() => {
-    const moduleForms: FormEntity[] = (modules || []).flatMap((mod: any) => {
+    const userModules = (modules || []).filter((mod: any) => {
+      if (!mod) return false;
+      if (mod.type === 'PAGE') return false;
+      // Filter out auto-provisioned system intake triage services
+      if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage || mod.name === 'Work Distribution') {
+        return false;
+      }
+      return true;
+    });
+
+    const moduleForms: FormEntity[] = userModules.flatMap((mod: any) => {
       const items: FormEntity[] = [];
-      if (mod.layout && mod.layout.length > 0) {
+      
+      const configForms = mod.config?.forms || mod.forms || [];
+      if (Array.isArray(configForms) && configForms.length > 0) {
+        configForms.forEach((cf: any, i: number) => {
+          items.push({
+            id: cf.id || `mod_subform_${mod.id}_${i}`,
+            tenantId: tenant?.id || 't1',
+            name: cf.name || `${mod.name} Custom Form #${i + 1}`,
+            description: cf.description || `Form created within ${mod.name} module.`,
+            isGlobal: false,
+            moduleId: mod.id,
+            moduleName: mod.name,
+            version: cf.version || 1,
+            status: cf.status || 'PUBLISHED',
+            schema: cf.schema || { layout: cf.fields || [] }
+          });
+        });
+      } else if (mod.layout && mod.layout.length > 0) {
         items.push({
           id: `mod_form_${mod.id}`,
           tenantId: tenant?.id || 't1',
@@ -145,22 +211,6 @@ export const FormsLibraryPage: React.FC = () => {
           version: 1,
           status: 'PUBLISHED',
           schema: { layout: mod.layout }
-        });
-      }
-      if (mod.config?.forms && Array.isArray(mod.config.forms)) {
-        mod.config.forms.forEach((cf: any, i: number) => {
-          items.push({
-            id: cf.id || `mod_subform_${mod.id}_${i}`,
-            tenantId: tenant?.id || 't1',
-            name: cf.name || `${mod.name} Custom Form #${i + 1}`,
-            description: cf.description || `Custom form defined within ${mod.name} module.`,
-            isGlobal: false,
-            moduleId: mod.id,
-            moduleName: mod.name,
-            version: cf.version || 1,
-            status: cf.status || 'PUBLISHED',
-            schema: cf.schema || { layout: cf.fields || [] }
-          });
         });
       }
       return items;
@@ -177,7 +227,6 @@ export const FormsLibraryPage: React.FC = () => {
     return matchesSearch;
   });
 
-
   return (
     <div className="flex flex-col w-full relative min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50 overflow-y-auto">
       {/* Standardized PageHeader matching Modules & Sites */}
@@ -186,10 +235,7 @@ export const FormsLibraryPage: React.FC = () => {
         description="Centralized hub for managing standalone embeddable forms across your workspace, site pages, and portals."
         actions={
           <Button
-            onClick={() => {
-              setSelectedForm(null);
-              setIsBuilderOpen(true);
-            }}
+            onClick={() => setIsNewFormModalOpen(true)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
@@ -206,7 +252,7 @@ export const FormsLibraryPage: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
             <input
               type="text"
-              placeholder="Search"
+              placeholder="Search forms..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
@@ -222,7 +268,7 @@ export const FormsLibraryPage: React.FC = () => {
               <button
                 key={mode.id}
                 onClick={() => setFilter(mode.id as any)}
-                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   filter === mode.id
                     ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
@@ -234,24 +280,19 @@ export const FormsLibraryPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Glassmorphic 3-Column Grid matching Modules & Sites */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map(n => (
-              <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
-            ))}
-          </div>
-        ) : filteredForms.length === 0 ? (
+        {/* Form Cards Grid or Empty State */}
+        {loading ? null : filteredForms.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title="No forms found"
-            description="Create standalone embeddable forms for your workspace, site pages, and intake portals."
+            title={search ? "No forms match your search" : "No forms created yet"}
+            description={
+              search 
+                ? "Try searching for a different keyword or clear your search query." 
+                : "Create a blank form, start from a pre-built template, or generate a form directly from a workspace module."
+            }
             action={{
-              label: "Create",
-              onClick: () => {
-                setSelectedForm(null);
-                setIsBuilderOpen(true);
-              }
+              label: "Create Form",
+              onClick: () => setIsNewFormModalOpen(true)
             }}
           />
         ) : (
@@ -259,21 +300,21 @@ export const FormsLibraryPage: React.FC = () => {
             {filteredForms.map((form, i) => (
               <motion.div
                 key={form.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
+                transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
                 onClick={() => {
                   setSelectedForm(form);
                   setIsBuilderOpen(true);
                 }}
-                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                 <div className="relative z-10 flex flex-col h-full justify-between">
                   <div>
                     <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
+                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
                         <FileText size={22} />
                       </div>
 
@@ -288,7 +329,7 @@ export const FormsLibraryPage: React.FC = () => {
 
                         <button
                           onClick={(e) => { e.stopPropagation(); setPreviewForm(form); }}
-                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Preview Form"
                         >
                           <Eye size={14} />
@@ -296,7 +337,7 @@ export const FormsLibraryPage: React.FC = () => {
 
                         <button
                           onClick={(e) => handleDeleteClick(e, form)}
-                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Delete Form"
                         >
                           <Trash2 size={14} />
@@ -304,7 +345,7 @@ export const FormsLibraryPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
                       {form.name}
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -318,7 +359,7 @@ export const FormsLibraryPage: React.FC = () => {
                       <span>{form.schema?.layout?.length || 0} Fields</span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
                       Edit in Builder <ArrowRight size={14} />
                     </div>
                   </div>
@@ -328,34 +369,41 @@ export const FormsLibraryPage: React.FC = () => {
 
             {/* Dashed Create Card matching Custom Modules */}
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: filteredForms.length * 0.03 }}
-              onClick={() => {
-                setSelectedForm(null);
-                setIsBuilderOpen(true);
-              }}
-              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
+              transition={{ duration: 0.25, delay: filteredForms.length * 0.03, ease: 'easeOut' }}
+              onClick={() => setIsNewFormModalOpen(true)}
+              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-[border-color,background-color] duration-200 cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
             >
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
                 <Plus size={24} />
               </div>
-              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
                 Create Form
               </span>
               <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
-                Add a new standalone embeddable form.
+                Add a new standalone or module-linked form.
               </p>
             </motion.div>
           </div>
         )}
       </div>
 
+      {/* Creation Modal */}
+      <NewFormModal
+        isOpen={isNewFormModalOpen}
+        onClose={() => setIsNewFormModalOpen(false)}
+        onSelectBlank={handleSelectBlank}
+        onSelectTemplate={handleSelectTemplate}
+        onSelectModule={handleSelectModule}
+        onSelectAIGenerated={handleSelectAIGenerated}
+      />
+
       {/* Standalone Builder Modal */}
       <InContextBuilderModal
         isOpen={isBuilderOpen}
         onClose={() => setIsBuilderOpen(false)}
-        title={selectedForm ? `Edit ${selectedForm.name}` : 'Create New Form'}
+        title={selectedForm?.name ? `Edit ${selectedForm.name}` : 'Create New Form'}
         subtitle="Global Platform Form Builder"
         builderContext={{ mode: 'global' }}
       >
@@ -368,6 +416,10 @@ export const FormsLibraryPage: React.FC = () => {
               setIsBuilderOpen(false);
               fetchForms();
             }
+          }}
+          onSave={() => {
+            setIsBuilderOpen(false);
+            fetchForms();
           }}
         />
       </InContextBuilderModal>

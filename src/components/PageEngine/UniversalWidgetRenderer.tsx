@@ -1,5 +1,5 @@
 import React from 'react';
-import { FormRenderer } from '../Builders';
+import { FormRenderer, QueueRenderer } from '../Builders';
 import { WorkQueue } from '../WorkQueue';
 import { 
   Database, Globe, Cpu, ShieldCheck, Workflow, 
@@ -104,9 +104,27 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
       );
 
     case 'work-queue':
+    case 'queue':
       return (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-sm">
-          <WorkQueue />
+        <div className="relative group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-sm overflow-hidden">
+          {widget.properties?.queueId && (
+            <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center gap-1 bg-zinc-900/90 backdrop-blur-md text-white p-1 rounded-xl shadow-lg border border-zinc-700 text-[10px] font-bold">
+              <span className="px-2 py-0.5 text-indigo-400 bg-indigo-950/60 rounded-md">Global Library Queue</span>
+            </div>
+          )}
+          {widget.properties?.queueId || widget.properties?.queueConfig ? (
+            <QueueRenderer
+              queueId={widget.properties.queueId}
+              queueConfig={widget.properties.queueConfig}
+              moduleId={widget.properties?.moduleId}
+              moduleIds={widget.properties?.moduleIds}
+              isUnifiedQueue={widget.properties?.isUnifiedQueue}
+              showHeader={widget.properties?.showHeader ?? true}
+              pageSize={widget.properties?.pageSize || 8}
+            />
+          ) : (
+            <WorkQueue />
+          )}
         </div>
       );
 

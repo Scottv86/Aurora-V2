@@ -2,6 +2,7 @@ export interface MenuItem {
   id: string;
   label: string;
   iconName: string;
+  description?: string;
   to?: string;
   isVisible?: boolean;
   isSubtitle?: boolean;
@@ -11,8 +12,11 @@ export interface MenuItem {
   moduleIds?: string[];
   isUnifiedQueue?: boolean;
   queueConfig?: {
-    conditions: any;
-    columns: string[];
+    conditions?: any;
+    columns?: string[];
+    defaultSort?: { key: string; direction: 'asc' | 'desc' };
+    slaMinutes?: number;
+    actions?: any[];
   };
 }
 

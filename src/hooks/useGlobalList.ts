@@ -328,28 +328,34 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
   };
 };
 
+import { builderCache } from '../utils/builderCache';
+
 export const useGlobalLists = () => {
   const { tenant } = usePlatform();
-  const [lists, setLists] = useState<GlobalList[]>([]);
-  const [loading, setLoading] = useState(false);
+  const cacheKey = `global_lists_${tenant?.id || 'default'}`;
+  const [lists, setLists] = useState<GlobalList[]>(() => builderCache.get<GlobalList[]>(cacheKey) || []);
+  const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
 
   const fetchLists = useCallback(async () => {
     if (!tenant?.id) return;
-    setLoading(true);
+    if (!builderCache.has(cacheKey)) {
+      setLoading(true);
+    }
     try {
       const { data, error } = await supabase
         .from('global_lists')
         .select('*')
         .order('name', { ascending: true });
       if (error) throw error;
-      setLists(data || []);
+      const next = data || [];
+      setLists(next);
+      builderCache.set(cacheKey, next);
     } catch (err) {
       console.error('[useGlobalLists] Fetch error:', err);
-      toast.error('Failed to load global lists');
     } finally {
       setLoading(false);
     }
-  }, [tenant?.id]);
+  }, [tenant?.id, cacheKey]);
 
   useEffect(() => {
     fetchLists();

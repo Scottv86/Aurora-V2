@@ -108,6 +108,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['pages', 'dashboards', 'widgets', 'layouts']
   },
   {
+    id: 'queues-management',
+    label: 'Queues',
+    description: 'Build and configure work queues, unified queue views, filter rules, and display columns.',
+    icon: 'ListOrdered',
+    to: '/workspace/settings/platform-modules/queues-management',
+    category: 'Build & Customize',
+    tags: ['queues', 'work queue', 'unified', 'filter', 'columns', 'distribution']
+  },
+  {
     id: 'sites',
     label: 'Sites',
     description: 'Manage external web pages, citizen portals, and public forms.',
@@ -136,12 +145,12 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   {
     id: 'validations-library',
-    label: 'Validations',
+    label: 'Rules',
     description: 'Create and maintain reusable field and cross-entity validation rulesets.',
     icon: 'ShieldCheck',
     to: '/workspace/settings/platform-modules/validations-library',
     category: 'Build & Customize',
-    tags: ['validations', 'rules', 'governance', 'checks', 'data quality']
+    tags: ['rules', 'validations', 'governance', 'checks', 'data quality', 'logic']
   },
   {
     id: 'automation-management',
@@ -171,6 +180,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['reports', 'analytics', 'visualizations', 'charts', 'exports', 'dashboards']
   },
   {
+    id: 'queries-library',
+    label: 'Queries',
+    description: 'Author, parameterize, and save reusable multi-table queries and virtual datasets.',
+    icon: 'Database',
+    to: '/workspace/settings/platform-modules/queries-library',
+    category: 'Build & Customize',
+    tags: ['queries', 'sql', 'datasets', 'views', 'builder', 'analytics', 'data']
+  },
+  {
     id: 'document-generation',
     label: 'Templates',
     description: 'Configure automated document templates, PDF creation, and email merging.',
@@ -180,13 +198,13 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
   },
   {
-    id: 'queues-management',
-    label: 'Queues',
-    description: 'Build and configure work queues, unified queue views, filter rules, and display columns.',
-    icon: 'ListOrdered',
-    to: '/workspace/settings/platform-modules/queues-management',
+    id: 'lists-management',
+    label: 'Lists',
+    description: 'Build and manage reusable choice datasets, lookup tables, and option sets.',
+    icon: 'ListTodo',
+    to: '/workspace/settings/platform-modules/global-lists',
     category: 'Build & Customize',
-    tags: ['queues', 'work queue', 'unified', 'filter', 'columns', 'distribution']
+    tags: ['lists', 'lookups', 'dropdowns', 'choices', 'options', 'tables']
   },
 
   // Logic & Workflows
@@ -199,14 +217,14 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'Logic & Workflows',
     tags: ['intake', 'routing', 'triage', 'work distribution', 'queues']
   },
-  // Data Exchange & APIs
+  // Develop
   {
     id: 'migration',
     label: 'Data Migration',
     description: 'Import and export platform data and schema definitions.',
     icon: 'ArrowRightLeft',
     to: '/workspace/settings/migration',
-    category: 'Data Exchange & APIs',
+    category: 'Develop',
     tags: ['import', 'export', 'transfer', 'migration']
   },
   {
@@ -215,19 +233,19 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Manage programmatic API keys, endpoints, and developer access logs.',
     icon: 'Key',
     to: '/workspace/settings/platform-modules/api-management',
-    category: 'Data Exchange & APIs',
+    category: 'Develop',
     tags: ['api', 'developer', 'keys', 'endpoints', 'rest', 'access']
   },
 
 
-  // Finance & Catalogs
+  // Configure
   {
     id: 'financial-management',
     label: 'Financial Management',
     description: 'Financial settings, tax configurations, and payment processing rules.',
     icon: 'Banknote',
     to: '/workspace/settings/platform-modules/financial-management',
-    category: 'Finance & Catalogs',
+    category: 'Configure',
     tags: ['finance', 'tax', 'payments', 'accounting', 'billing']
   },
   {
@@ -236,7 +254,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Centralized registry of products, service rates, application fees, subscriptions, and penalties.',
     icon: 'Tag',
     to: '/workspace/settings/platform-modules/pricing-catalog',
-    category: 'Finance & Catalogs',
+    category: 'Configure',
     tags: ['pricing', 'rates', 'fees', 'catalog', 'products', 'services']
   },
   {
@@ -245,17 +263,8 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Real-time stock tracking, alert thresholds, and quantity adjustments for catalog products.',
     icon: 'Boxes',
     to: '/workspace/settings/platform-modules/inventory-manager',
-    category: 'Finance & Catalogs',
+    category: 'Configure',
     tags: ['inventory', 'stock', 'products', 'supplies', 'tracking']
-  },
-  {
-    id: 'global-lists',
-    label: 'Global Lists',
-    description: 'Enterprise-grade lookup tables with full SCD Type 2 versioning.',
-    icon: 'ListTodo',
-    to: '/workspace/settings/platform-modules/global-lists',
-    category: 'Finance & Catalogs',
-    tags: ['lists', 'lookups', 'dropdowns', 'scd2', 'tables']
   },
   {
     id: 'people-organisations',
@@ -263,7 +272,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     description: 'Manage core entity taxonomies and global relationship rules.',
     icon: 'Users',
     to: '/workspace/settings/platform-modules/people-organisations',
-    category: 'Finance & Catalogs',
+    category: 'Configure',
     tags: ['people', 'organisations', 'entities', 'taxonomies', 'relationships']
   },
 
@@ -295,8 +304,8 @@ const CategoryIcon = ({ category }: { category: string }) => {
     case 'General & Security': return <LucideIcons.ShieldCheck className="w-4 h-4" />;
     case 'Build & Customize': return <LucideIcons.Layout className="w-4 h-4" />;
     case 'Logic & Workflows': return <LucideIcons.Zap className="w-4 h-4" />;
-    case 'Integrations & APIs': return <LucideIcons.Plug className="w-4 h-4" />;
-    case 'Finance & Catalogs': return <LucideIcons.Banknote className="w-4 h-4" />;
+    case 'Develop': return <LucideIcons.Code2 className="w-4 h-4" />;
+    case 'Configure': return <LucideIcons.Sliders className="w-4 h-4" />;
     case 'Analytics & Content': return <LucideIcons.BarChart2 className="w-4 h-4" />;
     default: return <Activity className="w-4 h-4" />;
   }
@@ -327,8 +336,8 @@ export const SettingsOverview = () => {
       'General & Security',
       'Build & Customize',
       'Logic & Workflows',
-      'Integrations & APIs',
-      'Finance & Catalogs',
+      'Develop',
+      'Configure',
       'Analytics & Content'
     ];
     return cats.sort((a, b) => order.indexOf(a) - order.indexOf(b));

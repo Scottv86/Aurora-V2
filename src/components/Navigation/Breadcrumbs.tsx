@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { DriveService } from '../../services/driveService';
-import { cn } from '../../lib/utils';
+import { cn, slugify } from '../../lib/utils';
 
 const PATH_MAP: Record<string, string> = {
   workspace: 'Workspace',
@@ -68,13 +68,14 @@ const PATH_MAP: Record<string, string> = {
   'report-management': 'Reports',
   'api-management': 'API Management',
   'financial-management': 'Financial Management',
-  'global-lists': 'Global Lists',
+  'global-lists': 'Lists',
   'records-management': 'Records Management',
   'forms-library': 'Forms',
   'workflows-library': 'Workflows',
-  'validations-library': 'Validations',
+  'validations-library': 'Rules',
   queues: 'Queues',
   'queues-management': 'Queues',
+  'queries-library': 'Queries',
 };
 
 
@@ -97,49 +98,57 @@ export const Breadcrumbs = () => {
     // 3. Check static PATH_MAP mapping next
     if (PATH_MAP[segment]) return PATH_MAP[segment];
 
-    // 4. Check modules or queues
-    if (
-      pathnames[index - 1] === 'page' ||
-      pathnames[index - 1] === 'pages' ||
-      pathnames[index - 1] === 'modules' || 
-      pathnames[index - 1] === 'builder' || 
-      pathnames[index - 1] === 'sub' ||
-      pathnames[index - 1] === 'queues'
-    ) {
-      // Check if it's a queue view (via query parameter or path segment)
-      const searchParams = new URLSearchParams(location.search);
-      const queueId = segment.startsWith('queue_') 
-        ? segment 
-        : (searchParams.get('queueId') || searchParams.get('queue'));
+    // 4. Check if it's a queue view (via query parameter, segment, or menu item)
+    const searchParams = new URLSearchParams(location.search);
+    const queueParam = searchParams.get('queueId') || searchParams.get('queue');
+    const isQueueContext = pathnames[index - 1] === 'queues' || segment.startsWith('queue_');
+    const queueTarget = isQueueContext ? segment : queueParam;
 
-      if (queueId && menuConfig) {
-        let foundQueueLabel = '';
-        const searchQueue = (items: any[]) => {
-          for (const item of items) {
-            if (item.id === queueId) {
-              foundQueueLabel = item.label;
-              return;
-            }
-            if (item.children) {
-              searchQueue(item.children);
-            }
+    if (queueTarget && menuConfig) {
+      let foundQueueLabel = '';
+      const searchQueue = (items: any[]) => {
+        for (const item of items) {
+          if (
+            item.id === queueTarget ||
+            item.queueId === queueTarget ||
+            (item.label && slugify(item.label) === queueTarget) ||
+            (item.label && item.label.toLowerCase() === queueTarget.toLowerCase())
+          ) {
+            foundQueueLabel = item.label;
+            return;
           }
-        };
-        for (const sec of menuConfig.sections || []) {
-          searchQueue(sec.items || []);
+          if (item.children) {
+            searchQueue(item.children);
+          }
         }
-        if (foundQueueLabel) return foundQueueLabel;
+      };
+      for (const sec of menuConfig.sections || []) {
+        searchQueue(sec.items || []);
       }
-
-      const mod = modules.find(m => m.id === segment);
-      if (mod) return mod.name;
+      if (foundQueueLabel) return foundQueueLabel;
     }
-    
-    // 5. Handle technical IDs that haven't been overridden yet
-    const looksLikeId = segment.length > 15 && /^[a-z0-9-]+$/i.test(segment) && !segment.includes(' ');
-    if (looksLikeId) return '...';
 
-    // 6. Default to formatted segment
+    // 5. Check modules or workspace custom pages (matching by id, slugified name, or exact name)
+    const mod = modules?.find(
+      (m: any) =>
+        m.id === segment ||
+        (m.name && slugify(m.name) === segment) ||
+        (m.name && m.name.toLowerCase() === segment.toLowerCase()) ||
+        (m.slug && m.slug === segment)
+    );
+    if (mod) return mod.name;
+
+    // 6. Handle technical IDs (UUIDs, MongoDB ObjectIDs, or system prefixed IDs) that haven't been overridden yet
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment);
+    const isMongoOrHexId = /^[0-9a-f]{24}$/i.test(segment);
+    const isPrefixedId = /^(rec_|usr_|tenant_|ws_|sec_|col_|row_)[a-zA-Z0-9_-]+$/i.test(segment);
+    const isRawHash = segment.length > 20 && /^[a-zA-Z0-9]+$/.test(segment);
+
+    if (isUuid || isMongoOrHexId || isPrefixedId || isRawHash) {
+      return '...';
+    }
+
+    // 7. Default to formatted segment
     return segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 

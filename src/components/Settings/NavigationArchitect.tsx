@@ -33,35 +33,13 @@ import {
   Compass,
   CornerDownRight,
   ChevronLeft,
-  Cpu
+  Cpu,
+  Layout
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '../UI/Primitives';
-import { cn } from '../../lib/utils';
-
-// Types matching NavigationSettingsPage
-interface MenuItem {
-  id: string;
-  label: string;
-  iconName: string;
-  to?: string;
-  isVisible?: boolean;
-  isSubtitle?: boolean;
-  children?: MenuItem[];
-  moduleId?: string;
-  moduleIds?: string[];
-  isUnifiedQueue?: boolean;
-  queueConfig?: {
-    conditions: any;
-    columns: string[];
-  };
-}
-
-interface MenuSection {
-  id: string;
-  title: string;
-  items: MenuItem[];
-}
+import { cn, slugify } from '../../lib/utils';
+import { MenuItem, MenuSection } from '../../types/menu';
 
 interface Props {
   sections: MenuSection[];
@@ -644,6 +622,23 @@ const SortableItemRow = ({
   const ruleCount = item.queueConfig?.conditions?.rules?.length || 0;
   const targetModName = item.moduleId ? modules?.find((m: any) => m.id === item.moduleId)?.name : null;
 
+  const isPage = !isQueue && Boolean(
+    item.to?.startsWith('/workspace/pages/') ||
+    (item.id && modules?.some((m: any) => m.type === 'PAGE' && (`module:${m.id}` === item.id || m.id === item.id)))
+  );
+  const matchedPage = isPage ? modules?.find((m: any) => 
+    m.type === 'PAGE' && (
+      `module:${m.id}` === item.id ||
+      m.id === item.id ||
+      (item.to && (
+        item.to === `/workspace/pages/${slugify(m.name)}` ||
+        item.to === `/workspace/pages/${m.id}` ||
+        item.to.replace('/workspace/pages/', '') === slugify(m.name)
+      )) ||
+      (item.to?.startsWith('/workspace/pages/') && slugify(m.name) === slugify(item.label))
+    )
+  ) : null;
+
   return (
     <div ref={setNodeRef} style={style} className="space-y-1">
       <div
@@ -693,6 +688,13 @@ const SortableItemRow = ({
                   <Cpu size={10} />
                   {item.isUnifiedQueue ? `Unified Queue (${item.moduleIds?.length || 0} modules)` : `Queue${targetModName ? `: ${targetModName}` : ''}`}
                   {ruleCount > 0 && <span className="opacity-75">• {ruleCount} rules</span>}
+                </span>
+              )}
+
+              {isPage && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1 shrink-0">
+                  <Layout size={10} />
+                  Page{matchedPage?.name && matchedPage.name !== item.label ? `: ${matchedPage.name}` : ''}
                 </span>
               )}
 
@@ -774,6 +776,23 @@ const SortableItemRow = ({
             const childRuleCount = child.queueConfig?.conditions?.rules?.length || 0;
             const childTargetModName = child.moduleId ? modules?.find((m: any) => m.id === child.moduleId)?.name : null;
 
+            const isChildPage = !isChildQueue && Boolean(
+              child.to?.startsWith('/workspace/pages/') ||
+              (child.id && modules?.some((m: any) => m.type === 'PAGE' && (`module:${m.id}` === child.id || m.id === child.id)))
+            );
+            const matchedChildPage = isChildPage ? modules?.find((m: any) => 
+              m.type === 'PAGE' && (
+                `module:${m.id}` === child.id ||
+                m.id === child.id ||
+                (child.to && (
+                  child.to === `/workspace/pages/${slugify(m.name)}` ||
+                  child.to === `/workspace/pages/${m.id}` ||
+                  child.to.replace('/workspace/pages/', '') === slugify(m.name)
+                )) ||
+                (child.to?.startsWith('/workspace/pages/') && slugify(m.name) === slugify(child.label))
+              )
+            ) : null;
+
             return (
               <div
                 key={child.id}
@@ -811,6 +830,12 @@ const SortableItemRow = ({
                           <Cpu size={10} />
                           {child.isUnifiedQueue ? `Unified Queue (${child.moduleIds?.length || 0} modules)` : `Queue${childTargetModName ? `: ${childTargetModName}` : ''}`}
                           {childRuleCount > 0 && <span className="opacity-75">• {childRuleCount} rules</span>}
+                        </span>
+                      )}
+                      {isChildPage && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1 shrink-0">
+                          <Layout size={10} />
+                          Page{matchedChildPage?.name && matchedChildPage.name !== child.label ? `: ${matchedChildPage.name}` : ''}
                         </span>
                       )}
                     </div>

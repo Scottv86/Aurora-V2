@@ -33,7 +33,7 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs:
     { id: 'tab:schema', label: 'Go to Schema', icon: Play, shortcut: 'G S', type: 'nav' },
     { id: 'tab:builder', label: 'Go to Interface', icon: Zap, shortcut: 'G B', type: 'nav' },
     { id: 'tab:workflow', label: 'Go to Workflow', icon: Play, shortcut: 'G W', type: 'nav' },
-    { id: 'tab:validations', label: 'Go to Validations', icon: ShieldCheck, shortcut: 'G V', type: 'nav' },
+    { id: 'tab:validations', label: 'Go to Rules', icon: ShieldCheck, shortcut: 'G R', type: 'nav' },
     { id: 'tab:automation', label: 'Go to Automation', icon: Zap, shortcut: 'G A', type: 'nav' },
     { id: 'tab:experience', label: 'Go to Experience', icon: Play, shortcut: 'G E', type: 'nav' },
     { id: 'tab:security', label: 'Go to Security', icon: Play, shortcut: 'G SEC', type: 'nav' },
