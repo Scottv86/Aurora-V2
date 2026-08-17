@@ -199,12 +199,21 @@ export const RecyclingBinDrawer = () => {
   const getItemIcon = (itemType: string) => {
     switch (itemType) {
       case 'DOCUMENT':
+      case 'DOCUMENT_TEMPLATE':
       case 'DRIVE_ITEM': return <FileText size={16} className="text-indigo-500" />;
       case 'FOLDER': return <Folder size={16} className="text-amber-500" />;
       case 'RECORD': return <FileText size={16} className="text-blue-500" />;
       case 'MODULE': return <Folder size={16} className="text-amber-500" />;
+      case 'FORM': return <FileText size={16} className="text-emerald-500" />;
+      case 'WORKFLOW': return <Zap size={16} className="text-cyan-500" />;
+      case 'VALIDATION': return <Zap size={16} className="text-rose-500" />;
       case 'AUTOMATION': return <Zap size={16} className="text-purple-500" />;
       case 'CONNECTOR': return <Plug size={16} className="text-emerald-500" />;
+      case 'SOLUTION': return <Folder size={16} className="text-indigo-500" />;
+      case 'SITE': return <FileText size={16} className="text-teal-500" />;
+      case 'PAGE': return <FileText size={16} className="text-sky-500" />;
+      case 'GLOBAL_LIST': return <Folder size={16} className="text-blue-500" />;
+      case 'REPORT': return <FileText size={16} className="text-violet-500" />;
       case 'CHAT_SESSION': return <MessageSquare size={16} className="text-indigo-500" />;
       case 'CHAT_MESSAGE': return <MessageSquare size={16} className="text-cyan-500" />;
       default: return <Trash2 size={16} className="text-zinc-400" />;
@@ -286,7 +295,7 @@ export const RecyclingBinDrawer = () => {
 
         {/* Tabs */}
         <div className="flex items-center gap-1 mt-3 overflow-x-auto scrollbar-none pb-0.5">
-          {['ALL', 'DOCUMENT', 'CHAT_SESSION', 'RECORD', 'MODULE', 'AUTOMATION', 'CONNECTOR'].map(tab => (
+          {['ALL', 'MODULE', 'FORM', 'WORKFLOW', 'VALIDATION', 'AUTOMATION', 'CONNECTOR', 'SOLUTION', 'SITE', 'PAGE', 'GLOBAL_LIST', 'REPORT', 'DOCUMENT_TEMPLATE', 'RECORD', 'CHAT_SESSION'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -297,7 +306,7 @@ export const RecyclingBinDrawer = () => {
                   : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
               )}
             >
-              {tab === 'ALL' ? 'All' : tab === 'DOCUMENT' ? 'Documents' : tab.replace('_', ' ')}
+              {tab === 'ALL' ? 'All' : tab.replace('_', ' ')}
             </button>
           ))}
         </div>

@@ -63,6 +63,37 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     doc.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleDeleteDocument = async (docId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    try {
+      await DocumentService.deleteDocument(tenant?.id || 'default', docId);
+      toast.success('Document deleted');
+      setDocuments(prev => prev.filter(d => d.id !== docId));
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Failed to delete document');
+    }
+  };
+
+  const formatDocDate = (dateVal: any, formatPattern: string) => {
+    if (!dateVal) return 'N/A';
+    try {
+      let d: Date;
+      if (typeof dateVal === 'object' && dateVal !== null && 'seconds' in dateVal) {
+        d = new Date(dateVal.seconds * 1000);
+      } else if (typeof dateVal === 'string' || typeof dateVal === 'number') {
+        d = new Date(dateVal);
+      } else {
+        return 'N/A';
+      }
+      if (isNaN(d.getTime())) return 'N/A';
+      return format(d, formatPattern);
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+
   const getStatusColor = (status: GeneratedDocument['status']) => {
     switch (status) {
       case 'Draft': return 'bg-zinc-800 text-zinc-400 border-zinc-700';
@@ -148,12 +179,10 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className="text-sm text-zinc-300">
-                        {doc.generatedAt && typeof doc.generatedAt === 'object' && 'seconds' in doc.generatedAt 
-                          ? format(new Date((doc.generatedAt as any).seconds * 1000), 'MMM d, yyyy') : 'N/A'}
+                        {formatDocDate(doc.generatedAt, 'MMM d, yyyy')}
                       </span>
                       <span className="text-xs text-zinc-500">
-                        {doc.generatedAt && typeof doc.generatedAt === 'object' && 'seconds' in doc.generatedAt 
-                          ? format(new Date((doc.generatedAt as any).seconds * 1000), 'h:mm a') : ''}
+                        {formatDocDate(doc.generatedAt, 'h:mm a')}
                       </span>
                     </div>
                   </td>
@@ -172,7 +201,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                       <button className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors" title="Email">
                         <Mail className="w-4 h-4" />
                       </button>
-                      <button className="p-2 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 rounded-lg transition-colors" title="Delete">
+                      <button 
+                        onClick={(e) => handleDeleteDocument(doc.id, e)}
+                        className="p-2 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 rounded-lg transition-colors" 
+                        title="Delete"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>

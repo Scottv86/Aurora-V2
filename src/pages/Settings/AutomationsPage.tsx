@@ -15,8 +15,12 @@ import {
 } from 'lucide-react';
 
 import { toast } from 'sonner';
+import { TrashService } from '../../services/trashService';
 import { cn, flattenFields } from '../../lib/utils';
 import { Skeleton } from '../../components/UI/Skeleton';
+import { EmptyState } from '../../components/UI/EmptyState';
+import { motion } from 'motion/react';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
 
 
@@ -873,7 +877,6 @@ export const AutomationsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-
   };
 
   const handleToggleActive = async (rule: any, event: React.MouseEvent) => {
@@ -901,13 +904,37 @@ export const AutomationsPage: React.FC = () => {
     }
   };
 
-  const handleDeleteRule = async (id: string, event: React.MouseEvent) => {
+  const [ruleToDelete, setRuleToDelete] = useState<any | null>(null);
+  const [isDeletingRule, setIsDeletingRule] = useState(false);
+
+  const handleDeleteRule = (ruleOrId: any, event: React.MouseEvent) => {
     event.stopPropagation();
     if (!tenant?.id) return;
-    if (!confirm('Are you sure you want to delete this automation?')) return;
+    const ruleId = typeof ruleOrId === 'string' ? ruleOrId : ruleOrId.id;
+    const targetRule = typeof ruleOrId === 'object' ? ruleOrId : automations.find(a => a.id === ruleId) || { id: ruleId, name: 'Automation' };
+    setRuleToDelete(targetRule);
+  };
+
+  const confirmDeleteRule = async () => {
+    if (!ruleToDelete || !tenant?.id) return;
+    const targetRule = ruleToDelete;
+    const ruleId = targetRule.id;
+    const ruleTitle = targetRule.name || 'Automation';
+    setIsDeletingRule(true);
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-      const res = await fetch(`${API_BASE_URL}/api/automations/${id}`, {
+      
+      await TrashService.softDelete({
+        tenantId: tenant.id,
+        token,
+        itemType: 'AUTOMATION',
+        itemId: ruleId,
+        title: ruleTitle,
+        subtitle: targetRule?.description || `Automation Rule`,
+        payload: targetRule
+      });
+
+      const res = await fetch(`${API_BASE_URL}/api/automations/${ruleId}`, {
         method: 'DELETE',
         headers: {
           'x-tenant-id': tenant.id,
@@ -915,13 +942,16 @@ export const AutomationsPage: React.FC = () => {
         }
       });
       if (res.ok) {
-        toast.success('Automation deleted');
-        if (selectedRuleId === id) setSelectedRuleId(null);
+        toast.success('Automation moved to Recycling Bin');
+        if (selectedRuleId === ruleId) setSelectedRuleId(null);
         fetchAutomations();
       }
     } catch (err) {
       console.error(err);
       toast.error('Failed to delete automation');
+    } finally {
+      setIsDeletingRule(false);
+      setRuleToDelete(null);
     }
   };
 
@@ -2650,38 +2680,42 @@ export const AutomationsPage: React.FC = () => {
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
             >
               <Plus size={16} />
-              <span>Create Automation</span>
+              <span>Create</span>
             </Button>
           }
         />
 
         {/* Main Content Area */}
-        <div className="p-6 lg:p-12 space-y-6">
+        <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
           {/* Search & Scope Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
               <input
                 type="text"
-                placeholder="Search automation rules..."
+                placeholder="Search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white"
+                className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
               />
             </div>
 
             <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
-              {(['ALL', 'GLOBAL', 'LOCAL'] as const).map((mode) => (
+              {[
+                { id: 'ALL', label: 'All' },
+                { id: 'GLOBAL', label: 'Global' },
+                { id: 'LOCAL', label: 'Local' }
+              ].map((mode) => (
                 <button
-                  key={mode}
-                  onClick={() => setFilterScope(mode)}
-                  className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
-                    filterScope === mode
+                  key={mode.id}
+                  onClick={() => setFilterScope(mode.id as any)}
+                  className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    filterScope === mode.id
                       ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
                       : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
-                  {mode.toLowerCase()} Rules
+                  {mode.label}
                 </button>
               ))}
             </div>
@@ -2693,14 +2727,24 @@ export const AutomationsPage: React.FC = () => {
                 <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
               ))}
             </div>
+          ) : filteredCatalogRules.length === 0 ? (
+            <EmptyState
+              icon={Zap}
+              title="No automations found"
+              description="Design visual trigger conditions, automated actions, and multi-step background workflow rules."
+              action={{
+                label: "Create",
+                onClick: handleCreateRule
+              }}
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-
-              {filteredCatalogRules.map((rule) => (
-
-                <div
+              {filteredCatalogRules.map((rule, i) => (
+                <motion.div
                   key={rule.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
                   onClick={() => {
                     setSelectedRuleId(rule.id);
                     setIsStudioOpen(true);
@@ -2754,25 +2798,27 @@ export const AutomationsPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </div>
-
+                </motion.div>
               ))}
 
               {/* Dashed Create Card matching Custom Modules */}
-              <div
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: filteredCatalogRules.length * 0.03 }}
                 onClick={handleCreateRule}
-                className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px]"
+                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
               >
-                <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
                   <Plus size={24} />
                 </div>
-                <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
                   Create Automation
                 </span>
-                <span className="text-xs text-zinc-400 mt-1">
-                  Design a new background trigger rule
-                </span>
-              </div>
+                <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                  Design a new background trigger rule.
+                </p>
+              </motion.div>
             </div>
           )}
 
@@ -2788,6 +2834,16 @@ export const AutomationsPage: React.FC = () => {
               {mainAutomationContent}
             </div>
           </InContextBuilderModal>
+
+          <DeleteConfirmationModal
+            isOpen={Boolean(ruleToDelete)}
+            onClose={() => setRuleToDelete(null)}
+            onConfirm={confirmDeleteRule}
+            title="Delete Automation"
+            description="Are you sure you want to delete this automation rule? It will be moved to the Recycling Bin."
+            itemName={ruleToDelete?.name}
+            isDeleting={isDeletingRule}
+          />
         </div>
       </div>
     );

@@ -212,7 +212,6 @@ export const NavigationSettingsPage = () => {
 
   // Initialize from tenant branding and tenant.menuConfig
   useEffect(() => {
-    let timer: NodeJS.Timeout;
     if (tenant) {
       const tConfig = tenant.menuConfig as any;
       const advanced: AdvancedMenuConfig = {
@@ -236,13 +235,8 @@ export const NavigationSettingsPage = () => {
         setShowBreadcrumbs(tenant.branding.show_breadcrumbs !== false);
       }
 
-      timer = setTimeout(() => {
-        setLoading(false);
-      }, 400);
+      setLoading(false);
     }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
   }, [tenant]);
 
   // Set default selected section once sections load

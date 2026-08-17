@@ -76,13 +76,15 @@ export interface SolutionBlueprint {
   modulesCount: number;
   workflowsCount: number;
   formsCount: number;
+  artifactsCount?: number;
   author: string;
   updatedAt: string;
   icon?: string;
   contextSources: ContextSource[];
   connectedModules: ConnectedModule[];
   artifacts: SolutionArtifact[];
-  chatHistory: SolutionChatMessage[];
+  chatHistory?: SolutionChatMessage[];
+  chatMessages?: SolutionChatMessage[];
   activeArtifactId?: string;
   solutionNotes?: string;
   savedNotes?: SavedNote[];

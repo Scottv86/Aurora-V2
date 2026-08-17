@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Trash2, Plus, Loader2, Layout, ArrowRight } from 'lucide-react';
+import { Trash2, Plus, Loader2, Layout, ArrowRight, Search } from 'lucide-react';
 
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
 import { cn, slugify } from '../../lib/utils';
+import { EmptyState } from '../../components/UI/EmptyState';
+import { TrashService } from '../../services/trashService';
 
 const COMMON_ICONS = [
   'LayoutDashboard', 'ClipboardList', 'Layers', 'Database', 'Globe', 'Cpu', 'ShieldCheck', 'Inbox', 'BookOpen', 'BarChart'
@@ -27,9 +30,25 @@ export const PagesManagementPage = () => {
   const [newPageIcon, setNewPageIcon] = useState('Layers');
   const [selectedTemplate, setSelectedTemplate] = useState<'blank' | 'dashboard' | 'my-work'>('blank');
   const [creating, setCreating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'custom' | 'home'>('all');
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    setLoading(false);
+  }, [tenant?.id, modules?.length]);
 
   // Filter modules to only show workspace pages (type === 'PAGE')
-  const pages = modules.filter((mod: any) => mod.type === 'PAGE');
+  const pages = modules.filter((mod: any) => {
+    if (mod.type !== 'PAGE') return false;
+    const isHome = tenant?.workspaceSettings?.homePageId === mod.id;
+    if (activeTab === 'home' && !isHome) return false;
+    if (activeTab === 'custom' && isHome) return false;
+    if (searchQuery) {
+      return mod.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+    return true;
+  });
 
   const handleSetHomePage = async (pageId: string) => {
     try {
@@ -54,6 +73,17 @@ export const PagesManagementPage = () => {
     setDeletingId(targetPage.id);
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      
+      await TrashService.softDelete({
+        tenantId: tenant.id,
+        token,
+        itemType: 'PAGE',
+        itemId: targetPage.id,
+        title: targetPage.name,
+        subtitle: `Workspace Page`,
+        payload: targetPage
+      });
+
       const response = await fetch(`http://localhost:3001/api/data/modules/${targetPage.id}`, {
         method: 'DELETE',
         headers: {
@@ -67,7 +97,7 @@ export const PagesManagementPage = () => {
       }
 
       await refreshModules();
-      toast.success(`"${targetPage.name}" page deleted successfully`);
+      toast.success(`"${targetPage.name}" page moved to Recycling Bin`);
     } catch (error: any) {
       toast.error(error.message || `Failed to delete ${targetPage.name}`);
     } finally {
@@ -156,12 +186,45 @@ export const PagesManagementPage = () => {
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
-            <span>Create Workspace Page</span>
+            <span>Create</span>
           </Button>
         }
       />
 
-      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-8">
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
+        {/* Search & Filter Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'custom', label: 'Workspace Pages' },
+              { id: 'home', label: 'Home Page' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
       {/* Home Page Selector Section */}
       <div className="mb-8 p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -190,7 +253,24 @@ export const PagesManagementPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map(n => (
+            <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
+          ))}
+        </div>
+      ) : pages.length === 0 ? (
+        <EmptyState
+          icon={Layout}
+          title="No workspace pages found"
+          description="Design and manage responsive workspace dashboards, personal queues, or custom workflow tracking pages."
+          action={{
+            label: "Create",
+            onClick: () => setShowCreateModal(true)
+          }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
         {pages.map((page: any, i: number) => {
           const IconComponent = (Icons as any)[page.iconName] || (Icons as any)[page.icon] || Layout;
           const widgetsCount = page.config?.widgets?.length || 0;
@@ -297,10 +377,18 @@ export const PagesManagementPage = () => {
           onClick={() => setShowCreateModal(true)}
           className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
         >
-          <Plus size={32} className="text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3" />
-          <span className="text-sm font-bold text-zinc-500 group-hover:text-indigo-500 transition-colors">Create Workspace Page</span>
+          <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+            <Plus size={24} />
+          </div>
+          <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+            Create Page
+          </span>
+          <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+            Design a responsive workspace page or custom dashboard layout.
+          </p>
         </motion.div>
       </div>
+      )}
       </div>
 
       {/* Creation Modal */}

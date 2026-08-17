@@ -557,6 +557,12 @@ export interface SolutionOrchestrationResult {
     roles: { name: string; level: string; color: string; description: string }[];
     matrix: { resource: string; read: boolean; create: boolean; edit: boolean; delete: boolean; export: boolean; scope: string }[];
   };
+  moduleArtifact?: {
+    id: string;
+    name: string;
+    description: string;
+    fields: { id: string; label: string; type: string; required?: boolean; sample?: string }[];
+  };
 }
 
 
@@ -649,10 +655,10 @@ ${customModules.map(m => `- **${m.name}** (${m.type}): ${m.description || 'Core 
 `;
 
   return {
-    summaryText: `I've analyzed your prompt "${prompt}" alongside your context documents. I've designed the ${topic} architecture with a complete Solution Vision & Architecture plan, tailored 12-column forms, SLA escalation graphs, navigation routes, and global picklists.`,
+    summaryText: `I've analyzed your prompt "${prompt}" alongside your context documents. I've formulated the primary **Solution Architecture & Vision Proposal** for ${topic}. Review the proposed system design below; once approved, I will synthesize all downstream forms, workflows, schemas, and RBAC matrix components.`,
     suggestedActions: [
-      `Deploy ${topic} to Workspace`,
-      'Add Validation Rules',
+      'Approve Solution Architecture Design',
+      'Refine Architecture Proposal',
       'Export Architecture Spec'
     ],
     groundedSources: contextSources.map(c => c.name),
@@ -674,6 +680,20 @@ ${customModules.map(m => `- **${m.name}** (${m.type}): ${m.description || 'Core 
       id: `art_flow_${Date.now()}`,
       name: `${topic} Automated Flow`,
       nodes: workflowNodes
+    },
+    moduleArtifact: {
+      id: `art_mod_${Date.now()}`,
+      name: `${topic} Data Module Schema`,
+      description: `Primary relational database table schema, fields & data dictionary for ${topic}`,
+      fields: [
+        { id: 'f_ref', label: 'Registration Reference Number', type: 'VARCHAR(64)', required: true, sample: 'SABR-2026-0812' },
+        { id: 'f_child_name', label: 'Child Full Name', type: 'VARCHAR(255)', required: true, sample: 'Oliver James Smith' },
+        { id: 'f_dob', label: 'Date of Birth', type: 'DATE', required: true, sample: '2026-08-17' },
+        { id: 'f_facility', label: 'Birth Hospital / Location', type: 'VARCHAR(255)', required: true, sample: 'Adelaide Women & Children Hospital' },
+        { id: 'f_status', label: 'Application Status', type: 'ENUM', required: true, sample: 'Submitted' },
+        { id: 'f_guardian', label: 'Parent / Guardian Email', type: 'EMAIL', required: true, sample: 'guardian@sa.gov.au' },
+        { id: 'f_cert', label: 'Certificate Issued Flag', type: 'BOOLEAN', required: false, sample: 'false' }
+      ]
     },
     permissionArtifact: {
       id: `art_perm_${Date.now()}`,
@@ -805,8 +825,21 @@ export const orchestrateSolutionBlueprint = async (
 
   const systemInstruction = `You are Aurora AI Solution Orchestrator. 
 Your job is to analyze user prompts and context documents to design/update an enterprise application solution bundle in Aurora.
-Assume full awareness of all existing workspace modules in Aurora.
-If the user requests changes to an existing artifact, update that artifact while maintaining its structure and fields.
+You are fully aware of all 12 specialized Builders in the Aurora platform:
+1. Data Module Builder (Database tables, schemas, relations & fields)
+2. Interactive Form Builder (Public intake forms, admin forms & field layouts)
+3. Visual Workflow Builder (Flow diagrams, node graphs & SLA triggers)
+4. Vision Spec & Page Builder (Architecture specs, vision plans & custom pages)
+5. Sites & Portal Builder (Public-facing portals & client sites)
+6. Navigation Tree Builder (Workspace sidebar menus & routing structure)
+7. Automations & SLA Rules Builder (Trigger rules, event listeners & auto-assignments)
+8. Validation Rules Builder (Field-level constraints & logic verification)
+9. Integration & Connectors Builder (REST APIs, webhooks & external data connectors)
+10. Reports & Analytics Builder (Dashboards, KPI metrics & charts)
+11. Document Templates Builder (PDF/Word generation templates)
+12. Roles & Security Matrix Builder (RBAC permissions, scopes & access policies)
+
+CRITICAL MANDATE: You MUST ALWAYS generate a "specArtifact" ("Solution Design") FIRST for every request. The specArtifact is the primary technical architecture proposal document that outlines the solution vision, business goals, data schema hierarchy, process workflows, RBAC matrix, and API endpoints. Always include specArtifact as the primary artifact in your JSON response.
 
 OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
 {
@@ -815,6 +848,15 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   "modules": [
     { "id": "mod_clients", "name": "Clients", "type": "RECORD", "description": "Client records", "fieldsCount": 8, "linked": true }
   ],
+  "moduleArtifact": {
+    "id": "art_mod_1",
+    "name": "Registrations Data Module Schema",
+    "description": "Relational database table schema and field dictionary.",
+    "fields": [
+      { "id": "f_ref", "label": "Reference Number", "type": "VARCHAR(64)", "required": true, "sample": "REF-001" },
+      { "id": "f_name", "label": "Full Name", "type": "VARCHAR(255)", "required": true, "sample": "Jane Doe" }
+    ]
+  },
   "specArtifact": {
     "id": "art_spec_1",
     "name": "Solution Design",
@@ -823,9 +865,9 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   },
   "formArtifact": {
     "id": "art_form_1",
-    "name": "Client Intake Form",
-    "title": "Client Intake & Onboarding Form",
-    "subtitle": "Full screen, well-designed built-in components built.",
+    "name": "Public Intake Form",
+    "title": "Public Registration Form",
+    "subtitle": "Public-facing registration submission form.",
     "fields": [
       { "id": "f_fname", "label": "First Name", "type": "text", "placeholder": "First Name", "required": true, "colSpan": 6 },
       { "id": "f_lname", "label": "Last Name", "type": "text", "placeholder": "Last Name", "required": true, "colSpan": 6 }
@@ -833,11 +875,17 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   },
   "workflowArtifact": {
     "id": "art_flow_1",
-    "name": "Automated Intake Flow",
+    "name": "Automated Processing Flow",
     "nodes": [
       { "id": "node_1", "label": "Form Submitted", "type": "TRIGGER", "status": "completed" },
-      { "id": "node_2", "label": "Assign Service", "type": "ACTION", "status": "active" }
+      { "id": "node_2", "label": "Assign Verification Agent", "type": "ACTION", "status": "active" }
     ]
+  },
+  "permissionArtifact": {
+    "id": "art_perm_1",
+    "name": "Roles & Security Matrix",
+    "roles": [{ "name": "Admin", "level": "Full Control", "color": "indigo", "description": "Full access" }],
+    "matrix": [{ "resource": "Records", "read": true, "create": true, "edit": true, "delete": true, "export": true, "scope": "Workspace" }]
   }
 }`;
 

@@ -54,9 +54,13 @@ import { useGlobalLists, useGlobalList, GlobalListItem, ListColumn } from '../..
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
+import { usePlatform } from '../../../hooks/usePlatform';
+import { TrashService } from '../../../services/trashService';
+import { DeleteConfirmationModal } from '../../../components/Common/DeleteConfirmationModal';
 
 export const GlobalListsSettings = () => {
   const location = useLocation();
+  const { tenant } = usePlatform();
   const isSettingsMode = location.pathname.startsWith('/workspace/settings');
 
   const { lists, loading: listsLoading, createList, deleteList, refetch: refetchLists } = useGlobalLists();
@@ -140,6 +144,39 @@ export const GlobalListsSettings = () => {
     e.preventDefault();
     if (!newListData.name) return;
     try { const newList = await createList(newListData.name, newListData.description); setIsCreatingList(false); setNewListData({ name: '', description: '' }); if (newList) setSelectedListId(newList.id); } catch (err) { }
+  };
+
+  const [listToDelete, setListToDelete] = useState<any | null>(null);
+  const [isDeletingList, setIsDeletingList] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent, list: any) => {
+    e.stopPropagation();
+    setListToDelete(list);
+  };
+
+  const confirmDeleteListCard = async () => {
+    if (!listToDelete) return;
+    const list = listToDelete;
+    setIsDeletingList(true);
+    try {
+      if (tenant?.id) {
+        await TrashService.softDelete({
+          tenantId: tenant.id,
+          itemType: 'GLOBAL_LIST',
+          itemId: list.id,
+          title: list.name,
+          subtitle: list.description || `Global List`,
+          payload: list
+        });
+      }
+      await deleteList(list.id);
+      toast.success(`List "${list.name}" moved to Recycling Bin`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete list');
+    } finally {
+      setIsDeletingList(false);
+      setListToDelete(null);
+    }
   };
 
   const handleUpdateMetadata = async () => { 
@@ -269,7 +306,14 @@ export const GlobalListsSettings = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pb-12">
               {listsLoading ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-64 bg-zinc-100 dark:bg-zinc-900 animate-pulse rounded-3xl" />) : filteredLists.map((list) => (
-                <motion.div key={list.id} whileHover={{ y: -4 }} onClick={() => setSelectedListId(list.id)} className="group cursor-pointer bg-white dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between min-h-[180px]">
+                <motion.div key={list.id} whileHover={{ y: -4 }} onClick={() => setSelectedListId(list.id)} className="group cursor-pointer bg-white dark:bg-white/5 dark:backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between min-h-[180px] relative overflow-hidden">
+                  <button
+                    onClick={(e) => handleDeleteClick(e, list)}
+                    className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                    title="Delete List"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                   <div className="space-y-4"><div className="p-3 w-fit bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Database size={20} /></div><div className="space-y-1"><h3 className="text-lg font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 transition-colors">{list.name}</h3><p className="text-sm text-zinc-500 line-clamp-2">{list.description || <span className="italic text-zinc-400 opacity-50">No description provided</span>}</p></div></div>
                 </motion.div>
               ))}
@@ -467,6 +511,15 @@ export const GlobalListsSettings = () => {
           {confirmDeleteListId && <ConfirmationModal title="Delete List?" message="Irreversible action." confirmLabel="Delete" onConfirm={() => { deleteList(confirmDeleteListId); setConfirmDeleteListId(null); setSelectedListId(null); }} onCancel={() => setConfirmDeleteListId(null)} />}
           {confirmDeleteColumnId && <ConfirmationModal title="Delete Column?" message="Data will be lost." confirmLabel="Delete" onConfirm={() => handleDeleteColumn()} onCancel={() => setConfirmDeleteColumnId(null)} />}
           {confirmRetireItemId && <ConfirmationModal title="Retire Record?" message="Archive this version." confirmLabel="Retire" onConfirm={() => handleRetireItem()} onCancel={() => setConfirmRetireItemId(null)} />}
+          <DeleteConfirmationModal
+            isOpen={Boolean(listToDelete)}
+            onClose={() => setListToDelete(null)}
+            onConfirm={confirmDeleteListCard}
+            title="Delete Global List"
+            description="Are you sure you want to delete this global list? It will be moved to the Recycling Bin."
+            itemName={listToDelete?.name}
+            isDeleting={isDeletingList}
+          />
         </AnimatePresence>
       </div>
     </SettingsSubNavLayout>

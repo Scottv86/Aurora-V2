@@ -56,20 +56,21 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   ];
 
   const handleSave = async () => {
-    if (!tenant || !user) return;
+    const tenantId = tenant?.id || 'default';
+    const userId = user?.id || 'user';
     if (!name.trim()) {
       toast.error('Please enter a template name');
       return;
     }
 
     try {
-      const savedTemplate = await DocumentService.saveTemplate(tenant.id, {
+      const savedTemplate = await DocumentService.saveTemplate(tenantId, {
         ...template,
         name,
         content,
         status,
         moduleId,
-        createdBy: user.id
+        createdBy: userId
       });
       toast.success('Template saved successfully');
       onSave?.(savedTemplate);

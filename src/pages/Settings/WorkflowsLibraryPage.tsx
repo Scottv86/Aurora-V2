@@ -6,12 +6,17 @@ import { GitBranch, Plus, Search, Trash2, ArrowRight, Layers } from 'lucide-reac
 import { WorkflowEntity } from '../../types/platform';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { WorkflowBuilder } from '../../components/Builders/WorkflowBuilder/WorkflowBuilder';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
 import { motion } from 'motion/react';
+import { TrashService } from '../../services/trashService';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+
+import { EmptyState } from '../../components/UI/EmptyState';
 
 export const WorkflowsLibraryPage: React.FC = () => {
   const { tenant, modules } = usePlatform();
@@ -65,18 +70,40 @@ export const WorkflowsLibraryPage: React.FC = () => {
     fetchWorkflows();
   }, [tenant?.id]);
 
-  const handleDeleteWorkflow = async (e: React.MouseEvent, id: string) => {
+  const [workflowToDelete, setWorkflowToDelete] = useState<WorkflowEntity | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent, wf: WorkflowEntity) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this workflow?')) return;
+    setWorkflowToDelete(wf);
+  };
+
+  const confirmDeleteWorkflow = async () => {
+    if (!workflowToDelete) return;
+    const wf = workflowToDelete;
+    setIsDeleting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
+      if (tenant?.id) {
+        await TrashService.softDelete({
+          tenantId: tenant.id,
+          itemType: 'WORKFLOW',
+          itemId: wf.id,
+          title: wf.name,
+          subtitle: wf.description || `Workflow: ${wf.name}`,
+          payload: wf
+        });
+      }
+      await fetch(`${API_BASE_URL}/api/workflows/${wf.id}`, {
         method: 'DELETE',
         headers: { 'x-tenant-id': tenant?.id || '' }
-      });
-      toast.success('Workflow deleted successfully');
-      setWorkflows(prev => prev.filter(w => w.id !== id));
+      }).catch(() => {});
+      toast.success('Workflow moved to Recycling Bin');
+      setWorkflows(prev => prev.filter(w => w.id !== wf.id));
     } catch (err) {
       toast.error('Failed to delete workflow');
+    } finally {
+      setIsDeleting(false);
+      setWorkflowToDelete(null);
     }
   };
 
@@ -108,10 +135,16 @@ export const WorkflowsLibraryPage: React.FC = () => {
     return [...workflows, ...moduleWorkflows];
   }, [workflows, modules, tenant?.id]);
 
-  const filteredWorkflows = allWorkflows.filter(w => 
-    w.name.toLowerCase().includes(search.toLowerCase()) || 
-    (w.description && w.description.toLowerCase().includes(search.toLowerCase()))
-  );
+  const [filterTab, setFilterTab] = useState<'all' | 'global' | 'module'>('all');
+
+  const filteredWorkflows = allWorkflows.filter(w => {
+    const matchesSearch = w.name.toLowerCase().includes(search.toLowerCase()) || 
+                          (w.description && w.description.toLowerCase().includes(search.toLowerCase()));
+    if (!matchesSearch) return false;
+    if (filterTab === 'global') return w.isGlobal;
+    if (filterTab === 'module') return !w.isGlobal;
+    return true;
+  });
 
 
   return (
@@ -129,31 +162,67 @@ export const WorkflowsLibraryPage: React.FC = () => {
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
-            <span>Create Workflow</span>
+            <span>Create</span>
           </Button>
         }
       />
 
       {/* Main Content Area */}
-      <div className="p-6 lg:p-12 space-y-6">
-        {/* Search Bar */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search workflows..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white"
-          />
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
+        {/* Search & Filter Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'global', label: 'Global Flows' },
+              { id: 'module', label: 'Module Processes' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setFilterTab(tab.id as any)}
+                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  filterTab === tab.id
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Glassmorphic 3-Column Grid matching Modules & Sites */}
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-zinc-500">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent mb-3" />
-            <p className="text-xs font-semibold">Loading workflow studio...</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
+            ))}
           </div>
+        ) : filteredWorkflows.length === 0 ? (
+          <EmptyState
+            icon={GitBranch}
+            title="No workflows found"
+            description="Create multi-node visual workflows, trigger automations, and manage business logic graphs."
+            action={{
+              label: "Create",
+              onClick: () => {
+                setSelectedWorkflow(null);
+                setIsBuilderOpen(true);
+              }
+            }}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredWorkflows.map((wf, i) => (
@@ -183,7 +252,7 @@ export const WorkflowsLibraryPage: React.FC = () => {
                         </span>
 
                         <button
-                          onClick={(e) => handleDeleteWorkflow(e, wf.id)}
+                          onClick={(e) => handleDeleteClick(e, wf)}
                           className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Delete Workflow"
                         >
@@ -224,17 +293,17 @@ export const WorkflowsLibraryPage: React.FC = () => {
                 setSelectedWorkflow(null);
                 setIsBuilderOpen(true);
               }}
-              className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px]"
+              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
             >
-              <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
                 <Plus size={24} />
               </div>
-              <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
                 Create Workflow
               </span>
-              <span className="text-xs text-zinc-400 mt-1">
-                Design a new process graph workflow
-              </span>
+              <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                Design a new process graph workflow.
+              </p>
             </motion.div>
           </div>
         )}
@@ -260,6 +329,16 @@ export const WorkflowsLibraryPage: React.FC = () => {
           }}
         />
       </InContextBuilderModal>
+
+      <DeleteConfirmationModal
+        isOpen={Boolean(workflowToDelete)}
+        onClose={() => setWorkflowToDelete(null)}
+        onConfirm={confirmDeleteWorkflow}
+        title="Delete Workflow"
+        description="Are you sure you want to delete this workflow? It will be moved to the Recycling Bin."
+        itemName={workflowToDelete?.name}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

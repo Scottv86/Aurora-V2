@@ -15,91 +15,32 @@ router.get('/', async (req: TenantRequest, res) => {
 
     let solutions = [];
     if (model) {
-      solutions = await model.findMany({
+      const rawSolutions = await model.findMany({
         where: { tenantId },
         orderBy: { updatedAt: 'desc' }
       });
-    }
+      solutions = rawSolutions.map((sol: any) => {
+        const modules = Array.isArray(sol.connectedModules) ? sol.connectedModules : [];
+        const artifacts = Array.isArray(sol.artifacts) ? sol.artifacts : [];
+        const chat = Array.isArray(sol.chatMessages) ? sol.chatMessages : Array.isArray(sol.chatHistory) ? sol.chatHistory : [];
 
-    // Seed default solution blueprint if database is empty
-    if (solutions.length === 0 && model) {
-      const defaultSolution = await model.create({
-        data: {
-          id: 'sol_enterprise_intake',
-          tenantId,
-          name: 'Enterprise Client Intake & Service Hub',
-          description: 'Production solution combining client intake forms, SLA triage workflows, executive KPI dashboards, and automated email templates.',
-          category: 'Customer Experience',
-          version: '1.0.0',
-          status: 'ACTIVE',
-          author: 'Aurora Architecture Engine',
-          icon: 'Boxes',
-          activeArtifactId: 'art_form_1',
-          connectedModules: [
-            { id: 'mod_clients', name: 'Clients', type: 'RECORD', description: 'Client records collection', fieldsCount: 12, linked: true },
-            { id: 'mod_services', name: 'Services', type: 'REGISTRY', description: 'Service catalog picklist', fieldsCount: 8, linked: true },
-            { id: 'mod_crm', name: 'CRM Integration', type: 'API_SYNC', description: 'External CRM webhook sync', fieldsCount: 6, linked: true }
-          ],
-          contextSources: [
-            { id: 'src_1', name: 'Project_Vision.docx', type: 'docx', size: '245 KB', uploadedAt: '2 hours ago', status: 'PROCESSED', sourceOrigin: 'DRIVE' },
-            { id: 'src_2', name: 'Client_Form_Wireframe.pdf', type: 'pdf', size: '1.2 MB', uploadedAt: 'Yesterday', status: 'PROCESSED', sourceOrigin: 'KNOWLEDGE_BASE' }
-          ],
-          artifacts: [
-            {
-              id: 'art_form_1',
-              name: 'Client Intake Form',
-              type: 'FORM',
-              description: 'Dynamic 12-column grid intake form',
-              content: {
-                title: 'Client Intake & Registration',
-                subtitle: 'Full screen enterprise onboarding form',
-                fields: [
-                  { id: 'f_fname', label: 'First Name', type: 'text', placeholder: 'Enter first name', required: true, colSpan: 6 },
-                  { id: 'f_lname', label: 'Last Name', type: 'text', placeholder: 'Enter last name', required: true, colSpan: 6 },
-                  { id: 'f_email', label: 'Email Address', type: 'email', placeholder: 'client@company.com', required: true, colSpan: 12 },
-                  { id: 'f_tier', label: 'Service Tier', type: 'select', colSpan: 12, options: ['Standard Support', 'Premium Onboarding', 'Enterprise SLA'] }
-                ]
-              }
-            },
-            {
-              id: 'art_flow_1',
-              name: 'Automated Intake Flow',
-              type: 'WORKFLOW',
-              description: 'Visual process execution graph',
-              content: {
-                nodes: [
-                  { id: 'node_1', label: 'Form Submitted', type: 'TRIGGER', status: 'completed' },
-                  { id: 'node_2', label: 'Evaluate SLA Thresholds', type: 'ACTION', status: 'active' },
-                  { id: 'node_3', label: 'Generate Welcome Pack', type: 'AUTOMATION', status: 'pending' }
-                ]
-              }
-            },
-            {
-              id: 'art_nav_1',
-              name: 'Portal Navigation Tree',
-              type: 'NAVIGATION',
-              description: 'Portal navigation menu tree',
-              content: {
-                items: [
-                  { label: 'Client Dashboard', path: '/workspace/dashboard' },
-                  { label: 'Submit Ticket Intake', path: '/workspace/intake' },
-                  { label: 'SLA Escalation Queue', path: '/workspace/triage' }
-                ]
-              }
-            },
-            {
-              id: 'art_list_1',
-              name: 'Service Tiers Picklist',
-              type: 'GLOBAL_LIST',
-              description: 'Shared enum picklist values',
-              content: {
-                options: ['Standard Support', 'Premium Onboarding', 'Enterprise SLA', '24/7 Managed Support']
-              }
-            }
-          ]
+        let description = sol.description;
+        if (!description || description.includes('linked data modules') || description.includes('Solution Blueprint combining')) {
+          const specArt = artifacts.find((a: any) => a.type === 'PAGE' || (a.id && a.id.startsWith('art_spec_')));
+          description = specArt?.description || (specArt?.content as any)?.title || (sol.name ? `Enterprise solution blueprint for ${sol.name}` : 'Enterprise Solution Blueprint');
         }
+
+        return {
+          ...sol,
+          description,
+          chatHistory: chat,
+          chatMessages: chat,
+          modulesCount: sol.modulesCount ?? modules.length,
+          workflowsCount: sol.workflowsCount ?? artifacts.filter((a: any) => a.type === 'WORKFLOW').length,
+          formsCount: sol.formsCount ?? artifacts.filter((a: any) => a.type === 'FORM').length,
+          artifactsCount: sol.artifactsCount ?? artifacts.length
+        };
       });
-      solutions = [defaultSolution];
     }
 
     res.json({ solutions });
@@ -129,7 +70,12 @@ router.get('/:id', async (req: TenantRequest, res) => {
       return res.status(404).json({ error: 'Solution blueprint not found' });
     }
 
-    res.json(sol);
+    const chat = Array.isArray(sol.chatMessages) ? sol.chatMessages : Array.isArray(sol.chatHistory) ? sol.chatHistory : [];
+    res.json({
+      ...sol,
+      chatHistory: chat,
+      chatMessages: chat
+    });
   } catch (err: any) {
     console.error('[SolutionRoutes] GET /:id Error:', err);
     res.status(500).json({ error: 'Failed to fetch solution blueprint details' });
@@ -164,7 +110,7 @@ router.post('/', async (req: TenantRequest, res) => {
         connectedModules: body.connectedModules || [],
         artifacts: body.artifacts || [],
         savedNotes: body.savedNotes || [],
-        chatMessages: body.chatMessages || [],
+        chatMessages: body.chatMessages || body.chatHistory || [],
         metadata: body.metadata || {}
       },
       create: {
@@ -181,7 +127,7 @@ router.post('/', async (req: TenantRequest, res) => {
         connectedModules: body.connectedModules || [],
         artifacts: body.artifacts || [],
         savedNotes: body.savedNotes || [],
-        chatMessages: body.chatMessages || [],
+        chatMessages: body.chatMessages || body.chatHistory || [],
         metadata: body.metadata || {}
       }
     });

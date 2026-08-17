@@ -7,98 +7,26 @@ import { motion } from 'motion/react';
 import { 
   Network, 
   Globe, 
-  ExternalLink,
   Plus,
   Search,
   Trash2,
   RefreshCw,
   Headphones,
   BookOpen,
-  ArrowRight,
-  Sparkles
+  ArrowRight
 } from 'lucide-react';
+import { EmptyState } from '../../components/UI/EmptyState';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
 import { SiteService, Site } from '../../services/siteService';
 import { toast } from 'sonner';
-
-const INITIAL_SEED_SITES: Partial<Site>[] = [
-  // Internal Sites
-  {
-    name: 'Main Intranet',
-    description: 'Central organizational hub for corporate announcements, company policies, employee directories, and departmental news.',
-    category: 'internal',
-    type: 'Intranet Hub',
-    domain: 'intranet.aurora.internal',
-    status: 'active',
-    access: 'Authenticated',
-    metrics: { metricLabel: 'Active Members', metricValue: '1,240' }
-  },
-  {
-    name: 'Engineering Knowledge Base',
-    description: 'Technical documentation, architecture decision records (ADRs), API guidelines, and developer onboarding materials.',
-    category: 'internal',
-    type: 'Knowledge Base',
-    domain: 'docs.eng.aurora.internal',
-    status: 'active',
-    access: 'Restricted',
-    metrics: { metricLabel: 'Articles Published', metricValue: '348' }
-  },
-  {
-    name: 'Operations Handbook',
-    description: 'Standard operating procedures, emergency protocols, infrastructure runbooks, and compliance checklists.',
-    category: 'internal',
-    type: 'Wiki',
-    domain: 'ops.aurora.internal',
-    status: 'active',
-    access: 'Authenticated',
-    metrics: { metricLabel: 'Active Readers', metricValue: '512' }
-  },
-  // External Portals
-  {
-    name: 'Property Bond Lodgement Portal',
-    description: 'Official self-service portal for bond holders & residents to lodge property bonds, track application status, and live chat with support.',
-    category: 'external',
-    type: 'Customer Portal',
-    domain: 'bonds.aurora.app',
-    status: 'active',
-    access: 'Public',
-    metrics: { metricLabel: 'Bonds Lodged', metricValue: '1,840' }
-  },
-  {
-    name: 'Client Support Portal',
-    description: 'Customer ticket submission, live chat assistant, knowledge base search, and SLA status tracking dashboard.',
-    category: 'external',
-    type: 'Customer Portal',
-    domain: 'support.aurora-app.com',
-    status: 'active',
-    access: 'Public',
-    metrics: { metricLabel: 'Monthly Tickets', metricValue: '4,120' }
-  },
-  {
-    name: 'Supplier & Vendor Portal',
-    description: 'Authenticated vendor center for uploading project proposals, verifying compliance credentials, and submitting invoice details.',
-    category: 'external',
-    type: 'Vendor Portal',
-    domain: 'vendor.aurora.app',
-    status: 'active',
-    access: 'Authenticated',
-    metrics: { metricLabel: 'Linked Vendors', metricValue: '120' }
-  },
-  // Public Sites
-  {
-    name: 'Product Launch Landing Page',
-    description: 'Promotional marketing website for capturing customer pre-registrations, product specifications, and email signups.',
-    category: 'public',
-    type: 'Landing Page',
-    domain: 'launch.aurora.app',
-    status: 'active',
-    access: 'Public',
-    metrics: { metricLabel: 'Monthly Traffic', metricValue: '88K views' }
-  }
-];
+import { usePlatform } from '../../hooks/usePlatform';
+import { TrashService } from '../../services/trashService';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 
 export const SitesPage = () => {
   const navigate = useNavigate();
+  const { tenant } = usePlatform();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,22 +37,12 @@ export const SitesPage = () => {
   const fetchSites = async () => {
     try {
       setLoading(true);
-      let data = await SiteService.getSites();
-      
-      // Auto-seed demo sites if database has no sites
-      if (data.length === 0) {
-        toast.info('Seeding default enterprise sites...');
-        for (const seed of INITIAL_SEED_SITES) {
-          await SiteService.createSite(seed);
-        }
-        data = await SiteService.getSites();
-      }
-      
+      const data = await SiteService.getSites();
       setSites(data);
     } catch (err: any) {
       toast.error(err.message || 'Failed to fetch sites.');
     } finally {
-      setLoading(false);
+      setTimeout(() => setLoading(false), 300);
     }
   };
 
@@ -132,16 +50,37 @@ export const SitesPage = () => {
     fetchSites();
   }, []);
 
-  const handleDeleteSite = async (e: React.MouseEvent, siteId: string, siteName: string) => {
-    e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete "${siteName}"?`)) return;
+  const [siteToDelete, setSiteToDelete] = useState<Site | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
+  const handleDeleteClick = (e: React.MouseEvent, site: Site) => {
+    e.stopPropagation();
+    setSiteToDelete(site);
+  };
+
+  const confirmDeleteSite = async () => {
+    if (!siteToDelete) return;
+    const site = siteToDelete;
+    setIsDeleting(true);
     try {
-      await SiteService.deleteSite(siteId);
-      setSites(prev => prev.filter(s => s.id !== siteId));
-      toast.success(`Site "${siteName}" deleted.`);
+      if (tenant?.id) {
+        await TrashService.softDelete({
+          tenantId: tenant.id,
+          itemType: 'SITE',
+          itemId: site.id,
+          title: site.name,
+          subtitle: site.description || `Site: ${site.domain || site.name}`,
+          payload: site
+        });
+      }
+      await SiteService.deleteSite(site.id).catch(() => {});
+      setSites(prev => prev.filter(s => s.id !== site.id));
+      toast.success(`Site "${site.name}" moved to Recycling Bin.`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete site.');
+    } finally {
+      setIsDeleting(false);
+      setSiteToDelete(null);
     }
   };
 
@@ -190,7 +129,7 @@ export const SitesPage = () => {
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
               >
                 <Plus size={16} />
-                <span>Create Site</span>
+                <span>Create</span>
               </Button>
             </div>
           }
@@ -198,48 +137,46 @@ export const SitesPage = () => {
 
         <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
           
-          {/* Category Filter Pills & Search Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            
-            {/* Category Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-              {[
-                { id: 'all', label: 'All Sites' },
-                { id: 'internal', label: 'Internal Hubs' },
-                { id: 'external', label: 'External Portals' },
-                { id: 'public', label: 'Public Sites' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                      : 'bg-white/60 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-800/80'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+          {/* Search & Filter Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+              />
             </div>
 
-            {/* Search & Status Filter */}
-            <div className="flex items-center gap-3">
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={14} />
-                <input
-                  type="text"
-                  placeholder="Search sites or domains..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
-                />
+            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+              {/* Category Pills */}
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
+                {[
+                  { id: 'all', label: 'All Sites' },
+                  { id: 'internal', label: 'Internal' },
+                  { id: 'external', label: 'External' },
+                  { id: 'public', label: 'Public' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
+                      activeTab === tab.id
+                        ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-900 dark:text-white focus:outline-none shadow-sm cursor-pointer"
+                className="px-3 py-2 bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs text-zinc-900 dark:text-white focus:outline-none cursor-pointer"
               >
                 <option value="all">All Statuses</option>
                 <option value="active">Active</option>
@@ -251,14 +188,16 @@ export const SitesPage = () => {
 
           {/* Glassmorphic 3-Column Grid matching Custom Modules */}
           {loading ? (
-            <div className="py-20 flex flex-col items-center justify-center text-zinc-500">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent mb-3" />
-              <p className="text-xs font-semibold">Loading sites & portals from database...</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map(n => (
+                <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
+              ))}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredSites.map((site, i) => {
                 const SiteIcon = getSiteIcon(site.type || '', site.category);
+
                 return (
                   <motion.div
                     key={site.id}
@@ -266,9 +205,17 @@ export const SitesPage = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
                     onClick={() => handleOpenBuilder(site.id)}
-                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden"
+                    className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col h-full relative overflow-hidden min-h-[240px]"
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    <button
+                      onClick={(e) => handleDeleteClick(e, site)}
+                      className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20"
+                      title="Delete Site"
+                    >
+                      <Trash2 size={14} />
+                    </button>
 
                     <div className="relative z-10 flex flex-col h-full justify-between">
                       <div>
@@ -276,32 +223,13 @@ export const SitesPage = () => {
                           <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-all">
                             <SiteIcon size={22} />
                           </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
-                              site.status === 'active' 
-                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
-                                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700'
-                            }`}>
-                              {site.status}
-                            </span>
-                            
-                            <button
-                              onClick={(e) => { e.stopPropagation(); window.open(`/public/portal/${site.id}`, '_blank'); }}
-                              className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-500 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
-                              title="Visit Live Site"
-                            >
-                              <ExternalLink size={14} />
-                            </button>
-                            
-                            <button
-                              onClick={(e) => handleDeleteSite(e, site.id, site.name)}
-                              className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
-                              title="Delete Site"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                            site.status === 'active'
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                          }`}>
+                            {site.status || 'Draft'}
+                          </span>
                         </div>
 
                         <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
@@ -311,22 +239,21 @@ export const SitesPage = () => {
                           {site.description || 'No description provided.'}
                         </p>
 
-                        <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 dark:bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/10">
+                        <div className="flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 dark:bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/10 mt-4">
                           <Globe size={13} className="shrink-0" />
                           <span className="truncate">{site.domain}</span>
                         </div>
                       </div>
-                        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
-                          <div className="text-xs text-zinc-500 font-semibold font-mono">
-                            {site.domain}
-                          </div>
-                          <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
-                            Edit in Builder <ArrowRight size={14} />
-                          </div>
+                      <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                        <div className="text-xs text-zinc-500 font-semibold font-mono">
+                          {site.domain}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform">
+                          Edit in Builder <ArrowRight size={14} />
                         </div>
                       </div>
-                    </motion.div>
-
+                    </div>
+                  </motion.div>
                 );
               })}
 
@@ -336,27 +263,31 @@ export const SitesPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: filteredSites.length * 0.03 }}
                 onClick={() => setIsModalOpen(true)}
-                className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[240px]"
+                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
               >
-                <div className="p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
                   <Plus size={24} />
                 </div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-1">Create Custom Site</h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs leading-relaxed">
-                  Start from scratch, deploy a pre-configured site blueprint, or generate with AI.
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                  Create Site
+                </span>
+                <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                  Build an intranet hub, portal, or public web site.
                 </p>
               </motion.div>
             </div>
           )}
 
           {filteredSites.length === 0 && !loading && (
-            <div className="text-center py-16 text-zinc-500">
-              <Sparkles size={32} className="mx-auto mb-3 text-zinc-400 opacity-50" />
-              <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-200">No Sites Found</h3>
-              <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
-                No sites or portals match "{searchQuery}". Create a new site or adjust your search filters.
-              </p>
-            </div>
+            <EmptyState
+              icon={Globe}
+              title="No sites deployed"
+              description="Build, manage, and deploy tenant intranet hubs, client portals, and public web applications."
+              action={{
+                label: "Create",
+                onClick: () => setIsModalOpen(true)
+              }}
+            />
           )}
         </div>
       </div>
@@ -366,6 +297,16 @@ export const SitesPage = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSiteCreated={() => fetchSites()}
+      />
+
+      <DeleteConfirmationModal
+        isOpen={Boolean(siteToDelete)}
+        onClose={() => setSiteToDelete(null)}
+        onConfirm={confirmDeleteSite}
+        title="Delete Site"
+        description="Are you sure you want to delete this site? It will be moved to the Recycling Bin."
+        itemName={siteToDelete?.name}
+        isDeleting={isDeleting}
       />
     </LicenseGate>
   );

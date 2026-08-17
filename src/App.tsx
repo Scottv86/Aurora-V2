@@ -366,6 +366,7 @@ const App = () => {
                    <Route path="report-management" element={<ReportManagementSettings />} />
                    <Route path="api-management" element={<APISettings />} />
                    <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
+                   <Route path="queues-management" element={<ComingSoon title="Queues" description="Build and configure work queues, unified queue views, filter rules, and display columns for your platform." />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
                 </Route>
                  <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />

@@ -39,6 +39,8 @@ export interface SolutionPreviewStudioProps {
   onDeleteNote?: (id: string) => void;
   onToggleCollapse?: () => void;
   onPromptRefine?: (promptText: string) => void;
+  isApproved?: boolean;
+  onApproveDesign?: () => void;
 }
 
 export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
@@ -49,7 +51,9 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
   savedNotes = [],
   onDeleteNote,
   onToggleCollapse,
-  onPromptRefine
+  onPromptRefine,
+  isApproved = false,
+  onApproveDesign
 }) => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'grid' | 'detail'>('grid');
@@ -165,6 +169,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-rose-600 dark:text-rose-400',
           badge: 'bg-rose-500/20 text-rose-500',
           icon: ShieldCheck,
+          badgeLabel: 'ROLES & RBAC',
           categoryLabel: 'Roles & Permissions Matrix'
         };
       case 'FORM':
@@ -174,6 +179,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-purple-600 dark:text-purple-400',
           badge: 'bg-purple-500/20 text-purple-500',
           icon: FileText,
+          badgeLabel: 'FORM',
           categoryLabel: 'Interactive Form Builder'
         };
       case 'WORKFLOW':
@@ -183,6 +189,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-emerald-600 dark:text-emerald-400',
           badge: 'bg-emerald-500/20 text-emerald-500',
           icon: GitBranch,
+          badgeLabel: 'WORKFLOW',
           categoryLabel: 'Visual Workflow Builder'
         };
       case 'MODULE':
@@ -192,6 +199,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-blue-600 dark:text-blue-400',
           badge: 'bg-blue-500/20 text-blue-500',
           icon: Layers,
+          badgeLabel: 'MODULE',
           categoryLabel: 'Data Module Schema'
         };
       case 'NAVIGATION':
@@ -201,6 +209,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-teal-600 dark:text-teal-400',
           badge: 'bg-teal-500/20 text-teal-500',
           icon: Globe,
+          badgeLabel: 'NAVIGATION',
           categoryLabel: 'Navigation Tree Builder'
         };
       case 'AUTOMATION':
@@ -210,6 +219,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-amber-600 dark:text-amber-400',
           badge: 'bg-amber-500/20 text-amber-500',
           icon: Zap,
+          badgeLabel: 'AUTOMATION',
           categoryLabel: 'Automation Rules Builder'
         };
       case 'INTEGRATION':
@@ -220,6 +230,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-rose-600 dark:text-rose-400',
           badge: 'bg-rose-500/20 text-rose-500',
           icon: Plug,
+          badgeLabel: 'API CONNECTOR',
           categoryLabel: 'Integration & API Connector'
         };
       case 'VALIDATION':
@@ -229,6 +240,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-sky-600 dark:text-sky-400',
           badge: 'bg-sky-500/20 text-sky-500',
           icon: ShieldCheck,
+          badgeLabel: 'VALIDATION',
           categoryLabel: 'Validation Rules Builder'
         };
       case 'REPORT':
@@ -238,6 +250,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-indigo-600 dark:text-indigo-400',
           badge: 'bg-indigo-500/20 text-indigo-500',
           icon: BarChart2,
+          badgeLabel: 'REPORT',
           categoryLabel: 'Reports & Analytics Builder'
         };
       case 'SITE':
@@ -247,6 +260,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-teal-600 dark:text-teal-400',
           badge: 'bg-teal-500/20 text-teal-500',
           icon: Globe,
+          badgeLabel: 'PORTAL',
           categoryLabel: 'Sites & Portal Builder'
         };
       case 'TEMPLATE':
@@ -256,6 +270,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-purple-600 dark:text-purple-400',
           badge: 'bg-purple-500/20 text-purple-500',
           icon: FileText,
+          badgeLabel: 'TEMPLATE',
           categoryLabel: 'Document Templates Builder'
         };
       case 'GLOBAL_LIST':
@@ -265,6 +280,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-amber-600 dark:text-amber-400',
           badge: 'bg-amber-500/20 text-amber-500',
           icon: CheckCircle2,
+          badgeLabel: 'PICKLIST',
           categoryLabel: 'Global Picklists Registry'
         };
       case 'PAGE':
@@ -274,6 +290,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-indigo-600 dark:text-indigo-400',
           badge: 'bg-indigo-500/20 text-indigo-500 font-black',
           icon: BookOpen,
+          badgeLabel: 'SOLUTION DESIGN',
           categoryLabel: 'Architecture & Vision Plan'
         };
       default:
@@ -283,6 +300,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           text: 'text-zinc-600 dark:text-zinc-400',
           badge: 'bg-zinc-500/20 text-zinc-500',
           icon: Sparkles,
+          badgeLabel: 'ARTIFACT',
           categoryLabel: 'Solution Artifact'
         };
     }
@@ -297,6 +315,34 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
         /* SOLUTION ARCHITECTURE & VISION SPECIFICATION PREVIEW */
         return (
           <div className={`bg-white/90 dark:bg-zinc-900/90 border border-indigo-500/30 rounded-3xl p-6 shadow-2xl space-y-5 ${isFullscreen ? 'max-w-5xl mx-auto' : ''}`}>
+            {!isApproved && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500/20 via-purple-500/15 to-emerald-500/20 border border-indigo-500/40 flex items-center justify-between gap-4 shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-600 text-white font-bold shrink-0">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <span>Stage 1: Solution Architecture Proposal</span>
+                    </h4>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-300 font-medium mt-0.5 leading-relaxed">
+                      Review the proposal below. Once approved, Aurora will synthesize all downstream forms, workflows, data modules &amp; RBAC matrices.
+                    </p>
+                  </div>
+                </div>
+
+                {onApproveDesign && (
+                  <button
+                    onClick={onApproveDesign}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>Approve Solution Design</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
@@ -313,8 +359,12 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-1 text-[10px] font-black rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
-                  APPROVED SPEC
+                <span className={`px-2.5 py-1 text-[10px] font-black rounded-full uppercase tracking-wider border ${
+                  isApproved
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                }`}>
+                  {isApproved ? 'APPROVED FOR PROVISIONING' : 'PROPOSAL PENDING APPROVAL'}
                 </span>
 
                 <button
@@ -828,8 +878,118 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           </div>
         );
 
+      case 'WORKFLOW':
+        /* VISUAL WORKFLOW GRAPH & FLOWCHART PREVIEW */
+        const flowNodes = Array.isArray(art.content?.nodes) && art.content.nodes.length > 0
+          ? art.content.nodes
+          : [
+              { id: 'node_1', label: 'Public Registration Form Submitted', type: 'TRIGGER', status: 'completed', description: 'Triggered when a registration application is submitted' },
+              { id: 'node_2', label: 'Verify Identity & Supporting Docs', type: 'ACTION', status: 'active', description: 'Agent verifies hospital discharge & parent ID documents' },
+              { id: 'node_3', label: 'Evaluate SA Health Rules & SLA (4H)', type: 'AUTOMATION', status: 'pending', description: 'System checks processing SLA timers & escalates if overdue' },
+              { id: 'node_4', label: 'Approve & Issue Birth Certificate', type: 'APPROVAL', status: 'pending', description: 'Final registrar approval & digital certificate dispatch' }
+            ];
+
+        return (
+          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-emerald-500/30 rounded-3xl p-6 shadow-2xl space-y-6 ${isFullscreen ? 'max-w-6xl mx-auto' : ''}`}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  <GitBranch size={22} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span>{art.name}</span>
+                  </h3>
+                  <p className="text-xs text-zinc-500 font-medium">
+                    Visual Workflow Process Graph & Execution Flowchart Diagram
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 text-[10px] font-black rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 uppercase tracking-wider">
+                ACTIVE WORKFLOW GRAPH
+              </span>
+            </div>
+
+            {/* Flowchart Node Canvas */}
+            <div className="p-6 bg-zinc-50 dark:bg-zinc-950 rounded-3xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-3 relative">
+              <div className="flex flex-col space-y-3">
+                {flowNodes.map((node: any, idx: number) => {
+                  const isLast = idx === flowNodes.length - 1;
+                  const nodeType = node.type || (idx === 0 ? 'TRIGGER' : isLast ? 'APPROVAL' : 'ACTION');
+                  
+                  let badgeColor = 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30';
+                  let iconText = '⚡';
+                  if (nodeType === 'TRIGGER') {
+                    badgeColor = 'bg-amber-500/20 text-amber-500 border-amber-500/30';
+                    iconText = '⚡';
+                  } else if (nodeType === 'ACTION') {
+                    badgeColor = 'bg-indigo-500/20 text-indigo-500 border-indigo-500/30';
+                    iconText = '⚙️';
+                  } else if (nodeType === 'AUTOMATION') {
+                    badgeColor = 'bg-purple-500/20 text-purple-500 border-purple-500/30';
+                    iconText = '🤖';
+                  } else if (nodeType === 'APPROVAL') {
+                    badgeColor = 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30';
+                    iconText = '✅';
+                  }
+
+                  return (
+                    <React.Fragment key={node.id || idx}>
+                      <div className="group relative p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/40 rounded-2xl shadow-sm transition-all flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold border ${badgeColor}`}>
+                            {iconText}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono font-bold text-zinc-400">Step {idx + 1}</span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase border ${badgeColor}`}>
+                                {nodeType}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-0.5">
+                              {node.label}
+                            </h4>
+                            {node.description && (
+                              <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
+                                {node.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            node.status === 'completed'
+                              ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                              : node.status === 'active'
+                              ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 animate-pulse'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 border border-zinc-200 dark:border-zinc-700'
+                          }`}>
+                            {node.status || 'Active'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {!isLast && (
+                        <div className="flex justify-center my-0.5">
+                          <div className="w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-zinc-400 shadow-xs">
+                            <ArrowRight size={13} className="rotate-90 text-emerald-500" />
+                          </div>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'FORM':
       default:
-        /* DYNAMIC FORM / WORKFLOW PREVIEW (DEFAULT) */
+        /* DYNAMIC FORM PREVIEW */
         return (
           <div className={`bg-gradient-to-br from-teal-500/10 via-indigo-500/10 to-purple-500/10 dark:from-teal-500/5 dark:via-indigo-500/5 dark:to-purple-500/5 border border-zinc-200/80 dark:border-zinc-800/80 rounded-3xl p-6 shadow-xl relative overflow-hidden ${isFullscreen ? 'max-w-5xl mx-auto' : ''}`}>
             <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 max-w-md mx-auto shadow-2xl space-y-5">
@@ -990,7 +1150,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
                             <Maximize2 size={12} />
                           </button>
                           <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase bg-white/80 dark:bg-zinc-900/80 text-zinc-600 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-800 shrink-0">
-                            {art.type}
+                            {theme.badgeLabel || art.type}
                           </span>
                         </div>
                       </div>

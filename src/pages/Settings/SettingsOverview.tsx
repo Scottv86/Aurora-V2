@@ -72,7 +72,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
   // Build & Customize (All Platform Builders)
   {
     id: 'solutions',
-    label: 'Solution',
+    label: 'Solutions',
     description: 'Package, deploy, and manage end-to-end solution blueprints and application bundles.',
     icon: 'Boxes',
     to: '/workspace/settings/platform-modules/solutions',
@@ -81,7 +81,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   {
     id: 'navigation',
-    label: 'Navigation',
+    label: 'Menus',
     description: 'Layout style and navigation menu architect.',
     icon: 'Compass',
     to: '/workspace/settings/navigation',
@@ -178,6 +178,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     to: '/workspace/settings/platform-modules/document-generation',
     category: 'Build & Customize',
     tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
+  },
+  {
+    id: 'queues-management',
+    label: 'Queues',
+    description: 'Build and configure work queues, unified queue views, filter rules, and display columns.',
+    icon: 'ListOrdered',
+    to: '/workspace/settings/platform-modules/queues-management',
+    category: 'Build & Customize',
+    tags: ['queues', 'work queue', 'unified', 'filter', 'columns', 'distribution']
   },
 
   // Logic & Workflows

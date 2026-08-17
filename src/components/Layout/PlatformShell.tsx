@@ -492,8 +492,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Build & Customize',
       icon: Layout,
       items: [
-        { label: 'Solution', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/solutions' },
-        { label: 'Navigation', icon: Compass, to: '/workspace/settings/navigation' },
+        { label: 'Solutions', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/solutions' },
+        { label: 'Menus', icon: Compass, to: '/workspace/settings/navigation' },
         { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
         { label: 'Sites', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
@@ -504,6 +504,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
         { label: 'Reports', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
         { label: 'Templates', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
+        { label: 'Queues', icon: LucideIcons.ListOrdered, to: '/workspace/settings/platform-modules/queues-management' },
       ]
     },
 
@@ -838,7 +839,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           <button
                             onClick={() => navigate('/workspace/settings/navigation/builder')}
                             className="w-10 h-10 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 flex items-center justify-center transition-all shadow-sm group mx-auto"
-                            title="Configure Navigation"
+                            title="Configure Menu"
                           >
                             <Compass size={18} className="group-hover:rotate-45 transition-transform duration-300" />
                           </button>
@@ -848,7 +849,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 transition-all shadow-sm group"
                           >
                             <Compass size={15} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-                            <span className="truncate">Configure Navigation</span>
+                            <span className="truncate">Configure Menu</span>
                           </button>
                         )}
                       </div>
@@ -861,7 +862,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                             <button
                               onClick={() => navigate('/workspace/settings/navigation/builder')}
                               className="w-10 h-10 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 flex items-center justify-center transition-all mx-auto animate-pulse"
-                              title="Configure Navigation"
+                              title="Configure Menu"
                             >
                               <Settings2 size={18} />
                             </button>

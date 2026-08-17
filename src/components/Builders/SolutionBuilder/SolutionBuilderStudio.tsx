@@ -25,6 +25,23 @@ import { toast } from 'sonner';
 import { orchestrateSolutionBlueprint } from '../../../services/aiService';
 import { API_BASE_URL } from '../../../config';
 import { motion } from 'motion/react';
+import { supabase } from '../../../lib/supabase';
+
+const getAuthToken = async (): Promise<string> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) return session.access_token;
+  } catch (e) {}
+
+  const authDataStr = localStorage.getItem('aurora_auth');
+  if (authDataStr) {
+    try {
+      const authData = JSON.parse(authDataStr);
+      return authData?.access_token || authData?.token || '';
+    } catch (e) {}
+  }
+  return '';
+};
 
 
 
@@ -34,11 +51,13 @@ import { motion } from 'motion/react';
 export interface SolutionBuilderStudioProps {
   initialSolution?: SolutionBlueprint | null;
   onClose?: () => void;
+  onSaveSuccess?: () => void;
 }
 
 export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   initialSolution,
-  onClose
+  onClose,
+  onSaveSuccess
 }) => {
   const navigate = useNavigate();
   const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, tenant, refreshModules } = usePlatform();
@@ -60,15 +79,19 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   );
 
   const [chatMessages, setChatMessages] = useState<SolutionChatMessage[]>(
-    initialSolution?.chatHistory || [
-      {
-        id: 'msg_1',
-        role: 'aurora',
-        text: "Welcome to Solution Studio! Upload project specifications, wireframes, or API docs in Context & Inputs, or prompt me to generate your full solution blueprint.",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        suggestedActions: ['Upload Project Specification', 'Add Custom Data Module', 'Generate Intake Form']
-      }
-    ]
+    (initialSolution?.chatHistory && initialSolution.chatHistory.length > 0)
+      ? initialSolution.chatHistory
+      : (initialSolution?.chatMessages && initialSolution.chatMessages.length > 0)
+      ? initialSolution.chatMessages
+      : [
+          {
+            id: 'msg_1',
+            role: 'aurora',
+            text: "Welcome to Solution Studio! Upload project specifications, wireframes, or API docs in Context & Inputs, or prompt me to generate your full solution blueprint.",
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            suggestedActions: ['Upload Project Specification', 'Add Custom Data Module', 'Generate Intake Form']
+          }
+        ]
   );
 
   const [savedNotes, setSavedNotes] = useState<SavedNote[]>(
@@ -82,8 +105,19 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   const [activeArtifactId, setActiveArtifactId] = useState<string>(
     initialSolution?.activeArtifactId || ''
   );
+  const [isDesignApproved, setIsDesignApproved] = useState<boolean>(
+    initialSolution?.status === 'ACTIVE' || false
+  );
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<{ id: string; label: string; status: 'pending' | 'active' | 'completed' }[]>([]);
+
+  const handleApproveDesign = () => {
+    setIsDesignApproved(true);
+    toast.success('Solution Design Approved! Synthesizing downstream Builder components (Forms, Workflows, Modules & RBAC)...');
+    
+    // Auto-trigger AI synthesis for downstream builder components
+    handleSendMessage('Approve Solution Architecture Design & synthesize all downstream builder artifacts', 'default');
+  };
 
   // Sync initial solution props if updated
   useEffect(() => {
@@ -91,7 +125,10 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
       if (initialSolution.name) setSolutionName(initialSolution.name);
       if (initialSolution.contextSources) setContextSources(initialSolution.contextSources);
       if (initialSolution.connectedModules) setConnectedModules(initialSolution.connectedModules);
-      if (initialSolution.chatHistory) setChatMessages(initialSolution.chatHistory);
+      const history = (initialSolution.chatHistory && initialSolution.chatHistory.length > 0)
+        ? initialSolution.chatHistory
+        : initialSolution.chatMessages;
+      if (history && history.length > 0) setChatMessages(history);
       if (initialSolution.artifacts) setArtifacts(initialSolution.artifacts);
       if (initialSolution.savedNotes) setSavedNotes(initialSolution.savedNotes);
     }
@@ -162,27 +199,65 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
         setConnectedModules(result.modules);
       }
 
-      if (result.specArtifact || result.formArtifact || result.workflowArtifact) {
+      if (result.specArtifact || result.formArtifact || result.workflowArtifact || result.permissionArtifact || result.moduleArtifact || (result.modules && result.modules.length > 0)) {
         const updatedArtifacts: SolutionArtifact[] = [...artifacts];
 
-        if (result.specArtifact) {
-          const specIdx = updatedArtifacts.findIndex(a => a.type === 'PAGE' || a.id.startsWith('art_spec_'));
-          const newSpecArt: SolutionArtifact = {
-            id: result.specArtifact.id || `art_spec_${Date.now()}`,
-            name: result.specArtifact.name || 'Solution Design',
+        // 1. ALWAYS Process Solution Design Proposal FIRST
+        const specData = result.specArtifact || {
+          id: `art_spec_${Date.now()}`,
+          name: 'Solution Design Proposal',
+          description: 'Technical Architecture Specification & Vision Plan',
+          markdownContent: `# Solution Architecture & Vision Proposal\n\n## 1. Executive Summary\nArchitectural solution proposal generated for prompt: "${text}".`
+        };
 
+        const specIdx = updatedArtifacts.findIndex(a => a.type === 'PAGE' || a.id.startsWith('art_spec_'));
+        const newSpecArt: SolutionArtifact = {
+          id: specData.id || `art_spec_${Date.now()}`,
+          name: specData.name || 'Solution Design Proposal',
+          type: 'PAGE',
+          description: specData.description || 'Enterprise Solution Architecture Plan',
+          content: {
+            title: specData.name,
+            markdown: specData.markdownContent
+          }
+        };
 
-            type: 'PAGE',
-            description: result.specArtifact.description || 'Enterprise Solution Architecture Plan',
-            content: {
-              title: result.specArtifact.name,
-              markdown: result.specArtifact.markdownContent
-            }
-          };
-          if (specIdx >= 0) updatedArtifacts[specIdx] = newSpecArt;
-          else updatedArtifacts.unshift(newSpecArt);
+        if (specIdx >= 0) {
+          updatedArtifacts[specIdx] = newSpecArt;
+        } else {
+          updatedArtifacts.unshift(newSpecArt);
         }
 
+        // Always set the Solution Design Proposal as the active artifact to preview first
+        setActiveArtifactId(newSpecArt.id);
+
+        // 2. Process Data Module Schema Artifact
+        if (result.moduleArtifact || (result.modules && result.modules.length > 0)) {
+          const modData = result.moduleArtifact || {
+            id: `art_mod_${Date.now()}`,
+            name: `${result.modules?.[0]?.name || 'Data Module'} Schema`,
+            description: `Relational database schema with fields & constraints`,
+            fields: [
+              { id: 'f_ref', label: 'Reference Number', type: 'VARCHAR(64)', required: true, sample: 'REF-2026-001' },
+              { id: 'f_title', label: 'Subject / Registrant Name', type: 'VARCHAR(255)', required: true, sample: 'Jane Smith' },
+              { id: 'f_dob', label: 'Event Date / DOB', type: 'DATE', required: true, sample: '2026-08-17' },
+              { id: 'f_status', label: 'Application Status', type: 'ENUM', required: true, sample: 'Submitted' },
+              { id: 'f_email', label: 'Contact Email', type: 'EMAIL', required: true, sample: 'registrant@aurora.io' }
+            ]
+          };
+          const modIdx = updatedArtifacts.findIndex(a => a.type === 'MODULE');
+          const newModArt: SolutionArtifact = {
+            id: modData.id || `art_mod_${Date.now()}`,
+            name: modData.name || 'Data Module Schema',
+            type: 'MODULE',
+            description: modData.description || 'Relational Database Schema & Field Definitions',
+            content: modData
+          };
+          if (modIdx >= 0) updatedArtifacts[modIdx] = newModArt;
+          else updatedArtifacts.push(newModArt);
+        }
+
+        // 3. Process Interactive Form Artifact
         if (result.formArtifact) {
           const formIdx = updatedArtifacts.findIndex(a => a.type === 'FORM');
           const newFormArt: SolutionArtifact = {
@@ -195,6 +270,7 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
           else updatedArtifacts.push(newFormArt);
         }
 
+        // 4. Process Visual Workflow Graph Artifact
         if (result.workflowArtifact) {
           const flowIdx = updatedArtifacts.findIndex(a => a.type === 'WORKFLOW');
           const newFlowArt: SolutionArtifact = {
@@ -207,6 +283,7 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
           else updatedArtifacts.push(newFlowArt);
         }
 
+        // 5. Process Roles & Security Matrix Artifact
         if (result.permissionArtifact) {
           const permIdx = updatedArtifacts.findIndex(a => a.type === 'PERMISSION');
           const newPermArt: SolutionArtifact = {
@@ -246,25 +323,25 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
 
 
   const handleApplySuggestedAction = (actionText: string) => {
-    handleSendMessage(`Please apply: ${actionText}`, 'default');
+    if (actionText.toLowerCase().includes('approve')) {
+      handleApproveDesign();
+    } else {
+      handleSendMessage(`Please apply: ${actionText}`, 'default');
+    }
   };
 
 
   const handleSaveBlueprint = async () => {
     try {
-      const authDataStr = localStorage.getItem('aurora_auth');
-      let token = '';
-      if (authDataStr) {
-        try {
-          const authData = JSON.parse(authDataStr);
-          token = authData?.access_token || authData?.token || '';
-        } catch (e) {}
-      }
+      const token = await getAuthToken();
+
+      const specArt = artifacts.find(a => a.type === 'PAGE' || a.id.startsWith('art_spec_'));
+      const dynamicDescription = specArt?.description || (specArt?.content as any)?.title || (chatMessages.find(m => m.role === 'self')?.text ? `Enterprise solution blueprint for "${chatMessages.find(m => m.role === 'self')?.text}"` : `Comprehensive solution blueprint combining ${artifacts.length} builder artifacts.`);
 
       const payload = {
         id: solutionId,
         name: solutionName,
-        description: `Solution Blueprint combining ${artifacts.length} artifacts and ${connectedModules.filter(m => m.linked).length} linked data modules.`,
+        description: dynamicDescription,
         category: 'Customer Experience',
         version: solutionVersion,
         status: solutionStatus,
@@ -274,7 +351,8 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
         connectedModules,
         artifacts,
         savedNotes,
-        chatMessages
+        chatMessages,
+        chatHistory: chatMessages
       };
 
       const res = await fetch(`${API_BASE_URL}/api/solutions`, {
@@ -289,11 +367,14 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
 
       if (res.ok) {
         toast.success(`Solution blueprint "${solutionName}" saved to database.`);
+        if (onSaveSuccess) onSaveSuccess();
       } else {
-        toast.success(`Solution blueprint "${solutionName}" saved.`);
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || `Failed to save solution blueprint.`);
       }
-    } catch (e) {
-      toast.success(`Solution blueprint "${solutionName}" saved.`);
+    } catch (e: any) {
+      console.error('Failed to save solution blueprint:', e);
+      toast.error('Failed to save solution blueprint.');
     }
   };
 
@@ -302,14 +383,7 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
     await handleSaveBlueprint();
 
     try {
-      const authDataStr = localStorage.getItem('aurora_auth');
-      let token = '';
-      if (authDataStr) {
-        try {
-          const authData = JSON.parse(authDataStr);
-          token = authData?.access_token || authData?.token || '';
-        } catch (e) {}
-      }
+      const token = await getAuthToken();
 
       const res = await fetch(`${API_BASE_URL}/api/solutions/${solutionId}/deploy`, {
         method: 'POST',
@@ -646,6 +720,8 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
               onDeleteNote={handleDeleteNote}
               onToggleCollapse={() => setIsRightPaneCollapsed(true)}
               onPromptRefine={(promptText) => handleSendMessage(promptText, 'default')}
+              isApproved={isDesignApproved}
+              onApproveDesign={handleApproveDesign}
             />
           )}
         </motion.div>

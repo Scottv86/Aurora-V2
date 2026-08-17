@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart2, Plus, ArrowLeft, ArrowRight, Trash2, Edit2, Eye, 
-  Sparkles, Save, Check, FileText, BarChart, LineChart, 
-  PieChart, Layers, Table, Activity, TrendingUp, Info, AlertTriangle, Printer,
-  GripVertical, Maximize2, Minimize2
+  Save, Check, BarChart, LineChart, 
+  PieChart, Layers, Table, Activity, TrendingUp, Info, Printer,
+  GripVertical, Maximize2, Minimize2, Search
 } from 'lucide-react';
 
 
@@ -20,16 +20,20 @@ import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/UI/Primitives';
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Skeleton } from '../../../components/UI/Skeleton';
+import { EmptyState } from '../../../components/UI/EmptyState';
+import { TrashService } from '../../../services/trashService';
+import { DeleteConfirmationModal } from '../../../components/Common/DeleteConfirmationModal';
 
 
 
 
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { cn, flattenFields } from '../../../lib/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createFormulaContext } from '../../../lib/formulaEngine';
 import { VisualSkeleton } from '../../WorkspacePage/WorkspacePageView';
+import { NewReportModal } from '../../../components/Modals/NewReportModal';
 
 // Types
 export interface ReportWidget {
@@ -466,12 +470,9 @@ const ReportBuilderCanvas = ({
       )}
     </div>
   );
-};
+}
 
-const DEFAULT_REPORTS: Report[] = [
-  { id: 'rep_exec_overview', tenantId: 't1', name: 'Executive Platform Overview', description: 'Comprehensive metric dashboard tracking module activities and system performance.', status: 'Published', createdBy: 'System Administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), config: { dataSource: { type: 'local', tables: ['records'] }, widgets: [] } },
-  { id: 'rep_monthly_usage', tenantId: 't1', name: 'Monthly Active Usage & Workflows', description: 'Real-time telemetry on active workflow executions and user interactions.', status: 'Published', createdBy: 'System Administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), config: { dataSource: { type: 'local', tables: ['records'] }, widgets: [] } }
-];
+const DEFAULT_REPORTS: Report[] = [];
 
 
 
@@ -509,7 +510,6 @@ setView('LIST');
 
   // Creator Modal State
   const [showCreatorModal, setShowCreatorModal] = useState(false);
-  const [showAIModal, setShowAIModal] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatingAI, setGeneratingAI] = useState(false);
 
@@ -615,11 +615,18 @@ setView('LIST');
     fetchDataSources();
   }, [tenant?.id]);
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const filteredReports = useMemo(() => {
-    if (activeTab === 'PUBLISHED') return reports.filter(r => r.status === 'Published');
-    if (activeTab === 'DRAFTS') return reports.filter(r => r.status === 'Draft');
-    return reports;
-  }, [reports, activeTab]);
+    return reports.filter(r => {
+      const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (r.description && r.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      if (!matchesSearch) return false;
+      if (activeTab === 'PUBLISHED') return r.status === 'Published';
+      if (activeTab === 'DRAFTS') return r.status === 'Draft';
+      return true;
+    });
+  }, [reports, activeTab, searchQuery]);
 
   // Create report handlers
   const handleCreateBlank = async () => {
@@ -691,8 +698,9 @@ setView('LIST');
     }
   };
 
-  const handleCreateAI = async () => {
-    if (!tenant?.id || !aiPrompt.trim()) return;
+  const handleCreateAI = async (customPrompt?: string) => {
+    const promptToUse = customPrompt || aiPrompt;
+    if (!tenant?.id || !promptToUse.trim()) return;
     setGeneratingAI(true);
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -705,7 +713,7 @@ setView('LIST');
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant.id
         },
-        body: JSON.stringify({ prompt: aiPrompt })
+        body: JSON.stringify({ prompt: promptToUse })
       });
       if (!aiResponse.ok) throw new Error('AI builder failed to generate report');
       
@@ -734,7 +742,6 @@ setView('LIST');
       setSelectedWidgetId(null);
       setIsPreview(false);
       navigate('?mode=builder');
-      setShowAIModal(false);
       setShowCreatorModal(false);
       setAiPrompt('');
       toast.success('AI Report built and loaded!');
@@ -751,6 +758,17 @@ setView('LIST');
     const { id } = deletingReport;
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      
+      await TrashService.softDelete({
+        tenantId: tenant.id,
+        token,
+        itemType: 'REPORT',
+        itemId: id,
+        title: deletingReport.name,
+        subtitle: deletingReport.description || `Report Dashboard`,
+        payload: deletingReport
+      });
+
       const res = await fetch(`http://localhost:3001/api/reports/${id}`, {
         method: 'DELETE',
         headers: {
@@ -760,7 +778,7 @@ setView('LIST');
       });
       if (!res.ok) throw new Error('Failed to delete report');
       setReports(prev => prev.filter(r => r.id !== id));
-      toast.success('Report deleted successfully');
+      toast.success('Report moved to Recycling Bin');
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete report');
     } finally {
@@ -1459,26 +1477,45 @@ setView('LIST');
             actions={
               <Button onClick={() => setShowCreatorModal(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer">
                 <Plus size={16} />
-                <span>Create Report</span>
+                <span>Create</span>
               </Button>
             }
           />
 
-          <div className="p-6 lg:p-12 space-y-6">
-            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-fit">
-              {(['ALL', 'PUBLISHED', 'DRAFTS'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setActiveTab(mode)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
-                    activeTab === mode
-                      ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-                  }`}
-                >
-                  {mode.toLowerCase()}
-                </button>
-              ))}
+          <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
+            {/* Search & Filter Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:w-80">
+                <BarChart2 className="hidden" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
+                {[
+                  { id: 'ALL', label: 'All' },
+                  { id: 'PUBLISHED', label: 'Published' },
+                  { id: 'DRAFTS', label: 'Drafts' }
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setActiveTab(mode.id as any)}
+                    className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      activeTab === mode.id
+                        ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
           {loading ? (
@@ -1488,19 +1525,23 @@ setView('LIST');
               ))}
             </div>
           ) : filteredReports.length === 0 ? (
-
-            <div className="p-16 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-3xl text-center space-y-4 bg-white/20 dark:bg-white/[0.005]">
-              <BarChart2 size={36} className="text-zinc-400 mx-auto" />
-              <div>
-                <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300">No reports found</h4>
-                <p className="text-xs text-zinc-500 mt-1">Generate a report by clicking &quot;New Report&quot;.</p>
-              </div>
-            </div>
+            <EmptyState
+              icon={BarChart2}
+              title="No reports found"
+              description="Design visual analytics dashboards, real-time telemetry charts, and scheduled report exports."
+              action={{
+                label: "Create",
+                onClick: () => setShowCreatorModal(true)
+              }}
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredReports.map((report) => (
-                <div
+              {filteredReports.map((report, i) => (
+                <motion.div
                   key={report.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
                   onClick={() => {
                     setCurrentReport(report);
                     setSelectedWidgetId(null);
@@ -1510,6 +1551,17 @@ setView('LIST');
                   className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeletingReport(report);
+                    }}
+                    className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                    title="Delete Report"
+                  >
+                    <Trash2 size={14} />
+                  </button>
 
                   <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
@@ -1547,200 +1599,56 @@ setView('LIST');
                       </div>
                     </div>
                   </div>
-                </div>              ))}
+                </motion.div>
+              ))}
 
 
               {/* Dash creator card */}
-              <div 
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: filteredReports.length * 0.03 }}
                 onClick={() => setShowCreatorModal(true)}
-                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center h-full min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01] bg-white/20 dark:bg-white/[0.005]"
+                className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
               >
-                <Plus size={32} className="text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3" />
-                <span className="text-sm font-bold text-zinc-500 group-hover:text-indigo-500 transition-colors">Create Report</span>
-              </div>
+                <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
+                  <Plus size={24} />
+                </div>
+                <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
+                  Create Report
+                </span>
+                <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                  Design visual analytics dashboards or custom reports.
+                </p>
+              </motion.div>
             </div>
           )}
 
           {/* Creation modal options */}
-          <AnimatePresence>
-            {showCreatorModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white/90 dark:bg-zinc-900/95 backdrop-blur-xl border border-zinc-200/50 dark:border-white/10 rounded-[2.5rem] w-full max-w-4xl p-8 space-y-6 shadow-2xl relative"
-                >
-                  <div className="flex justify-between items-center pb-4 border-b border-zinc-100/50 dark:border-white/5">
-                    <div>
-                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-wider">Create New Report</h3>
-                      <p className="text-xs text-zinc-500 mt-1">Select one of the three creation mechanisms to formulate your dashboard.</p>
-                    </div>
-                    <button onClick={() => setShowCreatorModal(false)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-white">✕</button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-                    {/* Blank option */}
-                    <div 
-                      onClick={handleCreateBlank}
-                      className="p-6 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-3xl cursor-pointer bg-zinc-50/50 dark:bg-zinc-900/30 hover:bg-indigo-500/[0.01] transition-all flex flex-col justify-between text-left h-56"
-                    >
-                      <div className="p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-xl w-fit">
-                        <FileText size={20} />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider block">Start From Blank</span>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Begin with a clean canvas, connect to any database tables or connectors, and design manually.</p>
-                      </div>
-                    </div>
-
-                    {/* Template Option */}
-                    <div 
-                      onClick={() => {
-                        setShowCreatorModal(false);
-                        // Trigger simple templates select view or select standard template directly
-                        handleCreateTemplate(REPORT_TEMPLATES[0]);
-                      }}
-                      className="p-6 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-3xl cursor-pointer bg-zinc-50/50 dark:bg-zinc-900/30 hover:bg-indigo-500/[0.01] transition-all flex flex-col justify-between text-left h-56"
-                    >
-                      <div className="p-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl w-fit">
-                        <Layers size={20} />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-wider block">Choose from Template</span>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Deploy preconfigured, beautiful dashboard layouts for workforce distribution, records activity, or audit logs.</p>
-                      </div>
-                    </div>
-
-                    {/* AI Prompt Option */}
-                    <div 
-                      onClick={() => {
-                        setShowCreatorModal(false);
-                        setShowAIModal(true);
-                      }}
-                      className="p-6 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-3xl cursor-pointer bg-indigo-500/5 hover:bg-indigo-500/10 transition-all flex flex-col justify-between text-left h-56 border-indigo-500/20"
-                    >
-                      <div className="p-3 bg-indigo-600 text-white rounded-xl w-fit animate-pulse">
-                        <Sparkles size={20} />
-                      </div>
-                      <div>
-                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">AI Dashboard Builder</span>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed mt-1">Write a prompt (e.g. &quot;active cases by status&quot;) and let Gemini craft the dataset mappings and charts automatically.</p>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* AI prompt modal */}
-          <AnimatePresence>
-            {showAIModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white/90 dark:bg-zinc-900/95 backdrop-blur-xl border border-zinc-200/50 dark:border-white/10 rounded-[2.5rem] w-full max-w-lg p-6 space-y-6 shadow-2xl relative"
-                >
-                  <div className="flex justify-between items-center pb-3 border-b border-zinc-100/50 dark:border-white/5">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={18} className="text-indigo-500" />
-                      <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">AI Report Architect</h3>
-                    </div>
-                    <button onClick={() => setShowAIModal(false)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-white">✕</button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Describe what you want to analyse</label>
-                    <textarea
-                      placeholder="e.g. Create a workforce overview dashboard showing staff role distributions, team memberships, and active status..."
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      className="w-full bg-zinc-55/10 dark:bg-zinc-900 border border-zinc-200/30 dark:border-white/5 rounded-2xl p-4 text-xs text-zinc-800 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-indigo-500/20 h-28 resize-none"
-                    />
-                    <div className="p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10 text-[10px] text-zinc-500 leading-normal flex gap-2">
-                      <Info size={16} className="text-indigo-500 shrink-0 mt-0.5" />
-                      <span>The AI builder will automatically identify the local database tables, configure the appropriate chart dimensions, and construct the widgets for you.</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-3 border-t border-zinc-100/50 dark:border-white/5">
-                    <Button variant="secondary" size="sm" onClick={() => setShowAIModal(false)}>Cancel</Button>
-                    <Button 
-                      variant="primary" 
-                      size="sm" 
-                      onClick={handleCreateAI} 
-                      disabled={generatingAI || !aiPrompt.trim()}
-                      className="gap-2 font-bold"
-                    >
-                      {generatingAI ? 'Assembling Dashboard...' : (
-                        <>
-                          <Sparkles size={14} /> Generate Report
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
+          <NewReportModal
+            isOpen={showCreatorModal}
+            onClose={() => setShowCreatorModal(false)}
+            onSelectBlank={handleCreateBlank}
+            onSelectTemplate={(template) => {
+              setShowCreatorModal(false);
+              handleCreateTemplate(template);
+            }}
+            onGenerateAI={(prompt) => {
+              handleCreateAI(prompt);
+            }}
+            templates={REPORT_TEMPLATES}
+            generatingAI={generatingAI}
+          />
 
           {/* Premium Delete Confirmation Modal */}
-          <AnimatePresence>
-            {deletingReport && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setDeletingReport(null)}
-                  className="absolute inset-0"
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                  className="relative w-full max-w-md bg-white/90 dark:bg-zinc-900/95 backdrop-blur-xl border border-zinc-200/50 dark:border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden"
-                >
-                  {/* Header */}
-                  <div className="p-6 border-b border-zinc-200/30 dark:border-white/5 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center gap-4">
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl">
-                      <AlertTriangle size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-wider">Delete Report?</h3>
-                      <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Permanent Deletion</p>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="p-6">
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                      Are you sure you want to delete report <span className="font-bold text-zinc-900 dark:text-white">&quot;{deletingReport.name}&quot;</span>? This will permanently remove the configuration and all embedded instances. This action cannot be undone.
-                    </p>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="p-6 border-t border-zinc-200/30 dark:border-white/5 flex gap-3">
-                    <button 
-                      onClick={() => setDeletingReport(null)}
-                      className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-2xl font-bold text-xs text-zinc-600 dark:text-zinc-300 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={confirmDeleteReport}
-                      className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold text-xs shadow-xl shadow-red-500/25 transition-all"
-                    >
-                      Delete Report
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
+          <DeleteConfirmationModal
+            isOpen={Boolean(deletingReport)}
+            onClose={() => setDeletingReport(null)}
+            onConfirm={confirmDeleteReport}
+            title="Delete Report Dashboard"
+            description="Are you sure you want to delete this report dashboard? It will be moved to the Recycling Bin."
+            itemName={deletingReport?.name}
+          />
         </div>
       </div>
     ) : (

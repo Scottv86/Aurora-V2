@@ -13,7 +13,7 @@ const PATH_MAP: Record<string, string> = {
   organization: 'Organisation',
   'ai-services': 'AI Services',
   branding: 'Branding',
-  navigation: 'Navigation',
+  navigation: 'Menus',
   'roles-access': 'Roles & Permissions',
   subscriptions: 'Subscriptions',
   revenue: 'Revenue Analytics',
@@ -73,7 +73,8 @@ const PATH_MAP: Record<string, string> = {
   'forms-library': 'Forms',
   'workflows-library': 'Workflows',
   'validations-library': 'Validations',
-  queues: 'Queues'
+  queues: 'Queues',
+  'queues-management': 'Queues',
 };
 
 

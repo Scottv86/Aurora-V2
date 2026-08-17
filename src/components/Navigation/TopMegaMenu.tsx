@@ -37,7 +37,7 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-650 hover:bg-indigo-700 text-white font-bold transition-all shadow-sm shrink-0"
           >
             <LucideIcons.Settings size={12} />
-            <span>Configure Navigation</span>
+            <span>Configure Menu</span>
           </NavLink>
         )}
       </div>
@@ -92,7 +92,7 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs transition-all shadow-sm shrink-0 border border-indigo-200/50 dark:border-indigo-500/20 group"
         >
           <LucideIcons.Compass size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-          <span>Configure Navigation</span>
+          <span>Configure Menu</span>
         </NavLink>
       )}
     </div>

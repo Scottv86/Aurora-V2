@@ -19,14 +19,18 @@ import {
   FileText,
   Plug,
   GitBranch,
-  Globe
+  Globe,
+  Trash2
 } from 'lucide-react';
 
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
+import { EmptyState } from '../../components/UI/EmptyState';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
+import { TrashService } from '../../services/trashService';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
 import { Skeleton } from '../../components/UI/Skeleton';
@@ -284,6 +288,50 @@ export const ConnectorsPage = () => {
     }
   };
 
+  const [connectorToDelete, setConnectorToDelete] = useState<any | null>(null);
+  const [isDeletingConnector, setIsDeletingConnector] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent, connector: any) => {
+    e.stopPropagation();
+    if (!tenant?.id) return;
+    setConnectorToDelete(connector);
+  };
+
+  const confirmDeleteConnector = async () => {
+    if (!connectorToDelete || !tenant?.id) return;
+    const connector = connectorToDelete;
+    setIsDeletingConnector(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      await TrashService.softDelete({
+        tenantId: tenant.id,
+        token,
+        itemType: 'CONNECTOR',
+        itemId: connector.id,
+        title: connector.name,
+        subtitle: connector.description || `Connector: ${connector.name}`,
+        payload: connector
+      });
+
+      await fetch(`${API_BASE_URL}/api/connectors/${connector.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      }).catch(() => {});
+
+      toast.success(`Integration "${connector.name}" moved to Recycling Bin`);
+      fetchData();
+      new BroadcastChannel('nexus_connectors').postMessage('refresh');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete connector');
+    } finally {
+      setIsDeletingConnector(false);
+      setConnectorToDelete(null);
+    }
+  };
+
   const handleGenerateConnector = async (prompt: string) => {
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -478,14 +526,14 @@ export const ConnectorsPage = () => {
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
               >
                 <Plus size={16} />
-                <span>Create Integration</span>
+                <span>Create</span>
               </Button>
             </div>
           )
         }
       />
 
-      <div className="p-6 lg:p-12 space-y-6">
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
         {!selectedConnectorId ? (
           <>
             {/* Search & List Mode Filters */}
@@ -494,25 +542,29 @@ export const ConnectorsPage = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
                 <input 
                   type="text"
-                  placeholder="Search connectors & APIs..."
-                  className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+                  placeholder="Search"
+                  className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
 
               <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
-                {(['all', 'active', 'vault'] as const).map((mode) => (
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'active', label: 'Active' },
+                  { id: 'vault', label: 'Vaulted Secrets' }
+                ].map((tab) => (
                   <button
-                    key={mode}
-                    onClick={() => setListTab(mode)}
-                    className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
-                      listTab === mode
+                    key={tab.id}
+                    onClick={() => setListTab(tab.id as any)}
+                    className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      listTab === tab.id
                         ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
                         : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
                     }`}
                   >
-                    {mode}
+                    {tab.label}
                   </button>
                 ))}
               </div>
@@ -522,20 +574,22 @@ export const ConnectorsPage = () => {
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[1, 2, 3, 4, 5, 6].map(n => (
-                  <Skeleton key={n} height={192} variant="rounded" className="rounded-3xl" />
+                  <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
                 ))}
               </div>
             ) : filteredRegistry.length === 0 ? (
-              <div className="p-16 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-3xl text-center space-y-4 bg-white/20 dark:bg-white/[0.005]">
-                <Plug size={36} className="text-zinc-400 mx-auto" />
-                <div>
-                  <h4 className="text-sm font-bold text-zinc-700 dark:text-zinc-300">No integrations found</h4>
-                  <p className="text-xs text-zinc-500 mt-1">Click "Add Integration" to connect external APIs or forge a custom HTTP webhook.</p>
-                </div>
-              </div>
+              <EmptyState
+                icon={Plug}
+                title="No integrations found"
+                description="Connect external API endpoints, configure security secrets vault, or forge custom HTTP webhooks."
+                action={{
+                  label: "Create",
+                  onClick: () => setIsModalOpen(true)
+                }}
+              />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredRegistry.map(conn => {
+                {filteredRegistry.map((conn, i) => {
                   const isActive = activeConnectors.some(ac => ac.connectorId === conn.id && ac.isActive);
                   const activeIconName = conn.icon || 'Plug';
 
@@ -544,10 +598,19 @@ export const ConnectorsPage = () => {
                       key={conn.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.03 }}
                       onClick={() => navigate(`${basePath}/${conn.id}`)}
                       className="group border border-white/20 dark:border-white/5 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-3xl p-6 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition-all shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
                     >
                       <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                      <button
+                        onClick={(e) => handleDeleteClick(e, conn)}
+                        className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                        title="Delete Integration"
+                      >
+                        <Trash2 size={14} />
+                      </button>
 
                       <div className="relative z-10 flex flex-col h-full justify-between">
                         <div>
@@ -579,15 +642,17 @@ export const ConnectorsPage = () => {
 
                 {/* Dashed Interactive Add Integration Card */}
                 <motion.div
-                  whileHover={{ y: -4 }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: filteredRegistry.length * 0.03 }}
                   onClick={() => setIsModalOpen(true)}
-                  className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[200px] transition-all text-center hover:bg-indigo-500/[0.01]"
+                  className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl cursor-pointer flex flex-col items-center justify-center min-h-[220px] transition-all text-center hover:bg-indigo-500/[0.01]"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
                     <Plus size={24} />
                   </div>
                   <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
-                    Add New Integration
+                    Create Integration
                   </span>
                   <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
                     Connect third-party APIs or forge custom webhooks.
@@ -667,6 +732,16 @@ export const ConnectorsPage = () => {
         onActivate={handleActivateConnector}
         onCreateCustom={handleCreateCustomConnector}
         onForge={handleGenerateConnector}
+      />
+
+      <DeleteConfirmationModal
+        isOpen={Boolean(connectorToDelete)}
+        onClose={() => setConnectorToDelete(null)}
+        onConfirm={confirmDeleteConnector}
+        title="Delete Integration Connector"
+        description="Are you sure you want to delete this integration connector? It will be moved to the Recycling Bin."
+        itemName={connectorToDelete?.name}
+        isDeleting={isDeletingConnector}
       />
     </div>
   );

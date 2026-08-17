@@ -111,47 +111,69 @@ router.post('/:id/restore', async (req: TenantRequest, res) => {
           }
         });
         emitTenantUpdate(tenantId, 'record_added', { id: item.itemId, ...payload });
-      } else if (item.itemType === 'MODULE') {
-        await db.module.create({
-          data: {
-            id: item.itemId,
-            tenantId,
-            name: payload.name || item.title,
-            category: payload.category || 'Custom Modules',
-            iconName: payload.iconName || 'Folder',
-            type: payload.type || 'CUSTOM',
-            enabled: payload.enabled ?? true,
-            status: payload.status || 'ACTIVE',
-            config: payload.config || {}
-          }
-        });
+      } else if (item.itemType === 'MODULE' || item.itemType === 'PAGE') {
+        if (db.module) {
+          await db.module.create({
+            data: {
+              id: item.itemId,
+              tenantId,
+              name: payload.name || item.title,
+              category: payload.category || (item.itemType === 'PAGE' ? 'Workspace Pages' : 'Custom Modules'),
+              iconName: payload.iconName || 'Folder',
+              type: payload.type || (item.itemType === 'PAGE' ? 'PAGE' : 'CUSTOM'),
+              enabled: payload.enabled ?? true,
+              status: payload.status || 'ACTIVE',
+              config: payload.config || {}
+            }
+          });
+        }
         emitTenantUpdate(tenantId, 'module_added', { id: item.itemId, ...payload });
       } else if (item.itemType === 'AUTOMATION') {
-        await db.automation.create({
-          data: {
-            id: item.itemId,
-            tenantId,
-            name: payload.name || item.title,
-            triggers: payload.triggers || [],
-            actions: payload.actions || [],
-            conditions: payload.conditions || null,
-            isActive: payload.isActive ?? true,
-            moduleId: payload.moduleId || null
-          }
-        });
+        if (db.automation) {
+          await db.automation.create({
+            data: {
+              id: item.itemId,
+              tenantId,
+              name: payload.name || item.title,
+              triggers: payload.triggers || [],
+              actions: payload.actions || [],
+              conditions: payload.conditions || null,
+              isActive: payload.isActive ?? true,
+              moduleId: payload.moduleId || null
+            }
+          });
+        }
       } else if (item.itemType === 'CONNECTOR') {
-        await db.tenantConnector.create({
-          data: {
-            id: item.itemId,
-            tenantId,
-            connectorId: payload.connectorId || 'custom_connector',
-            displayName: payload.displayName || item.title,
-            authType: payload.authType || 'NONE',
-            credentials: payload.credentials || {},
-            config: payload.config || {},
-            isActive: payload.isActive ?? true
-          }
-        });
+        if (db.tenantConnector) {
+          await db.tenantConnector.create({
+            data: {
+              id: item.itemId,
+              tenantId,
+              connectorId: payload.connectorId || 'custom_connector',
+              displayName: payload.displayName || item.title,
+              authType: payload.authType || 'NONE',
+              credentials: payload.credentials || {},
+              config: payload.config || {},
+              isActive: payload.isActive ?? true
+            }
+          });
+        }
+      } else if (item.itemType === 'SITE') {
+        if (db.site) {
+          await db.site.create({
+            data: {
+              id: item.itemId,
+              tenantId,
+              name: payload.name || item.title,
+              description: payload.description || '',
+              domain: payload.domain || '',
+              category: payload.category || 'public',
+              status: payload.status || 'draft',
+              theme: payload.theme || {},
+              pages: payload.pages || []
+            }
+          });
+        }
       } else if (item.itemType === 'CHAT_SESSION') {
         const restoredSession = await db.antigravitySession.create({
           data: {

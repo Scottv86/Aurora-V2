@@ -4,12 +4,17 @@ import { ShieldCheck, Plus, Search, Trash2, ArrowRight } from 'lucide-react';
 import { ValidationRulesetEntity } from '../../types/platform';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { ValidationBuilder } from '../../components/Builders/ValidationBuilder/ValidationBuilder';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
 import { motion } from 'motion/react';
+import { TrashService } from '../../services/trashService';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+
+import { EmptyState } from '../../components/UI/EmptyState';
 
 export const ValidationsLibraryPage: React.FC = () => {
   const { tenant, modules } = usePlatform();
@@ -54,18 +59,40 @@ export const ValidationsLibraryPage: React.FC = () => {
     fetchRulesets();
   }, [tenant?.id]);
 
-  const handleDeleteRuleset = async (e: React.MouseEvent, id: string) => {
+  const [rulesetToDelete, setRulesetToDelete] = useState<ValidationRulesetEntity | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent, ruleset: ValidationRulesetEntity) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this validation ruleset?')) return;
+    setRulesetToDelete(ruleset);
+  };
+
+  const confirmDeleteRuleset = async () => {
+    if (!rulesetToDelete) return;
+    const ruleset = rulesetToDelete;
+    setIsDeleting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/validations/${id}`, {
+      if (tenant?.id) {
+        await TrashService.softDelete({
+          tenantId: tenant.id,
+          itemType: 'VALIDATION',
+          itemId: ruleset.id,
+          title: ruleset.name,
+          subtitle: ruleset.description || `Validation: ${ruleset.name}`,
+          payload: ruleset
+        });
+      }
+      await fetch(`${API_BASE_URL}/api/validations/${ruleset.id}`, {
         method: 'DELETE',
         headers: { 'x-tenant-id': tenant?.id || '' }
-      });
-      toast.success('Validation ruleset deleted');
-      setRulesets(prev => prev.filter(r => r.id !== id));
+      }).catch(() => {});
+      toast.success('Validation ruleset moved to Recycling Bin');
+      setRulesets(prev => prev.filter(r => r.id !== ruleset.id));
     } catch (err) {
       toast.error('Failed to delete validation ruleset');
+    } finally {
+      setIsDeleting(false);
+      setRulesetToDelete(null);
     }
   };
 
@@ -94,10 +121,16 @@ export const ValidationsLibraryPage: React.FC = () => {
     return [...rulesets, ...moduleRulesets];
   }, [rulesets, modules, tenant?.id]);
 
-  const filteredRulesets = allRulesets.filter(r => 
-    r.name.toLowerCase().includes(search.toLowerCase()) || 
-    (r.description && r.description.toLowerCase().includes(search.toLowerCase()))
-  );
+  const [filterTab, setFilterTab] = useState<'all' | 'global' | 'module'>('all');
+
+  const filteredRulesets = allRulesets.filter(r => {
+    const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || 
+                          (r.description && r.description.toLowerCase().includes(search.toLowerCase()));
+    if (!matchesSearch) return false;
+    if (filterTab === 'global') return r.scope === 'GLOBAL';
+    if (filterTab === 'module') return r.scope !== 'GLOBAL';
+    return true;
+  });
 
 
   return (
@@ -115,31 +148,67 @@ export const ValidationsLibraryPage: React.FC = () => {
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
-            <span>Create Validation</span>
+            <span>Create</span>
           </Button>
         }
       />
 
       {/* Main Content Area */}
-      <div className="p-6 lg:p-12 space-y-6">
-        {/* Search Bar */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search validation rulesets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 text-zinc-900 dark:text-white"
-          />
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
+        {/* Search & Filter Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'global', label: 'Global Rules' },
+              { id: 'module', label: 'Module Rulesets' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setFilterTab(tab.id as any)}
+                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  filterTab === tab.id
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Glassmorphic 3-Column Grid matching Modules & Sites */}
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-zinc-500">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent mb-3" />
-            <p className="text-xs font-semibold">Loading validation rulesets...</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
+            ))}
           </div>
+        ) : filteredRulesets.length === 0 ? (
+          <EmptyState
+            icon={ShieldCheck}
+            title="No validation rulesets found"
+            description="Configure enterprise validation constraints, regex patterns, and compliance rulesets."
+            action={{
+              label: "Create",
+              onClick: () => {
+                setSelectedRuleset(null);
+                setIsBuilderOpen(true);
+              }
+            }}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredRulesets.map((ruleset, i) => (
@@ -169,7 +238,7 @@ export const ValidationsLibraryPage: React.FC = () => {
                         </span>
 
                         <button
-                          onClick={(e) => handleDeleteRuleset(e, ruleset.id)}
+                          onClick={(e) => handleDeleteClick(e, ruleset)}
                           className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Delete Ruleset"
                         >
@@ -210,17 +279,17 @@ export const ValidationsLibraryPage: React.FC = () => {
                 setSelectedRuleset(null);
                 setIsBuilderOpen(true);
               }}
-              className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px]"
+              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
             >
-              <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-emerald-500 group-hover:bg-emerald-500/10 transition-all mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
                 <Plus size={24} />
               </div>
-              <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
                 Create Validation
               </span>
-              <span className="text-xs text-zinc-400 mt-1">
-                Add a new validation ruleset
-              </span>
+              <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                Add a new validation ruleset.
+              </p>
             </motion.div>
           </div>
         )}
@@ -245,6 +314,16 @@ export const ValidationsLibraryPage: React.FC = () => {
           }}
         />
       </InContextBuilderModal>
+
+      <DeleteConfirmationModal
+        isOpen={Boolean(rulesetToDelete)}
+        onClose={() => setRulesetToDelete(null)}
+        onConfirm={confirmDeleteRuleset}
+        title="Delete Validation Ruleset"
+        description="Are you sure you want to delete this validation ruleset? It will be moved to the Recycling Bin."
+        itemName={rulesetToDelete?.name}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

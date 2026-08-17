@@ -6,6 +6,7 @@ import { FileText, Plus, Search, Trash2, Eye, Layers, ArrowRight } from 'lucide-
 import { FormEntity } from '../../types/platform';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
+import { Skeleton } from '../../components/UI/Skeleton';
 import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { DependencyDrawer } from '../../components/Builders/Common/DependencyDrawer';
 import { ShareEmbedModal } from '../../components/Builders/Common/ShareEmbedModal';
@@ -16,6 +17,10 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
 import { motion } from 'motion/react';
+import { TrashService } from '../../services/trashService';
+import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+
+import { EmptyState } from '../../components/UI/EmptyState';
 
 export const FormsLibraryPage: React.FC = () => {
   const { tenant, modules } = usePlatform();
@@ -87,18 +92,40 @@ export const FormsLibraryPage: React.FC = () => {
     fetchForms();
   }, [tenant?.id]);
 
-  const handleDeleteForm = async (e: React.MouseEvent, id: string) => {
+  const [formToDelete, setFormToDelete] = useState<FormEntity | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteClick = (e: React.MouseEvent, form: FormEntity) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this form?')) return;
+    setFormToDelete(form);
+  };
+
+  const confirmDeleteForm = async () => {
+    if (!formToDelete) return;
+    const form = formToDelete;
+    setIsDeleting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/forms/${id}`, {
+      if (tenant?.id) {
+        await TrashService.softDelete({
+          tenantId: tenant.id,
+          itemType: 'FORM',
+          itemId: form.id,
+          title: form.name,
+          subtitle: form.description || `Form: ${form.name}`,
+          payload: form
+        });
+      }
+      await fetch(`${API_BASE_URL}/api/forms/${form.id}`, {
         method: 'DELETE',
         headers: { 'x-tenant-id': tenant?.id || '' }
-      });
-      toast.success('Form deleted successfully');
-      setForms(prev => prev.filter(f => f.id !== id));
+      }).catch(() => {});
+      toast.success('Form moved to Recycling Bin');
+      setForms(prev => prev.filter(f => f.id !== form.id));
     } catch (err) {
       toast.error('Failed to delete form');
+    } finally {
+      setIsDeleting(false);
+      setFormToDelete(null);
     }
   };
 
@@ -166,38 +193,42 @@ export const FormsLibraryPage: React.FC = () => {
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
-            <span>Create Form</span>
+            <span>Create</span>
           </Button>
         }
       />
 
       {/* Main Content Area */}
-      <div className="p-6 lg:p-12 space-y-6">
+      <div className="flex-1 px-6 lg:px-12 pt-8 pb-20 relative z-10 space-y-6">
         {/* Search & Scope Filters */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
             <input
               type="text"
-              placeholder="Search forms..."
+              placeholder="Search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white"
+              className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
             />
           </div>
 
           <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
-            {(['all', 'global', 'module'] as const).map((mode) => (
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'global', label: 'Global' },
+              { id: 'module', label: 'Module-Bound' }
+            ].map((mode) => (
               <button
-                key={mode}
-                onClick={() => setFilter(mode)}
-                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
-                  filter === mode
+                key={mode.id}
+                onClick={() => setFilter(mode.id as any)}
+                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  filter === mode.id
                     ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
-                {mode} Forms
+                {mode.label}
               </button>
             ))}
           </div>
@@ -205,10 +236,24 @@ export const FormsLibraryPage: React.FC = () => {
 
         {/* Glassmorphic 3-Column Grid matching Modules & Sites */}
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-zinc-500">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent mb-3" />
-            <p className="text-xs font-semibold">Loading forms catalog...</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <Skeleton key={n} height={220} variant="rounded" className="rounded-3xl" />
+            ))}
           </div>
+        ) : filteredForms.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No forms found"
+            description="Create standalone embeddable forms for your workspace, site pages, and intake portals."
+            action={{
+              label: "Create",
+              onClick: () => {
+                setSelectedForm(null);
+                setIsBuilderOpen(true);
+              }
+            }}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredForms.map((form, i) => (
@@ -250,7 +295,7 @@ export const FormsLibraryPage: React.FC = () => {
                         </button>
 
                         <button
-                          onClick={(e) => handleDeleteForm(e, form.id)}
+                          onClick={(e) => handleDeleteClick(e, form)}
                           className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
                           title="Delete Form"
                         >
@@ -281,7 +326,6 @@ export const FormsLibraryPage: React.FC = () => {
               </motion.div>
             ))}
 
-
             {/* Dashed Create Card matching Custom Modules */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -291,17 +335,17 @@ export const FormsLibraryPage: React.FC = () => {
                 setSelectedForm(null);
                 setIsBuilderOpen(true);
               }}
-              className="group p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px]"
+              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-all cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
             >
-              <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/10 transition-all mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-all mb-3">
                 <Plus size={24} />
               </div>
-              <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors">
                 Create Form
               </span>
-              <span className="text-xs text-zinc-400 mt-1">
-                Add a new standalone embeddable form
-              </span>
+              <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+                Add a new standalone embeddable form.
+              </p>
             </motion.div>
           </div>
         )}
@@ -372,6 +416,16 @@ export const FormsLibraryPage: React.FC = () => {
           ]}
         />
       )}
+
+      <DeleteConfirmationModal
+        isOpen={Boolean(formToDelete)}
+        onClose={() => setFormToDelete(null)}
+        onConfirm={confirmDeleteForm}
+        title="Delete Form"
+        description="Are you sure you want to delete this form? It will be moved to the Recycling Bin."
+        itemName={formToDelete?.name}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };
