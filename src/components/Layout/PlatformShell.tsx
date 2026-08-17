@@ -511,13 +511,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     },
 
     {
-      category: 'Logic & Workflows',
-      icon: LucideIcons.Zap,
-      items: [
-        { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
-      ]
-    },
-    {
       category: 'Develop',
       icon: LucideIcons.Code2,
       items: [
@@ -530,6 +523,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Configure',
       icon: LucideIcons.Sliders,
       items: [
+        { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
         { label: 'Financial Management', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
         { label: 'Pricing Catalog', icon: LucideIcons.Tag, to: '/workspace/settings/platform-modules/pricing-catalog' },
         { label: 'Inventory Manager', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/inventory-manager' },

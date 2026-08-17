@@ -207,16 +207,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['lists', 'lookups', 'dropdowns', 'choices', 'options', 'tables']
   },
 
-  // Logic & Workflows
-  {
-    id: 'work-distribution',
-    label: 'Work Distribution',
-    description: 'Configure routing rules to automatically intake and distribute work across modules.',
-    icon: 'Inbox',
-    to: '/workspace/settings/platform-modules/work-distribution',
-    category: 'Logic & Workflows',
-    tags: ['intake', 'routing', 'triage', 'work distribution', 'queues']
-  },
   // Develop
   {
     id: 'migration',
@@ -239,6 +229,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
 
 
   // Configure
+  {
+    id: 'work-distribution',
+    label: 'Work Distribution',
+    description: 'Configure routing rules to automatically intake and distribute work across modules.',
+    icon: 'Inbox',
+    to: '/workspace/settings/platform-modules/work-distribution',
+    category: 'Configure',
+    tags: ['intake', 'routing', 'triage', 'work distribution', 'queues']
+  },
   {
     id: 'financial-management',
     label: 'Financial Management',
@@ -303,7 +302,6 @@ const CategoryIcon = ({ category }: { category: string }) => {
   switch (category) {
     case 'General & Security': return <LucideIcons.ShieldCheck className="w-4 h-4" />;
     case 'Build & Customize': return <LucideIcons.Layout className="w-4 h-4" />;
-    case 'Logic & Workflows': return <LucideIcons.Zap className="w-4 h-4" />;
     case 'Develop': return <LucideIcons.Code2 className="w-4 h-4" />;
     case 'Configure': return <LucideIcons.Sliders className="w-4 h-4" />;
     case 'Analytics & Content': return <LucideIcons.BarChart2 className="w-4 h-4" />;
@@ -335,7 +333,6 @@ export const SettingsOverview = () => {
     const order = [
       'General & Security',
       'Build & Customize',
-      'Logic & Workflows',
       'Develop',
       'Configure',
       'Analytics & Content'
