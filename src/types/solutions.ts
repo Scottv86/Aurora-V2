@@ -15,6 +15,7 @@ export type SolutionArtifactType =
   | 'GLOBAL_LIST' 
   | 'PERMISSION'
   | 'API' 
+  | 'AGENT'
   | 'RECORDS';
 
 export interface ContextSource {
@@ -76,6 +77,7 @@ export interface SolutionBlueprint {
   modulesCount: number;
   workflowsCount: number;
   formsCount: number;
+  agentsCount?: number;
   artifactsCount?: number;
   author: string;
   updatedAt: string;

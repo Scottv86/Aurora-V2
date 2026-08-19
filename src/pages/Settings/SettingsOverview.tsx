@@ -80,16 +80,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['solutions', 'blueprints', 'bundles', 'packages', 'deploy']
   },
   {
-    id: 'navigation',
-    label: 'Menus',
-    description: 'Layout style and navigation menu architect.',
-    icon: 'Compass',
-    to: '/workspace/settings/navigation',
-    category: 'Build & Customize',
-    tags: ['layout', 'menu', 'sidebar', 'top menu', 'navigation']
-  },
-
-  {
     id: 'platform-modules',
     label: 'Modules',
     description: 'Build and configure custom data modules, tables, and schemas.',
@@ -99,85 +89,13 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['system', 'custom', 'modules', 'builder', 'data models', 'entities']
   },
   {
-    id: 'pages',
-    label: 'Pages',
-    description: 'Manage custom pages, dashboard widgets, and layouts.',
-    icon: 'Layout',
-    to: '/workspace/settings/pages',
+    id: 'lists-management',
+    label: 'Lists',
+    description: 'Build and manage reusable choice datasets, lookup tables, and option sets.',
+    icon: 'ListTodo',
+    to: '/workspace/settings/platform-modules/global-lists',
     category: 'Build & Customize',
-    tags: ['pages', 'dashboards', 'widgets', 'layouts']
-  },
-  {
-    id: 'queues-management',
-    label: 'Queues',
-    description: 'Build and configure work queues, unified queue views, filter rules, and display columns.',
-    icon: 'ListOrdered',
-    to: '/workspace/settings/platform-modules/queues-management',
-    category: 'Build & Customize',
-    tags: ['queues', 'work queue', 'unified', 'filter', 'columns', 'distribution']
-  },
-  {
-    id: 'sites',
-    label: 'Sites',
-    description: 'Manage external web pages, citizen portals, and public forms.',
-    icon: 'Globe',
-    to: '/workspace/settings/platform-modules/sites',
-    category: 'Build & Customize',
-    tags: ['sites', 'portals', 'pages', 'public', 'external', 'builder']
-  },
-  {
-    id: 'forms-library',
-    label: 'Forms',
-    description: 'Centralized hub for managing standalone embeddable forms across your workspace, site pages, and portals.',
-    icon: 'FileText',
-    to: '/workspace/settings/platform-modules/forms-library',
-    category: 'Build & Customize',
-    tags: ['forms', 'builder', 'intake', 'fields', 'inputs']
-  },
-  {
-    id: 'workflows-library',
-    label: 'Workflows',
-    description: 'Visual graph studio for building and managing automated process chains across your platform.',
-    icon: 'GitBranch',
-    to: '/workspace/settings/platform-modules/workflows-library',
-    category: 'Build & Customize',
-    tags: ['workflows', 'process', 'graph', 'approval', 'automation']
-  },
-  {
-    id: 'validations-library',
-    label: 'Rules',
-    description: 'Create and maintain reusable field and cross-entity validation rulesets.',
-    icon: 'ShieldCheck',
-    to: '/workspace/settings/platform-modules/validations-library',
-    category: 'Build & Customize',
-    tags: ['rules', 'validations', 'governance', 'checks', 'data quality', 'logic']
-  },
-  {
-    id: 'automation-management',
-    label: 'Automations',
-    description: 'Build automated workflow rules, triggers, actions, and audit logs.',
-    icon: 'Zap',
-    to: '/workspace/settings/platform-modules/automation-management',
-    category: 'Build & Customize',
-    tags: ['automations', 'workflows', 'triggers', 'actions', 'logic', 'rules']
-  },
-  {
-    id: 'integration-management',
-    label: 'Integrations',
-    description: 'Connect and sync data with third-party tools, APIs, and databases.',
-    icon: 'Plug',
-    to: '/workspace/settings/platform-modules/integration-management',
-    category: 'Build & Customize',
-    tags: ['connectors', 'integrations', 'third-party', 'sync', 'webhooks']
-  },
-  {
-    id: 'report-management',
-    label: 'Reports',
-    description: 'Create custom data visualizations, scheduled reports, and export dashboards.',
-    icon: 'BarChart2',
-    to: '/workspace/settings/platform-modules/report-management',
-    category: 'Build & Customize',
-    tags: ['reports', 'analytics', 'visualizations', 'charts', 'exports', 'dashboards']
+    tags: ['lists', 'lookups', 'dropdowns', 'choices', 'options', 'tables']
   },
   {
     id: 'queries-library',
@@ -189,6 +107,96 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['queries', 'sql', 'datasets', 'views', 'builder', 'analytics', 'data']
   },
   {
+    id: 'validations-library',
+    label: 'Rules',
+    description: 'Create and maintain reusable field and cross-entity validation rulesets.',
+    icon: 'ShieldCheck',
+    to: '/workspace/settings/platform-modules/validations-library',
+    category: 'Build & Customize',
+    tags: ['rules', 'validations', 'governance', 'checks', 'data quality', 'logic']
+  },
+  {
+    id: 'integration-management',
+    label: 'Integrations',
+    description: 'Connect and sync data with third-party tools, APIs, and databases.',
+    icon: 'Plug',
+    to: '/workspace/settings/platform-modules/integration-management',
+    category: 'Build & Customize',
+    tags: ['connectors', 'integrations', 'third-party', 'sync', 'webhooks']
+  },
+  {
+    id: 'workflows-library',
+    label: 'Workflows',
+    description: 'Visual graph studio for building and managing automated process chains across your platform.',
+    icon: 'GitBranch',
+    to: '/workspace/settings/platform-modules/workflows-library',
+    category: 'Build & Customize',
+    tags: ['workflows', 'process', 'graph', 'approval', 'automation']
+  },
+  {
+    id: 'automation-management',
+    label: 'Automations',
+    description: 'Build automated workflow rules, triggers, actions, and audit logs.',
+    icon: 'Zap',
+    to: '/workspace/settings/platform-modules/automation-management',
+    category: 'Build & Customize',
+    tags: ['automations', 'workflows', 'triggers', 'actions', 'logic', 'rules']
+  },
+  {
+    id: 'queues-management',
+    label: 'Queues',
+    description: 'Build and configure work queues, unified queue views, filter rules, and display columns.',
+    icon: 'ListOrdered',
+    to: '/workspace/settings/platform-modules/queues-management',
+    category: 'Build & Customize',
+    tags: ['queues', 'work queue', 'unified', 'filter', 'columns', 'distribution']
+  },
+  {
+    id: 'agents',
+    label: 'Agents',
+    description: 'Configure autonomous AI agents, digital coworkers, skill definitions, and worker seats.',
+    icon: 'Bot',
+    to: '/workspace/settings/platform-modules/workforce-management?tab=agents',
+    category: 'Build & Customize',
+    tags: ['agents', 'ai', 'digital coworkers', 'bots', 'synthetic', 'autonomous']
+  },
+  {
+    id: 'forms-library',
+    label: 'Forms',
+    description: 'Centralized hub for managing standalone embeddable forms across your workspace, site pages, and portals.',
+    icon: 'FileText',
+    to: '/workspace/settings/platform-modules/forms-library',
+    category: 'Build & Customize',
+    tags: ['forms', 'builder', 'intake', 'fields', 'inputs']
+  },
+  {
+    id: 'pages',
+    label: 'Pages',
+    description: 'Manage custom pages, dashboard widgets, and layouts.',
+    icon: 'Layout',
+    to: '/workspace/settings/pages',
+    category: 'Build & Customize',
+    tags: ['pages', 'dashboards', 'widgets', 'layouts']
+  },
+  {
+    id: 'navigation',
+    label: 'Menus',
+    description: 'Layout style and navigation menu architect.',
+    icon: 'Compass',
+    to: '/workspace/settings/navigation',
+    category: 'Build & Customize',
+    tags: ['layout', 'menu', 'sidebar', 'top menu', 'navigation']
+  },
+  {
+    id: 'sites',
+    label: 'Sites',
+    description: 'Manage external web pages, citizen portals, and public forms.',
+    icon: 'Globe',
+    to: '/workspace/settings/platform-modules/sites',
+    category: 'Build & Customize',
+    tags: ['sites', 'portals', 'pages', 'public', 'external', 'builder']
+  },
+  {
     id: 'document-generation',
     label: 'Templates',
     description: 'Configure automated document templates, PDF creation, and email merging.',
@@ -198,13 +206,13 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
   },
   {
-    id: 'lists-management',
-    label: 'Lists',
-    description: 'Build and manage reusable choice datasets, lookup tables, and option sets.',
-    icon: 'ListTodo',
-    to: '/workspace/settings/platform-modules/global-lists',
+    id: 'report-management',
+    label: 'Reports',
+    description: 'Create custom data visualizations, scheduled reports, and export dashboards.',
+    icon: 'BarChart2',
+    to: '/workspace/settings/platform-modules/report-management',
     category: 'Build & Customize',
-    tags: ['lists', 'lookups', 'dropdowns', 'choices', 'options', 'tables']
+    tags: ['reports', 'analytics', 'visualizations', 'charts', 'exports', 'dashboards']
   },
 
   // Develop
@@ -225,6 +233,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     to: '/workspace/settings/platform-modules/api-management',
     category: 'Develop',
     tags: ['api', 'developer', 'keys', 'endpoints', 'rest', 'access']
+  },
+  {
+    id: 'testing',
+    label: 'Testing',
+    description: 'Automated test suites, sandbox simulation, and validation harness.',
+    icon: 'FlaskConical',
+    to: '/workspace/settings/testing',
+    category: 'Develop',
+    tags: ['testing', 'qa', 'tests', 'sandbox', 'validation', 'suites', 'developer', 'automation']
   },
 
 

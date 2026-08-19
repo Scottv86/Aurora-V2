@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { PeopleCenter } from '../../components/Settings/Workforce/PeopleCenter';
 import { TeamHub } from '../../components/Settings/Workforce/TeamHub';
@@ -8,20 +9,31 @@ import { SecurityGroups } from '../../components/Settings/Workforce/SecurityGrou
 import { ActivityLog } from '../../components/Settings/Workforce/ActivityLog';
 import { OnboardingWizard } from '../../components/Settings/Workforce/OnboardingWizard';
 import { CreateTeamModal } from '../../components/Settings/Workforce/CreateTeamModal';
-import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot } from 'lucide-react';
+import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot, Sparkles } from 'lucide-react';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
+import { AgentBuilderStudio } from '../../components/Builders/AgentBuilder/AgentBuilderStudio';
 import { cn } from '../../lib/utils';
 
 export const WorkforcePage = () => {
-  const [activeTab, setActiveTab] = useState('people');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam && ['people', 'agents', 'teams', 'positions', 'groups', 'visualizer', 'audit'].includes(tabParam) ? tabParam : 'people');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['people', 'agents', 'teams', 'positions', 'groups', 'visualizer', 'audit'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
   
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingType, setOnboardingType] = useState<'human' | 'agent' | undefined>(undefined);
+  const [isAgentStudioOpen, setIsAgentStudioOpen] = useState(false);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isPositionModalOpen, setIsPositionModalOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -95,7 +107,19 @@ export const WorkforcePage = () => {
         icon={Users}
         items={subNavItems}
         activeId={activeTab}
-        onTabChange={(id) => { setActiveTab(id); setActiveFilter('all'); }}
+        onTabChange={(id) => { 
+          setActiveTab(id); 
+          setActiveFilter('all'); 
+          setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            if (id === 'people') {
+              next.delete('tab');
+            } else {
+              next.set('tab', id);
+            }
+            return next;
+          });
+        }}
         actions={
           <div className="flex items-center gap-3">
 
@@ -146,7 +170,26 @@ export const WorkforcePage = () => {
               )}
             </div>
 
-            {action && (
+            {activeTab === 'agents' ? (
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  className="gap-1.5 px-4 font-bold h-9 border-zinc-200 dark:border-zinc-700"
+                  onClick={() => { setOnboardingType('agent'); setIsOnboardingOpen(true); }}
+                >
+                  <Plus size={14} /> Quick Provision
+                </Button>
+                <Button 
+                  variant="primary" 
+                  size="sm"
+                  className="gap-2 shadow-lg shadow-indigo-500/20 px-5 font-bold h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  onClick={() => setIsAgentStudioOpen(true)}
+                >
+                  <Sparkles size={15} /> Agent Studio
+                </Button>
+              </div>
+            ) : action && (
               <Button 
                 variant="primary" 
                 size="sm"
@@ -233,6 +276,16 @@ export const WorkforcePage = () => {
           isOpen={isTeamModalOpen}
           onClose={() => setIsTeamModalOpen(false)}
         />
+
+        {isAgentStudioOpen && (
+          <AgentBuilderStudio 
+            onClose={() => setIsAgentStudioOpen(false)}
+            onDeploySuccess={() => {
+              setIsAgentStudioOpen(false);
+              setRefreshTrigger(t => t + 1);
+            }}
+          />
+        )}
       </SettingsSubNavLayout>
     </LicenseGate>
   );

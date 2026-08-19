@@ -228,7 +228,49 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
       }
     }
 
-    // 4. Update Blueprint Status to PUBLISHED
+    // 4. Provision Autonomous AI Agents (Digital Coworkers)
+    const agentArtifacts = artifacts.filter((a: any) => a.type === 'AGENT');
+    for (const aArt of agentArtifacts) {
+      try {
+        const agentConfig = aArt.content || {};
+        const agentName = aArt.name || agentConfig.name || 'Autonomous Solution Copilot';
+        const role = agentConfig.roleTitle || agentConfig.workforceMapping?.role || 'Digital Coworker';
+        const modelType = agentConfig.modelConfig?.model || 'gemini-2.5-flash';
+        
+        let agentRecord: any = null;
+        if (db.agent) {
+          agentRecord = await db.agent.create({
+            data: {
+              name: agentName,
+              modelType,
+              config: agentConfig
+            }
+          });
+        }
+
+        if (db.tenantMember) {
+          await db.tenantMember.create({
+            data: {
+              tenantId,
+              agentId: agentRecord?.id || null,
+              firstName: agentName.split(' ')[0] || 'AI',
+              familyName: agentName.split(' ').slice(1).join(' ') || 'Copilot',
+              roleId: role,
+              status: 'Active',
+              isSynthetic: true,
+              licenceType: agentConfig.workforceMapping?.licenceType || 'AI Agent Seat',
+              avatarUrl: agentConfig.avatarUrl || null,
+              agentConfig: agentConfig
+            }
+          });
+        }
+        provisionedResources.push(`Autonomous Agent: ${agentName} (${role})`);
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Agent error for ${aArt.name}:`, e);
+      }
+    }
+
+    // 5. Update Blueprint Status to PUBLISHED
     await model.update({
       where: { id },
       data: { status: 'PUBLISHED' }

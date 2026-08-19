@@ -21,7 +21,12 @@ import {
   Plug,
   ShieldCheck,
   Send,
-  X
+  X,
+  Bot,
+  Cpu,
+  Wrench,
+  Shield,
+  Key
 } from 'lucide-react';
 import { SolutionArtifact, SavedNote } from '../../../types/solutions';
 import { DrivePickerModal } from '../../Drive/DrivePickerModal';
@@ -153,6 +158,9 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
       case 'PERMISSION':
         navigate('/workspace/settings/workforce?tab=groups');
         break;
+      case 'AGENT':
+        navigate('/workspace/settings/platform-modules/agents-library');
+        break;
       default:
         toast.info(`Opening ${activeArtifact.name} in dedicated builder...`);
         break;
@@ -162,6 +170,16 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
 
   const getArtifactTileTheme = (art: SolutionArtifact) => {
     switch (art.type) {
+      case 'AGENT':
+        return {
+          bg: 'bg-violet-500/10 dark:bg-violet-500/15',
+          border: 'border-violet-500/30 hover:border-violet-500/60',
+          text: 'text-violet-600 dark:text-violet-400',
+          badge: 'bg-violet-500/20 text-violet-500',
+          icon: Bot,
+          badgeLabel: 'AI AGENT',
+          categoryLabel: 'Digital Coworker & Copilot'
+        };
       case 'PERMISSION':
         return {
           bg: 'bg-rose-500/10 dark:bg-rose-500/15',
@@ -311,6 +329,197 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
     if (!art) return null;
 
     switch (art.type) {
+      case 'AGENT':
+        /* AUTONOMOUS AGENT BLUEPRINT PREVIEW */
+        const agentContent = art.content || {};
+        const agentTools = Array.isArray(agentContent.tools) && agentContent.tools.length > 0
+          ? agentContent.tools
+          : [
+              { id: 'tool_db_query', name: 'Platform Database Query', type: 'DATABASE_QUERY', description: 'Query and filter records across platform schemas', enabled: true },
+              { id: 'tool_doc_parser', name: 'Document & OCR Parser', type: 'FILE_PARSER', description: 'Extract tables and entities from uploaded documents', enabled: true },
+              { id: 'tool_workflow_dispatch', name: 'Workflow Dispatcher', type: 'WORKFLOW_TRIGGER', description: 'Trigger workflow executions and approval queues', enabled: true }
+            ];
+
+        return (
+          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-violet-500/30 rounded-3xl p-6 shadow-2xl space-y-6 ${isFullscreen ? 'max-w-6xl mx-auto' : ''}`}>
+            {/* Agent Header Banner */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 text-violet-500 border border-violet-500/30 shadow-inner">
+                  <Bot size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>{art.name}</span>
+                    </h3>
+                    <span className="px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20">
+                      {agentContent.roleTitle || 'Autonomous Copilot'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                    {art.description || 'Configured AI Digital Coworker with autonomous task execution & tool bindings'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenDedicatedBuilder}
+                  className="px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-md shadow-violet-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Open in Agent Builder Studio"
+                >
+                  <Bot size={14} />
+                  <span>Open in Agent Builder</span>
+                  <ArrowRight size={13} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const jsonStr = JSON.stringify(art.content, null, 2);
+                    navigator.clipboard.writeText(jsonStr);
+                    toast.success('Agent blueprint JSON copied to clipboard!');
+                  }}
+                  className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title="Copy Agent Config JSON"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Model & Persona Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-1">
+                <div className="flex items-center gap-2 text-zinc-400 text-[10px] font-black uppercase tracking-wider">
+                  <Cpu size={13} className="text-violet-500" />
+                  <span>Model Engine</span>
+                </div>
+                <div className="text-sm font-black text-zinc-900 dark:text-white">
+                  {agentContent.modelConfig?.model || 'gemini-2.5-flash'}
+                </div>
+                <div className="text-[10px] text-zinc-500 font-medium">
+                  Temp: {agentContent.modelConfig?.temperature ?? 0.2} • Max Tokens: {agentContent.modelConfig?.maxOutputTokens || 2048}
+                </div>
+              </div>
+
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-1">
+                <div className="flex items-center gap-2 text-zinc-400 text-[10px] font-black uppercase tracking-wider">
+                  <Sparkles size={13} className="text-indigo-500" />
+                  <span>Persona & Tone</span>
+                </div>
+                <div className="text-sm font-black text-zinc-900 dark:text-white truncate">
+                  {agentContent.modelConfig?.systemPersona || 'Analytical & Precise'}
+                </div>
+                <div className="text-[10px] text-zinc-500 font-medium">
+                  Enterprise-compliant conversational demeanor
+                </div>
+              </div>
+
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-1">
+                <div className="flex items-center gap-2 text-zinc-400 text-[10px] font-black uppercase tracking-wider">
+                  <Shield size={13} className="text-emerald-500" />
+                  <span>Safety Guardrails</span>
+                </div>
+                <div className="text-sm font-black text-emerald-500">
+                  {Math.round((agentContent.guardrails?.confidenceThreshold || 0.85) * 100)}% Confidence Gate
+                </div>
+                <div className="text-[10px] text-zinc-500 font-medium">
+                  {agentContent.guardrails?.requireHumanApproval ? 'HITL Approval on Mutations' : 'Autonomous Auto-Dispatch'}
+                </div>
+              </div>
+            </div>
+
+            {/* System Directives & Instructions */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                <BookOpen size={13} className="text-violet-500" />
+                <span>Core Behavioral Directives &amp; Instructions</span>
+              </h4>
+              <div className="p-5 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                {(agentContent.systemInstructions || 'You are an autonomous AI coworker deployed within Aurora.')
+                  .split('\n')
+                  .map((line: string, idx: number) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return <div key={idx} className="h-1" />;
+                    return (
+                      <p key={idx} className="font-medium text-[11px]">
+                        {trimmed}
+                      </p>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Bound Tools & Skills Matrix */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                  <Wrench size={13} className="text-violet-500" />
+                  <span>Enabled Tools &amp; Capability Bindings ({agentTools.filter((t: any) => t.enabled !== false).length})</span>
+                </h4>
+                <span className="text-[10px] text-zinc-400 font-medium">Auto-authorized for workspace context</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {agentTools.map((tool: any, idx: number) => (
+                  <div
+                    key={tool.id || idx}
+                    className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-2.5 ${
+                      tool.enabled !== false
+                        ? 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200/80 dark:border-zinc-800/80'
+                        : 'bg-zinc-100/50 dark:bg-zinc-900/40 border-dashed border-zinc-200 dark:border-zinc-800 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div className="p-2 rounded-xl bg-violet-500/10 text-violet-500 border border-violet-500/20 shrink-0 mt-0.5">
+                        <Wrench size={13} />
+                      </div>
+                      <div className="min-w-0">
+                        <h5 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                          {tool.name}
+                        </h5>
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-0.5">
+                          {tool.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase shrink-0 ${
+                      tool.enabled !== false
+                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                        : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400'
+                    }`}>
+                      {tool.enabled !== false ? 'ACTIVE' : 'OFF'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Workforce & Deployment Seat */}
+            <div className="p-4 bg-gradient-to-r from-violet-500/10 via-indigo-500/5 to-teal-500/10 rounded-2xl border border-violet-500/20 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-violet-600 text-white font-bold shrink-0">
+                  <Key size={16} />
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold text-zinc-900 dark:text-white">
+                    Workforce Placement: {agentContent.workforceMapping?.teamName || 'Operations Squad'}
+                  </h5>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                    Seat Type: <span className="font-bold text-violet-500">{agentContent.workforceMapping?.licenceType || 'AI Agent Seat'}</span> • Role: {agentContent.workforceMapping?.role || 'Digital Coworker'}
+                  </p>
+                </div>
+              </div>
+
+              <span className="px-3 py-1 rounded-xl bg-white dark:bg-zinc-900 border border-violet-500/30 text-violet-600 dark:text-violet-400 text-xs font-black shadow-xs shrink-0">
+                PROVISION ON DEPLOY
+              </span>
+            </div>
+          </div>
+        );
+
       case 'PAGE':
         /* SOLUTION ARCHITECTURE & VISION SPECIFICATION PREVIEW */
         return (

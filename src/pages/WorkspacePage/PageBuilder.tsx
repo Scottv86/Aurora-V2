@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { fetchModule } from '../../services/dataService';
 import { PageAIBuilderModal } from './PageAIBuilderModal';
 import { PLATFORM_MODULES } from '../../config/platformModules';
-import { API_BASE_URL } from '../../config';
+import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed } from './WorkspacePageView';
 import { QueueRenderer } from '../../components/Builders';
@@ -130,7 +130,7 @@ export const PageBuilder = () => {
           setBreadcrumbOverride(id, pageMod.name);
         }
         
-        const loadedWidgets = (pageMod.config?.widgets || pageMod.widgets || []).map((w: any, index: number) => {
+        const loadedWidgets = (pageMod.config?.widgets || pageMod.config?.config?.widgets || pageMod.widgets || []).map((w: any, index: number) => {
           const dims = getWidgetDefaultDimensions(w.type);
           return {
             ...w,
@@ -177,7 +177,7 @@ export const PageBuilder = () => {
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       
-      const response = await fetch(`http://localhost:3001/api/data/modules/${actualId}`, {
+      const response = await fetch(`${DATA_API_URL}/modules/${actualId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

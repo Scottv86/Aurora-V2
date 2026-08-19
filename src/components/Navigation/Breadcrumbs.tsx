@@ -76,6 +76,7 @@ const PATH_MAP: Record<string, string> = {
   queues: 'Queues',
   'queues-management': 'Queues',
   'queries-library': 'Queries',
+  agents: 'Agents',
 };
 
 

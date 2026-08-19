@@ -141,7 +141,7 @@ export const QueueView = () => {
 
   // Filter records based on condition and search query
   const filteredRecords = useMemo(() => {
-    let result = rawRecords;
+    let result = Array.isArray(rawRecords) ? rawRecords : [];
 
     // Apply Queue conditions
     if (activeQueue?.queueConfig?.conditions) {

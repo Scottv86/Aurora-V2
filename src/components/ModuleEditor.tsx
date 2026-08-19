@@ -2288,10 +2288,18 @@ export const ModuleEditor = () => {
           setWorkflow(data.workflow);
         }
         if (data.forms && Array.isArray(data.forms)) {
-          const normalizedForms = data.forms.map((f: any) => {
+          const seenFormIds = new Set<string>();
+          const normalizedForms = data.forms.map((f: any, idx: number) => {
             const hasSteps = f.steps && f.steps.length > 0;
+            let formId = f.id || `form-${Date.now()}-${idx}`;
+            if (seenFormIds.has(formId)) {
+              formId = `${formId}-${idx}`;
+            }
+            seenFormIds.add(formId);
+
             return {
               ...f,
+              id: formId,
               usage: f.usage && f.usage !== 'undefined' ? f.usage : (data.forms.length === 1 ? 'workspace_create' : 'public_link'),
               isMultistep: f.isMultistep || false,
               fields: f.fields || [],

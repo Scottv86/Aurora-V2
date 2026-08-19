@@ -265,7 +265,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <GripVertical size={14} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
+                        <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label || (field as any).name || 'Untitled Field'}</span>
                         {field.required && <span className="text-red-500 font-bold">*</span>}
                       </div>
 
@@ -286,7 +286,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                     </div>
 
                     <div className="h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 flex items-center text-xs text-zinc-400 pointer-events-none">
-                      {field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+                      {field.placeholder || `Enter ${(field.label || (field as any).name || 'value').toLowerCase()}...`}
                     </div>
                   </div>
                 ))}
@@ -304,7 +304,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                   <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">Field Label</label>
                   <input
                     type="text"
-                    value={selectedField.label}
+                    value={selectedField.label || (selectedField as any).name || ''}
                     onChange={(e) => handleUpdateField(selectedField.id, { label: e.target.value })}
                     className="w-full px-3 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />

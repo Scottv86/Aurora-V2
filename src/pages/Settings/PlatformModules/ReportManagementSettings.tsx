@@ -547,6 +547,10 @@ setView('LIST');
   const [newRelType, setNewRelType] = useState<'left' | 'inner'>('left');
   const [isAiBuilding, setIsAiBuilding] = useState(false);
 
+  const [records, setRecords] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [automations, setAutomations] = useState<any[]>([]);
   const [availableModules, setAvailableModules] = useState<any[]>([]);
   const [dataSources, setDataSources] = useState<any[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]);
@@ -599,11 +603,11 @@ setView('LIST');
       const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
 
       const [recsRes, memsRes, teamsRes, autosRes, catalogRes] = await Promise.all([
-        fetch(`http://localhost:3001/api/data/records`, { headers }).then(res => res.json()).catch(() => ({ records: [] as any[] })),
-        fetch(`http://localhost:3001/api/members`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-        fetch(`http://localhost:3001/api/teams`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-        fetch(`http://localhost:3001/api/automations`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-        fetch(`http://localhost:3001/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[])
+        fetch(`${API_BASE_URL}/api/data/records`, { headers }).then(res => res.json()).catch(() => ({ records: [] as any[] })),
+        fetch(`${API_BASE_URL}/api/members`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`${API_BASE_URL}/api/teams`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`${API_BASE_URL}/api/automations`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`${API_BASE_URL}/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[])
       ]);
 
       setRecords(recsRes.records || []);
@@ -640,7 +644,7 @@ setView('LIST');
     if (!tenant?.id) return;
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`http://localhost:3001/api/reports`, {
+      const res = await fetch(`${API_BASE_URL}/api/reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -676,7 +680,7 @@ setView('LIST');
     if (!tenant?.id) return;
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`http://localhost:3001/api/reports`, {
+      const res = await fetch(`${API_BASE_URL}/api/reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -713,7 +717,7 @@ setView('LIST');
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       
       // 1. Ask server to generate using Gemini
-      const aiResponse = await fetch(`http://localhost:3001/api/reports/ai-builder`, {
+      const aiResponse = await fetch(`${API_BASE_URL}/api/reports/ai-builder`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -727,7 +731,7 @@ setView('LIST');
       const aiResult = await aiResponse.json();
       
       // 2. Save generated report to DB
-      const res = await fetch(`http://localhost:3001/api/reports`, {
+      const res = await fetch(`${API_BASE_URL}/api/reports`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -776,7 +780,7 @@ setView('LIST');
         payload: deletingReport
       });
 
-      const res = await fetch(`http://localhost:3001/api/reports/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/reports/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -801,7 +805,7 @@ setView('LIST');
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const updatedStatus = statusOverride || currentReport.status;
-      const res = await fetch(`http://localhost:3001/api/reports/${currentReport.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/reports/${currentReport.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

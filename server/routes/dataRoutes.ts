@@ -137,13 +137,19 @@ router.get('/modules', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    await ensureWorkDistributionModule(db, tenantId);
+    try {
+      await ensureWorkDistributionModule(db, tenantId);
+    } catch (provisionErr) {
+      console.warn('[DataAPI] ensureWorkDistributionModule warning:', provisionErr);
+    }
+
     const modules = await db.module.findMany();
     // Flatten config for frontend
     const formatted = modules.map(m => {
-      const config = (m.config as any);
+      const config = (m.config as any) || {};
+      const safeConfig = typeof config === 'object' ? config : {};
       return {
-        ...config,
+        ...safeConfig,
         id: m.id,
         name: m.name,
         category: m.category,
@@ -151,7 +157,7 @@ router.get('/modules', async (req: TenantRequest, res) => {
         type: m.type,
         enabled: m.enabled,
         isGlobal: m.isGlobal,
-        templateId: m.templateId || config.id,
+        templateId: m.templateId || safeConfig.id || null,
         status: m.enabled ? 'ACTIVE' : 'INACTIVE',
         createdAt: m.createdAt,
       };

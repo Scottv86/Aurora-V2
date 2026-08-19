@@ -493,20 +493,21 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Layout,
       items: [
         { label: 'Solutions', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/solutions' },
-        { label: 'Menus', icon: Compass, to: '/workspace/settings/navigation' },
         { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
-        { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
-        { label: 'Queues', icon: LucideIcons.ListOrdered, to: '/workspace/settings/platform-modules/queues-management' },
-        { label: 'Sites', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
-        { label: 'Forms', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/forms-library' },
-        { label: 'Workflows', icon: LucideIcons.GitBranch, to: '/workspace/settings/platform-modules/workflows-library' },
-        { label: 'Rules', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
-        { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },
-        { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
-        { label: 'Reports', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
-        { label: 'Queries', icon: LucideIcons.Database, to: '/workspace/settings/platform-modules/queries-library' },
-        { label: 'Templates', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
         { label: 'Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
+        { label: 'Queries', icon: LucideIcons.Database, to: '/workspace/settings/platform-modules/queries-library' },
+        { label: 'Rules', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
+        { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
+        { label: 'Workflows', icon: LucideIcons.GitBranch, to: '/workspace/settings/platform-modules/workflows-library' },
+        { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },
+        { label: 'Queues', icon: LucideIcons.ListOrdered, to: '/workspace/settings/platform-modules/queues-management' },
+        { label: 'Agents', icon: LucideIcons.Bot, to: '/workspace/settings/platform-modules/agents' },
+        { label: 'Forms', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/forms-library' },
+        { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
+        { label: 'Menus', icon: Compass, to: '/workspace/settings/navigation' },
+        { label: 'Sites', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
+        { label: 'Templates', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
+        { label: 'Reports', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
       ]
     },
 
@@ -516,6 +517,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       items: [
         { label: 'Data Migration', icon: ArrowRightLeft, to: '/workspace/settings/migration' },
         { label: 'API Management', icon: LucideIcons.Key, to: '/workspace/settings/platform-modules/api-management' },
+        { label: 'Testing', icon: LucideIcons.FlaskConical, to: '/workspace/settings/testing' },
       ]
     },
 

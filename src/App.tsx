@@ -63,6 +63,8 @@ import { WorkflowsLibraryPage } from './pages/Settings/WorkflowsLibraryPage';
 import { ValidationsLibraryPage } from './pages/Settings/ValidationsLibraryPage';
 import { QueuesLibraryPage } from './pages/Settings/QueuesLibraryPage';
 import { QueriesLibraryPage } from './pages/Settings/QueriesLibraryPage';
+import { AgentsLibraryPage } from './pages/Settings/AgentsLibraryPage';
+import { AgentBuilderStudio } from './components/Builders/AgentBuilder/AgentBuilderStudio';
 
 import { OrganizationPage } from './pages/Settings/OrganizationPage';
 import { AISettingsPage } from './pages/Settings/AISettingsPage';
@@ -107,6 +109,7 @@ import { AutomationsPage } from './pages/Settings/AutomationsPage';
 import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
 import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
 import { APISettings } from './pages/Settings/APISettings';
+import { TestingPage } from './pages/Settings/TestingPage';
 import { QueryExplorer } from './pages/Settings/QueryExplorer';
 import { RecordsManagement } from './pages/Platform/RecordsManagement';
 import { RecordsManagementSettings } from './pages/Settings/PlatformModules/RecordsManagementSettings';
@@ -270,6 +273,7 @@ const App = () => {
                 <Route path="modules" element={<NavigateWithSearch to="/workspace/settings/modules" replace />} />
                 <Route path="pages" element={<NavigateWithSearch to="/workspace/settings/pages" replace />} />
                 <Route path="queues" element={<NavigateWithSearch to="/workspace/settings/queues" replace />} />
+                <Route path="testing" element={<Navigate to="/workspace/settings/testing" replace />} />
                 
                 {/* Dynamic Module Routes */}
                 <Route path="modules/:moduleId" element={<ModuleView />} />
@@ -330,10 +334,13 @@ const App = () => {
                 
                 {/* Module Builder */}
                 <Route path="builder" element={<Navigate to="/workspace/settings/platform-modules?newModule=true" replace />} />
-                <Route path="ai-builder" element={<AIBuilder />} />
-                <Route path="builder/:id" element={<ModuleEditor />} />
-                <Route path="builder/page/:id" element={<PageBuilder />} />
-                <Route path="builder/site/:siteId" element={<SiteBuilderPage />} />
+                 <Route path="ai-builder" element={<AIBuilder />} />
+                 <Route path="builder/:id" element={<ModuleEditor />} />
+                 <Route path="builder/page/:id" element={<PageBuilder />} />
+                 <Route path="builder/site/:siteId" element={<SiteBuilderPage />} />
+                 <Route path="builder/agent" element={<AgentBuilderStudio />} />
+                 <Route path="builder/agent/:id" element={<AgentBuilderStudio />} />
+                 <Route path="agent-builder" element={<AgentBuilderStudio />} />
 
 
                 <Route path="pages" element={<PagesManagementPage />} />
@@ -373,6 +380,9 @@ const App = () => {
                    <Route path="queues-management" element={<QueuesLibraryPage />} />
                    <Route path="queries-library" element={<QueriesLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
+                   <Route path="agents" element={<AgentsLibraryPage />} />
+                   <Route path="agents-library" element={<AgentsLibraryPage />} />
+                   <Route path="testing" element={<TestingPage />} />
                 </Route>
                  <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="solution" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
@@ -383,8 +393,11 @@ const App = () => {
                  <Route path="knowledge" element={<Navigate to="/workspace/settings/platform-modules/knowledge-base" replace />} />
                  <Route path="sites" element={<Navigate to="/workspace/settings/platform-modules/sites" replace />} />
                  <Route path="api" element={<Navigate to="/workspace/settings/platform-modules/api-management" replace />} />
+                 <Route path="agents" element={<Navigate to="/workspace/settings/platform-modules/agents-library" replace />} />
+                 <Route path="agents-library" element={<Navigate to="/workspace/settings/platform-modules/agents-library" replace />} />
                  
                  {/* New Settings Placeholder Routes */}
+                 <Route path="testing" element={<TestingPage />} />
                  <Route path="data" element={<Navigate to="/workspace/apps/query" replace />} />
                  <Route path="fees-products" element={<NavigateWithSearch to="/workspace/settings/platform-modules/pricing-catalog" replace />} />
                  <Route path="finance" element={<Navigate to="/workspace/settings/platform-modules/financial-management" replace />} />

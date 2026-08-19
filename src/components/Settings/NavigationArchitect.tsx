@@ -34,7 +34,8 @@ import {
   CornerDownRight,
   ChevronLeft,
   Cpu,
-  Layout
+  Layout,
+  Globe
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { Button } from '../UI/Primitives';
@@ -639,6 +640,12 @@ const SortableItemRow = ({
     )
   ) : null;
 
+  const isSite = !isQueue && !isPage && Boolean(
+    item.id?.startsWith('site:') || 
+    item.to?.startsWith('/public/portal/') || 
+    item.to?.startsWith('/workspace/platform/sites/')
+  );
+
   return (
     <div ref={setNodeRef} style={style} className="space-y-1">
       <div
@@ -695,6 +702,13 @@ const SortableItemRow = ({
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1 shrink-0">
                   <Layout size={10} />
                   Page{matchedPage?.name && matchedPage.name !== item.label ? `: ${matchedPage.name}` : ''}
+                </span>
+              )}
+
+              {isSite && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0">
+                  <Globe size={10} />
+                  Site / Portal
                 </span>
               )}
 
@@ -793,6 +807,12 @@ const SortableItemRow = ({
               )
             ) : null;
 
+            const isChildSite = !isChildQueue && !isChildPage && Boolean(
+              child.id?.startsWith('site:') ||
+              child.to?.startsWith('/public/portal/') ||
+              child.to?.startsWith('/workspace/platform/sites/')
+            );
+
             return (
               <div
                 key={child.id}
@@ -836,6 +856,12 @@ const SortableItemRow = ({
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1 shrink-0">
                           <Layout size={10} />
                           Page{matchedChildPage?.name && matchedChildPage.name !== child.label ? `: ${matchedChildPage.name}` : ''}
+                        </span>
+                      )}
+                      {isChildSite && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0">
+                          <Globe size={10} />
+                          Site / Portal
                         </span>
                       )}
                     </div>

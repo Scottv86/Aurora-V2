@@ -297,6 +297,36 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
           else updatedArtifacts.push(newPermArt);
         }
 
+        // 6. Process Autonomous AI Agent Artifact
+        if (result.agentArtifact) {
+          const agentIdx = updatedArtifacts.findIndex(a => a.type === 'AGENT');
+          const newAgentArt: SolutionArtifact = {
+            id: result.agentArtifact.id || `art_agent_${Date.now()}`,
+            name: result.agentArtifact.name || 'Autonomous Solution Copilot',
+            type: 'AGENT',
+            description: result.agentArtifact.description || 'AI Digital Coworker configured for automated triage & execution',
+            content: result.agentArtifact
+          };
+          if (agentIdx >= 0) updatedArtifacts[agentIdx] = newAgentArt;
+          else updatedArtifacts.push(newAgentArt);
+        }
+
+        if (Array.isArray(result.agentArtifacts) && result.agentArtifacts.length > 0) {
+          result.agentArtifacts.forEach((ag: any, idx: number) => {
+            const agId = ag.id || `art_agent_${Date.now()}_${idx}`;
+            const agIdx = updatedArtifacts.findIndex(a => a.id === agId || (a.type === 'AGENT' && a.name === ag.name));
+            const artObj: SolutionArtifact = {
+              id: agId,
+              name: ag.name || `AI Coworker ${idx + 1}`,
+              type: 'AGENT',
+              description: ag.description || 'Autonomous agent specialist',
+              content: ag
+            };
+            if (agIdx >= 0) updatedArtifacts[agIdx] = artObj;
+            else updatedArtifacts.push(artObj);
+          });
+        }
+
         setArtifacts(updatedArtifacts);
       }
 

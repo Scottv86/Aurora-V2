@@ -24,6 +24,10 @@ import {
   Maximize2,
   Minimize2,
   ExternalLink,
+  Globe,
+  PanelLeft,
+  PanelLeftClose,
+  PanelTop,
   X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -40,6 +44,7 @@ import { InContextBuilderModal } from '../../components/Builders/Common/InContex
 import { QueueBuilder } from '../../components/Builders/QueueBuilder/QueueBuilder';
 import { QueueEntity } from '../../types/platform';
 import { MenuItem, MenuSection } from '../../types/menu';
+import { SiteService, Site } from '../../services/siteService';
 
 // Types
 type LayoutStyle = 'sidebar' | 'slim' | 'top';
@@ -147,8 +152,40 @@ export const NavigationSettingsPage = () => {
   }, [activeScope, menuConfigState, teams, positions, members]);
 
   // Modal / Add tool states
-  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | null>(null);
+  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | 'site' | null>(null);
   const [appSearchQuery, setAppSearchQuery] = useState('');
+  const [siteSearchQuery, setSiteSearchQuery] = useState('');
+
+  // Sites state
+  const [sites, setSites] = useState<Site[]>([]);
+  const [loadingSites, setLoadingSites] = useState(false);
+
+  const fetchSites = async () => {
+    try {
+      setLoadingSites(true);
+      const data = await SiteService.getSites();
+      setSites(data || []);
+    } catch (err) {
+      console.error('Failed to fetch sites', err);
+    } finally {
+      setLoadingSites(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSites();
+  }, [tenant?.id]);
+
+  const filteredSites = useMemo(() => {
+    if (!siteSearchQuery.trim()) return sites;
+    const q = siteSearchQuery.toLowerCase();
+    return sites.filter(s => 
+      s.name?.toLowerCase().includes(q) ||
+      s.description?.toLowerCase().includes(q) ||
+      s.domain?.toLowerCase().includes(q) ||
+      s.category?.toLowerCase().includes(q)
+    );
+  }, [sites, siteSearchQuery]);
 
   // Custom link form state
   const [customLabel, setCustomLabel] = useState('');
@@ -314,6 +351,10 @@ export const NavigationSettingsPage = () => {
     } else if (toolType === 'queue') {
       setSelectedSectionId(sectionId);
       setActiveAddTool('queue');
+      return;
+    } else if (toolType === 'site') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('site');
       return;
     }
 
@@ -732,6 +773,30 @@ export const NavigationSettingsPage = () => {
     )
   );
 
+  const selectedItemSite = useMemo(() => {
+    if (!selectedItemInfo?.item) return null;
+    const it = selectedItemInfo.item;
+    const siteIdFromId = it.id?.startsWith('site:') ? it.id.replace('site:', '').split('-')[0] : null;
+    const siteIdFromTo = it.to?.startsWith('/public/portal/') ? it.to.replace('/public/portal/', '').split('?')[0] : null;
+    return (sites || []).find((s: Site) => 
+      s.id === siteIdFromId || 
+      s.id === siteIdFromTo || 
+      s.domain === siteIdFromTo ||
+      (it.to && (it.to === `/public/portal/${s.id}` || it.to === `/public/portal/${s.domain}`))
+    ) || null;
+  }, [selectedItemInfo, sites]);
+
+  const isSelectedItemSite = Boolean(
+    !isSelectedItemQueue &&
+    !isSelectedItemPage &&
+    (
+      selectedItemSite ||
+      selectedItemInfo?.item.id?.startsWith('site:') ||
+      selectedItemInfo?.item.to?.startsWith('/public/portal/') ||
+      selectedItemInfo?.item.to?.startsWith('/workspace/platform/sites/')
+    )
+  );
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 w-full h-full bg-white dark:bg-zinc-950">
@@ -864,24 +929,24 @@ export const NavigationSettingsPage = () => {
               <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl p-1 text-xs">
                 <button
                   onClick={() => setLayoutStyle('sidebar')}
-                  className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'sidebar' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-                  title="Sidebar layout"
+                  className={cn("px-2.5 py-1 rounded-lg font-bold transition-all", layoutStyle === 'sidebar' ? "bg-indigo-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5")}
+                  title="Standard Sidebar layout (Left)"
                 >
-                  <Rows size={14} />
+                  <PanelLeft size={15} />
                 </button>
                 <button
                   onClick={() => setLayoutStyle('slim')}
-                  className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'slim' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-                  title="Slim sidebar layout"
+                  className={cn("px-2.5 py-1 rounded-lg font-bold transition-all", layoutStyle === 'slim' ? "bg-indigo-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5")}
+                  title="Slim Sidebar layout (Compact left rail)"
                 >
-                  <Columns size={14} />
+                  <PanelLeftClose size={15} />
                 </button>
                 <button
                   onClick={() => setLayoutStyle('top')}
-                  className={cn("px-2 py-1 rounded-lg font-bold transition-all", layoutStyle === 'top' ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-zinc-200")}
-                  title="Top menu layout"
+                  className={cn("px-2.5 py-1 rounded-lg font-bold transition-all", layoutStyle === 'top' ? "bg-indigo-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/5")}
+                  title="Top Mega Menu layout (Horizontal top bar)"
                 >
-                  <Layout size={14} />
+                  <PanelTop size={15} />
                 </button>
               </div>
 
@@ -1051,6 +1116,24 @@ export const NavigationSettingsPage = () => {
               <div>
                 <h4 className="font-bold text-zinc-850 dark:text-white">Catalog Apps</h4>
                 <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Add enabled apps from tenant catalog.</p>
+              </div>
+            </button>
+
+            {/* Sites & Portals */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'site' }));
+              }}
+              onClick={() => setActiveAddTool('site')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-emerald-500 group-hover:scale-105 transition-all">
+                <Globe size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Sites & Portals</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Link published websites, portals, and domains.</p>
               </div>
             </button>
 
@@ -1357,6 +1440,97 @@ export const NavigationSettingsPage = () => {
                           <option value="">Select page to switch...</option>
                           {modules.filter((m: any) => m.type === 'PAGE').map(p => (
                             <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Linked Site / Portal Configuration Section */}
+                {!selectedItemInfo.item.isSubtitle && isSelectedItemSite && (
+                  <div className="border-t border-zinc-200/50 dark:border-white/5 pt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block flex items-center gap-1.5 text-[11px]">
+                        <Globe size={13} className="text-emerald-500" /> Linked Site / Portal
+                      </label>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        Site / Portal
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 bg-emerald-500/[0.04] border border-emerald-500/20 rounded-2xl space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200">
+                            {selectedItemSite?.name || selectedItemInfo.item.label}
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            {selectedItemSite?.status || 'Active'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                          {selectedItemSite?.description || 'Published site portal with custom branding, public forms, and knowledge base.'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-[10px] text-zinc-400 font-medium">
+                        <span>Category: {selectedItemSite?.category || 'Public'}</span>
+                        <span>•</span>
+                        <span className="font-mono truncate max-w-[140px]">{selectedItemInfo.item.to}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            if (selectedItemInfo.item.to) {
+                              window.open(selectedItemInfo.item.to, '_blank');
+                            }
+                          }}
+                          className="gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                        >
+                          <ExternalLink size={12} /> View Portal
+                        </Button>
+                        {selectedItemSite && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              navigate(`/workspace/settings/builder/site/${selectedItemSite.id}`);
+                            }}
+                            className="gap-1.5 text-[11px] font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                          >
+                            <Sliders size={12} /> Site Studio
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Switch Site from Library */}
+                      <div className="pt-2 border-t border-zinc-200/60 dark:border-white/5 space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Switch Linked Site</label>
+                        <select
+                          value={selectedItemSite?.id || ''}
+                          onChange={(e) => {
+                            const targetSiteId = e.target.value;
+                            if (!targetSiteId) return;
+                            const targetSite = sites.find(s => s.id === targetSiteId);
+                            if (targetSite) {
+                              updateSelectedItemInSections({
+                                id: `site:${targetSite.id}-${Date.now()}`,
+                                label: targetSite.name,
+                                iconName: selectedItemInfo.item.iconName || 'Globe',
+                                to: `/public/portal/${targetSite.id}`
+                              });
+                              toast.success(`Switched to site "${targetSite.name}"`);
+                            }
+                          }}
+                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 text-[11px] outline-none text-zinc-700 dark:text-zinc-300"
+                        >
+                          <option value="">Select site to switch...</option>
+                          {sites.map(s => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
                           ))}
                         </select>
                       </div>
@@ -1730,6 +1904,105 @@ export const NavigationSettingsPage = () => {
 
             <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
               <Button variant="ghost" onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); }}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeAddTool === 'site' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Globe size={18} className="text-emerald-500" /> Select Site or Portal
+              </h3>
+              <button onClick={() => { setActiveAddTool(null); setSiteSearchQuery(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Search Filter */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
+              <input
+                type="text"
+                placeholder="Search published sites & portals..."
+                value={siteSearchQuery}
+                onChange={(e) => setSiteSearchQuery(e.target.value)}
+                autoFocus
+                className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-white"
+              />
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+              {loadingSites ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-400 text-xs">
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+                  <span>Loading sites...</span>
+                </div>
+              ) : filteredSites.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-400 space-y-2">
+                  <p>No sites found matching "{siteSearchQuery}"</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setActiveAddTool(null);
+                      navigate('/workspace/settings/platform-modules/sites');
+                    }}
+                    className="gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                  >
+                    <Plus size={13} /> Create Site in Site Builder
+                  </Button>
+                </div>
+              ) : (
+                filteredSites.map((site) => (
+                  <button
+                    key={site.id}
+                    onClick={() => {
+                      addItemToActiveSection({
+                        id: `site:${site.id}-${Date.now()}`,
+                        label: site.name,
+                        iconName: 'Globe',
+                        to: `/public/portal/${site.id}`,
+                        isVisible: true
+                      });
+                      setActiveAddTool(null);
+                      setSiteSearchQuery('');
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-emerald-500 hover:bg-emerald-500/5 text-left transition-all group"
+                  >
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 text-emerald-500 shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-colors mt-0.5">
+                        <Globe size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 truncate">{site.name}</span>
+                          <span className={cn(
+                            "text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider",
+                            site.status === 'active' ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
+                          )}>
+                            {site.status || 'draft'}
+                          </span>
+                          <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400 capitalize">
+                            {site.category || 'public'}
+                          </span>
+                        </div>
+                        {site.description && (
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{site.description}</p>
+                        )}
+                        <p className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 mt-1">/public/portal/{site.id}</p>
+                      </div>
+                    </div>
+                    <Plus size={16} className="text-zinc-400 group-hover:text-emerald-500 shrink-0 ml-2" />
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button variant="ghost" onClick={() => { setActiveAddTool(null); setSiteSearchQuery(''); }}>Close</Button>
             </div>
           </div>
         </div>

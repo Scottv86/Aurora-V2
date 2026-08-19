@@ -563,6 +563,36 @@ export interface SolutionOrchestrationResult {
     description: string;
     fields: { id: string; label: string; type: string; required?: boolean; sample?: string }[];
   };
+  agentArtifact?: {
+    id: string;
+    name: string;
+    roleTitle: string;
+    description: string;
+    systemInstructions: string;
+    modelConfig?: {
+      model: string;
+      temperature: number;
+      topP: number;
+      maxOutputTokens: number;
+      systemPersona: string;
+    };
+    tools?: { id: string; name: string; type: string; description: string; enabled: boolean; requiresApproval?: boolean; icon?: string }[];
+    guardrails?: {
+      confidenceThreshold: number;
+      requireHumanApproval: boolean;
+      approvalThresholdAmount?: number;
+      readOnlyMode: boolean;
+      maxTokensPerExecution: number;
+      allowedDomains: string[];
+      sensitiveDataFilter: boolean;
+    };
+    workforceMapping?: {
+      role: string;
+      licenceType: string;
+      teamName?: string;
+    };
+  };
+  agentArtifacts?: any[];
 }
 
 
@@ -710,6 +740,45 @@ ${customModules.map(m => `- **${m.name}** (${m.type}): ${m.description || 'Core 
         { resource: 'Customer PII Data', read: true, create: true, edit: true, delete: false, export: false, scope: 'Record Owner' },
         { resource: 'Analytics Dashboards', read: true, create: false, edit: false, delete: false, export: true, scope: 'Workspace-wide' }
       ]
+    },
+    agentArtifact: {
+      id: `art_agent_${Date.now()}`,
+      name: `${topic} Copilot`,
+      roleTitle: `${topic} Operations Specialist`,
+      description: `Autonomous digital coworker responsible for automated record triage, validation verification, and SLA action routing for ${topic}.`,
+      systemInstructions: `You are the ${topic} Operations Specialist deployed within Aurora.
+Your objective is to assist workspace operators by analyzing inbound ${topic} intake records, validating fields against compliance guidelines, and automatically routing cases to appropriate queues.
+
+Operational Directives:
+1. Always query database records to verify historical context before taking actions.
+2. If discrepancies or sensitive changes exceed $500 or require managerial sign-off, route to human supervisor.
+3. Keep communications clear, concise, and audit-compliant.`,
+      modelConfig: {
+        model: 'gemini-2.5-flash',
+        temperature: 0.2,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+        systemPersona: 'Analytical, fast, enterprise-compliant and supportive.'
+      },
+      tools: [
+        { id: 'tool_db_query', name: 'Platform Database Query', type: 'DATABASE_QUERY', description: 'Query and filter records across platform modules.', enabled: true, icon: 'Database' },
+        { id: 'tool_doc_parser', name: 'Document & OCR Parser', type: 'FILE_PARSER', description: 'Extract key-value pairs and summaries from uploaded files.', enabled: true, icon: 'FileText' },
+        { id: 'tool_workflow_dispatch', name: 'Workflow Dispatcher', type: 'WORKFLOW_TRIGGER', description: 'Trigger platform workflow graphs and approval queues.', enabled: true, icon: 'GitFork' }
+      ],
+      guardrails: {
+        confidenceThreshold: 0.85,
+        requireHumanApproval: true,
+        approvalThresholdAmount: 500,
+        readOnlyMode: false,
+        maxTokensPerExecution: 4096,
+        allowedDomains: ['aurora.platform'],
+        sensitiveDataFilter: true
+      },
+      workforceMapping: {
+        role: 'Standard Agent',
+        licenceType: 'AI Agent Seat',
+        teamName: 'Operations Squad'
+      }
     }
   };
 };
@@ -738,10 +807,11 @@ export const generateThinkingStepsForPrompt = (
     ];
   }
 
-  // Scenario 2: Refinement / Specific Artifact Tweak (Form, Workflow, Report, Module, Automation, etc.)
-  if (p.includes('add') || p.includes('remove') || p.includes('update') || p.includes('change') || p.includes('modify') || p.includes('field') || p.includes('node') || p.includes('title')) {
+  // Scenario 2: Refinement / Specific Artifact Tweak (Form, Workflow, Report, Module, Automation, Agent, etc.)
+  if (p.includes('add') || p.includes('remove') || p.includes('update') || p.includes('change') || p.includes('modify') || p.includes('field') || p.includes('node') || p.includes('title') || p.includes('agent')) {
     let target = 'solution artifact';
-    if (p.includes('form')) target = 'Form Layout';
+    if (p.includes('agent') || p.includes('bot') || p.includes('copilot') || p.includes('assistant')) target = 'AI Agent Coworker';
+    else if (p.includes('form')) target = 'Form Layout';
     else if (p.includes('workflow') || p.includes('flow')) target = 'Workflow Diagram';
     else if (p.includes('report') || p.includes('chart')) target = 'Report Dashboard';
     else if (p.includes('module') || p.includes('table')) target = 'Data Module Schema';
@@ -768,7 +838,7 @@ export const generateThinkingStepsForPrompt = (
     { id: 's1', label: `Ingesting ${contextSourcesCount > 0 ? `${contextSourcesCount} context document(s)` : 'workspace requirements'} & evaluating prompt intent`, status: 'active' },
     { id: 's2', label: 'Architecting solution vision, RBAC security model & API endpoints', status: 'pending' },
     { id: 's3', label: 'Generating relational database modules, tables & validation schemas', status: 'pending' },
-    { id: 's4', label: 'Constructing interactive forms, process workflows & analytics dashboards', status: 'pending' }
+    { id: 's4', label: 'Constructing interactive forms, process workflows, AI agent coworkers & analytics dashboards', status: 'pending' }
   ];
 };
 
@@ -825,7 +895,7 @@ export const orchestrateSolutionBlueprint = async (
 
   const systemInstruction = `You are Aurora AI Solution Orchestrator. 
 Your job is to analyze user prompts and context documents to design/update an enterprise application solution bundle in Aurora.
-You are fully aware of all 12 specialized Builders in the Aurora platform:
+You are fully aware of all specialized Builders in the Aurora platform:
 1. Data Module Builder (Database tables, schemas, relations & fields)
 2. Interactive Form Builder (Public intake forms, admin forms & field layouts)
 3. Visual Workflow Builder (Flow diagrams, node graphs & SLA triggers)
@@ -838,8 +908,9 @@ You are fully aware of all 12 specialized Builders in the Aurora platform:
 10. Reports & Analytics Builder (Dashboards, KPI metrics & charts)
 11. Document Templates Builder (PDF/Word generation templates)
 12. Roles & Security Matrix Builder (RBAC permissions, scopes & access policies)
+13. Autonomous Agent Builder (AI digital coworkers, domain specialists, workflow copilots, tool bindings & safety guardrails)
 
-CRITICAL MANDATE: You MUST ALWAYS generate a "specArtifact" ("Solution Design") FIRST for every request. The specArtifact is the primary technical architecture proposal document that outlines the solution vision, business goals, data schema hierarchy, process workflows, RBAC matrix, and API endpoints. Always include specArtifact as the primary artifact in your JSON response.
+CRITICAL MANDATE: You MUST ALWAYS generate a "specArtifact" ("Solution Design") FIRST for every request. The specArtifact is the primary technical architecture proposal document that outlines the solution vision, business goals, data schema hierarchy, process workflows, RBAC matrix, and API endpoints. Always include specArtifact as the primary artifact in your JSON response. Whenever a solution involves task automation, document processing, triage, or conversational assistance, ALSO synthesize an "agentArtifact" for an autonomous digital coworker tailored to this solution.
 
 OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
 {
@@ -862,6 +933,38 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
     "name": "Solution Design",
     "description": "Comprehensive technical architecture specification plan.",
     "markdownContent": "# Solution Architecture & Vision\\n\\n## Executive Summary..."
+  },
+  "agentArtifact": {
+    "id": "art_agent_1",
+    "name": "Claims Triage Specialist",
+    "roleTitle": "Autonomous Triage Copilot",
+    "description": "AI coworker that analyzes inbound claims, runs verification checks, and routes cases.",
+    "systemInstructions": "You are the Claims Triage Specialist for Aurora...",
+    "modelConfig": {
+      "model": "gemini-2.5-flash",
+      "temperature": 0.2,
+      "topP": 0.95,
+      "maxOutputTokens": 2048,
+      "systemPersona": "Analytical, precise, enterprise-compliant and supportive."
+    },
+    "tools": [
+      { "id": "tool_db_query", "name": "Platform Database Query", "type": "DATABASE_QUERY", "description": "Query records", "enabled": true },
+      { "id": "tool_doc_parser", "name": "Document & OCR Parser", "type": "FILE_PARSER", "description": "Extract text", "enabled": true }
+    ],
+    "guardrails": {
+      "confidenceThreshold": 0.85,
+      "requireHumanApproval": true,
+      "approvalThresholdAmount": 500,
+      "readOnlyMode": false,
+      "maxTokensPerExecution": 4096,
+      "allowedDomains": ["aurora.platform"],
+      "sensitiveDataFilter": true
+    },
+    "workforceMapping": {
+      "role": "Standard Agent",
+      "licenceType": "AI Agent Seat",
+      "teamName": "Operations Squad"
+    }
   },
   "formArtifact": {
     "id": "art_form_1",

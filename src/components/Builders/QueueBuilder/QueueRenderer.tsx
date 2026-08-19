@@ -13,6 +13,7 @@ import { Skeleton } from '../../UI/Skeleton';
 import { UserAvatarWithPresence } from '../../Common/UserPresenceBadge';
 import { QueueEntity } from '../../../types/platform';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
+import { builderCache } from '../../../utils/builderCache';
 
 export interface QueueRendererProps {
   queue?: QueueEntity | null;
@@ -26,6 +27,7 @@ export interface QueueRendererProps {
   className?: string;
   onRowClick?: (record: any) => void;
   readOnly?: boolean;
+  name?: string;
 }
 
 export const QueueRenderer: React.FC<QueueRendererProps> = ({
@@ -39,7 +41,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   pageSize: customPageSize = 10,
   className,
   onRowClick,
-  readOnly = false
+  readOnly = false,
+  name: propName
 }) => {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -51,7 +54,9 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   const pageSize = customPageSize;
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // 1. Fetch queue entity by queueId if not passed directly
+  const hasInlineConfig = Boolean(overrideConfig || propModuleId || (propModuleIds && propModuleIds.length > 0));
+
+  // 1. Fetch queue entity by queueId only if not passed directly and not already configured inline
   const { data: fetchedQueue } = useQuery<QueueEntity | null>({
     queryKey: ['queue-renderer-entity', tenant?.id, queueId, session?.access_token],
     queryFn: async () => {
@@ -80,7 +85,9 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       }
       return null;
     },
-    enabled: !!queueId && !initialQueue && !!tenant?.id
+    enabled: !!queueId && !initialQueue && !hasInlineConfig && !!tenant?.id,
+    staleTime: 60000,
+    gcTime: 300000
   });
 
   // 2. Search menuConfig / modules for navigation queue definition
@@ -187,10 +194,11 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     if (overrideConfig || propModuleId || propModuleIds) {
       const explicitModuleIds = propModuleIds || overrideConfig?.moduleIds || (propModuleId || overrideConfig?.moduleId ? [propModuleId || overrideConfig?.moduleId] : []);
       const fallbackModId = (modules || []).find((m: any) => m.type !== 'PAGE')?.id || (modules || [])[0]?.id;
+      const queueName = propName || overrideConfig?.name || 'Work Queue';
       return {
         id: queueId || 'custom-queue',
         tenantId: tenant?.id || 't1',
-        name: 'Custom Queue',
+        name: queueName,
         isUnifiedQueue: propIsUnified ?? overrideConfig?.isUnifiedQueue ?? (explicitModuleIds.length > 1),
         moduleId: propModuleId || overrideConfig?.moduleId,
         moduleIds: explicitModuleIds.length > 0 ? explicitModuleIds : (fallbackModId ? [fallbackModId] : []),
@@ -202,7 +210,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       };
     }
     return null;
-  }, [initialQueue, fetchedQueue, navExtractedQueue, overrideConfig, propModuleId, propModuleIds, propIsUnified, queueId, tenant?.id, modules]);
+  }, [initialQueue, fetchedQueue, navExtractedQueue, overrideConfig, propModuleId, propModuleIds, propIsUnified, queueId, tenant?.id, modules, propName]);
 
   const targetModuleIds = useMemo(() => {
     if (!activeQueue) return [];
@@ -225,19 +233,21 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     return [];
   }, [activeQueue, modules]);
 
-  // Fetch all records for target modules
+  const recordsCacheKey = `queue_records_${tenant?.id || 't1'}_${targetModuleIds.join('_')}_${activeQueue?.id || 'default'}`;
+
+  // Fetch all records for target modules with instant cache hydration
   const { data: rawRecords = [], isLoading: recordsQueryLoading } = useQuery({
-    queryKey: ['queue-renderer-records', tenant?.id, targetModuleIds, activeQueue?.id, modules?.length],
+    queryKey: ['queue-renderer-records', tenant?.id, targetModuleIds, activeQueue?.id],
     queryFn: async () => {
       if (!tenant?.id || targetModuleIds.length === 0) return [];
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
 
       const promises = targetModuleIds.map((mId: string) =>
-        fetchRecords(mId, tenant.id, token, 1, 1000).catch(() => ({ records: [] as any[] }))
+        fetchRecords(mId, tenant.id, token, 1, 100).catch(() => ({ records: [] as any[] }))
       );
       const results = await Promise.all(promises);
 
-      return results.flatMap((res: any, idx) => {
+      const combined = results.flatMap((res: any, idx) => {
         const mId = targetModuleIds[idx];
         const mod = getRecordModule(mId);
         return (res?.records || []).map((r: any) => ({
@@ -247,8 +257,17 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
           _moduleIcon: r.moduleIcon || mod?.icon || mod?.iconName || 'Box'
         }));
       });
+
+      builderCache.set(recordsCacheKey, combined);
+      return combined;
     },
-    enabled: !!tenant?.id && targetModuleIds.length > 0 && !!(session?.access_token || (import.meta as any).env.VITE_DEV_TOKEN)
+    placeholderData: () => {
+      const cached = builderCache.get<any[]>(recordsCacheKey);
+      return Array.isArray(cached) && cached.length > 0 ? cached : undefined;
+    },
+    enabled: !!tenant?.id && targetModuleIds.length > 0 && !!(session?.access_token || (import.meta as any).env.VITE_DEV_TOKEN),
+    staleTime: 10000,
+    gcTime: 300000
   });
 
   const visibilityContext = useMemo(() => ({
@@ -259,7 +278,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
 
   // Filter records based on condition and search query
   const filteredRecords = useMemo(() => {
-    let result = rawRecords;
+    let result = Array.isArray(rawRecords) ? rawRecords : [];
 
     const conditions = activeQueue?.queueConfig?.conditions;
     if (conditions && conditions.rules && conditions.rules.length > 0) {
@@ -323,9 +342,10 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   }, [rawRecords, activeQueue, searchQuery, visibilityContext, sortConfig, members, modules]);
 
   // Paginated records
-  const totalRecords = filteredRecords.length;
+  const totalRecords = Array.isArray(filteredRecords) ? filteredRecords.length : 0;
   const totalPages = Math.ceil(totalRecords / pageSize) || 1;
   const paginatedRecords = useMemo(() => {
+    if (!Array.isArray(filteredRecords)) return [];
     const start = (page - 1) * pageSize;
     return filteredRecords.slice(start, start + pageSize);
   }, [filteredRecords, page, pageSize]);
@@ -405,7 +425,10 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   };
 
   const renderCell = (record: any, colId: string) => {
-    const value = getFieldValue(record, colId) ?? record[colId];
+    let value = getFieldValue(record, colId) ?? record[colId];
+    if (colId === 'title' && (value === undefined || value === null || value === '')) {
+      value = record.title || record.data?.title || record.name || record.data?.name || record._record_key || record.id;
+    }
 
     if (value === undefined || value === null || value === '') {
       return <span className="text-zinc-300 dark:text-zinc-700 font-medium">-</span>;
@@ -494,7 +517,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     }
   };
 
-  if (platformLoading || recordsQueryLoading) {
+  if (platformLoading || (recordsQueryLoading && rawRecords.length === 0)) {
     return (
       <div className={cn("space-y-4 p-4 bg-white/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200 dark:border-zinc-800", className)}>
         <div className="flex items-center justify-between">

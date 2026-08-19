@@ -114,6 +114,7 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
           )}
           {widget.properties?.queueId || widget.properties?.queueConfig ? (
             <QueueRenderer
+              name={widget.title}
               queueId={widget.properties.queueId}
               queueConfig={widget.properties.queueConfig}
               moduleId={widget.properties?.moduleId}

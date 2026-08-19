@@ -28,6 +28,7 @@ import { cn } from '../../../lib/utils';
 import dagre from 'dagre';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
+import { builderCache } from '../../../utils/builderCache';
 import { API_BASE_URL } from '@/src/config';
 
 const ACTION_LIBRARY = [
@@ -468,14 +469,36 @@ const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
         </div>
       );
 
-    case 'AI_AGENT':
+    case 'AI_AGENT': {
+      const savedAgents = builderCache.get<any[]>('agents_default') || [];
       return (
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Task/Instructions</label>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Assigned Autonomous Agent</label>
+            <select
+              value={config.agentId || ''}
+              onChange={(e) => {
+                const selected = savedAgents.find(a => a.id === e.target.value);
+                updateNodeConfig(nodeId, { 
+                  agentId: e.target.value,
+                  agentName: selected?.name || '',
+                  agentRole: selected?.roleTitle || ''
+                });
+              }}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-semibold"
+            >
+              <option value="">-- General Autonomous Agent --</option>
+              {savedAgents.map(a => (
+                <option key={a.id} value={a.id}>{a.name} ({a.roleTitle || 'Digital Coworker'})</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Task / Step Directives</label>
             <textarea
               rows={4}
-              placeholder="e.g. Evaluate this record..."
+              placeholder="e.g. Evaluate this record for payment discrepancies, check Stripe status, and flag for supervisor review..."
               value={config.task || ''}
               onChange={(e) => updateNodeConfig(nodeId, { task: e.target.value })}
               className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-sans resize-y"
@@ -483,6 +506,7 @@ const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
           </div>
         </div>
       );
+    }
 
     default:
       return (

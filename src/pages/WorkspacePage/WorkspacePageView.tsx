@@ -24,26 +24,18 @@ import { FormRenderer, QueueRenderer } from '../../components/Builders';
 
 
 const useMyContainerWidth = () => {
-  const [width, setWidth] = useState(1280);
-  const [mounted, setMounted] = useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(() => (typeof window !== 'undefined' ? Math.max(window.innerWidth - 320, 800) : 1280));
+  const [mounted] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const node = containerRef.current;
-      if (node) {
-        setWidth(node.offsetWidth || 1280);
-        setMounted(true);
-      }
-    }, 0);
-
     const node = containerRef.current;
-    if (!node) {
-      return () => clearTimeout(timer);
+    if (node && node.offsetWidth) {
+      setWidth(node.offsetWidth);
     }
 
     let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
+    if (typeof ResizeObserver !== 'undefined' && node) {
       observer = new ResizeObserver((entries) => {
         const entry = entries[0];
         if (entry && entry.contentRect.width) {
@@ -54,7 +46,6 @@ const useMyContainerWidth = () => {
     }
 
     return () => {
-      clearTimeout(timer);
       if (observer) {
         observer.disconnect();
       }
@@ -64,7 +55,7 @@ const useMyContainerWidth = () => {
   return { width, containerRef, mounted };
 };
 
-export const VisualSkeleton: React.FC<{ type: string }> = ({ type }) => {
+export const VisualSkeleton: React.FC<{ type: string }> = () => {
   return <div className="w-full h-full flex items-center justify-center" />;
 };
 
@@ -74,7 +65,8 @@ export const WorkspacePageView = () => {
   const { tenant, modules, setBreadcrumbOverride, isLoading: platformLoading } = usePlatform();
   const { session } = useAuth();
 
-  const [pageData, setPageData] = useState<any>(null);
+  const pageCacheKey = `workspace_page_${tenant?.id || 't1'}_${pageId}`;
+  const [freshPageData, setFreshPageData] = useState<any>(null);
 
   // Synchronously resolve matching page from already-loaded platform modules
   const matchedPage = useMemo(() => {
@@ -84,7 +76,15 @@ export const WorkspacePageView = () => {
     ) || null;
   }, [pageId, modules]);
 
-  const activePage = pageData || matchedPage;
+  // Synchronously resolve activePage: use fresh data if matches current page, else cached, else matchedPage
+  const activePage = useMemo(() => {
+    if (freshPageData && (freshPageData.id === pageId || slugify(freshPageData.name || '') === pageId || freshPageData.name?.toLowerCase() === pageId?.toLowerCase() || freshPageData.id === matchedPage?.id)) {
+      return freshPageData;
+    }
+    const cached = pageId ? builderCache.get<any>(pageCacheKey) : null;
+    if (cached) return cached;
+    return matchedPage;
+  }, [freshPageData, pageCacheKey, matchedPage, pageId]);
 
   // Sync breadcrumbs immediately
   useEffect(() => {
@@ -105,7 +105,8 @@ export const WorkspacePageView = () => {
       try {
         const pageMod = await fetchModule(targetId, tenant.id, token, modules);
         if (isSubscribed && pageMod) {
-          setPageData(pageMod);
+          setFreshPageData(pageMod);
+          builderCache.set(pageCacheKey, pageMod);
         }
       } catch (err) {
         console.error('Failed to load page config', err);
@@ -115,10 +116,16 @@ export const WorkspacePageView = () => {
     return () => {
       isSubscribed = false;
     };
-  }, [pageId, tenant?.id, session?.access_token, matchedPage?.id, modules]);
+  }, [pageId, tenant?.id, session?.access_token, matchedPage?.id, pageCacheKey, modules]);
 
   const widgets = useMemo(() => {
-    return (activePage?.config?.widgets || activePage?.widgets || []).map((w: any, index: number) => {
+    const rawWidgets = 
+      activePage?.config?.widgets || 
+      activePage?.config?.config?.widgets || 
+      activePage?.widgets || 
+      [];
+
+    return rawWidgets.map((w: any, index: number) => {
       const dims = getWidgetDefaultDimensions(w.type);
       return {
         ...w,
@@ -128,7 +135,7 @@ export const WorkspacePageView = () => {
         h: (w.h !== undefined && w.h !== null) ? w.h : dims.h
       };
     });
-  }, [activePage?.config?.widgets, activePage?.widgets]);
+  }, [activePage]);
 
   const { width, containerRef, mounted } = useMyContainerWidth();
 
@@ -338,6 +345,7 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
         <div className="bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm p-4 overflow-hidden">
           {widget.properties?.queueId || widget.properties?.queueConfig ? (
             <QueueRenderer
+              name={widget.title}
               queueId={widget.properties.queueId}
               queueConfig={widget.properties.queueConfig}
               moduleId={widget.properties?.moduleId}
@@ -724,15 +732,15 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
 
       {!moduleId ? (
         <p className="text-xs text-zinc-400 italic">No module selected for chart. Please configure in settings.</p>
-      ) : loading ? (
+      ) : loading && chartData.length === 0 ? (
         <div className="flex-1 flex items-center justify-center min-h-0">
           <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
         </div>
       ) : chartData.length === 0 ? (
         <p className="text-xs text-zinc-400 italic py-10 text-center">No record data found to display.</p>
       ) : (
-        <div className="flex-1 min-h-0 w-full text-xs">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+        <div className="flex-1 min-h-[160px] w-full text-xs">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
             {chartType === 'line' ? (
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
