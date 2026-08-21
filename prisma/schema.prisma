@@ -52,6 +52,7 @@ model Tenant {
   sites                  Site[]
   solutionBlueprints     SolutionBlueprint[]
   savedQueries           SavedQuery[]
+  savedViews             SavedView[]
 
   @@map("tenants")
 }
@@ -1075,6 +1076,23 @@ model SavedQuery {
   @@map("saved_queries")
 }
 
+model SavedView {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  userId      String?  @map("user_id")
+  scopeType   String   @default("MODULE") @map("scope_type") // MODULE, QUEUE, WORKSPACE
+  scopeId     String   @map("scope_id")                      // moduleId, queueId, pageId
+  name        String
+  description String?
+  icon        String?  @default("Bookmark")
+  color       String?
+  filterState Json     @map("filter_state")
+  isShared    Boolean  @default(false) @map("is_shared")
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-
-
+  @@index([tenantId, scopeType, scopeId])
+  @@map("saved_views")
+}

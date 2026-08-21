@@ -338,7 +338,8 @@ export const SuperAdmin = () => {
               sortKey: 'dbConnectionString'
             },
             {
-              header: '',
+              header: 'Actions',
+              align: 'right',
               className: 'text-right',
               accessor: (tenant: any) => (
                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-1 group-hover:translate-x-0">

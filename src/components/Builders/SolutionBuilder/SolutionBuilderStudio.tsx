@@ -20,7 +20,7 @@ import { ContextInputsPanel } from './ContextInputsPanel';
 import { OrchestratorChatPanel } from './OrchestratorChatPanel';
 import { SolutionPreviewStudio } from './SolutionPreviewStudio';
 import { usePlatform } from '../../../hooks/usePlatform';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { orchestrateSolutionBlueprint } from '../../../services/aiService';
 import { API_BASE_URL } from '../../../config';
@@ -60,6 +60,9 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   onSaveSuccess
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, tenant, refreshModules } = usePlatform();
 
   const [solutionId] = useState(initialSolution?.id || `sol_blank_${Date.now()}`);
@@ -507,8 +510,13 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
   };
 
   const handleBack = () => {
-    if (onClose) onClose();
-    else navigate('/workspace/settings/platform-modules/solutions');
+    if (onClose) {
+      onClose();
+    } else if (returnUrl) {
+      navigate(returnUrl);
+    } else {
+      navigate('/workspace/settings/platform-modules/solutions');
+    }
   };
 
   const handleSaveToNote = (text: string) => {

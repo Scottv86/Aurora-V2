@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { 
   Columns,
   Rows,
@@ -91,7 +91,9 @@ const ALL_CATALOG_APPS = [
 
 export const NavigationSettingsPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
 
@@ -823,12 +825,17 @@ export const NavigationSettingsPage = () => {
           <button 
             onClick={() => {
               setIsBuilderFullscreen(false);
-              navigate('/workspace/settings/navigation');
+              if (returnUrl) {
+                navigate(returnUrl);
+              } else {
+                navigate('/workspace/settings/navigation');
+              }
             }}
             className={cn(
               "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
               isBuilderFullscreen ? "p-1.5" : "p-2.5"
             )}
+            title={returnUrl ? "Back to Workspace" : "Back to Navigation Settings"}
           >
             <ArrowLeft size={16} />
           </button>

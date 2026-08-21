@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Sparkles, 
   Search, 
@@ -66,8 +66,6 @@ export const Navbar = () => {
     lastPlatformPath = '/workspace';
   }
   const isAurora = location.pathname.startsWith('/workspace/aurora-vibe');
-  const isSettings = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
-  const isPlatform = !isAurora && !isSettings;
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showEnvMenu, setShowEnvMenu] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -142,55 +140,59 @@ export const Navbar = () => {
             {isTenantBrandingEnabled ? (tenant?.name || 'Organization') : 'Aurora'}
           </span>
         </div>
-        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-2" />
-        <div className="relative" ref={envMenuRef}>
-          <button 
-            onClick={() => setShowEnvMenu(!showEnvMenu)}
-            className="group relative flex items-center gap-2 bg-zinc-100/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/30 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10 rounded-full pl-3 pr-2 py-1 transition-all duration-300 shadow-sm"
-          >
-            <div className="flex items-center gap-1.5 pointer-events-none">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-              <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mt-0.5">Env:</span>
-            </div>
-            <div className="flex items-center">
-              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 pr-4 transition-colors">
-                {environment}
-              </span>
-              <ChevronDown size={12} className={cn("absolute right-2 text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-all duration-200", showEnvMenu && "rotate-180")} />
-            </div>
-          </button>
+        {location.pathname.includes('/settings') && (
+          <>
+            <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-2" />
+            <div className="relative" ref={envMenuRef}>
+              <button 
+                onClick={() => setShowEnvMenu(!showEnvMenu)}
+                className="group relative flex items-center gap-2 bg-zinc-100/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/30 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10 rounded-full pl-3 pr-2 py-1 transition-all duration-300 shadow-sm"
+              >
+                <div className="flex items-center gap-1.5 pointer-events-none">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                  <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mt-0.5">Env:</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 pr-4 transition-colors">
+                    {environment}
+                  </span>
+                  <ChevronDown size={12} className={cn("absolute right-2 text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-all duration-200", showEnvMenu && "rotate-180")} />
+                </div>
+              </button>
 
-          {/* Environment Dropdown Menu */}
-          {showEnvMenu && (
-            <div className="absolute left-0 top-full mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden py-1 z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Select Environment</p>
-              </div>
-              <div className="p-1">
-                {(tenant?.environments || ['production']).map(env => (
-                  <button
-                    key={env}
-                    onClick={() => {
-                      setEnvironment(env as Environment);
-                      setShowEnvMenu(false);
-                    }}
-                    className={cn(
-                      "w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors",
-                      environment === env 
-                        ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5"
-                    )}
-                  >
-                    {env}
-                    {environment === env && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
-                    )}
-                  </button>
-                ))}
-              </div>
+              {/* Environment Dropdown Menu */}
+              {showEnvMenu && (
+                <div className="absolute left-0 top-full mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden py-1 z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+                    <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Select Environment</p>
+                  </div>
+                  <div className="p-1">
+                    {(tenant?.environments || ['production']).map(env => (
+                      <button
+                        key={env}
+                        onClick={() => {
+                          setEnvironment(env as Environment);
+                          setShowEnvMenu(false);
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors",
+                          environment === env 
+                            ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
+                            : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5"
+                        )}
+                      >
+                        {env}
+                        {environment === env && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       <div className="hidden md:flex flex-1 justify-center px-4">
@@ -206,28 +208,55 @@ export const Navbar = () => {
         </button>
       </div>
 
-      <div className="flex items-center gap-4 flex-1 justify-end">
+      <div className="flex items-center gap-4 flex-1 justify-end h-full">
         {!isAdminPath && !isSuperAdminUser && (
-          <button 
-            onClick={() => {
-              setIsAppLauncherOpen(!isAppLauncherOpen);
-              if (!isAppLauncherOpen) {
-                setIsChatOpen(false);
-                setIsAIAssistantOpen(false);
-                setIsNotificationsOpen(false);
-                setIsRecyclingBinOpen(false);
-              }
-            }}
-            className={cn(
-              "p-2 transition-all duration-300 rounded-lg group",
-              isAppLauncherOpen 
-                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
-                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-            title="App Launcher"
-          >
-            <LayoutGrid size={20} />
-          </button>
+          <>
+            <button 
+              onClick={() => {
+                setIsAppLauncherOpen(!isAppLauncherOpen);
+                if (!isAppLauncherOpen) {
+                  setIsChatOpen(false);
+                  setIsAIAssistantOpen(false);
+                  setIsNotificationsOpen(false);
+                  setIsRecyclingBinOpen(false);
+                }
+              }}
+              className={cn(
+                "p-2 transition-all duration-300 rounded-lg group",
+                isAppLauncherOpen 
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+              )}
+              title="App Launcher"
+            >
+              <LayoutGrid size={20} />
+            </button>
+
+            {/* Aurora AI Chat */}
+            <button 
+              onClick={() => {
+                if (isAurora) {
+                  navigate(lastPlatformPath);
+                } else {
+                  setIsAppLauncherOpen(false);
+                  setIsChatOpen(false);
+                  setIsAIAssistantOpen(false);
+                  setIsNotificationsOpen(false);
+                  setIsRecyclingBinOpen(false);
+                  navigate('/workspace/aurora-vibe');
+                }
+              }}
+              className={cn(
+                "p-2 transition-all duration-300 rounded-lg group",
+                isAurora 
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+              )}
+              title="Aurora AI Chat"
+            >
+              <Sparkles size={20} className={cn(isAurora ? "text-indigo-600 dark:text-indigo-400 animate-pulse" : "group-hover:text-indigo-500 transition-colors")} />
+            </button>
+          </>
         )}
 
         {!location.pathname.startsWith('/admin') && (
@@ -332,7 +361,7 @@ export const Navbar = () => {
           )}
         </button>
         {/* Divider */}
-        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+        <div className="self-stretch w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
 
         <div className="flex items-center gap-3 relative shrink-0" ref={menuRef}>
           <div className="text-right hidden sm:block shrink-0">
@@ -538,51 +567,6 @@ export const Navbar = () => {
                 </button>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
-
-        {/* 3-Way Icon-Only Experience Switcher */}
-        <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-full p-0.5 shadow-inner backdrop-blur-md shrink-0">
-          <Link
-            to={isAdminPath ? '/admin' : (platformUser?.isSuperAdmin ? '/admin' : lastPlatformPath)}
-            className={cn(
-              "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
-              (isPlatform || isAdminPath) && !isAurora
-                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
-                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
-            )}
-            title={platformUser?.isSuperAdmin ? "Super Admin Portal" : "Workspace"}
-          >
-            <LayoutGrid size={14} />
-          </Link>
-          <Link
-            to="/workspace/aurora-vibe"
-            className={cn(
-              "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
-              isAurora 
-                ? "bg-gradient-to-r from-indigo-500 to-purple-650 text-white shadow-md shadow-indigo-500/20" 
-                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
-            )}
-            title="Aurora AI Chat"
-          >
-            <Sparkles size={14} className={isAurora ? "animate-pulse text-white" : ""} />
-          </Link>
-          {isDeveloper && !isAdminPath && !isSuperAdminUser && (
-            <Link
-              to="/workspace/settings"
-              className={cn(
-                "p-1.5 rounded-full transition-all duration-300 select-none flex items-center justify-center",
-                isSettings 
-                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50" 
-                  : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-300"
-              )}
-              title="Developer Settings"
-            >
-              <SettingsIcon size={14} />
-            </Link>
           )}
         </div>
       </div>

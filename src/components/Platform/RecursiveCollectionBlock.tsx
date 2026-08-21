@@ -253,7 +253,8 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   // Dynamic table columns mapping
   const tableColumns = useMemo(() => {
     const buildActionsColumn = () => ({
-      header: '',
+      header: 'Actions',
+      align: 'right' as const,
       className: 'text-right w-[120px]',
       accessor: (record: any) => {
         const activeDensity = field?.density || 'standard';
@@ -321,7 +322,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
           sortable: true,
           sortKey: '_record_key',
           accessor: (record: any) => (
-            <span className="text-xs font-bold text-indigo-500">
+            <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
               {record._record_key || '-'}
             </span>
           )
@@ -372,7 +373,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
         sortable: true,
         sortKey: '_record_key',
         accessor: (record: any) => (
-          <span className="text-xs font-bold text-indigo-500">
+          <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
             {record._record_key || '-'}
           </span>
         )
@@ -455,8 +456,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
               className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/[0.03] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[190px]"
             >
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{rec._record_key || 'REC'}</span>
+                <div className="flex items-center justify-end">
                   <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
                     {status}
                   </span>
@@ -528,7 +528,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
               className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl p-4 hover:shadow-xl hover:shadow-indigo-500/[0.02] cursor-pointer transition-all duration-200 flex items-center justify-between gap-4"
             >
               <div className="flex items-center gap-4 min-w-0 flex-1">
-                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest shrink-0">
+                <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono shrink-0">
                   {rec._record_key || 'REC'}
                 </span>
                 <div className="min-w-0 flex-1">

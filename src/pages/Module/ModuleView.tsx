@@ -14,7 +14,8 @@ import {
   Search,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Share2
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -40,6 +41,7 @@ import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupB
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { useModalStack } from '../../context/ModalStackContext';
+import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 
 const InlineAssigneeCell = ({
   record,
@@ -580,10 +582,15 @@ export const ModuleView = () => {
   const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
+  const [recordToShare, setRecordToShare] = useState<any | null>(null);
   const [page, setPage] = useState(1);
-  const pageSize = useMemo(() => {
-    return (moduleData as any)?.interfaceSettings?.master?.pagination?.pageSize || 25;
-  }, [moduleData]);
+  const [userPageSize, setUserPageSize] = useState<number | null>(null);
+  const defaultPageSize = (moduleData as any)?.interfaceSettings?.master?.pagination?.pageSize || 25;
+  const pageSize = userPageSize || defaultPageSize;
+  const setPageSize = (size: number) => {
+    setUserPageSize(size);
+    setPage(1);
+  };
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -680,14 +687,15 @@ export const ModuleView = () => {
     enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
   });
 
-  const { data: recordsResult, isLoading: recordsQueryLoading } = useQuery({
+  const { data: recordsResult, isLoading: recordsQueryLoading, isFetching: recordsQueryFetching } = useQuery({
     queryKey: ['records', tenant?.id, moduleId, queueId ? 'all' : page, queueId ? 2000 : pageSize],
     queryFn: async () => {
       if (!tenant?.id || !moduleId) return null;
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       return fetchRecords(moduleId, tenant.id, token, queueId ? 1 : page, queueId ? 2000 : pageSize);
     },
-    enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
+    enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN),
+    placeholderData: (previousData) => previousData
   });
 
   // Fast switch when moduleId changes
@@ -711,11 +719,11 @@ export const ModuleView = () => {
       setRecords(recs);
       builderCache.set(recordsCacheKey, recs);
       if (!queueId) {
-        setTotalRecords(recordsResult.total);
-        setTotalPages(recordsResult.totalPages);
+        setTotalRecords(recordsResult.total ?? recs.length);
+        setTotalPages(recordsResult.totalPages ?? (Math.ceil((recordsResult.total ?? recs.length) / pageSize) || 1));
       }
     }
-  }, [recordsResult, queueId, recordsCacheKey]);
+  }, [recordsResult, queueId, recordsCacheKey, pageSize]);
 
   // Combined loading state for progressive rendering
   const isSessionReady = !!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN;
@@ -1248,7 +1256,7 @@ export const ModuleView = () => {
   const [cardImgIndices, setCardImgIndices] = useState<Record<string, number>>({});
 
   const interfaceSettings = useMemo(() => {
-    return (moduleData as any)?.interfaceSettings || {
+    const raw = (moduleData as any)?.interfaceSettings || {
       master: {
         layoutType: 'table',
         density: 'standard',
@@ -1257,6 +1265,12 @@ export const ModuleView = () => {
       detail: {
         layoutType: 'tabs'
       },
+      actions: []
+    };
+
+    return {
+      ...raw,
+      actions: (raw.actions || []).filter((act: any) => act.label?.trim().toLowerCase() !== 'archive')
     };
   }, [moduleData]);
 
@@ -1488,7 +1502,7 @@ export const ModuleView = () => {
         setRecords(prev => prev.filter(r => r.id !== deletedId));
         setTotalRecords(t => Math.max(0, t - 1));
       }
-      toast.success("Record deleted successfully");
+      toast.success("Record moved to Recycling Bin");
       setRecordToDelete(null);
     },
     onError: (error: any) => {
@@ -1756,19 +1770,27 @@ export const ModuleView = () => {
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
                       onClick={() => handleRecordClick(record.id)}
-                      className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-indigo-500/50 hover:shadow-lg transition-all group relative space-y-4"
+                      className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all group relative space-y-4"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
-                          {record._record_key || 'Key'}
-                        </span>
+                      <div className="flex items-center justify-end">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRecordToShare(record);
+                            }}
+                            className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-zinc-400 hover:text-indigo-500 rounded cursor-pointer transition-colors"
+                            title="Share Record"
+                          >
+                            <Share2 size={12} />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setRecordToDelete(record.id);
                             }}
-                            className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded"
+                            className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded cursor-pointer transition-colors"
+                            title="Delete Record"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -1943,19 +1965,27 @@ export const ModuleView = () => {
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
                         onClick={() => handleRecordClick(record.id)}
-                        className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-indigo-500/50 hover:shadow-xl transition-all group relative space-y-3.5"
+                        className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg transition-all group relative space-y-3.5"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">
-                            {record._record_key || 'Deal'}
-                          </span>
+                        <div className="flex items-center justify-end">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRecordToShare(record);
+                              }}
+                              className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-zinc-400 hover:text-indigo-500 rounded cursor-pointer transition-colors"
+                              title="Share Record"
+                            >
+                              <Share2 size={11} />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setRecordToDelete(record.id);
                               }}
-                              className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded"
+                              className="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded cursor-pointer transition-colors"
+                              title="Delete Record"
                             >
                               <Trash2 size={10} />
                             </button>
@@ -2155,7 +2185,7 @@ export const ModuleView = () => {
                   setCurrentDate(new Date(year, mIdx, 1));
                   setCalendarViewMode('month');
                 }}
-                className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl hover:border-indigo-500/50 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between min-h-[180px]"
+                className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between min-h-[180px]"
               >
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors">
@@ -2258,9 +2288,9 @@ export const ModuleView = () => {
                           e.stopPropagation();
                           handleRecordClick(record.id);
                         }}
-                        className="px-2 py-1 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-lg text-[9px] font-bold text-indigo-600 dark:text-indigo-400 truncate cursor-pointer transition-all flex items-center justify-between group"
+                        className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[9px] font-bold text-zinc-800 dark:text-zinc-200 truncate cursor-pointer transition-all flex items-center justify-between group"
                       >
-                        <span className="truncate">{record._record_key || 'Record'}</span>
+                        <span className="truncate">{getRecordTitle(record)}</span>
                       </div>
                     ))}
                   </div>
@@ -2314,13 +2344,8 @@ export const ModuleView = () => {
                       <div 
                         key={record.id}
                         onClick={() => handleRecordClick(record.id)}
-                        className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer space-y-2 group"
+                        className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all cursor-pointer space-y-2 group"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-indigo-500 uppercase tracking-wider">
-                            {record._record_key || 'Key'}
-                          </span>
-                        </div>
                         <p className="text-[11px] font-bold text-zinc-900 dark:text-white leading-relaxed truncate">
                           {getRecordTitle(record)}
                         </p>
@@ -2371,10 +2396,9 @@ export const ModuleView = () => {
                       <div 
                         key={record.id}
                         onClick={() => handleRecordClick(record.id)}
-                        className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 hover:border-indigo-500/50 rounded-xl cursor-pointer transition-all flex items-center justify-between"
+                        className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-xl cursor-pointer transition-all flex items-center justify-between"
                       >
-                        <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
-                        <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate flex-1 text-right">
+                        <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate flex-1">
                           {getRecordTitle(record)}
                         </span>
                       </div>
@@ -2403,10 +2427,9 @@ export const ModuleView = () => {
                             <div 
                               key={record.id}
                               onClick={() => handleRecordClick(record.id)}
-                              className="p-3 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/30 rounded-xl cursor-pointer transition-all flex items-center justify-between group"
+                              className="p-3 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700 rounded-xl cursor-pointer transition-all flex items-center justify-between group"
                             >
-                              <span className="text-[10px] font-black text-indigo-500 truncate mr-2 shrink-0">{record._record_key}</span>
-                              <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 truncate flex-1 text-right">
+                              <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate flex-1">
                                 {getRecordTitle(record)}
                               </span>
                             </div>
@@ -2440,12 +2463,9 @@ export const ModuleView = () => {
                 <div 
                   key={record.id}
                   onClick={() => handleRecordClick(record.id)}
-                  className="p-5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-indigo-500/50 hover:shadow-md transition-all cursor-pointer space-y-3 group"
+                  className="p-5 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all cursor-pointer space-y-3 group"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">
-                      {record._record_key || 'Key'}
-                    </span>
+                  <div className="flex items-center justify-end">
                     <span className="text-[9px] font-bold text-zinc-400 font-mono">
                       {new Date(record[dateFieldId] || record.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -2759,12 +2779,11 @@ export const ModuleView = () => {
                       : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
                   )}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">{record._record_key || 'Record'}</span>
-                    {loadingGeocode && !coordsCache[record.id] && (
+                  {loadingGeocode && !coordsCache[record.id] && (
+                    <div className="flex justify-end mb-1">
                       <div className="w-3 h-3 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
                     {getRecordTitle(record)}
                   </p>
@@ -2795,8 +2814,7 @@ export const ModuleView = () => {
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest">{selectedRecord._record_key}</span>
-                    <h4 className="text-sm font-bold text-zinc-950 dark:text-white mt-0.5">
+                    <h4 className="text-sm font-bold text-zinc-950 dark:text-white">
                       {getRecordTitle(selectedRecord)}
                     </h4>
                   </div>
@@ -2896,11 +2914,10 @@ export const ModuleView = () => {
               <div 
                 key={record.id}
                 onClick={() => handleRecordClick(record.id)}
-                className="group relative bg-white/50 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.07] hover:border-indigo-500/50 dark:hover:border-indigo-500/40 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
+                className="group relative bg-white/50 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.07] hover:border-zinc-350 dark:hover:border-zinc-700 rounded-[2rem] p-6 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
               >
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key || 'Key'}</span>
+                  <div className="flex items-center justify-end">
                     <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
                       {status}
                     </span>
@@ -3071,7 +3088,7 @@ export const ModuleView = () => {
               <div 
                 key={record.id}
                 onClick={() => handleRecordClick(record.id)}
-                className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/55 rounded-[2.5rem] overflow-hidden hover:shadow-2xl hover:shadow-indigo-500/[0.04] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[340px]"
+                className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 rounded-[2.5rem] overflow-hidden hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[340px]"
               >
                 {/* Picture Gallery Slider inside card header */}
                 <div className="h-44 w-full relative bg-zinc-150 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800/80 overflow-hidden group/gallery">
@@ -3114,8 +3131,7 @@ export const ModuleView = () => {
 
                 <div className="p-6 flex-grow flex flex-col justify-between">
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key || 'Key'}</span>
+                    <div className="flex items-center justify-end">
                       <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
                         {status}
                       </span>
@@ -3232,7 +3248,7 @@ export const ModuleView = () => {
 
                 <div 
                   onClick={() => handleRecordClick(record.id)}
-                  className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
@@ -3371,8 +3387,7 @@ export const ModuleView = () => {
                   className="flex min-w-full items-center group hover:bg-zinc-50/50 dark:hover:bg-zinc-950/20 cursor-pointer transition-colors"
                 >
                   <div className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/10 p-4 truncate">
-                    <span className="block text-[9px] font-black text-indigo-500 uppercase tracking-widest">{record._record_key}</span>
-                    <span className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate mt-0.5 group-hover:text-indigo-500 transition-colors">
+                    <span className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate group-hover:text-indigo-500 transition-colors">
                       {getRecordTitle(record)}
                     </span>
                   </div>
@@ -3572,6 +3587,7 @@ export const ModuleView = () => {
       header: field.label || field.name,
       sortable: true,
       sortKey: field.id || field.name,
+      filterKey: field.id || field.name,
       className: densityClass,
       style: field.columnWidth ? { width: `${field.columnWidth}px`, minWidth: `${field.columnWidth}px` } : undefined,
       accessor: (record: any) => {
@@ -3662,6 +3678,7 @@ export const ModuleView = () => {
         header: 'Created',
         sortable: true,
         sortKey: 'createdAt',
+        filterKey: 'createdAt',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'createdAt')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdAt').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdAt').width}px` } 
@@ -3676,6 +3693,7 @@ export const ModuleView = () => {
         header: 'Created By',
         sortable: true,
         sortKey: 'createdBy',
+        filterKey: 'createdBy',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'createdBy')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdBy').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'createdBy').width}px` } 
@@ -3706,6 +3724,7 @@ export const ModuleView = () => {
         header: 'Updated',
         sortable: true,
         sortKey: 'updatedAt',
+        filterKey: 'updatedAt',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'updatedAt')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'updatedAt').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'updatedAt').width}px` } 
@@ -3720,6 +3739,7 @@ export const ModuleView = () => {
         header: 'Status',
         sortable: true,
         sortKey: 'status',
+        filterKey: 'status',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'status')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'status').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'status').width}px` } 
@@ -3734,6 +3754,7 @@ export const ModuleView = () => {
         header: 'Assignee',
         sortable: true,
         sortKey: 'assigneeId',
+        filterKey: 'assigneeId',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'assigneeId')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'assigneeId').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'assigneeId').width}px` } 
@@ -3755,6 +3776,7 @@ export const ModuleView = () => {
       participantIds: {
         header: 'Participants',
         sortable: false,
+        filterKey: 'participantIds',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'participantIds')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'participantIds').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'participantIds').width}px` } 
@@ -3816,28 +3838,42 @@ export const ModuleView = () => {
         header: interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key',
         sortable: true,
         sortKey: '_record_key',
+        filterKey: '_record_key',
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === '_record_key').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === '_record_key').width}px` } 
           : undefined,
         accessor: (record: any) => (
-          <span className="text-sm font-bold text-indigo-500">
+          <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
             {record._record_key || '-'}
           </span>
         )
       },
       ...builtColumns,
       {
-        header: '',
+        header: 'Actions',
+        align: 'right',
         className: cn('text-right', densityClass),
+        filterable: false,
         accessor: (record: any) => (
-          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setRecordToShare(record);
+              }}
+              className="p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
+              title="Share Record"
+            >
+              <Share2 size={14} />
+            </button>
             <button 
               onClick={(e) => {
                 e.stopPropagation();
                 setRecordToDelete(record.id);
               }}
-              className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-all"
+              className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-400/10 rounded-lg transition-all cursor-pointer"
+              title="Delete Record"
             >
               <Trash2 size={14} />
             </button>
@@ -3846,64 +3882,118 @@ export const ModuleView = () => {
       }
     ];
 
-    return (
-      <div className="flex-1 bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-3xl shadow-sm overflow-hidden flex flex-col">
-        
-        <Table 
-          data={slicedRecords as any}
-          onRowClick={(record) => handleRecordClick(String(record.id))}
-          className="bg-transparent dark:bg-transparent border-none shadow-none"
-          noContainer={true}
-          pagination={false}
-          columns={tableColumns}
-        />
+    const moduleFilterFields = (() => {
+      const systemFieldOptions = [
+        { id: '_record_key', label: 'Key', type: 'text' as const },
+        { id: 'assigneeId', label: 'Assignee', type: 'user' as const, userOptions: members },
+        { id: 'status', label: 'Status', type: 'status' as const, options: allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived'] },
+        { id: 'createdAt', label: 'Created At', type: 'date' as const },
+        { id: 'updatedAt', label: 'Updated At', type: 'date' as const }
+      ];
+      const customFieldOptions = (allFields || []).map((f: any) => ({
+        id: f.id,
+        label: f.label || f.name || f.id,
+        type: f.type || 'text',
+        options: f.options,
+        userOptions: ['user', 'member', 'assignee'].includes(f.type) || f.id === 'assigneeId' || f.id === 'assignee' ? members : undefined
+      }));
+      const map = new Map();
+      [...systemFieldOptions, ...customFieldOptions].forEach(item => map.set(item.id, item));
+      return Array.from(map.values());
+    })();
 
-        {interfaceSettings.master.pagination?.enabled !== false && totalRecords > 0 && (
-          <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-950/30 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-              Showing <span className="text-zinc-900 dark:text-white">{totalRecords > 0 ? (page - 1) * pageSize + 1 : 0}</span> to <span className="text-zinc-900 dark:text-white">{Math.min(page * pageSize, totalRecords)}</span> of <span className="text-zinc-900 dark:text-white">{totalRecords}</span> records
-            </p>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
-              >
-                Previous
-              </button>
-              <div className="flex items-center gap-1">
-                {totalPages > 0 && [...Array(totalPages)].map((_, i) => {
-                  const pNum = i + 1;
-                  if (totalPages > 7 && pNum > 2 && pNum < totalPages - 1 && Math.abs(pNum - page) > 1) {
-                    if (pNum === 3 || pNum === totalPages - 2) return <span key={pNum} className="text-zinc-400 px-1">...</span>;
-                    return null;
-                  }
-                  return (
-                    <button
-                      key={pNum}
-                      onClick={() => setPage(pNum)}
-                      className={cn(
-                        "w-8 h-8 rounded-lg text-[10px] font-bold transition-all",
-                        page === pNum 
-                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                          : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      )}
-                    >
-                      {pNum}
-                    </button>
-                  );
-                })}
-              </div>
-              <button 
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages || totalPages === 0}
-                className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest hover:text-zinc-900 dark:hover:text-white disabled:opacity-50 transition-all"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+    return (
+      <div className="flex-1 h-full min-h-0 flex flex-col w-full overflow-hidden">
+        <Table 
+          key={`module_table_${moduleIdRaw || moduleData?.id}`}
+          filterScopeId={moduleIdRaw || moduleData?.id}
+          enableSavedViews={true}
+          scopeType="MODULE"
+          scopeId={moduleIdRaw || moduleData?.id}
+          tenantId={tenant?.id}
+          token={(session as any)?.access_token}
+          data={filteredRecords as any}
+          onRowClick={(record) => handleRecordClick(String(record.id))}
+          className="h-full flex-1 w-full"
+          columns={tableColumns}
+          loading={recordsQueryLoading || recordsQueryFetching}
+          noContainer={true}
+          searchable={false}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          enableFilters={true}
+          filterFields={moduleFilterFields}
+          currentUserId={(platformUser as any)?.id || (session?.user as any)?.id}
+          currentUserName={(platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email}
+          pagination={interfaceSettings.master.pagination?.enabled !== false}
+          page={page}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          totalCount={totalRecords}
+          pageSizeOptions={[10, 25, 50, 100]}
+          enableSelection={true}
+          assigneeOptions={members}
+          statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+          onBulkAssign={(selectedIds, _selectedItems, assigneeId, clearSelection) => {
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+            Promise.all(selectedIds.map(id => 
+              fetch(`${DATA_API_URL}/records/${id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                  'x-tenant-id': tenant?.id || ''
+                },
+                body: JSON.stringify({ moduleId, assigneeId })
+              })
+            )).then(() => {
+              queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+              toast.success(`Updated assignee for ${selectedIds.length} record(s)`);
+              clearSelection();
+            }).catch(err => {
+              toast.error(err.message || 'Failed to update assignee');
+            });
+          }}
+          onBulkStatusChange={(selectedIds, _selectedItems, status, clearSelection) => {
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+            Promise.all(selectedIds.map(id => 
+              fetch(`${DATA_API_URL}/records/${id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                  'x-tenant-id': tenant?.id || ''
+                },
+                body: JSON.stringify({ moduleId, status, data: { status } })
+              })
+            )).then(() => {
+              queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+              toast.success(`Updated status for ${selectedIds.length} record(s)`);
+              clearSelection();
+            }).catch(err => {
+              toast.error(err.message || 'Failed to update status');
+            });
+          }}
+          onBulkDelete={(selectedIds, _selectedItems, clearSelection) => {
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+            Promise.all(selectedIds.map(id => 
+              fetch(`${DATA_API_URL}/records/${id}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'x-tenant-id': tenant?.id || ''
+                }
+              })
+            )).then(() => {
+              queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+              toast.success(`Moved ${selectedIds.length} record(s) to Recycling Bin`);
+              clearSelection();
+            }).catch(err => {
+              toast.error(err.message || 'Failed to delete records');
+            });
+          }}
+        />
       </div>
     );
   };
@@ -3942,167 +4032,87 @@ export const ModuleView = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden">
+    <div className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden">
       
       {/* Header Panel */}
-      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
+      <div className="px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
         <div className="flex items-center gap-3">
           {Icon && (
-            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-              <Icon size={24} />
+            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Icon size={20} />
             </div>
           )}
           <div>
-            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{moduleData?.name || 'Loading...'}</h1>
+            <h1 className="text-base font-bold text-zinc-950 dark:text-white leading-none">{moduleData?.name || 'Loading...'}</h1>
             {moduleData?.description && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                 {moduleData.description}
               </p>
             )}
           </div>
         </div>
 
-        {/* Toolbar Controls / Actions / Search */}
-        <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
-          {interfaceSettings.master.layoutType !== 'pipeline' && 
-           interfaceSettings.master.layoutType !== 'kanban' && 
-           interfaceSettings.master.layoutType !== 'calendar' && 
-           interfaceSettings.master.layoutType !== 'map' && 
-           interfaceSettings.master.layoutType !== 'cards' && 
-           interfaceSettings.master.layoutType !== 'portfolio' && 
-           interfaceSettings.master.layoutType !== 'timeline' && 
-           interfaceSettings.master.layoutType !== 'gantt' && 
-           interfaceSettings.master.layoutType !== 'analytics' && (
-            <div className="relative">
-              <LucideIcons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
-              <input 
-                type="text" 
-                placeholder="Search records..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-white/50 dark:bg-zinc-900/30 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-450 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500 w-60 transition-all shadow-sm"
-              />
-            </div>
-          )}
+        {/* Toolbar Controls / Actions */}
+        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+          {/* Always Available Header Search */}
+          <div className="relative">
+            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
+            <input 
+              type="text" 
+              placeholder="Search records..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 w-52 sm:w-60 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg pl-8 pr-3 text-xs text-zinc-900 dark:text-zinc-200 placeholder-zinc-400 outline-none focus:border-indigo-500 transition-all shadow-xs"
+            />
+          </div>
 
-          {/* Quick Actions & Create Buttons */}
-          <div className="flex items-center gap-2">
-            {interfaceSettings.actions?.map((act: any) => {
-              const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
-              return (
-                <button
-                  key={act.id}
-                  onClick={() => {
-                    const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
-                    setActiveQuickAction(act);
-                    setActionForm(form || null);
-                    const defaults: any = {};
-                    if (form) {
-                      const allFormFields = form.isMultistep 
-                        ? (form.steps || []).flatMap((s: any) => s.fields || [])
-                        : (form.fields || []);
-                      allFormFields.forEach((fObj: any) => {
-                        const field = allFields.find(f => f.id === fObj.id);
-                        const defVal = calculateDefaultValue(field, defaults);
-                        if (defVal !== undefined && defVal !== null && defVal !== '') {
-                          defaults[fObj.id] = defVal;
-                        }
-                      });
-                      if (form.isMultistep && form.steps?.length > 0) {
-                        const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
-                        setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
+          {/* Custom Action Buttons */}
+          {interfaceSettings.actions?.map((act: any) => {
+            const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
+            return (
+              <button
+                key={act.id}
+                onClick={() => {
+                  const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
+                  setActiveQuickAction(act);
+                  setActionForm(form || null);
+                  const defaults: any = {};
+                  if (form) {
+                    const allFormFields = form.isMultistep 
+                      ? (form.steps || []).flatMap((s: any) => s.fields || [])
+                      : (form.fields || []);
+                    allFormFields.forEach((fObj: any) => {
+                      const field = allFields.find(f => f.id === fObj.id);
+                      const defVal = calculateDefaultValue(field, defaults);
+                      if (defVal !== undefined && defVal !== null && defVal !== '') {
+                        defaults[fObj.id] = defVal;
                       }
+                    });
+                    if (form.isMultistep && form.steps?.length > 0) {
+                      const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
+                      setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
                     }
-                    setActionFormData(defaults);
-                    setActionFormErrors({});
-                    setShowQuickActionModal(true);
-                  }}
-                  className="px-3.5 py-2 bg-white/50 dark:bg-zinc-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                >
-                  <ActionIcon size={14} />
-                  {act.label}
-                </button>
-              );
-            })}
-            
-            <button 
-              onClick={() => {
-                const initialDefaults: any = {};
-                allFields.forEach((f: any) => {
-                  const defVal = calculateDefaultValue(f, initialDefaults);
-                  if (defVal !== undefined && defVal !== null && defVal !== '') {
-                    initialDefaults[f.id] = defVal;
                   }
-                });
-                setNewEntryData(initialDefaults);
-                evaluateAllDataPopulationRules(initialDefaults);
-                setEditingRecord(null);
-                if (moduleData?.tabs && moduleData.tabs.length > 0) {
-                  setActiveTabId(moduleData.tabs[0].id);
-                } else {
-                  setActiveTabId(null);
-                }
-                
-                if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
-                  const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
-                  setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
-                } else {
-                  setActiveStepId(null);
-                }
-                
-                setShowNewEntryModal(true);
-              }}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-md shadow-indigo-500/10 flex items-center gap-1.5"
-            >
-              <Plus size={14} />
-              {createForm?.settings?.workspaceButtonLabel || 'New Entry'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
-
-
-
-      {recordsLoading && records.length === 0 ? null : records.length > 0 ? (
-        interfaceSettings.master.layoutType === 'pipeline' ? (
-          renderPipelineView()
-        ) : interfaceSettings.master.layoutType === 'kanban' ? (
-          renderKanbanView()
-        ) : interfaceSettings.master.layoutType === 'calendar' ? (
-          renderCalendarView()
-        ) : interfaceSettings.master.layoutType === 'map' ? (
-          renderMapView()
-        ) : interfaceSettings.master.layoutType === 'cards' ? (
-          renderCardsView()
-        ) : interfaceSettings.master.layoutType === 'portfolio' ? (
-          renderPortfolioView()
-        ) : interfaceSettings.master.layoutType === 'timeline' ? (
-          renderTimelineView()
-        ) : interfaceSettings.master.layoutType === 'gantt' ? (
-          renderGanttView()
-        ) : interfaceSettings.master.layoutType === 'analytics' ? (
-          renderAnalyticsView()
-        ) : (
-          renderTableView()
-        )
-      ) : (
-        <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center space-y-4">
-          <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center mx-auto border border-zinc-200 dark:border-zinc-800">
-            <Icon size={24} className="text-zinc-400 dark:text-zinc-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">No data found in {moduleData?.name || 'Module'}</h3>
-            <p className="text-zinc-500 mt-1">Start by creating your first entry or importing data.</p>
-          </div>
+                  setActionFormData(defaults);
+                  setActionFormErrors({});
+                  setShowQuickActionModal(true);
+                }}
+                className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
+              >
+                <ActionIcon size={12} className="text-zinc-500 dark:text-zinc-400" />
+                <span>{act.label}</span>
+              </button>
+            );
+          })}
+          
+          {/* New Entry Primary Button */}
           <button 
             onClick={() => {
-              const initialDefaults = {};
+              const initialDefaults: any = {};
               allFields.forEach((f: any) => {
-                if (f.defaultValue !== undefined && f.defaultValue !== '') {
-                  (initialDefaults as any)[f.id] = f.defaultValue;
+                const defVal = calculateDefaultValue(f, initialDefaults);
+                if (defVal !== undefined && defVal !== null && defVal !== '') {
+                  initialDefaults[f.id] = defVal;
                 }
               });
               setNewEntryData(initialDefaults);
@@ -4113,23 +4123,92 @@ export const ModuleView = () => {
               } else {
                 setActiveTabId(null);
               }
-
-              // Initialize custom create form step if applicable
+              
               if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
                 const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
                 setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
               } else {
                 setActiveStepId(null);
               }
-
+              
               setShowNewEntryModal(true);
             }}
-            className="px-6 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm font-bold text-zinc-900 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+            className="h-8 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5"
           >
-            Create First Entry
+            <Plus size={13} />
+            <span>{createForm?.settings?.workspaceButtonLabel || 'New Entry'}</span>
           </button>
         </div>
-      )}
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 w-full min-h-0 flex flex-col relative z-10 overflow-hidden">
+        {recordsLoading || records.length > 0 ? (
+          interfaceSettings.master.layoutType === 'pipeline' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderPipelineView()}</div>
+          ) : interfaceSettings.master.layoutType === 'kanban' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderKanbanView()}</div>
+          ) : interfaceSettings.master.layoutType === 'calendar' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderCalendarView()}</div>
+          ) : interfaceSettings.master.layoutType === 'map' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderMapView()}</div>
+          ) : interfaceSettings.master.layoutType === 'cards' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderCardsView()}</div>
+          ) : interfaceSettings.master.layoutType === 'portfolio' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderPortfolioView()}</div>
+          ) : interfaceSettings.master.layoutType === 'timeline' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderTimelineView()}</div>
+          ) : interfaceSettings.master.layoutType === 'gantt' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderGanttView()}</div>
+          ) : interfaceSettings.master.layoutType === 'analytics' ? (
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderAnalyticsView()}</div>
+          ) : (
+            renderTableView()
+          )
+        ) : (
+          <div className="flex-1 p-8 flex items-center justify-center">
+            <div className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl text-center space-y-4 max-w-md w-full">
+              <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center mx-auto border border-zinc-200 dark:border-zinc-800">
+                <Icon size={24} className="text-zinc-400 dark:text-zinc-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-zinc-900 dark:text-white">No data found in {moduleData?.name || 'Module'}</h3>
+                <p className="text-zinc-500 text-xs mt-1">Start by creating your first entry or importing data.</p>
+              </div>
+              <button 
+                onClick={() => {
+                  const initialDefaults = {};
+                  allFields.forEach((f: any) => {
+                    if (f.defaultValue !== undefined && f.defaultValue !== '') {
+                      (initialDefaults as any)[f.id] = f.defaultValue;
+                    }
+                  });
+                  setNewEntryData(initialDefaults);
+                  evaluateAllDataPopulationRules(initialDefaults);
+                  setEditingRecord(null);
+                  if (moduleData?.tabs && moduleData.tabs.length > 0) {
+                    setActiveTabId(moduleData.tabs[0].id);
+                  } else {
+                    setActiveTabId(null);
+                  }
+
+                  if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
+                    const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
+                    setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
+                  } else {
+                    setActiveStepId(null);
+                  }
+
+                  setShowNewEntryModal(true);
+                }}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all shadow-xs"
+              >
+                Create First Entry
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Modals */}
       {createPortal(
@@ -4787,7 +4866,7 @@ export const ModuleView = () => {
               <div className="text-center space-y-2">
                 <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Delete Entry?</h3>
                 <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
-                  Are you sure you want to delete this record? This action cannot be undone.
+                  Are you sure you want to delete this record? This record will be moved to the Recycling Bin and can be restored at any time.
                 </p>
               </div>
               <div className="flex gap-4 pt-4">
@@ -4801,7 +4880,7 @@ export const ModuleView = () => {
                   onClick={() => handleDeleteEntry(recordToDelete)}
                   className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-all shadow-xl shadow-rose-500/20"
                 >
-                  Delete
+                  Move to Recycling Bin
                 </button>
               </div>
             </motion.div>
@@ -4848,7 +4927,17 @@ export const ModuleView = () => {
       </AnimatePresence>,
       document.body
     )}
-      </div>
+
+      {/* Share Record Modal */}
+      {recordToShare && (
+        <ShareRecordModal
+          isOpen={!!recordToShare}
+          onClose={() => setRecordToShare(null)}
+          record={recordToShare}
+          moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
+          moduleName={moduleData?.name}
+        />
+      )}
     </div>
   );
 };

@@ -421,6 +421,48 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       });
     });
 
+    socket.on('record_shared', (data: any) => {
+      if (!data || !data.recordId) return;
+      const currentUserId = user?.id || supabaseUser?.id;
+      const currentUserEmail = user?.email || supabaseUser?.email;
+      const currentMemberId = (user as any)?.memberId || (user as any)?.cuid;
+
+      const isRecipient =
+        (data.recipientMemberIds && currentMemberId && data.recipientMemberIds.includes(currentMemberId)) ||
+        (data.recipientUserIds && currentUserId && data.recipientUserIds.includes(currentUserId)) ||
+        (data.recipientEmails && currentUserEmail && data.recipientEmails.some((e: string) => e.toLowerCase() === currentUserEmail.toLowerCase()));
+
+      if (isRecipient) {
+        const senderName = data.sharedBy?.name || 'A team member';
+        const recordTitle = data.recordTitle || `Record #${String(data.recordId).slice(-6)}`;
+        const moduleName = data.moduleName || 'Workspace';
+        const notifId = `share_${data.recordId}_${Date.now()}`;
+        const recordUrl = data.moduleId ? `/workspace/modules/${data.moduleId}/records/${data.recordId}` : `/workspace`;
+
+        addNotification({
+          id: notifId,
+          type: 'message',
+          audience: 'business',
+          title: `${senderName} shared a record with you`,
+          content: `${senderName} shared "${recordTitle}" in ${moduleName}${data.message ? `: "${data.message}"` : '.'}`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: 'high',
+          link: recordUrl
+        });
+
+        toast.info(`${senderName} shared a record with you`, {
+          description: `"${recordTitle}" in ${moduleName}${data.message ? ` — "${data.message}"` : ''}`,
+          action: {
+            label: 'View',
+            onClick: () => {
+              window.location.href = recordUrl;
+            }
+          }
+        });
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -865,13 +907,17 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
-  // Fetch modules once tenant is available
+  // Fetch essential modules once tenant is available; secondary metadata is loaded asynchronously
   useEffect(() => {
     if (tenant?.id) {
       refreshModules();
-      refreshBilling();
-      refreshMembers();
-      refreshTeams();
+      // Secondary platform state can be loaded in background after mount
+      const timeout = setTimeout(() => {
+        refreshBilling();
+        refreshMembers();
+        refreshTeams();
+      }, 1000);
+      return () => clearTimeout(timeout);
     }
   }, [tenant?.id, supabaseUser, refreshModules, refreshBilling, refreshMembers, refreshTeams]);
 

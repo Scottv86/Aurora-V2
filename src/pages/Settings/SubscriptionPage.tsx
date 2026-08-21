@@ -150,7 +150,8 @@ export const SubscriptionPage = () => {
       )
     },
     {
-      header: '',
+      header: 'Actions',
+      align: 'right',
       className: 'text-right',
       accessor: (member: TenantMember) => (
         <div className="flex items-center justify-end gap-2">
@@ -209,7 +210,8 @@ export const SubscriptionPage = () => {
       )
     },
     {
-      header: '',
+      header: 'Actions',
+      align: 'right',
       className: 'text-right',
       accessor: () => (
         <button className="p-2 text-zinc-400 hover:text-blue-500 transition-colors cursor-pointer">

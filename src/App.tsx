@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
@@ -32,93 +33,95 @@ import { PlatformShell } from './components/Layout/PlatformShell';
 import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { Login } from './components/Auth/Login';
 import { ComingSoon } from './components/Common/ComingSoon';
-import { AIBuilder } from './components/AIBuilder';
-import { Onboarding } from './components/Onboarding';
-import { WorkQueue } from './components/WorkQueue';
-import { ExternalPortal } from './components/ExternalPortal';
-import { ModuleEditor } from './components/ModuleEditor';
-import { Analytics } from './components/Analytics';
-import { AntigravityChat } from './components/AntigravityChat';
-
-import { DocumentAutomation } from './components/DocumentAutomation';
-import { TenantOverview } from './components/TenantOverview';
-import { GlobalListsSettings } from './pages/Settings/PlatformModules/GlobalListsSettings';
-import { PeopleOrgDirectory } from './pages/Platform/PeopleOrgDirectory';
-import { PeopleOrgDetail } from './pages/Platform/PeopleOrgDetail';
-import { PeopleOrgSettings } from './pages/Settings/PlatformModules/PeopleOrgSettings';
-import { PlatformModulesSettings } from './pages/Settings/PlatformModules/PlatformModulesSettings';
-import { KnowledgeBaseSettings } from './pages/Settings/PlatformModules/KnowledgeBaseSettings';
-import { PricingCatalogSettings } from './pages/Settings/PlatformModules/PricingCatalogSettings';
-import { InventoryManagerSettings } from './pages/Settings/PlatformModules/InventoryManagerSettings';
-import { HealthMonitor } from './components/HealthMonitor';
-import { FleetManager } from './components/FleetManager';
-import { ComputeMatrix } from './components/ComputeMatrix';
-import { WorkforcePage } from './pages/Settings/WorkforcePage';
-import { MemberDetailView } from './pages/Settings/MemberDetailView';
-import { TeamDetailView } from './pages/Settings/TeamDetailView';
-import { PositionDetailView } from './pages/Settings/PositionDetailView';
-import { SubscriptionPage } from './pages/Settings/SubscriptionPage';
-import { FormsLibraryPage } from './pages/Settings/FormsLibraryPage';
-import { WorkflowsLibraryPage } from './pages/Settings/WorkflowsLibraryPage';
-import { ValidationsLibraryPage } from './pages/Settings/ValidationsLibraryPage';
-import { QueuesLibraryPage } from './pages/Settings/QueuesLibraryPage';
-import { QueriesLibraryPage } from './pages/Settings/QueriesLibraryPage';
-import { AgentsLibraryPage } from './pages/Settings/AgentsLibraryPage';
-import { AgentBuilderStudio } from './components/Builders/AgentBuilder/AgentBuilderStudio';
-
-import { OrganizationPage } from './pages/Settings/OrganizationPage';
-import { AISettingsPage } from './pages/Settings/AISettingsPage';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
 
+// Lazy-loaded Pages & Heavy Builders
+const AIBuilder = lazy(() => import('./components/AIBuilder').then(m => ({ default: m.AIBuilder })));
+const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ default: m.Onboarding })));
+const WorkQueue = lazy(() => import('./components/WorkQueue').then(m => ({ default: m.WorkQueue })));
+const ExternalPortal = lazy(() => import('./components/ExternalPortal').then(m => ({ default: m.ExternalPortal })));
+const ModuleEditor = lazy(() => import('./components/ModuleEditor').then(m => ({ default: m.ModuleEditor })));
+const Analytics = lazy(() => import('./components/Analytics').then(m => ({ default: m.Analytics })));
+const AntigravityChat = lazy(() => import('./components/AntigravityChat').then(m => ({ default: m.AntigravityChat })));
+
+const DocumentAutomation = lazy(() => import('./components/DocumentAutomation').then(m => ({ default: m.DocumentAutomation })));
+const TenantOverview = lazy(() => import('./components/TenantOverview').then(m => ({ default: m.TenantOverview })));
+const GlobalListsSettings = lazy(() => import('./pages/Settings/PlatformModules/GlobalListsSettings').then(m => ({ default: m.GlobalListsSettings })));
+const PeopleOrgDirectory = lazy(() => import('./pages/Platform/PeopleOrgDirectory').then(m => ({ default: m.PeopleOrgDirectory })));
+const PeopleOrgDetail = lazy(() => import('./pages/Platform/PeopleOrgDetail').then(m => ({ default: m.PeopleOrgDetail })));
+const PeopleOrgSettings = lazy(() => import('./pages/Settings/PlatformModules/PeopleOrgSettings').then(m => ({ default: m.PeopleOrgSettings })));
+const PlatformModulesSettings = lazy(() => import('./pages/Settings/PlatformModules/PlatformModulesSettings').then(m => ({ default: m.PlatformModulesSettings })));
+const KnowledgeBaseSettings = lazy(() => import('./pages/Settings/PlatformModules/KnowledgeBaseSettings').then(m => ({ default: m.KnowledgeBaseSettings })));
+const PricingCatalogSettings = lazy(() => import('./pages/Settings/PlatformModules/PricingCatalogSettings').then(m => ({ default: m.PricingCatalogSettings })));
+const InventoryManagerSettings = lazy(() => import('./pages/Settings/PlatformModules/InventoryManagerSettings').then(m => ({ default: m.InventoryManagerSettings })));
+const HealthMonitor = lazy(() => import('./components/HealthMonitor').then(m => ({ default: m.HealthMonitor })));
+const FleetManager = lazy(() => import('./components/FleetManager').then(m => ({ default: m.FleetManager })));
+const ComputeMatrix = lazy(() => import('./components/ComputeMatrix').then(m => ({ default: m.ComputeMatrix })));
+const WorkforcePage = lazy(() => import('./pages/Settings/WorkforcePage').then(m => ({ default: m.WorkforcePage })));
+const MemberDetailView = lazy(() => import('./pages/Settings/MemberDetailView').then(m => ({ default: m.MemberDetailView })));
+const TeamDetailView = lazy(() => import('./pages/Settings/TeamDetailView').then(m => ({ default: m.TeamDetailView })));
+const PositionDetailView = lazy(() => import('./pages/Settings/PositionDetailView').then(m => ({ default: m.PositionDetailView })));
+const SubscriptionPage = lazy(() => import('./pages/Settings/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
+const FormsLibraryPage = lazy(() => import('./pages/Settings/FormsLibraryPage').then(m => ({ default: m.FormsLibraryPage })));
+const WorkflowsLibraryPage = lazy(() => import('./pages/Settings/WorkflowsLibraryPage').then(m => ({ default: m.WorkflowsLibraryPage })));
+const ValidationsLibraryPage = lazy(() => import('./pages/Settings/ValidationsLibraryPage').then(m => ({ default: m.ValidationsLibraryPage })));
+const QueuesLibraryPage = lazy(() => import('./pages/Settings/QueuesLibraryPage').then(m => ({ default: m.QueuesLibraryPage })));
+const QueriesLibraryPage = lazy(() => import('./pages/Settings/QueriesLibraryPage').then(m => ({ default: m.QueriesLibraryPage })));
+const AgentsLibraryPage = lazy(() => import('./pages/Settings/AgentsLibraryPage').then(m => ({ default: m.AgentsLibraryPage })));
+const AgentBuilderStudio = lazy(() => import('./components/Builders/AgentBuilder/AgentBuilderStudio').then(m => ({ default: m.AgentBuilderStudio })));
+
+const OrganizationPage = lazy(() => import('./pages/Settings/OrganizationPage').then(m => ({ default: m.OrganizationPage })));
+const AISettingsPage = lazy(() => import('./pages/Settings/AISettingsPage').then(m => ({ default: m.AISettingsPage })));
+
 // Super Admin Suite Pages
-import { SuperAdminOverview } from './pages/SuperAdmin/SuperAdminOverview';
-import { TenantManagementPage } from './pages/SuperAdmin/TenantManagementPage';
-import { UserManagementPage } from './pages/SuperAdmin/UserManagementPage';
-import { RolesAccessPage } from './pages/SuperAdmin/RolesAccessPage';
-import { BillingSubscriptionsPage } from './pages/SuperAdmin/BillingSubscriptionsPage';
-import { RevenueAnalyticsPage } from './pages/SuperAdmin/RevenueAnalyticsPage';
-import { ProvisioningResourcesPage } from './pages/SuperAdmin/ProvisioningResourcesPage';
-import { ServerLoadsPage } from './pages/SuperAdmin/ServerLoadsPage';
-import { StorageManagementPage } from './pages/SuperAdmin/StorageManagementPage';
-import { AIMonitoringPage } from './pages/SuperAdmin/AIMonitoringPage';
-import { SystemMonitoringPage } from './pages/SuperAdmin/SystemMonitoringPage';
-import { SystemLogsAuditPage } from './pages/SuperAdmin/SystemLogsAuditPage';
-import { BugsSupportPage } from './pages/SuperAdmin/BugsSupportPage';
-import { DevelopmentPage } from './pages/SuperAdmin/DevelopmentPage';
-import { SuperAdminSettingsPage } from './pages/SuperAdmin/SuperAdminSettingsPage';
+const SuperAdminOverview = lazy(() => import('./pages/SuperAdmin/SuperAdminOverview').then(m => ({ default: m.SuperAdminOverview })));
+const TenantManagementPage = lazy(() => import('./pages/SuperAdmin/TenantManagementPage').then(m => ({ default: m.TenantManagementPage })));
+const UserManagementPage = lazy(() => import('./pages/SuperAdmin/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
+const RolesAccessPage = lazy(() => import('./pages/SuperAdmin/RolesAccessPage').then(m => ({ default: m.RolesAccessPage })));
+const BillingSubscriptionsPage = lazy(() => import('./pages/SuperAdmin/BillingSubscriptionsPage').then(m => ({ default: m.BillingSubscriptionsPage })));
+const RevenueAnalyticsPage = lazy(() => import('./pages/SuperAdmin/RevenueAnalyticsPage').then(m => ({ default: m.RevenueAnalyticsPage })));
+const ProvisioningResourcesPage = lazy(() => import('./pages/SuperAdmin/ProvisioningResourcesPage').then(m => ({ default: m.ProvisioningResourcesPage })));
+const ServerLoadsPage = lazy(() => import('./pages/SuperAdmin/ServerLoadsPage').then(m => ({ default: m.ServerLoadsPage })));
+const StorageManagementPage = lazy(() => import('./pages/SuperAdmin/StorageManagementPage').then(m => ({ default: m.StorageManagementPage })));
+const AIMonitoringPage = lazy(() => import('./pages/SuperAdmin/AIMonitoringPage').then(m => ({ default: m.AIMonitoringPage })));
+const SystemMonitoringPage = lazy(() => import('./pages/SuperAdmin/SystemMonitoringPage').then(m => ({ default: m.SystemMonitoringPage })));
+const SystemLogsAuditPage = lazy(() => import('./pages/SuperAdmin/SystemLogsAuditPage').then(m => ({ default: m.SystemLogsAuditPage })));
+const BugsSupportPage = lazy(() => import('./pages/SuperAdmin/BugsSupportPage').then(m => ({ default: m.BugsSupportPage })));
+const DevelopmentPage = lazy(() => import('./pages/SuperAdmin/DevelopmentPage').then(m => ({ default: m.DevelopmentPage })));
+const SuperAdminSettingsPage = lazy(() => import('./pages/SuperAdmin/SuperAdminSettingsPage').then(m => ({ default: m.SuperAdminSettingsPage })));
 
 // Pages
-import { DashboardPage } from './pages/Dashboard/DashboardPage';
-import { ModuleView } from './pages/Module/ModuleView';
-import { QueueView } from './pages/Queue/QueueView';
-import { RecordDetailView } from './pages/Record/RecordDetailView';
-import { WorkspacePageView } from './pages/WorkspacePage/WorkspacePageView';
-import { PageBuilder } from './pages/WorkspacePage/PageBuilder';
-import { PagesManagementPage } from './pages/Settings/PagesManagementPage';
-import { SitesPage } from './pages/Settings/SitesPage';
-import { SiteBuilderPage } from './pages/Settings/SiteBuilderPage';
-import { PortalViewPage } from './pages/Platform/PortalViewPage';
+const DashboardPage = lazy(() => import('./pages/Dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ModuleView = lazy(() => import('./pages/Module/ModuleView').then(m => ({ default: m.ModuleView })));
+const QueueView = lazy(() => import('./pages/Queue/QueueView').then(m => ({ default: m.QueueView })));
+const RecordDetailView = lazy(() => import('./pages/Record/RecordDetailView').then(m => ({ default: m.RecordDetailView })));
+const WorkspacePageView = lazy(() => import('./pages/WorkspacePage/WorkspacePageView').then(m => ({ default: m.WorkspacePageView })));
+const PageBuilder = lazy(() => import('./pages/WorkspacePage/PageBuilder').then(m => ({ default: m.PageBuilder })));
+const PagesManagementPage = lazy(() => import('./pages/Settings/PagesManagementPage').then(m => ({ default: m.PagesManagementPage })));
+const SitesPage = lazy(() => import('./pages/Settings/SitesPage').then(m => ({ default: m.SitesPage })));
+const SiteBuilderPage = lazy(() => import('./pages/Settings/SiteBuilderPage').then(m => ({ default: m.SiteBuilderPage })));
+const PortalViewPage = lazy(() => import('./pages/Platform/PortalViewPage').then(m => ({ default: m.PortalViewPage })));
 
-import { BrandingSettingsPage } from './pages/Settings/BrandingSettingsPage';
-import { NavigationSettingsPage } from './pages/Settings/NavigationSettingsPage';
-import { NavigationManagementPage } from './pages/Settings/NavigationManagementPage';
-import { SettingsOverview } from './pages/Settings/SettingsOverview';
-import { ConnectorsPage } from './pages/Settings/ConnectorsPage';
-import { MigrationPage } from './pages/Settings/MigrationPage';
-import { AutomationsPage } from './pages/Settings/AutomationsPage';
-import { IntakeSettingsPage } from './pages/Settings/IntakeSettingsPage';
-import { TriageInboxPage } from './pages/Triage/TriageInboxPage';
-import { APISettings } from './pages/Settings/APISettings';
-import { TestingPage } from './pages/Settings/TestingPage';
-import { QueryExplorer } from './pages/Settings/QueryExplorer';
-import { RecordsManagement } from './pages/Platform/RecordsManagement';
-import { RecordsManagementSettings } from './pages/Settings/PlatformModules/RecordsManagementSettings';
-import { ReportManagementSettings } from './pages/Settings/PlatformModules/ReportManagementSettings';
-import { SolutionsPage } from './pages/Settings/SolutionsPage';
-import { DriveApp } from './pages/Apps/DriveApp';
+const BrandingSettingsPage = lazy(() => import('./pages/Settings/BrandingSettingsPage').then(m => ({ default: m.BrandingSettingsPage })));
+const NavigationSettingsPage = lazy(() => import('./pages/Settings/NavigationSettingsPage').then(m => ({ default: m.NavigationSettingsPage })));
+const NavigationManagementPage = lazy(() => import('./pages/Settings/NavigationManagementPage').then(m => ({ default: m.NavigationManagementPage })));
+const SettingsOverview = lazy(() => import('./pages/Settings/SettingsOverview').then(m => ({ default: m.SettingsOverview })));
+const ConnectorsPage = lazy(() => import('./pages/Settings/ConnectorsPage').then(m => ({ default: m.ConnectorsPage })));
+const MigrationPage = lazy(() => import('./pages/Settings/MigrationPage').then(m => ({ default: m.MigrationPage })));
+const AutomationsPage = lazy(() => import('./pages/Settings/AutomationsPage').then(m => ({ default: m.AutomationsPage })));
+const IntakeSettingsPage = lazy(() => import('./pages/Settings/IntakeSettingsPage').then(m => ({ default: m.IntakeSettingsPage })));
+const TriageInboxPage = lazy(() => import('./pages/Triage/TriageInboxPage').then(m => ({ default: m.TriageInboxPage })));
+const APISettings = lazy(() => import('./pages/Settings/APISettings').then(m => ({ default: m.APISettings })));
+const TestingPage = lazy(() => import('./pages/Settings/TestingPage').then(m => ({ default: m.TestingPage })));
+const QueryExplorer = lazy(() => import('./pages/Settings/QueryExplorer').then(m => ({ default: m.QueryExplorer })));
+const RecordsManagement = lazy(() => import('./pages/Platform/RecordsManagement').then(m => ({ default: m.RecordsManagement })));
+const RecordsManagementSettings = lazy(() => import('./pages/Settings/PlatformModules/RecordsManagementSettings').then(m => ({ default: m.RecordsManagementSettings })));
+const ReportManagementSettings = lazy(() => import('./pages/Settings/PlatformModules/ReportManagementSettings').then(m => ({ default: m.ReportManagementSettings })));
+const SolutionsPage = lazy(() => import('./pages/Settings/SolutionsPage').then(m => ({ default: m.SolutionsPage })));
+const DriveApp = lazy(() => import('./pages/Apps/DriveApp').then(m => ({ default: m.DriveApp })));
 
-import { DocsApp } from './pages/Apps/DocsApp';
-import { DocEditor } from './pages/Apps/DocEditor';
+const DocsApp = lazy(() => import('./pages/Apps/DocsApp').then(m => ({ default: m.DocsApp })));
+const DocEditor = lazy(() => import('./pages/Apps/DocEditor').then(m => ({ default: m.DocEditor })));
 import { slugify } from './lib/utils';
 
 
@@ -223,8 +226,9 @@ const App = () => {
                       <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
                       <StackedModalManager />
                       <NewModuleModal />
-                      <Routes>
-              {/* Login & Root Redirect */}
+                      <Suspense fallback={<PageLoader label="Loading view..." />}>
+                        <Routes>
+                          {/* Login & Root Redirect */}
               <Route path="/login" element={<Login />} />
               <Route path="/" element={<Navigate to="/workspace" replace />} />
               <Route path="/public/portal/:siteId" element={<PortalViewPage />} />
@@ -280,6 +284,10 @@ const App = () => {
                 <Route path="modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
                 <Route path="modules/:parentModuleId/records/:parentRecordId/sub/:moduleId/:recordId" element={<RecordDetailView />} />
                 <Route path="queues/:queueId" element={<QueueView />} />
+                <Route path="queues/:queueId/records/:recordId" element={<RecordDetailView />} />
+                <Route path="queues/:queueId/modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
+                <Route path="pages/:pageId/records/:recordId" element={<RecordDetailView />} />
+                <Route path="pages/:pageId/modules/:moduleId/records/:recordId" element={<RecordDetailView />} />
                 
                 {/* Platform Operations */}
                 <Route path="my-work" element={<MyWorkRouteWrapper />} />
@@ -428,6 +436,7 @@ const App = () => {
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/workspace" replace />} />
               </Routes>
+              </Suspense>
               </Router>
               </NewModuleModalProvider>
             </ModalStackProvider>

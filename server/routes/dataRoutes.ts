@@ -1799,5 +1799,60 @@ router.post('/:recordId/comments', async (req: TenantRequest, res) => {
   }
 });
 
+// POST /records/:recordId/share - Share record with team members and emit notifications
+router.post('/records/:recordId/share', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { recordId } = req.params;
+    const { recipientMemberIds, recipientUserIds, recipientEmails, message, sharedBy, recordTitle, moduleId } = req.body;
+
+    const record = await db.record.findUnique({
+      where: { id: recordId },
+      include: { module: true }
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    const dataObj = { ...(record.data as Record<string, any> || {}) };
+    const currentShared = Array.isArray(dataObj._sharedWith) ? dataObj._sharedWith : [];
+    const newShares = (recipientMemberIds || []).map((mId: string) => ({
+      memberId: mId,
+      sharedAt: new Date().toISOString(),
+      sharedBy: sharedBy?.name || 'User',
+      message: message || ''
+    }));
+    dataObj._sharedWith = [...currentShared, ...newShares];
+
+    await db.record.update({
+      where: { id: recordId },
+      data: { data: dataObj }
+    });
+
+    const payload = {
+      recordId,
+      moduleId: moduleId || record.moduleId,
+      moduleName: record.module?.name || 'Workspace Module',
+      recordTitle: recordTitle || (record.data as any)?.name || (record.data as any)?.title || `#${recordId.slice(-6)}`,
+      sharedBy: sharedBy || { name: 'A team member' },
+      recipientMemberIds: recipientMemberIds || [],
+      recipientUserIds: recipientUserIds || [],
+      recipientEmails: recipientEmails || [],
+      message: message || '',
+      timestamp: new Date().toISOString()
+    };
+
+    console.log(`[DataAPI] Emitting record_shared for record ${recordId} in tenant ${tenantId}`);
+    emitTenantUpdate(tenantId, 'record_shared', payload);
+
+    res.json({ success: true, payload });
+  } catch (err: any) {
+    console.error('[DataAPI] POST /records/:recordId/share error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 

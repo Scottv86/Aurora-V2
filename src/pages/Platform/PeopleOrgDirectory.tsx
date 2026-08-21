@@ -367,7 +367,8 @@ export const PeopleOrgDirectory = () => {
                         )
                       },
                       {
-                        header: '',
+                        header: 'Actions',
+                        align: 'right',
                         className: 'text-right',
                         accessor: (entity) => (
                           <button 

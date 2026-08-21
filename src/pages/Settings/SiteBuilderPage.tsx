@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Save, 
@@ -77,8 +77,10 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useTheme } from '../../hooks/useTheme';
 import { Modal } from '../../components/UI/TabsAndModal';
 import { toast } from 'sonner';
-import { motion } from 'motion/react';
-import { ComponentPickerModal, InContextBuilderModal, FormBuilder, FormRenderer } from '../../components/Builders';
+import { ComponentPickerModal } from '../../components/Builders/Common/ComponentPickerModal';
+import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
+import { FormBuilder } from '../../components/Builders/FormBuilder/FormBuilder';
+import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
 
 
 
@@ -92,6 +94,9 @@ export type InspectableElement =
 export const SiteBuilderPage: React.FC = () => {
   const { siteId } = useParams<{ siteId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -1147,11 +1152,18 @@ export const SiteBuilderPage: React.FC = () => {
       <header className={`h-16 border-b px-6 flex items-center justify-between shrink-0 z-30 ${editorHeaderClass}`}>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/workspace/settings/platform-modules/sites')}
+            onClick={() => {
+              if (returnUrl) {
+                navigate(returnUrl);
+              } else {
+                navigate('/workspace/settings/platform-modules/sites');
+              }
+            }}
             className="p-2 opacity-70 hover:opacity-100 hover:bg-indigo-500/10 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
+            title={returnUrl ? "Back to Workspace" : "Back to Sites"}
           >
             <ArrowLeft size={16} />
-            <span className="hidden sm:inline">Back to Sites</span>
+            <span className="hidden sm:inline">{returnUrl ? "Back" : "Back to Sites"}</span>
           </button>
 
           <div className="h-5 w-px bg-zinc-700/40 hidden sm:block" />

@@ -33,6 +33,7 @@ import validationRoutes from './routes/validationRoutes';
 import solutionRoutes from './routes/solutionRoutes';
 import queueRoutes from './routes/queueRoutes';
 import savedQueryRoutes from './routes/savedQueryRoutes';
+import savedViewRoutes from './routes/savedViewRoutes';
 
 
 
@@ -139,6 +140,7 @@ app.use('/api/validations', authenticate, requireTenantAccess, validationRoutes)
 app.use('/api/solutions', authenticate, requireTenantAccess, solutionRoutes);
 app.use('/api/queues', authenticate, requireTenantAccess, queueRoutes);
 app.use('/api/saved-queries', authenticate, requireTenantAccess, savedQueryRoutes);
+app.use('/api/saved-views', authenticate, requireTenantAccess, savedViewRoutes);
 
 
 

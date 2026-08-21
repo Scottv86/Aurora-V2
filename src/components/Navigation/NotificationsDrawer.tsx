@@ -12,7 +12,8 @@ import {
   Loader2,
   ExternalLink,
   Trash2,
-  Sun
+  Sun,
+  Share2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -50,6 +51,9 @@ export const NotificationsDrawer = () => {
   const getIcon = (type: NotificationItem['type'], status?: NotificationItem['status'], title?: string) => {
     if (title && (title.includes('Handover') || title.includes('Digital Twin'))) {
       return <Sun size={16} className="text-amber-500 animate-pulse" />;
+    }
+    if (title && title.toLowerCase().includes('shared')) {
+      return <Share2 size={16} className="text-indigo-500" />;
     }
     if (type === 'scheduled_task') {
       if (status === 'running') return <Loader2 size={16} className="text-amber-500 animate-spin" />;
@@ -119,7 +123,13 @@ export const NotificationsDrawer = () => {
             {safeNotifications.map((n) => (
               <div 
                 key={n.id}
-                onClick={() => !n.isRead && markNotificationAsRead(n.id)}
+                onClick={() => {
+                  if (!n.isRead) markNotificationAsRead(n.id);
+                  if (n.link && !n.sessionId && !n.title?.includes('Handover') && !n.id?.includes('handover')) {
+                    setIsNotificationsOpen(false);
+                    navigate(n.link);
+                  }
+                }}
                 className={cn(
                   "p-4 hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors relative group/notif cursor-pointer",
                   !n.isRead && "bg-indigo-500/[0.03]"
@@ -186,7 +196,7 @@ export const NotificationsDrawer = () => {
                             setIsNotificationsOpen(false);
                             setIsHandoverOpen(true);
                           }}
-                          className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-md transition-all shadow-sm"
+                          className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-md transition-all shadow-sm cursor-pointer"
                         >
                           <span>Open Handover</span>
                           <ExternalLink size={12} />
@@ -201,9 +211,24 @@ export const NotificationsDrawer = () => {
                             setIsNotificationsOpen(false);
                             navigate(`/workspace/aurora-vibe/${n.sessionId}`);
                           }}
-                          className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all shadow-sm"
+                          className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all shadow-sm cursor-pointer"
                         >
                           <span>Open</span>
+                          <ExternalLink size={12} />
+                        </button>
+                      )}
+
+                      {n.link && !n.sessionId && !n.title?.includes('Handover') && !n.id?.includes('handover') && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markNotificationAsRead(n.id);
+                            setIsNotificationsOpen(false);
+                            navigate(n.link!);
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md transition-all shadow-sm cursor-pointer"
+                        >
+                          <span>View</span>
                           <ExternalLink size={12} />
                         </button>
                       )}

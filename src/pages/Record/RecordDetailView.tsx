@@ -23,12 +23,15 @@ import {
   CheckCircle2,
   Lock,
   HelpCircle,
+  MoreHorizontal,
+  Share2,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
+import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
@@ -47,6 +50,7 @@ import { RecursiveCollectionBlock } from '../../components/Platform/RecursiveCol
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
 import { builderCache, workspaceMotion } from '../../utils/builderCache';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
+import { PageWrapper } from '../../components/Common/PageWrapper';
 
 
 interface WorkflowState {
@@ -72,7 +76,7 @@ export const RecordDetailView = ({
   isModal?: boolean;
   onClose?: () => void;
 } = {}) => {
-  const { moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
+  const { pageId, queueId, moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
   const { session, user: supabaseUser } = auth;
@@ -86,14 +90,27 @@ export const RecordDetailView = ({
     return matchedMod ? matchedMod.id : routeModuleId;
   }, [routeModuleId, modules]);
 
-  const moduleId = moduleIdProp || resolvedRouteModuleId;
   const recordId = recordIdProp || routeRecordId;
   const recordCacheKey = `record_${tenant?.id || 'default'}_${recordId || 'none'}`;
-  const [moduleData, setModuleData] = useState<Module | null>(() => modules?.find((m: any) => m.id === moduleId || slugify(m.name) === moduleId) || null);
   const [record, setRecord] = useState<Record<string, any> | null>(() => builderCache.get(recordCacheKey) || null);
+  const moduleId = moduleIdProp || resolvedRouteModuleId || record?.moduleId || '';
+  const [moduleData, setModuleData] = useState<Module | null>(() => modules?.find((m: any) => m.id === moduleId || slugify(m.name) === moduleId) || null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
   const [quickActionAutomations, setQuickActionAutomations] = useState<any[]>([]);
   const [triggeringAutomationId, setTriggeringAutomationId] = useState<string | null>(null);
+
+  const getBackUrl = useCallback(() => {
+    if (parentModuleId && parentRecordId) {
+      return `/workspace/modules/${parentModuleId}/records/${parentRecordId}`;
+    }
+    if (pageId) {
+      return `/workspace/pages/${pageId}`;
+    }
+    if (queueId) {
+      return `/workspace/queues/${queueId}`;
+    }
+    return `/workspace/modules/${routeModuleId || moduleId}`;
+  }, [parentModuleId, parentRecordId, pageId, queueId, routeModuleId, moduleId]);
 
   useEffect(() => {
     const fetchQuickActions = async () => {
@@ -175,6 +192,7 @@ export const RecordDetailView = ({
   const [hoveredTabRect, setHoveredTabRect] = useState<{ bottom: number, left: number } | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
@@ -227,13 +245,14 @@ export const RecordDetailView = ({
   const [showParticipantMenu, setShowParticipantMenu] = useState(false);
   const [showTransitionsMenu, setShowTransitionsMenu] = useState(false);
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
   const [participantSearch, setParticipantSearch] = useState('');
 
   const assigneeMenuRef = useRef<HTMLDivElement>(null);
   const participantMenuRef = useRef<HTMLDivElement>(null);
   const transitionsMenuRef = useRef<HTMLDivElement>(null);
-  const historyMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   // Click outside hook for toolbar dropdowns
   useEffect(() => {
@@ -248,8 +267,8 @@ export const RecordDetailView = ({
       if (transitionsMenuRef.current && !transitionsMenuRef.current.contains(target)) {
         setShowTransitionsMenu(false);
       }
-      if (historyMenuRef.current && !historyMenuRef.current.contains(target)) {
-        setShowHistoryMenu(false);
+      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
+        setShowMoreMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -694,13 +713,13 @@ export const RecordDetailView = ({
 
   useEffect(() => {
     if (platformLoading) return;
-    if (!tenant?.id || !moduleId || !recordId) {
+    if (!tenant?.id || !recordId) {
       setLoading(false);
       return;
     }
 
     // Guard: Don't re-fetch if we already have this specific record and module loaded
-    if (record?.id === recordId && moduleData?.id === moduleId) {
+    if (record?.id === recordId && moduleData?.id === (moduleId || record?.moduleId)) {
       setLoading(false);
       return;
     }
@@ -710,35 +729,49 @@ export const RecordDetailView = ({
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         
-        const prebuilt = MODULES.find(m => m.id === moduleId);
-        let currentModule = moduleData;
-        if (prebuilt) {
-          currentModule = prebuilt as any;
-          setModuleData(currentModule);
-        } else {
-          const modRes = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
+        let recData = record;
+        if (!recData || recData.id !== recordId) {
+          const recRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'x-tenant-id': tenant.id
             }
           });
-          if (modRes.ok) {
-            currentModule = await modRes.json();
+          if (recRes.ok) {
+            recData = await recRes.json();
+            setRecord(recData);
+          } else if (recRes.status === 404) {
+            toast.error("Record not found");
+            setLoading(false);
+            return;
+          } else {
+            throw new Error(`Failed to fetch record: ${recRes.statusText}`);
+          }
+        }
+
+        const effectiveModuleId = moduleId || recData?.moduleId;
+        let currentModule = moduleData;
+
+        if (effectiveModuleId && (!currentModule || currentModule.id !== effectiveModuleId)) {
+          const prebuilt = MODULES.find(m => m.id === effectiveModuleId);
+          if (prebuilt) {
+            currentModule = prebuilt as any;
             setModuleData(currentModule);
+          } else {
+            const modRes = await fetch(`${DATA_API_URL}/modules/${effectiveModuleId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': tenant.id
+              }
+            });
+            if (modRes.ok) {
+              currentModule = await modRes.json();
+              setModuleData(currentModule);
+            }
           }
         }
         
-        const recRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'x-tenant-id': tenant.id
-          }
-        });
-        
-        if (recRes.ok) {
-          const recData = await recRes.json();
-          setRecord(recData);
-          
+        if (recData) {
           // CRITICAL: Compute flat fields and merge defaults into editData
           // so that calculations (including VLOOKUP) can see fields that rely on default values.
           const currentFlatFields = flattenFields(currentModule?.layout || []) as ModuleField[];
@@ -756,7 +789,9 @@ export const RecordDetailView = ({
           const withCalculations = evaluateCalculations(dataWithDefaults, currentFlatFields, lookupData);
           editDataRef.current = withCalculations;
           setEditData(withCalculations);
-          evaluateAllDataPopulationRules(withCalculations, currentModule);
+          if (currentModule) {
+            evaluateAllDataPopulationRules(withCalculations, currentModule);
+          }
           
           if (recordId && recData._record_key) {
             setBreadcrumbOverride(recordId, recData._record_key);
@@ -770,16 +805,15 @@ export const RecordDetailView = ({
               }
             });
             if (parentRecRes.ok) {
-              const parentRecData = await parentRecRes.json();
-              if (parentRecData._record_key) {
-                setBreadcrumbOverride(parentRecordId, parentRecData._record_key);
+              const parentData = await parentRecRes.json();
+              if (parentData._record_key) {
+                setBreadcrumbOverride(parentRecordId, parentData._record_key);
               }
             }
           }
 
           // Trigger AI summary update once on load if field exists
           const aiField = currentFlatFields.find(f => f.type === 'ai_summary');
-          
           if (aiField) {
             (async () => {
               try {
@@ -791,7 +825,7 @@ export const RecordDetailView = ({
                     'Authorization': `Bearer ${token}`,
                     'x-tenant-id': tenant.id!
                   },
-                  body: JSON.stringify({ moduleId, ...recData, [aiField.id]: summary })
+                  body: JSON.stringify({ moduleId: effectiveModuleId, ...recData, [aiField.id]: summary })
                 });
                 if (aiRes.ok) {
                   const updated = await aiRes.json();
@@ -803,10 +837,6 @@ export const RecordDetailView = ({
               }
             })();
           }
-        } else if (recRes.status === 404) {
-          toast.error("Record not found");
-        } else {
-          throw new Error(`Failed to fetch record: ${recRes.statusText}`);
         }
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -1531,15 +1561,11 @@ export const RecordDetailView = ({
         throw new Error(err.error || 'Failed to delete record');
       }
 
-      toast.success("Record deleted successfully");
+      toast.success("Record moved to Recycling Bin");
       if (isModal && onClose) {
         onClose();
       } else {
-        if (parentModuleId && parentRecordId) {
-          navigate(`/workspace/modules/${parentModuleId}/records/${parentRecordId}`);
-        } else {
-          navigate(`/workspace/modules/${routeModuleId || moduleId}`);
-        }
+        navigate(getBackUrl());
       }
     } catch (error: any) {
       console.error("Delete Error:", error);
@@ -1605,7 +1631,7 @@ export const RecordDetailView = ({
                 : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
             : activeFieldId === nestedField.id 
               ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
-              : "border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/50 hover:border-zinc-200 dark:hover:border-zinc-800",
+              : "border-transparent",
           !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
         )}
         data-field-id={nestedField.id}
@@ -1684,7 +1710,7 @@ export const RecordDetailView = ({
   };
 
   const interfaceSettings = useMemo(() => {
-    return (moduleData as any)?.interfaceSettings || {
+    const raw = (moduleData as any)?.interfaceSettings || {
       master: {
         layoutType: 'table',
         density: 'standard',
@@ -1694,6 +1720,11 @@ export const RecordDetailView = ({
         layoutType: 'tabs'
       },
       actions: []
+    };
+
+    return {
+      ...raw,
+      actions: (raw.actions || []).filter((act: any) => act.label?.trim().toLowerCase() !== 'archive')
     };
   }, [moduleData]);
 
@@ -1751,9 +1782,7 @@ export const RecordDetailView = ({
                           : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
                       : activeFieldId === field?.id 
                         ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                        : !activeFieldId && !isVisual && !isReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type)
-                          ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
-                          : "border-transparent"
+                        : "border-transparent"
                   )}>
                     {activeFieldId === field?.id && savingFieldId === field?.id && (
                       <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
@@ -1953,9 +1982,7 @@ export const RecordDetailView = ({
                       : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
                   : activeFieldId === field.id 
                     ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                    : !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) 
-                      ? "hover:bg-indigo-500/5 hover:border-indigo-500/30 border-transparent"
-                      : "border-transparent"
+                    : "border-transparent"
               )}>
               {activeFieldId === field.id && savingFieldId === field.id && (
                 <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
@@ -2203,21 +2230,17 @@ export const RecordDetailView = ({
       if (isModal && onClose) {
         onClose();
       } else {
-        if (parentModuleId && parentRecordId) {
-          navigate(`/workspace/modules/${parentModuleId}/records/${parentRecordId}`);
-        } else {
-          navigate(`/workspace/modules/${routeModuleId || moduleId}`);
-        }
+        navigate(getBackUrl());
       }
     };
 
     return (
-      <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden flex flex-col animate-in fade-in duration-300">
-        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30">
+      <div className="flex flex-col flex-1 min-h-0 w-full h-full overflow-hidden animate-in fade-in duration-300">
+        <div className="px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md shrink-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Guided Process Wizard</span>
-              <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase mt-0.5">Step {safeActiveIdx + 1} of {steps.length}: {currentStep.label}</h3>
+              <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Guided Process Wizard</span>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white uppercase mt-0.5">Step {safeActiveIdx + 1} of {steps.length}: {currentStep.label}</h3>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
               {steps.map((step: any, idx: number) => {
@@ -2241,7 +2264,7 @@ export const RecordDetailView = ({
                         isActive
                           ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                           : isCompleted
-                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                             : "bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-400"
                       )}
                     >
@@ -2253,7 +2276,7 @@ export const RecordDetailView = ({
             </div>
           </div>
 
-          <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full mt-6 overflow-hidden">
+          <div className="w-full h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full mt-4 overflow-hidden">
             <div 
               className="h-full bg-indigo-600 transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
@@ -2261,7 +2284,7 @@ export const RecordDetailView = ({
           </div>
         </div>
 
-        <div className="p-8 flex-1 space-y-6">
+        <div className="p-6 lg:p-8 flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-6">
           {(() => {
             const subtabs = visibleTabs.filter((t: any) => t.parentId === currentStep.id);
             if (subtabs.length > 0) {
@@ -2275,9 +2298,9 @@ export const RecordDetailView = ({
                           key={sub.id}
                           onClick={() => setActiveTabId(sub.id)}
                           className={cn(
-                            "px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 border",
+                            "px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-2 border",
                             isSubActive
-                              ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                              ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white border-zinc-200/80 dark:border-white/10 shadow-sm"
                               : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                           )}
                         >
@@ -2298,11 +2321,11 @@ export const RecordDetailView = ({
           })()}
         </div>
 
-        <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex justify-between gap-4">
+        <div className="px-6 py-4 border-t border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md flex justify-between gap-4 shrink-0">
           <button
             onClick={handleBack}
             disabled={safeActiveIdx === 0}
-            className="px-6 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest transition-colors"
+            className="px-6 py-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider transition-colors"
           >
             Back
           </button>
@@ -2310,14 +2333,14 @@ export const RecordDetailView = ({
           {isLastStep ? (
             <button
               onClick={handleFinish}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+              className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-wider"
             >
               Finish & Save
             </button>
           ) : (
             <button
               onClick={handleNext}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-widest"
+              className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-wider"
             >
               Next Step
             </button>
@@ -2330,16 +2353,16 @@ export const RecordDetailView = ({
   const renderAccordionView = () => {
     const accordionTabs = visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id));
     return (
-      <div className="space-y-6">
+      <div className="flex-1 min-h-0 w-full h-full overflow-y-auto custom-scrollbar space-y-6 pr-1">
         {accordionTabs.map((tab: any) => {
           const isCollapsed = collapsedGroups[tab.id] ?? false;
           const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
           const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
           return (
-            <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm overflow-hidden transition-all">
+            <div key={tab.id} className="bg-white/70 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl shadow-sm overflow-hidden backdrop-blur-sm transition-all shrink-0">
               <div 
                 onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
-                className="p-6 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+                className="p-5 md:p-6 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100/60 dark:border-zinc-800/60 flex items-center justify-between cursor-pointer select-none"
               >
                 <div className="flex items-center gap-3">
                   {interfaceSettings.detail?.showTabIcons ? (
@@ -2347,7 +2370,7 @@ export const RecordDetailView = ({
                   ) : (
                     <span className="w-2 h-2 rounded-full bg-indigo-500" />
                   )}
-                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
                 </div>
                 <LucideIcons.ChevronDown size={16} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
               </div>
@@ -2360,7 +2383,7 @@ export const RecordDetailView = ({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="p-8">
+                    <div className="p-6 md:p-8">
                       {renderFieldsGrid(tab.id)}
                     </div>
                   </motion.div>
@@ -2372,6 +2395,7 @@ export const RecordDetailView = ({
       </div>
     );
   };
+
 
   if ((loading || platformLoading) && !record) return null;
 
@@ -2388,8 +2412,8 @@ export const RecordDetailView = ({
     return <Navigate to="/workspace" replace />;
   }
 
-  return (
-    <div className="flex flex-col w-full px-6 lg:px-12 pt-6 pb-20 space-y-8">
+  const mainContent = (
+    <div className="relative flex flex-col w-full h-full min-h-0 overflow-hidden">
       <style>{`
         @keyframes shake-field {
           0%, 100% { transform: translateX(0); }
@@ -2400,147 +2424,122 @@ export const RecordDetailView = ({
           animation: shake-field 0.4s ease-in-out;
         }
       `}</style>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+
+      {/* Ambient background glows for workspace page cohesion */}
+      {!isModal && (
+        <>
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
+        </>
+      )}
+
+      {/* Standardized Full-Width Sticky PageHeader */}
+      <div className={cn(
+        "w-full px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-30",
+        !isModal && "sticky top-0"
+      )}>
+        {/* Left: Back + Icon + Title + Metadata */}
+        <div className="flex items-center gap-3.5 min-w-0">
           {isModal ? (
             <button 
               onClick={onClose}
-              className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
+              className="h-9 w-9 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm shrink-0"
+              title="Back"
             >
-              <ArrowLeft size={20} />
+              <ArrowLeft size={16} />
             </button>
           ) : (
             <Link 
-              to={parentModuleId && parentRecordId ? `/workspace/modules/${parentModuleId}/records/${parentRecordId}` : `/workspace/modules/${routeModuleId || moduleId}`}
-              className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors"
+              to={getBackUrl()}
+              className="h-9 w-9 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm shrink-0"
+              title="Back"
             >
-              <ArrowLeft size={20} />
+              <ArrowLeft size={16} />
             </Link>
           )}
-          <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-500/20">
-            <Icon size={24} className="text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-lg font-bold tracking-tight text-zinc-950 dark:text-white truncate">
                 {recordTitle}
               </h1>
             </div>
-            <div className="text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-1.5 text-xs">
+
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="font-medium text-zinc-600 dark:text-zinc-400">
+                {moduleData.name}
+              </span>
+
+              {(editData._record_key || record._record_key) && (
+                <>
+                  <span className="text-zinc-350 dark:text-zinc-600">•</span>
+                  <span className="font-mono font-medium text-zinc-600 dark:text-zinc-400">
+                    {editData._record_key || record._record_key}
+                  </span>
+                </>
+              )}
+
               {(() => {
                 const config = moduleData.config || (moduleData as any).config;
                 const subtitleFieldIds = config?.subtitleFieldIds;
                 
                 if (subtitleFieldIds && Array.isArray(subtitleFieldIds) && subtitleFieldIds.length > 0) {
                   const items = subtitleFieldIds.map((fieldId) => {
-                    // Special handling for metadata fields
-                    if (fieldId === 'createdAt') {
-                      return record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now';
-                    }
-                    if (fieldId === 'createdBy') {
-                      return record.createdBy || 'System';
-                    }
-                    if (fieldId === '_record_key') {
-                      return record._record_key || record.id;
-                    }
+                    if (fieldId === 'createdAt') return null;
+                    if (fieldId === 'createdBy') return record.createdBy ? `By ${record.createdBy}` : null;
+                    if (fieldId === '_record_key') return null;
 
                     const field = allFields.find(f => f.id === fieldId);
                     const value = getFieldValue(editData, fieldId, field?.name) ?? getFieldValue(record, fieldId, field?.name);
                     if (!value && value !== 0) return null;
                     
-                    // Format value if it's a date or other special type
                     let displayValue = value;
                     if (field?.type === 'date' && value) {
                       displayValue = new Date(value).toLocaleDateString();
                     }
-                    
                     return displayValue;
                   }).filter(Boolean);
 
                   if (items.length > 0) {
                     return items.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5">
-                        {idx > 0 && <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />}
-                        <span className="font-medium">{String(item)}</span>
-                      </div>
+                      <span key={idx} className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        <span className="text-zinc-350 dark:text-zinc-600">•</span>
+                        <span>{String(item)}</span>
+                      </span>
                     ));
                   }
                 }
-                
-                // Fallback to default: Module Name • Record Key • Created Date
-                return (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium">{moduleData.name}</span>
-                    {(editData._record_key || record._record_key) && (
-                      <>
-                        <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
-                        <span className="font-medium">{editData._record_key || record._record_key}</span>
-                      </>
-                    )}
-                    <span className="w-1 h-1 bg-zinc-300 dark:bg-zinc-700 rounded-full" />
-                    <span>Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
-                  </div>
-                );
+                return null;
               })()}
+
+              <span className="flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500">
+                <span className="text-zinc-350 dark:text-zinc-600">•</span>
+                <span>Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
+              </span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Automation Quick Actions */}
+
+        {/* Right: Actions Cluster */}
+        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap shrink-0">
+          {/* Quick Actions & Automations */}
           {quickActionAutomations.map((auto: any) => (
             <button
               key={auto.id}
               disabled={triggeringAutomationId === auto.id}
               onClick={() => handleTriggerQuickAction(auto)}
-              className="h-10 px-4 bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-600 hover:text-white border border-violet-200 dark:border-violet-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+              className="h-8 px-2.5 bg-zinc-100/80 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
             >
               {triggeringAutomationId === auto.id ? (
-                <Loader2 size={12} className="animate-spin" />
+                <Loader2 size={12} className="animate-spin text-indigo-500" />
               ) : (
-                <LucideIcons.Zap size={12} />
+                <LucideIcons.Zap size={12} className="text-amber-500" />
               )}
               <span>{auto.name}</span>
             </button>
           ))}
-          {/* Custom Quick Actions */}
-          {interfaceSettings.actions?.map((act: any) => {
-            const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
-            return (
-              <button
-                key={act.id}
-                onClick={() => {
-                  const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
-                  setActiveQuickAction(act);
-                  setActionForm(form || null);
-                  const defaults: any = {};
-                  if (form) {
-                    const allFormFields = form.isMultistep 
-                      ? (form.steps || []).flatMap((s: any) => s.fields || [])
-                      : (form.fields || []);
-                    allFormFields.forEach((fObj: any) => {
-                      const field = allFields.find(f => f.id === fObj.id);
-                      const defVal = calculateDefaultValue(field, defaults);
-                      if (defVal !== undefined && defVal !== null && defVal !== '') {
-                        defaults[fObj.id] = defVal;
-                      }
-                    });
-                    if (form.isMultistep && form.steps?.length > 0) {
-                      const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
-                      setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
-                    }
-                  }
-                  setActionFormData(defaults);
-                  setActionFormErrors({});
-                  setShowQuickActionModal(true);
-                }}
-                className="h-10 px-4 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white border border-indigo-200 dark:border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-              >
-                <ActionIcon size={14} />
-                <span>{act.label}</span>
-              </button>
-            );
-          })}
-          {/* Status & Transitions Dropdown */}
+
+          {/* Workflow Status Pill */}
           {activeWorkflow ? (
             <div className="relative" ref={transitionsMenuRef}>
               {(() => {
@@ -2552,19 +2551,18 @@ export const RecordDetailView = ({
                     <button
                       onClick={handleStartWorkflow}
                       disabled={isTransitioning}
-                      className="h-10 px-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                      className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
                     >
                       {isTransitioning ? (
-                        <Loader2 size={12} className="animate-spin" />
+                        <Loader2 size={12} className="animate-spin text-indigo-500" />
                       ) : (
-                        <LucideIcons.Zap size={12} fill="currentColor" />
+                        <LucideIcons.Zap size={12} className="text-amber-500" />
                       )}
-                      <span>Initialize Workflow</span>
+                      <span>Start Workflow</span>
                     </button>
                   );
                 }
 
-                // Resolve display names for all active nodes
                 const displayNodeNames: string[] = [];
                 for (const nodeId of activeNodeIds) {
                   const node = activeWorkflow?.nodes.find((n: any) => n.id === nodeId);
@@ -2588,7 +2586,6 @@ export const RecordDetailView = ({
 
                 const displayStatusText = displayNodeNames.length > 0 ? displayNodeNames.join(' / ') : 'Active';
 
-                // Collect transitions from all active nodes
                 const transitions: any[] = [];
                 for (const nodeId of activeNodeIds) {
                   const nodeTransitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === nodeId) || [];
@@ -2603,23 +2600,23 @@ export const RecordDetailView = ({
                   <>
                     <button
                       onClick={() => setShowTransitionsMenu(!showTransitionsMenu)}
-                      className="h-10 px-4 bg-indigo-500/10 dark:bg-indigo-500/5 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl transition-all flex items-center gap-2 text-xs font-bold uppercase tracking-wider relative overflow-hidden group/status"
+                      className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold shadow-xs group"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
-                      <span>{displayStatusText}</span>
-                      <LucideIcons.ChevronDown size={14} className="text-indigo-500/70 group-hover:text-indigo-500 transition-colors" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)] shrink-0" />
+                      <span className="truncate max-w-[120px]">{displayStatusText}</span>
+                      <LucideIcons.ChevronDown size={11} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors shrink-0" />
                     </button>
 
                     <AnimatePresence>
                       {showTransitionsMenu && (
                         <motion.div
-                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          initial={{ opacity: 0, y: 6, scale: 0.95 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.95 }}
                           transition={{ duration: 0.15 }}
-                          className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden p-1.5 space-y-0.5"
+                          className="absolute right-0 mt-1.5 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden p-1.5 space-y-0.5"
                         >
-                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-2.5 py-1.5">Transitions</p>
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-2.5 py-1">Transitions</p>
                           {transitions.map((edge: any) => {
                             const targetNode = activeWorkflow?.nodes.find((n: any) => n.id === edge.target);
                             if (!targetNode) return null;
@@ -2632,7 +2629,7 @@ export const RecordDetailView = ({
                                   setShowTransitionsMenu(false);
                                 }}
                                 disabled={isTransitioning}
-                                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-between group/item disabled:opacity-50"
+                                className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-between group/item disabled:opacity-50"
                               >
                                 <span>{targetNode.name}</span>
                                 <LucideIcons.ArrowRight size={12} className="text-zinc-400 group-hover/item:translate-x-0.5 transition-transform" />
@@ -2640,7 +2637,7 @@ export const RecordDetailView = ({
                             );
                           })}
                           {transitions.length === 0 && (
-                            <p className="text-[10px] text-zinc-400 italic px-2.5 py-2">No available transitions</p>
+                            <p className="text-[10px] text-zinc-400 italic px-2.5 py-1.5">No available transitions</p>
                           )}
                         </motion.div>
                       )}
@@ -2651,87 +2648,614 @@ export const RecordDetailView = ({
             </div>
           ) : null}
 
-          {/* Visualizer Trigger */}
-          {activeWorkflow && (
-            <button
-              onClick={() => setShowVisualizer(true)}
-              title="View Workflow Diagram"
-              className="w-10 h-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
-            >
-              <GitFork size={16} />
-            </button>
-          )}
-
-          {/* History Popover */}
-          {activeWorkflow && (
-            <div className="relative" ref={historyMenuRef}>
+          {/* People & Collaboration Group */}
+          <div className="flex items-center gap-1.5">
+            {/* Assignee Picker */}
+            <div className="relative" ref={assigneeMenuRef}>
               <button
-                onClick={() => setShowHistoryMenu(!showHistoryMenu)}
-                title="Workflow History"
-                className={cn(
-                  "w-10 h-10 border text-zinc-500 rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm",
-                  showHistoryMenu 
-                    ? "bg-indigo-50 dark:bg-indigo-950/20 border-indigo-500/50 text-indigo-600 dark:text-indigo-400"
-                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:text-indigo-500 dark:hover:text-indigo-400"
-                )}
+                onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
+                className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 group text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs"
+                title={currentAssignee ? `Assignee: ${currentAssignee.name}` : 'Assign Member'}
               >
-                <History size={16} />
+                {currentAssignee ? (
+                  <>
+                    <UserAvatarWithPresence
+                      avatarUrl={currentAssignee.avatarUrl}
+                      name={currentAssignee.name}
+                      status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
+                      size="xs"
+                    />
+                    <span className="max-w-[80px] truncate">{currentAssignee.name.split(' ')[0]}</span>
+                  </>
+                ) : (
+                  <>
+                    <LucideIcons.User size={12} className="text-zinc-400" />
+                    <span className="text-zinc-500">Assignee</span>
+                  </>
+                )}
+                <LucideIcons.ChevronDown size={11} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
               </button>
 
               <AnimatePresence>
-                {showHistoryMenu && (
+                {showAssigneeMenu && (
                   <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    initial={{ opacity: 0, y: 6, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col"
+                    className="absolute right-0 mt-1.5 w-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
                   >
-                    <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 flex items-center justify-between">
-                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Workflow History</span>
-                      <History size={12} className="text-zinc-400" />
+                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-0.5">
+                      <button
+                        onClick={() => {
+                          const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
+                          if (me) handleUpdateAssignee(me.id);
+                          setShowAssigneeMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
+                      >
+                        <LucideIcons.UserCheck size={12} />
+                        <span>Assign to me</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleUpdateAssignee(null);
+                          setShowAssigneeMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
+                      >
+                        <LucideIcons.UserMinus size={12} />
+                        <span>Clear Assignee</span>
+                      </button>
                     </div>
 
-                    <div className="max-h-64 overflow-y-auto p-3 space-y-4 relative before:absolute before:inset-y-3 before:left-5 before:w-px before:bg-zinc-200 dark:before:bg-zinc-800 scrollbar-thin">
-                      {(() => {
-                        const wState = record.workflowState as WorkflowState | undefined;
-                        const history = wState?.history || [];
+                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 relative">
+                      <LucideIcons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={11} />
+                      <input
+                        type="text"
+                        placeholder="Search members..."
+                        value={assigneeSearch}
+                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md pl-7 pr-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
 
-                        if (history.length === 0) {
+                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5 max-h-44 scrollbar-thin">
+                      {(members || [])
+                        .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                        .map(member => {
+                          const isSelected = (editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId) === member.id;
                           return (
-                            <p className="text-[10px] text-zinc-400 italic text-center py-4 pl-4">No history available</p>
-                          );
-                        }
-
-                        return history.map((h, i) => {
-                          const node = activeWorkflow?.nodes?.find((n: any) => n.id === h.nodeId);
-                          return (
-                            <div key={i} className="relative pl-7 flex flex-col gap-0.5">
-                              <div className={cn(
-                                "absolute left-1.5 top-1 w-2.5 h-2.5 rounded-full bg-white dark:bg-zinc-950 border-2 z-10 transition-colors",
-                                i === history.length - 1 ? "border-indigo-500 scale-110 shadow-lg shadow-indigo-500/20" : "border-zinc-300 dark:border-zinc-700"
-                              )} />
-                              <p className="text-[11px] font-bold text-zinc-900 dark:text-white leading-tight">
-                                {node?.name || 'Unknown Node'}
-                              </p>
-                              <div className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium space-x-1 flex items-center flex-wrap">
-                                <span>{new Date(h.timestamp).toLocaleDateString()} {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                {h.triggeredBy && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-indigo-500/80">{h.triggeredBy}</span>
-                                  </>
-                                )}
-                              </div>
-                              {h.triggerCondition && (
-                                <div className="mt-1 text-[8px] bg-amber-500/10 dark:bg-amber-500/5 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md font-mono border border-amber-500/20 w-fit flex items-center gap-1">
-                                  <Zap size={8} /> Condition: {h.triggerCondition}
-                                </div>
+                            <button
+                              key={member.id}
+                              onClick={() => {
+                                handleUpdateAssignee(member.id);
+                                setShowAssigneeMenu(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
+                                isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
                               )}
-                            </div>
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <UserAvatarWithPresence
+                                  avatarUrl={member.avatarUrl}
+                                  name={member.name}
+                                  status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
+                                  size="xs"
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate leading-none">{member.name}</p>
+                                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
+                                </div>
+                              </div>
+                              {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
+                            </button>
                           );
-                        });
-                      })()}
+                        })}
+                      {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
+                        <p className="text-[10px] text-zinc-400 text-center py-3 italic font-medium">No members found</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Participants Picker */}
+            <div className="relative" ref={participantMenuRef}>
+              <button
+                onClick={() => setShowParticipantMenu(!showParticipantMenu)}
+                className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 group text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs"
+                title={currentParticipants.length > 0 ? `${currentParticipants.length} Participants` : 'Manage Participants'}
+              >
+                <LucideIcons.Users size={12} className={currentParticipants.length > 0 ? "text-indigo-500" : "text-zinc-400"} />
+                <span>{currentParticipants.length > 0 ? currentParticipants.length : 'Participants'}</span>
+                <LucideIcons.ChevronDown size={11} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
+              </button>
+
+              <AnimatePresence>
+                {showParticipantMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-1.5 w-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
+                  >
+                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-0.5">
+                      <button
+                        onClick={() => {
+                          const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
+                          if (me) handleToggleParticipant(me.id);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
+                      >
+                        <LucideIcons.UserPlus size={12} />
+                        <span>Toggle myself</span>
+                      </button>
+                      {currentParticipants.length > 0 && (
+                        <button
+                          onClick={() => {
+                            handleClearParticipants();
+                            setShowParticipantMenu(false);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
+                        >
+                          <LucideIcons.UserMinus size={12} />
+                          <span>Clear Participants</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 relative">
+                      <LucideIcons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={11} />
+                      <input
+                        type="text"
+                        placeholder="Search members..."
+                        value={participantSearch}
+                        onChange={(e) => setParticipantSearch(e.target.value)}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md pl-7 pr-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5 max-h-44 scrollbar-thin">
+                      {(members || [])
+                        .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase()))
+                        .map(member => {
+                          const currentIds: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
+                          const isSelected = currentIds.includes(member.id);
+                          return (
+                            <button
+                              key={member.id}
+                              onClick={() => {
+                                handleToggleParticipant(member.id);
+                              }}
+                              className={cn(
+                                "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
+                                isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <UserAvatarWithPresence
+                                  avatarUrl={member.avatarUrl}
+                                  name={member.name}
+                                  status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
+                                  size="xs"
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate leading-none">{member.name}</p>
+                                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
+                                </div>
+                              </div>
+                              {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
+                            </button>
+                          );
+                        })}
+                      {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase())).length === 0 && (
+                        <p className="text-[10px] text-zinc-400 text-center py-3 italic font-medium">No members found</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Share Button */}
+            <button
+              type="button"
+              onClick={() => setShowShareModal(true)}
+              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
+              title="Share Record"
+            >
+              <Share2 size={12} className="text-indigo-500" />
+              <span className="hidden sm:inline">Share</span>
+            </button>
+          </div>
+
+          {/* More Options Menu (•••) */}
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              title="More Actions"
+              className={cn(
+                "w-8 h-8 rounded-lg border transition-all flex items-center justify-center shadow-xs",
+                showMoreMenu
+                  ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-600 dark:text-indigo-400"
+                  : "bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white"
+              )}
+            >
+              <MoreHorizontal size={15} />
+            </button>
+
+            <AnimatePresence>
+              {showMoreMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 mt-1.5 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden p-1 space-y-0.5"
+                >
+                  {/* Share Record Option */}
+                  <button
+                    onClick={() => {
+                      setShowShareModal(true);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Share2 size={13} className="text-indigo-500 shrink-0" />
+                    <span>Share Record</span>
+                  </button>
+
+                  {/* Export PDF & Custom Module Actions */}
+                  {interfaceSettings.actions && interfaceSettings.actions.length > 0 ? (
+                    interfaceSettings.actions.map((act: any) => {
+                      const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.FileText;
+                      return (
+                        <button
+                          key={act.id}
+                          onClick={() => {
+                            setShowMoreMenu(false);
+                            const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
+                            if (form) {
+                              setActiveQuickAction(act);
+                              setActionForm(form);
+                              const defaults: any = {};
+                              const allFormFields = form.isMultistep 
+                                ? (form.steps || []).flatMap((s: any) => s.fields || [])
+                                : (form.fields || []);
+                              allFormFields.forEach((fObj: any) => {
+                                const field = allFields.find(f => f.id === fObj.id);
+                                const defVal = calculateDefaultValue(field, defaults);
+                                if (defVal !== undefined && defVal !== null && defVal !== '') {
+                                  defaults[fObj.id] = defVal;
+                                }
+                              });
+                              if (form.isMultistep && form.steps?.length > 0) {
+                                const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
+                                setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
+                              }
+                              setActionFormData(defaults);
+                              setActionFormErrors({});
+                              setShowQuickActionModal(true);
+                            } else {
+                              window.print();
+                            }
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                        >
+                          <ActionIcon size={13} className="text-zinc-500 dark:text-zinc-400 shrink-0" />
+                          <span>{act.label}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        window.print();
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <LucideIcons.FileText size={13} className="text-zinc-500 dark:text-zinc-400 shrink-0" />
+                      <span>Export PDF</span>
+                    </button>
+                  )}
+
+                  {activeWorkflow && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setShowVisualizer(true);
+                          setShowMoreMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                      >
+                        <GitFork size={13} className="text-indigo-500 shrink-0" />
+                        <span>Workflow Diagram</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowHistoryMenu(true);
+                          setShowMoreMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                      >
+                        <History size={13} className="text-indigo-500 shrink-0" />
+                        <span>Workflow History</span>
+                      </button>
+                    </>
+                  )}
+
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
+
+                  <button
+                    onClick={() => {
+                      setShowDeleteModal(true);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Trash2 size={13} className="shrink-0" />
+                    <span>Delete Record</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Close Button (for Modal) */}
+          {isModal && (
+            <button 
+              onClick={onClose}
+              className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content Area Supporting all 5 Layout Options */}
+      {editForm && !editForm.isMultistep ? (
+        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-y-auto custom-scrollbar">
+          {renderFieldsGrid('default')}
+        </div>
+      ) : interfaceSettings.detail?.layoutType === 'process' || (editForm && editForm.isMultistep) ? (
+        renderProcessWizardView()
+      ) : interfaceSettings.detail?.layoutType === 'accordion' ? (
+        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-hidden">
+          {renderAccordionView()}
+        </div>
+      ) : interfaceSettings.detail?.layoutType === 'split' ? (
+        <div className="flex-1 w-full min-h-0 relative z-10 flex flex-row overflow-hidden">
+          {/* Edge-to-Edge Left Navigation Menu */}
+          <div className="w-64 md:w-72 shrink-0 border-r border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md flex flex-col h-full overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1.5 custom-scrollbar">
+              {sortedVisibleTabs.map((tab: any) => {
+                const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+                const isParent = subtabs.length > 0;
+                const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+                const isActive = activeTabId === tab.id || isParentActive;
+                const isSubtab = !!tab.parentId && sortedVisibleTabs.some((p: any) => p.id === tab.parentId);
+                
+                const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+                const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (isParent) {
+                        setActiveTabId(subtabs[0].id);
+                      } else {
+                        setActiveTabId(tab.id);
+                      }
+                    }}
+                    className={cn(
+                      "w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-between group cursor-pointer",
+                      isActive
+                        ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white font-bold shadow-sm"
+                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60",
+                      isSubtab && "pl-7 border-l-2 border-zinc-200 dark:border-zinc-800 ml-3.5 rounded-l-none"
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {interfaceSettings.detail?.showTabIcons && (
+                        <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={14} className="shrink-0" />
+                      )}
+                      <span className="truncate">{tab.label}</span>
+                      {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                      {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                    </div>
+                    {!isParent && <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400 group-hover:translate-x-0.5")} />}
+                    {isParent && <ChevronDown size={12} className={cn("transition-transform flex-shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400")} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Field Cards Container */}
+          <div className="flex-1 min-h-0 h-full p-6 lg:p-8 overflow-y-auto custom-scrollbar">
+            {activeTabId ? renderFieldsGrid(activeTabId) : (
+              <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
+            )}
+          </div>
+        </div>
+      ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
+        <div className="flex-1 min-h-0 w-full h-full p-6 overflow-y-auto custom-scrollbar space-y-6">
+          {visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id)).map((tab: any) => {
+            const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
+            const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+            return (
+              <div key={tab.id} className="bg-white/70 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-sm backdrop-blur-sm space-y-6 shrink-0">
+                <div className="pb-4 border-b border-zinc-100/80 dark:border-zinc-800/80 flex items-center gap-2">
+                  {interfaceSettings.detail?.showTabIcons ? (
+                    <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  )}
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
+                </div>
+                {renderFieldsGrid(tab.id)}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Edge-to-Edge Tabbed View */
+        <div className="flex-1 w-full min-h-0 relative z-10 flex flex-col overflow-hidden">
+          {moduleData?.tabs && moduleData.tabs.length > 0 && (
+            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md">
+              <AnimatePresence>
+                {showLeftScroll && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="absolute left-0 top-0 bottom-0 w-20 z-10 pointer-events-none"
+                  >
+                    <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                      <button 
+                        onClick={() => handleScroll('left')}
+                        className="p-1.5 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div 
+                ref={tabContainerRef}
+                onScroll={checkScroll}
+                className="flex gap-2 px-6 py-3 overflow-x-auto no-scrollbar scroll-smooth"
+              >
+                {[...sortedVisibleTabs.filter((t: any) => !t.parentId), { id: 'activity', name: 'activity', label: 'Activity Feed', iconName: 'MessageSquare' }].map((tab: any) => {
+                  const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+                  const isParent = subtabs.length > 0;
+                  const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+                  const isActive = activeTabId === tab.id || isParentActive;
+
+                  const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+                  const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
+                  return (
+                    <div 
+                      key={tab.id}
+                      className="relative"
+                      onMouseEnter={(e) => {
+                        setHoveredTabId(tab.id);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredTabId(null);
+                        setHoveredTabRect(null);
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          if (isParent) {
+                            setActiveTabId(subtabs[0].id);
+                          } else {
+                            setActiveTabId(tab.id);
+                          }
+                        }}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border cursor-pointer",
+                          isActive
+                            ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white border-zinc-200/80 dark:border-white/10 shadow-sm"
+                            : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-transparent border-transparent hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60"
+                        )}
+                      >
+                        {interfaceSettings.detail?.showTabIcons && (
+                          <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={13} className="shrink-0" />
+                        )}
+                        <span>{tab.label}</span>
+                        {isParent && <ChevronDown size={10} className={cn("ml-0.5 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
+                        {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                        {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                      </button>
+
+                      {/* Mega Menu Dropdown */}
+                      {isParent && hoveredTabId === tab.id && hoveredTabRect && (
+                        <div 
+                          style={{
+                            position: 'fixed',
+                            top: `${hoveredTabRect.bottom + 4}px`,
+                            left: `${hoveredTabRect.left}px`,
+                          }}
+                          className="w-52 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-[9999] animate-in fade-in slide-in-from-top-1 duration-200 flex flex-col gap-0.5"
+                          onMouseEnter={() => {
+                            setHoveredTabId(tab.id);
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredTabId(null);
+                            setHoveredTabRect(null);
+                          }}
+                        >
+                          {subtabs.map((sub: any) => {
+                            const subHasErrors = failedTabSeverities[sub.id] === 'error';
+                            const subHasWarnings = failedTabSeverities[sub.id] === 'warning';
+                            return (
+                              <button
+                                key={sub.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTabId(sub.id);
+                                  setHoveredTabId(null);
+                                  setHoveredTabRect(null);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between cursor-pointer",
+                                  activeTabId === sub.id
+                                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold"
+                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {interfaceSettings.detail?.showTabIcons && (
+                                    <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                  )}
+                                  <span>{sub.label}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  {subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                                  {subHasWarnings && !subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                                  {activeTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-white" />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <AnimatePresence>
+                {showRightScroll && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="absolute right-0 top-0 bottom-0 w-20 z-10 pointer-events-none"
+                  >
+                    <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                      <button 
+                        onClick={() => handleScroll('right')}
+                        className="p-1.5 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -2739,523 +3263,34 @@ export const RecordDetailView = ({
             </div>
           )}
 
-          {/* Assignee Picker */}
-          <div className="relative" ref={assigneeMenuRef}>
-            <button
-              onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
-              className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all flex items-center gap-2 group text-xs font-semibold shadow-sm"
-            >
-              {currentAssignee ? (
-                <>
-                  <UserAvatarWithPresence
-                    avatarUrl={currentAssignee.avatarUrl}
-                    name={currentAssignee.name}
-                    status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
-                    size="xs"
-                  />
-                  <span className="text-zinc-700 dark:text-zinc-300 max-w-[100px] truncate">{currentAssignee.name}</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:border-indigo-500 transition-colors">
-                    <LucideIcons.User size={10} />
-                  </div>
-                  <span className="text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">Assignee</span>
-                </>
-              )}
-              <LucideIcons.ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-            </button>
-
-            <AnimatePresence>
-              {showAssigneeMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
-                >
-                  {/* Actions */}
-                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-1">
-                    <button
-                      onClick={() => {
-                        const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
-                        if (me) handleUpdateAssignee(me.id);
-                        setShowAssigneeMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
-                    >
-                      <LucideIcons.UserCheck size={12} />
-                      <span>Assign to me</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleUpdateAssignee(null);
-                        setShowAssigneeMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
-                    >
-                      <LucideIcons.UserMinus size={12} />
-                      <span>Clear Assignee</span>
-                    </button>
-                  </div>
-
-                  {/* Search */}
-                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 relative">
-                    <LucideIcons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={12} />
-                    <input
-                      type="text"
-                      placeholder="Search members..."
-                      value={assigneeSearch}
-                      onChange={(e) => setAssigneeSearch(e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  {/* Members List */}
-                  <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 max-h-48 scrollbar-thin">
-                    {(members || [])
-                      .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
-                      .map(member => {
-                        const isSelected = (editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId) === member.id;
-                        return (
-                          <button
-                            key={member.id}
-                            onClick={() => {
-                              handleUpdateAssignee(member.id);
-                              setShowAssigneeMenu(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-                              isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <UserAvatarWithPresence
-                                avatarUrl={member.avatarUrl}
-                                name={member.name}
-                                status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
-                                size="xs"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate leading-none">{member.name}</p>
-                                <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
-                              </div>
-                            </div>
-                            {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
-                          </button>
-                        );
-                      })}
-                    {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
-                      <p className="text-[10px] text-zinc-400 text-center py-4 italic font-medium">No members found</p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Participants Picker */}
-          <div className="relative" ref={participantMenuRef}>
-            <button
-              onClick={() => setShowParticipantMenu(!showParticipantMenu)}
-              className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all flex items-center gap-2 group text-xs font-semibold shadow-sm"
-            >
-              {currentParticipants.length > 0 ? (
-                <>
-                  <div className="flex items-center -space-x-1.5 overflow-hidden">
-                    {currentParticipants.slice(0, 3).map(p => (
-                      <UserAvatarWithPresence
-                        key={p.id}
-                        avatarUrl={p.avatarUrl}
-                        name={p.name}
-                        status={(p as any).status || (p as any).presenceStatus || 'AVAILABLE'}
-                        size="xs"
-                      />
-                    ))}
-                  </div>
-                  <span className="text-zinc-700 dark:text-zinc-300">
-                    {currentParticipants.length} {currentParticipants.length === 1 ? 'Participant' : 'Participants'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:border-indigo-500 transition-colors">
-                    <LucideIcons.Users size={10} />
-                  </div>
-                  <span className="text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors">Participants</span>
-                </>
-              )}
-              <LucideIcons.ChevronDown size={14} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-            </button>
-
-            <AnimatePresence>
-              {showParticipantMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
-                >
-                  {/* Actions */}
-                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-1">
-                    <button
-                      onClick={() => {
-                        const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
-                        if (me) handleToggleParticipant(me.id);
-                      }}
-                      className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
-                    >
-                      <LucideIcons.UserPlus size={12} />
-                      <span>Toggle myself</span>
-                    </button>
-                    {currentParticipants.length > 0 && (
-                      <button
-                        onClick={() => {
-                          handleClearParticipants();
-                          setShowParticipantMenu(false);
-                        }}
-                        className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
-                      >
-                        <LucideIcons.UserMinus size={12} />
-                        <span>Clear Participants</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Search */}
-                  <div className="p-2 border-b border-zinc-100 dark:border-zinc-800 relative">
-                    <LucideIcons.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={12} />
-                    <input
-                      type="text"
-                      placeholder="Search members..."
-                      value={participantSearch}
-                      onChange={(e) => setParticipantSearch(e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  {/* Members List */}
-                  <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 max-h-48 scrollbar-thin">
-                    {(members || [])
-                      .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase()))
-                      .map(member => {
-                        const currentIds: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
-                        const isSelected = currentIds.includes(member.id);
-                        return (
-                          <button
-                            key={member.id}
-                            onClick={() => {
-                              handleToggleParticipant(member.id);
-                            }}
-                            className={cn(
-                              "w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-                              isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <UserAvatarWithPresence
-                                avatarUrl={member.avatarUrl}
-                                name={member.name}
-                                status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
-                                size="xs"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate leading-none">{member.name}</p>
-                                <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
-                              </div>
-                            </div>
-                            {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
-                          </button>
-                        );
-                      })}
-                    {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase())).length === 0 && (
-                      <p className="text-[10px] text-zinc-400 text-center py-4 italic font-medium">No members found</p>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Delete Button */}
-          <button 
-            onClick={() => setShowDeleteModal(true)}
-            className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-rose-500 rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
-            title="Delete Record"
-          >
-            <Trash2 size={16} />
-          </button>
-
-          {/* Close Button (for Modal) */}
-          {isModal && (
-            <button 
-              onClick={onClose}
-              className="h-10 px-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm"
-              title="Close"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="w-full space-y-8">
-        {editForm && !editForm.isMultistep ? (
-          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
-            {renderFieldsGrid('default')}
-          </div>
-        ) : interfaceSettings.detail?.layoutType === 'process' || (editForm && editForm.isMultistep) ? (
-          renderProcessWizardView()
-        ) : interfaceSettings.detail?.layoutType === 'accordion' ? (
-          renderAccordionView()
-        ) : interfaceSettings.detail?.layoutType === 'split' ? (
-          <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6 items-start">
-            {/* Left Navigation Menu */}
-            <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-5 space-y-4 shadow-sm">
-              <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
-              <div className="space-y-1">
-                {sortedVisibleTabs.map((tab: any) => {
-                  const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
-                  const isParent = subtabs.length > 0;
-                  const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
-                  const isActive = activeTabId === tab.id || isParentActive;
-                  const isSubtab = !!tab.parentId && sortedVisibleTabs.some((p: any) => p.id === tab.parentId);
-                  
-                  const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
-                  const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
-
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        if (isParent) {
-                          setActiveTabId(subtabs[0].id);
-                        } else {
-                          setActiveTabId(tab.id);
-                        }
-                      }}
-                      className={cn(
-                        "w-full text-left px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center justify-between group",
-                        isActive
-                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                          : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900",
-                        isSubtab && "pl-8 border-l border-zinc-200 dark:border-zinc-800 ml-4 rounded-l-none"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {interfaceSettings.detail?.showTabIcons && (
-                          <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
-                        )}
-                        <span className="truncate">{tab.label}</span>
-                        {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                        {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
-                      </div>
-                      {!isParent && <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />}
-                      {isParent && <ChevronDown size={12} className={cn("transition-transform flex-shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400")} />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Field Cards Container */}
-            <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm">
-              {activeTabId ? renderFieldsGrid(activeTabId) : (
-                <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
-              )}
-            </div>
-          </div>
-        ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
-          <div className="space-y-8">
-            {visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id)).map((tab: any) => {
-              const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
-              const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
-              return (
-                <div key={tab.id} className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6">
-                  <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
-                    {interfaceSettings.detail?.showTabIcons ? (
-                      <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                    )}
-                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
-                  </div>
-                  {renderFieldsGrid(tab.id)}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[32px] shadow-sm">
-            {moduleData?.tabs && moduleData.tabs.length > 0 && (
-              <div className="relative group/tabs overflow-hidden rounded-t-[31px]">
-                <AnimatePresence>
-                  {showLeftScroll && (
-                    <motion.div 
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      className="absolute left-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
-                    >
-                      <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                        <button 
-                          onClick={() => handleScroll('left')}
-                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
-                        >
-                          <ChevronLeft size={18} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div 
-                  ref={tabContainerRef}
-                  onScroll={checkScroll}
-                  className="flex gap-1.5 px-6 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-x-auto no-scrollbar scroll-smooth"
-                >
-                  {[...sortedVisibleTabs.filter((t: any) => !t.parentId), { id: 'activity', name: 'activity', label: 'Activity Feed', iconName: 'MessageSquare' }].map((tab: any) => {
-                    const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
-                    const isParent = subtabs.length > 0;
-                    const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
-                    const isActive = activeTabId === tab.id || isParentActive;
-
-                    const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
-                    const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
-
-                    return (
-                      <div 
-                        key={tab.id}
-                        className="relative"
-                        onMouseEnter={(e) => {
-                          setHoveredTabId(tab.id);
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
-                        }}
-                        onMouseLeave={() => {
-                          setHoveredTabId(null);
-                          setHoveredTabRect(null);
-                        }}
-                      >
-                        <button
-                          onClick={() => {
-                            if (isParent) {
-                              setActiveTabId(subtabs[0].id);
-                            } else {
-                              setActiveTabId(tab.id);
-                            }
-                          }}
-                          className={cn(
-                            "px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border",
-                            isActive
-                              ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5 border-zinc-200/50 dark:border-zinc-800/80"
-                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white border-transparent"
-                          )}
-                        >
-                          {interfaceSettings.detail?.showTabIcons && (
-                            <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
-                          )}
-                          <span>{tab.label}</span>
-                          {isParent && <ChevronDown size={10} className={cn("ml-1 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
-                          {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                          {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
-                        </button>
-
-                        {/* Mega Menu Dropdown */}
-                        {isParent && hoveredTabId === tab.id && hoveredTabRect && (
-                          <div 
-                            style={{
-                              position: 'fixed',
-                              top: `${hoveredTabRect.bottom}px`,
-                              left: `${hoveredTabRect.left}px`,
-                            }}
-                            className="w-48 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-[9999] animate-in fade-in slide-in-from-top-1 duration-200 flex flex-col gap-0.5"
-                            onMouseEnter={() => {
-                              setHoveredTabId(tab.id);
-                            }}
-                            onMouseLeave={() => {
-                              setHoveredTabId(null);
-                              setHoveredTabRect(null);
-                            }}
-                          >
-                            {subtabs.map((sub: any) => {
-                              const subHasErrors = failedTabSeverities[sub.id] === 'error';
-                              const subHasWarnings = failedTabSeverities[sub.id] === 'warning';
-                              return (
-                                <button
-                                  key={sub.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveTabId(sub.id);
-                                    setHoveredTabId(null);
-                                    setHoveredTabRect(null);
-                                  }}
-                                  className={cn(
-                                    "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between",
-                                    activeTabId === sub.id
-                                      ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
-                                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    {interfaceSettings.detail?.showTabIcons && (
-                                      <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
-                                    )}
-                                    <span>{sub.label}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    {subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                                    {subHasWarnings && !subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
-                                    {activeTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <AnimatePresence>
-                  {showRightScroll && (
-                    <motion.div 
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      className="absolute right-0 top-0 bottom-0 w-24 z-10 pointer-events-none"
-                    >
-                      <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                        <button 
-                          onClick={() => handleScroll('right')}
-                          className="p-2 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ring-4 ring-black/5 dark:ring-white/5"
-                        >
-                          <ChevronRight size={18} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+          <div className="p-6 lg:p-8 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+            {activeTabId === 'activity' ? (
+              <RecordActivityFeed recordId={record.id} />
+            ) : activeTabId ? (
+              renderFieldsGrid(activeTabId)
+            ) : (
+              <div className="text-zinc-500 text-sm">
+                Select a section
               </div>
             )}
-
-            <div className="p-8">
-              {activeTabId === 'activity' ? (
-                <RecordActivityFeed recordId={record.id} />
-              ) : activeTabId ? (
-                renderFieldsGrid(activeTabId)
-              ) : (
-                <div className="text-zinc-500 text-sm">
-                  Select a section
-                </div>
-              )}
-            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {isModal ? (
+        <div className="w-full h-full flex flex-col relative overflow-hidden">
+          {mainContent}
+        </div>
+      ) : (
+        <PageWrapper className="w-full h-[calc(100vh-4rem)] flex flex-col relative overflow-hidden">
+          {mainContent}
+        </PageWrapper>
+      )}
+
 
 
 
@@ -3282,7 +3317,7 @@ export const RecordDetailView = ({
               <div className="text-center space-y-2">
                 <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Delete Entry?</h3>
                 <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
-                  Are you sure you want to delete this record? This action cannot be undone.
+                  Are you sure you want to delete this record? This record will be moved to the Recycling Bin and can be restored at any time.
                 </p>
               </div>
               <div className="flex gap-4 pt-4">
@@ -3296,7 +3331,7 @@ export const RecordDetailView = ({
                   onClick={handleDeleteEntry} 
                   className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-all shadow-xl shadow-rose-500/20"
                 >
-                  Delete
+                  Move to Recycling Bin
                 </button>
               </div>
             </motion.div>
@@ -3305,6 +3340,17 @@ export const RecordDetailView = ({
       </AnimatePresence>,
       document.body
     )}
+
+      {/* Share Record Modal */}
+      {showShareModal && (
+        <ShareRecordModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          record={record}
+          moduleId={moduleId}
+          moduleName={moduleData?.name}
+        />
+      )}
 
       {/* Workflow Visualizer Modal */}
       {createPortal(
@@ -3371,6 +3417,91 @@ export const RecordDetailView = ({
       </AnimatePresence>,
       document.body
     )}
+
+      {/* Workflow History Timeline Modal */}
+      {createPortal(
+        <AnimatePresence>
+          {showHistoryMenu && activeWorkflow && (
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-8">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowHistoryMenu(false)}
+                className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10"
+              >
+                <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500 border border-indigo-500/20">
+                      <History size={18} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-zinc-900 dark:text-white">Workflow History</h2>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">Activity timeline for {record?._record_key || 'this record'}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowHistoryMenu(false)}
+                    className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 relative before:absolute before:inset-y-6 before:left-8 before:w-px before:bg-zinc-200 dark:before:bg-zinc-800 custom-scrollbar">
+                  {(() => {
+                    const wState = record.workflowState as WorkflowState | undefined;
+                    const history = wState?.history || [];
+
+                    if (history.length === 0) {
+                      return (
+                        <p className="text-xs text-zinc-400 italic text-center py-6">No history events recorded yet</p>
+                      );
+                    }
+
+                    return history.map((h, i) => {
+                      const node = activeWorkflow?.nodes?.find((n: any) => n.id === h.nodeId);
+                      return (
+                        <div key={i} className="relative pl-7 flex flex-col gap-0.5">
+                          <div className={cn(
+                            "absolute left-1.5 top-1 w-2.5 h-2.5 rounded-full bg-white dark:bg-zinc-950 border-2 z-10 transition-colors",
+                            i === history.length - 1 ? "border-indigo-500 scale-110 shadow-lg shadow-indigo-500/20" : "border-zinc-300 dark:border-zinc-700"
+                          )} />
+                          <p className="text-xs font-bold text-zinc-900 dark:text-white leading-tight">
+                            {node?.name || 'Unknown Node'}
+                          </p>
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium space-x-1 flex items-center flex-wrap">
+                            <span>{new Date(h.timestamp).toLocaleDateString()} {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            {h.triggeredBy && (
+                              <>
+                                <span>•</span>
+                                <span className="text-indigo-500/80">{h.triggeredBy}</span>
+                              </>
+                            )}
+                          </div>
+                          {h.triggerCondition && (
+                            <div className="mt-1 text-[9px] bg-amber-500/10 dark:bg-amber-500/5 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md font-mono border border-amber-500/20 w-fit flex items-center gap-1">
+                              <Zap size={9} /> Condition: {h.triggerCondition}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
       {createPortal(
         <AnimatePresence>
           {showQuickActionModal && (
@@ -3681,7 +3812,7 @@ export const RecordDetailView = ({
     </AnimatePresence>,
     document.body
   )}
-    </div>
+    </>
   );
 };
 

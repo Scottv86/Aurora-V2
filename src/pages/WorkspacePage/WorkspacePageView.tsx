@@ -15,12 +15,28 @@ import { fetchModule, fetchRecords } from '../../services/dataService';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { toast } from 'sonner';
-import { createFormulaContext } from '../../lib/formulaEngine';
-import { builderCache, workspaceMotion } from '../../utils/builderCache';
+import { builderCache } from '../../utils/builderCache';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
-import { getWidgetDefaultDimensions } from './PageBuilder';
-import { FormRenderer, QueueRenderer } from '../../components/Builders';
+import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
+import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
+import { Table, Column } from '../../components/UI/Table';
+
+export const getWidgetDefaultDimensions = (type: string) => {
+  switch (type) {
+    case 'stats-grid': return { w: 12, h: 2, minW: 6, minH: 2 };
+    case 'active-workflows': return { w: 6, h: 5, minW: 4, minH: 3 };
+    case 'work-queue':
+    case 'queue': return { w: 12, h: 6, minW: 6, minH: 4 };
+    case 'module-table': return { w: 6, h: 6, minW: 4, minH: 3 };
+    case 'module-creator': return { w: 6, h: 6, minW: 4, minH: 3 };
+    case 'rich-text': return { w: 12, h: 4, minW: 4, minH: 2 };
+    case 'chart': return { w: 6, h: 5, minW: 4, minH: 3 };
+    case 'report': return { w: 12, h: 8, minW: 6, minH: 4 };
+    case 'standalone-form': return { w: 6, h: 6, minW: 4, minH: 4 };
+    default: return { w: 6, h: 5, minW: 4, minH: 3 };
+  }
+};
 
 
 const useMyContainerWidth = () => {
@@ -176,7 +192,7 @@ export const WorkspacePageView = () => {
       <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
 
       {/* Page Header */}
-      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex items-center justify-between gap-4 z-20">
+      <div className="px-6 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex items-center justify-between gap-4 z-20">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
             <PageIcon size={24} />
@@ -188,44 +204,51 @@ export const WorkspacePageView = () => {
         </div>
       </div>
 
-      {/* Widgets Grid */}
-      <div className="flex-1 p-6 lg:p-8 overflow-y-auto min-h-0 flex flex-col custom-scrollbar relative z-10">
-        <div ref={containerRef} className="w-full relative">
+      {/* Widgets Grid / Viewport */}
+      <div className="flex-1 p-6 overflow-hidden min-h-0 flex flex-col relative z-10">
+        <div ref={containerRef} className="w-full h-full flex-1 flex flex-col min-h-0 relative">
         {widgets.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 bg-white/40 dark:bg-white/[0.03] border border-dashed border-zinc-300 dark:border-zinc-800 rounded-3xl text-center space-y-3">
             <Layout size={32} className="text-zinc-400" />
             <div>
               <p className="text-sm font-bold text-zinc-650 dark:text-zinc-300">This page has no widgets</p>
-              <p className="text-xs text-zinc-400">Click &quot;Edit Page Layout&quot; on the top right to start adding components.</p>
+              <p className="text-xs text-zinc-400">Click &quot;Configure Page&quot; on the top right to start adding components.</p>
             </div>
+          </div>
+        ) : widgets.length === 1 ? (
+          <div className="w-full h-full flex-1 min-h-0 flex flex-col">
+            <WidgetRenderer widget={widgets[0]} tenant={tenant} session={session} />
           </div>
         ) : (
           mounted && (
-            <ReactGridLayout
-              className="layout read-only-layout"
-              layout={layout}
-              width={width}
-              gridConfig={{
-                cols: 12,
-                rowHeight: 50,
-                margin: [24, 24]
-              }}
-              dragConfig={{
-                enabled: false
-              }}
-              resizeConfig={{
-                enabled: false
-              }}
-            >
-              {widgets.map((widget: any) => (
-                <div 
-                  key={widget.id} 
-                  className="w-full h-full [&>div]:h-full"
-                >
-                  <WidgetRenderer widget={widget} tenant={tenant} session={session} />
-                </div>
-              ))}
-            </ReactGridLayout>
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+              <ReactGridLayout
+                className="layout read-only-layout"
+                layout={layout}
+                width={width}
+                gridConfig={{
+                  cols: 12,
+                  rowHeight: 50,
+                  margin: [24, 24],
+                  containerPadding: [0, 0]
+                }}
+                dragConfig={{
+                  enabled: false
+                }}
+                resizeConfig={{
+                  enabled: false
+                }}
+              >
+                {widgets.map((widget: any) => (
+                  <div 
+                    key={widget.id} 
+                    className="w-full h-full [&>div]:h-full"
+                  >
+                    <WidgetRenderer widget={widget} tenant={tenant} session={session} />
+                  </div>
+                ))}
+              </ReactGridLayout>
+            </div>
           )
         )}
       </div>
@@ -236,7 +259,7 @@ export const WorkspacePageView = () => {
 };
 
 // --- WIDGET RENDERER CONTROLLER ---
-const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any, session: any }) => {
+const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, tenant: any, session: any }) => {
   const statsCacheKey = `stats_${tenant?.id || 'default'}`;
   const defaultStats = { activeRecords: 12, totalRecords: 48, aiAutomations: 128, health: '99.9%' };
   const [stats, setStats] = useState<any>(() => builderCache.get(statsCacheKey) || defaultStats);
@@ -342,7 +365,7 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
     case 'work-queue':
     case 'queue':
       return (
-        <div className="bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm p-4 overflow-hidden">
+        <div className="w-full h-full flex-1 min-h-0 flex flex-col overflow-hidden">
           {widget.properties?.queueId || widget.properties?.queueConfig ? (
             <QueueRenderer
               name={widget.title}
@@ -352,7 +375,8 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
               moduleIds={widget.properties?.moduleIds}
               isUnifiedQueue={widget.properties?.isUnifiedQueue}
               showHeader={widget.properties?.showHeader ?? true}
-              pageSize={widget.properties?.pageSize || 10}
+              pageSize={widget.properties?.pageSize || 15}
+              className="w-full h-full flex-1"
             />
           ) : (
             <WorkQueue />
@@ -413,15 +437,43 @@ const WidgetRenderer = ({ widget, tenant, session }: { widget: any, tenant: any,
         </div>
       );
   }
-};
+});
 
 // --- WIDGET: MODULE TABLE ---
 const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {
+  const { pageId } = useParams();
+  const navigate = useNavigate();
+  const { modules } = usePlatform();
   const moduleId = widget.properties?.moduleId;
   const recordsCacheKey = `records_${tenant?.id || 'default'}_${moduleId || 'none'}`;
   const [records, setRecords] = useState<any[]>(() => builderCache.get(recordsCacheKey) || []);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+
+  const targetModule = useMemo(() => {
+    return modules.find((m: any) => m.id === moduleId);
+  }, [modules, moduleId]);
+
+  const filterFields = useMemo(() => {
+    if (!targetModule) {
+      return [
+        { id: 'id', label: 'Record ID', type: 'text' as const },
+        { id: 'title', label: 'Summary', type: 'text' as const },
+        { id: 'createdAt', label: 'Created At', type: 'date' as const }
+      ];
+    }
+    const rawFields = targetModule.fields || targetModule.config?.fields || targetModule.tabs?.flatMap((t: any) => t.fields || []) || [];
+    return [
+      { id: 'id', label: 'Record ID', type: 'text' as const },
+      ...rawFields.map((f: any) => ({
+        id: f.id,
+        label: f.label || f.name || f.id,
+        type: f.type || 'text',
+        options: f.options
+      })),
+      { id: 'createdAt', label: 'Created At', type: 'date' as const }
+    ];
+  }, [targetModule]);
 
   useEffect(() => {
     const loadRecords = async () => {
@@ -429,7 +481,7 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
       if (!builderCache.has(recordsCacheKey)) setLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const res = await fetchRecords(moduleId, tenant.id, token, 1, 10);
+        const res = await fetchRecords(moduleId, tenant.id, token, 1, 50);
         const data = res.records || [];
         setRecords(data);
         builderCache.set(recordsCacheKey, data);
@@ -442,78 +494,97 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
     loadRecords();
   }, [moduleId, tenant?.id, session?.access_token, recordsCacheKey]);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return records;
-    const s = search.toLowerCase();
-    return records.filter((r: any) => {
-      return Object.values(r.data || {}).some(val => 
-        val && val.toString().toLowerCase().includes(s)
-      );
-    });
-  }, [records, search]);
+  const columns: Column<any>[] = useMemo(() => [
+    {
+      header: 'Record ID',
+      accessor: (record: any) => (
+        <span className="font-mono text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+          {String(record.id).slice(-6)}
+        </span>
+      ),
+      sortable: true,
+      sortKey: 'id',
+      filterKey: 'id',
+      width: '100px'
+    },
+    {
+      header: 'Summary',
+      accessor: (record: any) => {
+        const keys = Object.keys(record.data || {});
+        const summaryVal = record.title || record.data?.title || (keys.length > 0 ? record.data[keys[0]] : '-') || '-';
+        return <span className="font-medium text-xs text-zinc-900 dark:text-zinc-100 line-clamp-1">{String(summaryVal)}</span>;
+      },
+      sortable: true,
+      filterKey: 'title'
+    },
+    {
+      header: 'Created At',
+      accessor: (record: any) => (
+        <span className="text-[11px] text-zinc-400">
+          {new Date(record.createdAt || Date.now()).toLocaleDateString()}
+        </span>
+      ),
+      sortable: true,
+      sortKey: 'createdAt',
+      filterKey: 'createdAt',
+      width: '110px'
+    },
+    {
+      header: 'Actions',
+      align: 'right',
+      filterable: false,
+      accessor: (record: any) => (
+        <Link 
+          to={pageId ? `/workspace/pages/${pageId}/modules/${moduleId}/records/${record.id}` : `/workspace/modules/${moduleId}/records/${record.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider"
+        >
+          View
+        </Link>
+      ),
+      width: '70px'
+    }
+  ], [moduleId, pageId]);
+
+  if (!moduleId) {
+    return (
+      <div className="h-full flex items-center justify-center p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-2xl">
+        <p className="text-xs text-zinc-400 italic">No module selected. Please configure in settings.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
-        <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Record List'}</h3>
-        {moduleId && (
-          <input
-            type="text"
-            placeholder="Search records..."
-            className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1 text-xs outline-none focus:border-indigo-500/50"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        )}
-      </div>
-
-      {!moduleId ? (
-        <p className="text-xs text-zinc-400 italic">No module selected. Please configure in settings.</p>
-      ) : loading && records.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center min-h-[100px]" />
-      ) : filtered.length === 0 ? (
-        <p className="text-xs text-zinc-400 italic py-4 text-center">No records found.</p>
-      ) : (
-        <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead className="sticky top-0 bg-zinc-100/80 dark:bg-white/5 backdrop-blur-md z-10 border-b border-zinc-200 dark:border-zinc-800">
-              <tr className="text-zinc-400 font-bold uppercase tracking-wider">
-                <th className="py-2 pl-2">Record ID</th>
-                <th className="py-2">Summary</th>
-                <th className="py-2">Created At</th>
-                <th className="py-2 pr-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((record, i) => {
-                const keys = Object.keys(record.data || {});
-                const summaryVal = keys.length > 0 ? record.data[keys[0]] : '-';
-                return (
-                  <motion.tr 
-                    key={record.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: Math.min(i, 8) * 0.02, ease: 'easeOut' }}
-                    className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-white/[0.02] transition-colors"
-                  >
-                    <td className="py-2.5 pl-2 font-mono text-[10px] text-zinc-500">{record.id.slice(0, 8)}...</td>
-                    <td className="py-2.5 font-medium text-zinc-900 dark:text-zinc-100">{summaryVal?.toString() || '-'}</td>
-                    <td className="py-2.5 text-zinc-400 text-[10px]">{new Date(record.createdAt || Date.now()).toLocaleDateString()}</td>
-                    <td className="py-2.5 pr-2 text-right">
-                      <Link 
-                        to={`/workspace/modules/${moduleId}/records/${record.id}`}
-                        className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <div className="h-full flex flex-col overflow-hidden">
+      <Table
+        key={`module_table_widget_${moduleId || widget.id}`}
+        filterScopeId={moduleId || widget.id}
+        enableSavedViews={true}
+        scopeType="MODULE"
+        scopeId={moduleId}
+        tenantId={tenant?.id}
+        token={(session as any)?.access_token}
+        data={records}
+        columns={columns}
+        loading={loading && records.length === 0}
+        title={widget.title || 'Record List'}
+        searchable={true}
+        searchValue={search}
+        onSearchChange={setSearch}
+        enableFilters={true}
+        filterFields={filterFields}
+        onRowClick={(record) => {
+          if (pageId) {
+            navigate(`/workspace/pages/${pageId}/modules/${moduleId}/records/${record.id}`);
+          } else {
+            navigate(`/workspace/modules/${moduleId}/records/${record.id}`);
+          }
+        }}
+        pageSize={5}
+        pageSizeOptions={[5, 10, 25]}
+        density="compact"
+        className="h-full"
+      />
     </div>
   );
 };
@@ -1209,8 +1280,8 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                       </table>
                     </div>
                   ) : (
-                    <div className="w-full h-full min-h-0 min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                    <div className="w-full h-full min-h-[160px] min-w-0">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
                         {w.type === 'bar' ? (
                           <BarChart 
                             data={aggData}

@@ -14,7 +14,7 @@ import {
   Minimize2
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { generateSolution, AISolution } from '../services/aiService';
@@ -24,6 +24,9 @@ import { toast } from 'sonner';
 
 export const AIBuilder = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
 
   useEffect(() => {
@@ -169,7 +172,9 @@ export const AIBuilder = () => {
         <button 
           onClick={() => {
             setIsBuilderFullscreen(false);
-            if (window.history.length > 1) {
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else if (window.history.length > 1) {
               navigate(-1);
             } else {
               navigate('/workspace/settings');
@@ -179,7 +184,7 @@ export const AIBuilder = () => {
             "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01] flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs cursor-pointer",
             isBuilderFullscreen ? "px-3 py-1.5" : "px-3 py-2"
           )}
-          title="Back to Previous Page"
+          title={returnUrl ? "Back to Workspace" : "Back to Previous Page"}
         >
           <ArrowLeft size={16} />
           <span>Back</span>

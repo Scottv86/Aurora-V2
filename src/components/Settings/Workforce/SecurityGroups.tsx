@@ -94,7 +94,9 @@ export const SecurityGroups = ({
       )
     },
     {
-      header: '',
+      header: 'Actions',
+      align: 'right',
+      className: 'text-right',
       accessor: (g: PermissionGroup) => (
         <div className="flex items-center justify-end gap-2">
           <Button 

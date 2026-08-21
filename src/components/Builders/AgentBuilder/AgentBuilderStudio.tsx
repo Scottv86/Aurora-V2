@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Bot, 
@@ -23,7 +23,7 @@ import { AgentSandboxStudio } from './AgentSandboxStudio';
 import { ImportAgentModal } from '../../Modals/ImportAgentModal';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useUsers } from '../../../hooks/useUsers';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export interface AgentBuilderStudioProps {
@@ -38,6 +38,9 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   onDeploySuccess
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { provisionAgent } = useUsers();
 
@@ -135,6 +138,8 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   const handleClose = () => {
     if (onClose) {
       onClose();
+    } else if (returnUrl) {
+      navigate(returnUrl);
     } else {
       navigate('/workspace/settings/platform-modules/workforce-management?tab=agents');
     }
@@ -157,9 +162,10 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
           <button
             onClick={handleClose}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all text-xs font-bold"
+            title={returnUrl ? "Back to Workspace" : "Back to Workforce"}
           >
             <ArrowLeft size={16} />
-            <span>Workforce</span>
+            <span>{returnUrl ? "Back" : "Workforce"}</span>
           </button>
 
           <div className="h-4 w-px bg-zinc-200 dark:border-zinc-800" />

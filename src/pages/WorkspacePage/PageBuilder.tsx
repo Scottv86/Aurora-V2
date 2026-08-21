@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { 
   ArrowLeft, Save, Trash2, Settings, 
@@ -17,28 +17,10 @@ import { PageAIBuilderModal } from './PageAIBuilderModal';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
-import { ReportWidgetEmbed } from './WorkspacePageView';
-import { QueueRenderer } from '../../components/Builders';
+import { ReportWidgetEmbed, getWidgetDefaultDimensions } from './WorkspacePageView';
+import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
 export { PageBuilderEngine } from '../../components/PageEngine';
-
-
-
-export const getWidgetDefaultDimensions = (type: string) => {
-  switch (type) {
-    case 'stats-grid': return { w: 12, h: 2, minW: 6, minH: 2 };
-    case 'active-workflows': return { w: 6, h: 5, minW: 4, minH: 3 };
-    case 'work-queue':
-    case 'queue': return { w: 12, h: 6, minW: 6, minH: 4 };
-    case 'module-table': return { w: 6, h: 6, minW: 4, minH: 3 };
-    case 'module-creator': return { w: 6, h: 6, minW: 4, minH: 3 };
-    case 'rich-text': return { w: 12, h: 4, minW: 4, minH: 2 };
-    case 'chart': return { w: 6, h: 5, minW: 4, minH: 3 };
-    case 'report': return { w: 12, h: 8, minW: 6, minH: 4 };
-    case 'standalone-form': return { w: 6, h: 6, minW: 4, minH: 4 };
-
-    default: return { w: 6, h: 5, minW: 4, minH: 3 };
-  }
-};
+export { getWidgetDefaultDimensions };
 
 const useMyContainerWidth = (loading: boolean) => {
   const [width, setWidth] = useState(1280);
@@ -86,6 +68,9 @@ const useMyContainerWidth = (loading: boolean) => {
 export const PageBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { tenant, refreshModules, modules, menuConfig, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, setBreadcrumbOverride } = usePlatform();
   const { session } = useAuth();
 
@@ -361,13 +346,17 @@ export const PageBuilder = () => {
           <button 
             onClick={() => {
               setIsBuilderFullscreen(false);
-              navigate('/workspace/settings/pages');
+              if (returnUrl) {
+                navigate(returnUrl);
+              } else {
+                navigate('/workspace/settings/pages');
+              }
             }}
             className={cn(
               "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
               isBuilderFullscreen ? "p-1.5" : "p-2.5"
             )}
-            title="Back to Pages"
+            title={returnUrl ? "Back to Workspace" : "Back to Pages"}
           >
             <ArrowLeft size={16} />
           </button>
@@ -504,7 +493,8 @@ export const PageBuilder = () => {
                 gridConfig={{
                   cols: 12,
                   rowHeight: 50,
-                  margin: [24, 24]
+                  margin: [24, 24],
+                  containerPadding: [0, 0]
                 }}
                 dragConfig={{
                   enabled: true,

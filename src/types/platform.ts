@@ -279,6 +279,7 @@ export interface BusinessLogic {
 export interface User {
   id: string;
   email: string;
+  name?: string;
   firstName?: string;
   lastName?: string;
   role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'STAFF' | 'EXTERNAL' | string;
@@ -301,8 +302,8 @@ export interface DocumentTemplate {
   content: string;
   status: 'Draft' | 'Published' | 'Archived';
   version: number;
-  createdAt?: string | number | { seconds: number; nanoseconds: number };
-  updatedAt?: string | number | { seconds: number; nanoseconds: number };
+  createdAt: string;
+  updatedAt: string;
   createdBy?: string;
 }
 
@@ -315,8 +316,8 @@ export interface GeneratedDocument {
   moduleId?: string;
   name: string;
   url?: string;
-  status: 'Draft' | 'Final' | 'Issued' | 'Approved';
-  generatedAt: string | number | { seconds: number; nanoseconds: number };
+  status: 'Draft' | 'Generated' | 'Signed' | 'Archived';
+  generatedAt: string;
   generatedBy?: string;
   dataSnapshot?: Record<string, any>;
   content?: string;
@@ -346,6 +347,7 @@ export interface Invoice {
 
 export interface TenantMember {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   role: 'Admin' | 'Lead' | 'Standard';

@@ -124,7 +124,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { CommandPalette } from './CommandPalette';
 import { cn, calculateHeight, flattenFields, isFieldVisible, isContainerField } from '../lib/utils';
 import { compactLayout } from '../lib/layoutEngine';
@@ -1571,6 +1571,9 @@ export const ModuleEditor = () => {
   const { id: routeId } = useParams();
   const id = routeId || 'new';
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
   const { tenant, modules, refreshModules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
 
@@ -1657,8 +1660,7 @@ export const ModuleEditor = () => {
     },
     filters: [] as { fieldId: string, type: string }[],
     actions: [
-      { id: 'act-1', label: 'Export PDF', icon: 'FileText' },
-      { id: 'act-2', label: 'Archive', icon: 'Trash2' }
+      { id: 'act-1', label: 'Export PDF', icon: 'FileText' }
     ]
   });
   const getRecordTitle = React.useCallback((r: any) => {
@@ -2501,7 +2503,10 @@ export const ModuleEditor = () => {
 
       if (isNew) {
         toast.success('Module created successfully!');
-        navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+        const targetPath = returnUrl 
+          ? `/workspace/settings/builder/${savedModule.id}?returnUrl=${encodeURIComponent(returnUrl)}`
+          : `/workspace/settings/builder/${savedModule.id}`;
+        navigate(targetPath, { replace: true, state: { returnUrl } });
       } else {
         toast.success('Module saved successfully!');
       }
@@ -3660,8 +3665,7 @@ export const ModuleEditor = () => {
                 <div className="space-y-3">
                   {statusRecords.map(record => (
                     <div key={record.id} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-black text-indigo-500 tracking-wider">{record._record_key}</span>
+                      <div className="flex items-center justify-end">
                         <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-[8px] font-bold text-zinc-600 dark:text-zinc-400">
                           {record.assignee.substring(0, 2)}
                         </div>
@@ -3782,7 +3786,6 @@ export const ModuleEditor = () => {
             <div className="space-y-2 flex-grow overflow-y-auto">
               {mockRecords.map(r => (
                 <div key={r.id} className="p-3.5 border border-zinc-100 dark:border-zinc-800/80 hover:border-indigo-500/30 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/20 cursor-pointer transition-all">
-                  <div className="text-[9px] font-black text-indigo-500 uppercase">{r._record_key}</div>
                   <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{getRecordTitle(r)}</div>
                   <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider mt-1 flex items-center gap-1">
                     <LucideIcons.MapPin size={10} />
@@ -3882,8 +3885,7 @@ export const ModuleEditor = () => {
           {mockRecords.map(r => (
             <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all flex flex-col gap-4 justify-between min-h-[220px]">
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black text-indigo-500 tracking-wider">{r._record_key}</span>
+                <div className="flex items-center justify-end">
                   <span className={cn(
                     "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border",
                     r.status === 'Done' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600" :
@@ -3990,8 +3992,7 @@ export const ModuleEditor = () => {
               
               <div className="p-6 flex-1 flex flex-col justify-between">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-black text-indigo-500 tracking-wider">{r._record_key}</span>
+                  <div className="flex items-center justify-end">
                     <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400">{r.status}</span>
                   </div>
                   
@@ -4139,8 +4140,7 @@ export const ModuleEditor = () => {
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
             {mockRecords.map((r, rIdx) => (
               <div key={r.id} className="grid grid-cols-12 divide-x divide-zinc-200/50 dark:divide-zinc-800/30 items-center">
-                <div className="col-span-3 p-4 flex flex-col gap-0.5">
-                  <span className="text-[8px] font-black text-indigo-500">{r._record_key}</span>
+                <div className="col-span-3 p-4 flex flex-col justify-center">
                   <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{getRecordTitle(r)}</span>
                 </div>
                 
@@ -4345,8 +4345,7 @@ export const ModuleEditor = () => {
                 <div className="space-y-3">
                   {stageRecords.map(record => (
                     <div key={record.id} className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-black text-indigo-500 tracking-wider">{record._record_key}</span>
+                      <div className="flex items-center justify-end">
                         <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-[8px] font-bold text-zinc-600 dark:text-zinc-400">
                           {record.assignee.substring(0, 2)}
                         </div>
@@ -4705,13 +4704,17 @@ export const ModuleEditor = () => {
           <button 
             onClick={() => {
               setIsBuilderFullscreen(false);
-              navigate('/workspace/settings/platform-modules');
+              if (returnUrl) {
+                navigate(returnUrl);
+              } else {
+                navigate('/workspace/settings/platform-modules');
+              }
             }}
             className={cn(
               "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
               isBuilderFullscreen ? "p-1.5" : "p-2.5"
             )}
-            title="Back to Platform Modules"
+            title={returnUrl ? "Back to Workspace" : "Back to Platform Modules"}
           >
             <ArrowLeft size={16} />
           </button>
@@ -5541,7 +5544,7 @@ export const ModuleEditor = () => {
                                   <tr key={rIdx} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-900/10 transition-colors">
                                     {/* Lead ID column */}
                                     <td className={cn(
-                                      "font-bold text-indigo-500/80 font-mono",
+                                      "font-normal text-zinc-600 dark:text-zinc-400 font-mono",
                                       interfaceSettings.master.density === 'compact' ? 'px-6 py-2 text-[10px]' : 
                                       interfaceSettings.master.density === 'spacious' ? 'px-6 py-5 text-sm' : 'px-6 py-4 text-xs'
                                     )}>
@@ -8947,7 +8950,7 @@ export const ModuleEditor = () => {
                             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Record Format Preview</label>
                             <div className="h-[38px] bg-white/40 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-xl flex items-center justify-between px-3.5">
                               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Format</span>
-                              <span className="text-xs font-black text-indigo-500 dark:text-indigo-400 font-mono">{moduleSettings.recordKeyPrefix || 'PREFIX'}-1001{moduleSettings.recordKeySuffix || ''}</span>
+                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 font-mono">{moduleSettings.recordKeyPrefix || 'PREFIX'}-1001{moduleSettings.recordKeySuffix || ''}</span>
                             </div>
                           </div>
                         </div>
@@ -15026,7 +15029,10 @@ export const ModuleEditor = () => {
                 toast.success(`Successfully provisioned rule and ${newMappings.length} fields`);
                 await refreshModules();
                 if (isNew && savedModule?.id) {
-                  navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+                  const targetPath = returnUrl 
+                    ? `/workspace/settings/builder/${savedModule.id}?returnUrl=${encodeURIComponent(returnUrl)}`
+                    : `/workspace/settings/builder/${savedModule.id}`;
+                  navigate(targetPath, { replace: true, state: { returnUrl } });
                 }
               } else {
                 throw new Error('Failed to save auto-provisioned rule/fields');
@@ -15185,7 +15191,10 @@ export const ModuleEditor = () => {
                 toast.success(`Successfully provisioned lookup and ${newMappings.length} fields`);
                 await refreshModules();
                 if (isNew && savedModule?.id) {
-                  navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+                  const targetPath = returnUrl 
+                    ? `/workspace/settings/builder/${savedModule.id}?returnUrl=${encodeURIComponent(returnUrl)}`
+                    : `/workspace/settings/builder/${savedModule.id}`;
+                  navigate(targetPath, { replace: true, state: { returnUrl } });
                 }
               } else {
                 throw new Error('Failed to save auto-provisioned lookup fields');
@@ -15293,7 +15302,10 @@ export const ModuleEditor = () => {
                 toast.success(`Successfully provisioned lookup and ${Object.keys(newMappings).length} fields`);
                 await refreshModules();
                 if (isNew && savedModule?.id) {
-                  navigate(`/workspace/settings/builder/${savedModule.id}`, { replace: true });
+                  const targetPath = returnUrl 
+                    ? `/workspace/settings/builder/${savedModule.id}?returnUrl=${encodeURIComponent(returnUrl)}`
+                    : `/workspace/settings/builder/${savedModule.id}`;
+                  navigate(targetPath, { replace: true, state: { returnUrl } });
                 }
               } else {
                 throw new Error('Failed to save auto-provisioned fields');

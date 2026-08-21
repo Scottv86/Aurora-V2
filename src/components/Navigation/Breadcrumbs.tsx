@@ -153,7 +153,10 @@ export const Breadcrumbs = () => {
     return segment.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
-  const isSettings = pathnames.includes('settings');
+  const isSettings = pathnames.includes('settings') || pathnames.includes('admin');
+  const isWorkspace = pathnames[0] === 'workspace';
+  const isPageContext = pathnames.includes('pages');
+  const isQueueContext = pathnames.includes('queues');
 
   let breadcrumbItems = pathnames.map((segment, index) => {
     let to = `/${pathnames.slice(0, index + 1).join('/')}`;
@@ -166,9 +169,28 @@ export const Breadcrumbs = () => {
       to,
       label: getLabel(segment, index)
     };
-  }).filter((item, idx, arr) => {
+  }).filter((item, idx, _arr) => {
+    // In Settings / Admin routes, hide "Workspace" root
     if (isSettings && item.segment === 'workspace') return false;
-    if (item.segment === 'platform-modules' && idx < arr.length - 1) return false;
+
+    // In Workspace routes, hide intermediate structural route folders: 'pages', 'queues', 'modules', 'platform', 'platform-modules'
+    if (isWorkspace && !isSettings) {
+      if (item.segment === 'pages') return false;
+      if (item.segment === 'queues') return false;
+      if (item.segment === 'modules') return false;
+      if (item.segment === 'platform' || item.segment === 'platform-modules') return false;
+    }
+
+    // Always strip structural keyword 'platform' if present as intermediate prefix
+    if (item.segment === 'platform' || item.segment === 'platform-modules') {
+      if (idx < _arr.length - 1) return false;
+    }
+
+    // When inside embedded page or queue context, hide intermediate child module segments
+    if ((isPageContext || isQueueContext) && item.segment === 'modules') return false;
+    if ((isPageContext || isQueueContext) && idx > 0 && pathnames[idx - 1] === 'modules') return false;
+
+    // Technical internal keywords to never show in breadcrumb trails
     return !['records', 'sub', 'member', 'teams', 'positions', 'page'].includes(item.segment);
   });
 

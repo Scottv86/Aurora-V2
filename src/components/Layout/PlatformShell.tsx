@@ -4,8 +4,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft,
   ChevronRight,
+  Settings,
   Settings2,
   LayoutDashboard,
+  LayoutGrid,
   Layout,
   Building,
   CreditCard,
@@ -239,11 +241,29 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   
   const location = useLocation();
   const navigate = useNavigate();
+  const isAdminPath = location.pathname.startsWith('/admin');
+  const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
+  const searchParams = new URLSearchParams(location.search);
+  const isReportBuilder = (location.pathname.includes('/report-management') || location.pathname.includes('/reports')) && 
+                          searchParams.get('mode') === 'builder';
+  const isSolutionBuilder = (location.pathname.includes('/solutions') || location.pathname.includes('/solution')) &&
+                           (searchParams.get('mode') === 'studio' || searchParams.get('mode') === 'builder' || searchParams.has('id') || searchParams.has('solutionId'));
 
-  // Reset fullscreen when route changes
+  const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
+                          location.pathname.includes('/workspace/settings/ai-builder') ||
+                          location.pathname.includes('/workspace/settings/navigation/builder') ||
+                          location.pathname.includes('/workspace/settings/agent-builder') ||
+                          isReportBuilder ||
+                          isSolutionBuilder;
+
+  // Sync fullscreen state based on whether route is a builder
   useEffect(() => {
-    setIsBuilderFullscreen(false);
-  }, [location.pathname, setIsBuilderFullscreen]);
+    if (isModuleBuilder) {
+      setIsBuilderFullscreen(true);
+    } else {
+      setIsBuilderFullscreen(false);
+    }
+  }, [location.pathname, location.search, isModuleBuilder, setIsBuilderFullscreen]);
 
   // Escape key to exit fullscreen mode
   useEffect(() => {
@@ -367,6 +387,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     );
   };
 
+  const navigateWithReturn = (targetUrl: string) => {
+    const currentPath = location.pathname + location.search;
+    const separator = targetUrl.includes('?') ? '&' : '?';
+    const urlWithParam = `${targetUrl}${separator}returnUrl=${encodeURIComponent(currentPath)}`;
+    navigate(urlWithParam, { state: { returnUrl: currentPath } });
+  };
+
   const getContextualAction = () => {
     if (!isTenantAdmin) return null;
     
@@ -377,7 +404,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       const targetId = matchedPage ? matchedPage.id : pageId;
       return renderConfigureButton(
         'Configure Page', 
-        () => navigate(`/workspace/settings/builder/page/${targetId}`),
+        () => navigateWithReturn(`/workspace/settings/builder/page/${targetId}`),
         'Layout'
       );
     }
@@ -389,7 +416,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       const targetId = matchedMod ? matchedMod.id : moduleId;
       return renderConfigureButton(
         'Configure Module', 
-        () => navigate(`/workspace/settings/builder/${targetId}`),
+        () => navigateWithReturn(`/workspace/settings/builder/${targetId}`),
         'SlidersHorizontal'
       );
     }
@@ -398,7 +425,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     if (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2]) {
       return renderConfigureButton(
         'Configure Queue', 
-        () => navigate('/workspace/settings/navigation/builder'),
+        () => navigateWithReturn('/workspace/settings/navigation/builder'),
         'Compass'
       );
     }
@@ -408,46 +435,46 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       const feature = pathnames[2];
       
       if (feature === 'work-distribution' || feature === 'intake') {
-        return renderConfigureButton('Configure Work Distribution', () => navigate('/workspace/settings/platform-modules/work-distribution'), 'Inbox');
+        return renderConfigureButton('Configure Work Distribution', () => navigateWithReturn('/workspace/settings/platform-modules/work-distribution'), 'Inbox');
       }
       if (feature === 'people-organisations' || feature === 'entities') {
-        return renderConfigureButton('Configure Directory', () => navigate('/workspace/settings/platform-modules/people-organisations'), 'Users');
+        return renderConfigureButton('Configure Directory', () => navigateWithReturn('/workspace/settings/platform-modules/people-organisations'), 'Users');
       }
       if (feature === 'knowledge-base') {
-        return renderConfigureButton('Configure Knowledge Base', () => navigate('/workspace/settings/platform-modules/knowledge-base'), 'BookOpen');
+        return renderConfigureButton('Configure Knowledge Base', () => navigateWithReturn('/workspace/settings/platform-modules/knowledge-base'), 'BookOpen');
       }
       if (feature === 'pricing-catalog') {
-        return renderConfigureButton('Configure Pricing Catalog', () => navigate('/workspace/settings/platform-modules/pricing-catalog'), 'Tag');
+        return renderConfigureButton('Configure Pricing Catalog', () => navigateWithReturn('/workspace/settings/platform-modules/pricing-catalog'), 'Tag');
       }
       if (feature === 'inventory-manager') {
-        return renderConfigureButton('Configure Inventory', () => navigate('/workspace/settings/platform-modules/inventory-manager'), 'Boxes');
+        return renderConfigureButton('Configure Inventory', () => navigateWithReturn('/workspace/settings/platform-modules/inventory-manager'), 'Boxes');
       }
       if (feature === 'global-lists') {
-        return renderConfigureButton('Configure Lists', () => navigate('/workspace/settings/platform-modules/global-lists'), 'ListTodo');
+        return renderConfigureButton('Configure Lists', () => navigateWithReturn('/workspace/settings/platform-modules/global-lists'), 'ListTodo');
       }
       if (feature === 'workforce') {
-        return renderConfigureButton('Configure Workforce', () => navigate('/workspace/settings/platform-modules/workforce-management'), 'Users');
+        return renderConfigureButton('Configure Workforce', () => navigateWithReturn('/workspace/settings/platform-modules/workforce-management'), 'Users');
       }
       if (feature === 'integrations') {
-        return renderConfigureButton('Configure Integrations', () => navigate('/workspace/settings/platform-modules/integration-management'), 'Plug');
+        return renderConfigureButton('Configure Integrations', () => navigateWithReturn('/workspace/settings/platform-modules/integration-management'), 'Plug');
       }
       if (feature === 'sites') {
-        return renderConfigureButton('Configure Sites', () => navigate('/workspace/settings/platform-modules/sites'), 'Globe');
+        return renderConfigureButton('Configure Sites', () => navigateWithReturn('/workspace/settings/platform-modules/sites'), 'Globe');
       }
       if (feature === 'automations') {
-        return renderConfigureButton('Configure Automations', () => navigate('/workspace/settings/platform-modules/automation-management'), 'Zap');
+        return renderConfigureButton('Configure Automations', () => navigateWithReturn('/workspace/settings/platform-modules/automation-management'), 'Zap');
       }
       if (feature === 'templates') {
-        return renderConfigureButton('Configure Templates', () => navigate('/workspace/settings/platform-modules/document-generation'), 'FileText');
+        return renderConfigureButton('Configure Templates', () => navigateWithReturn('/workspace/settings/platform-modules/document-generation'), 'FileText');
       }
       if (feature === 'reports') {
-        return renderConfigureButton('Configure Reports', () => navigate('/workspace/settings/platform-modules/report-management'), 'BarChart2');
+        return renderConfigureButton('Configure Reports', () => navigateWithReturn('/workspace/settings/platform-modules/report-management'), 'BarChart2');
       }
       if (feature === 'api') {
-        return renderConfigureButton('Configure API', () => navigate('/workspace/settings/platform-modules/api-management'), 'Key');
+        return renderConfigureButton('Configure API', () => navigateWithReturn('/workspace/settings/platform-modules/api-management'), 'Key');
       }
       if (feature === 'records-management') {
-        return renderConfigureButton('Configure Records', () => navigate('/workspace/settings/platform-modules/records-management'), 'Archive');
+        return renderConfigureButton('Configure Records', () => navigateWithReturn('/workspace/settings/platform-modules/records-management'), 'Archive');
       }
     }
 
@@ -455,21 +482,21 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     if (pathnames[0] === 'workspace' && pathnames[1] === 'apps' && pathnames[2]) {
       const appName = pathnames[2];
       if (appName === 'docs') {
-        return renderConfigureButton('Configure Documents', () => navigate('/workspace/settings/platform-modules/document-generation'), 'FileText');
+        return renderConfigureButton('Configure Documents', () => navigateWithReturn('/workspace/settings/platform-modules/document-generation'), 'FileText');
       }
       if (appName === 'drive') {
-        return renderConfigureButton('Configure Storage', () => navigate('/workspace/settings/platform-modules/records-management'), 'Folder');
+        return renderConfigureButton('Configure Storage', () => navigateWithReturn('/workspace/settings/platform-modules/records-management'), 'Folder');
       }
     }
 
     // 6. Analytics: /workspace/analytics
     if (pathnames[0] === 'workspace' && pathnames[1] === 'analytics') {
-      return renderConfigureButton('Configure Reports', () => navigate('/workspace/settings/platform-modules/report-management'), 'BarChart2');
+      return renderConfigureButton('Configure Reports', () => navigateWithReturn('/workspace/settings/platform-modules/report-management'), 'BarChart2');
     }
 
     // 7. My Work: /workspace/my-work
     if (pathnames[0] === 'workspace' && pathnames[1] === 'my-work') {
-      return renderConfigureButton('Configure Work Queue', () => navigate('/workspace/settings/platform-modules/work-distribution'), 'ClipboardList');
+      return renderConfigureButton('Configure Work Queue', () => navigateWithReturn('/workspace/settings/platform-modules/work-distribution'), 'ClipboardList');
     }
     
     return null;
@@ -556,20 +583,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       )
     })).filter(group => group.items.length > 0);
   }, [settingsSearchQuery]);
-
-  const isAdminPath = location.pathname.startsWith('/admin');
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings') || location.pathname.startsWith('/dashboard/settings');
-  const searchParams = new URLSearchParams(location.search);
-  const isReportBuilder = (location.pathname.includes('/report-management') || location.pathname.includes('/reports')) && 
-                          searchParams.get('mode') === 'builder';
-  const isSolutionBuilder = (location.pathname.includes('/solutions') || location.pathname.includes('/solution')) &&
-                           (searchParams.get('mode') === 'studio' || searchParams.get('mode') === 'builder' || searchParams.has('id') || searchParams.has('solutionId'));
-
-  const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
-                          location.pathname.includes('/workspace/settings/ai-builder') ||
-                          location.pathname.includes('/workspace/settings/navigation/builder') ||
-                          isReportBuilder ||
-                          isSolutionBuilder;
 
   const rawLayoutStyle = tenant?.branding?.layout_style || 'sidebar';
   const layoutStyle = (isSettingsMode || isAdminPath) ? 'sidebar' : rawLayoutStyle;
@@ -698,7 +711,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           />
         )}
       </AnimatePresence>
-      {!isBuilderFullscreen && <Navbar />}
+      {!isBuilderFullscreen && !isModuleBuilder && <Navbar />}
 
       {/* Top Mounted Mega Menu */}
       {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
@@ -718,13 +731,13 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             }}
             style={{ width: `${currentWidth}px` }}
             className={cn(
-              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl z-45 overflow-y-auto overflow-x-hidden",
+              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl z-45 flex flex-col",
               (isModuleBuilder || isBuilderFullscreen || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
               !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300"
             )}
           >
-            <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "p-4" : "p-2")}>
-              <div className="flex-1 space-y-6">
+            <div className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar", isSidebarReallyOpen ? "p-4" : "p-2")}>
+              <div className="space-y-6">
                 {/* System Governance / Super Admin Mode */}
                 {isAdminPath && (
                   <div className="flex flex-col h-full space-y-6">
@@ -834,7 +847,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       <div className="pt-3 mt-2 border-t border-zinc-200/60 dark:border-zinc-800/60">
                         {collapsed ? (
                           <button
-                            onClick={() => navigate('/workspace/settings/navigation/builder')}
+                            onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
                             className="w-10 h-10 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 flex items-center justify-center transition-all shadow-sm group mx-auto"
                             title="Configure Menu"
                           >
@@ -842,7 +855,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                           </button>
                         ) : (
                           <button
-                            onClick={() => navigate('/workspace/settings/navigation/builder')}
+                            onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
                             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 transition-all shadow-sm group"
                           >
                             <Compass size={15} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
@@ -857,7 +870,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                         {isTenantAdmin ? (
                           collapsed ? (
                             <button
-                              onClick={() => navigate('/workspace/settings/navigation/builder')}
+                              onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
                               className="w-10 h-10 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 flex items-center justify-center transition-all mx-auto animate-pulse"
                               title="Configure Menu"
                             >
@@ -873,7 +886,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                                 <p className="text-[9px] text-zinc-500 leading-normal">No menu items configured. Design your layout in settings.</p>
                               </div>
                               <button 
-                                onClick={() => navigate('/workspace/settings/navigation/builder')}
+                                onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
                                 className="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition-all shadow-sm"
                               >
                                 Open Builder
@@ -944,22 +957,63 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                   </div>
                 )}
               </div>
-
-              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1 mt-auto shrink-0">
-                {layoutStyle !== 'slim' && (
-                  <button
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className={cn(
-                      "w-full flex items-center p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors",
-                      isSidebarReallyOpen ? "justify-end px-3" : "justify-center px-0"
-                    )}
-                    title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-                  >
-                    {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-                  </button>
-                )}
-              </div>
             </div>
+
+            {layoutStyle !== 'slim' && (() => {
+              let lastPlatformPath = localStorage.getItem('lastPlatformPath') || '/workspace';
+              if (lastPlatformPath.includes('/settings')) {
+                lastPlatformPath = '/workspace';
+              }
+              return (
+                <div className={cn(
+                  "shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md flex items-center w-full transition-all duration-300",
+                  isSidebarReallyOpen ? "h-12" : "h-auto py-2 px-1.5 flex-col gap-1.5"
+                )}>
+                  {isTenantAdmin && !isAdminPath && (
+                    <div className={cn("min-w-0", isSidebarReallyOpen ? "flex-1 px-2" : "w-full")}>
+                      <SidebarItem
+                        icon={isSettingsMode ? LayoutGrid : Settings}
+                        label={isSettingsMode ? "Workspace" : "Settings"}
+                        onClick={() => {
+                          if (isSettingsMode) {
+                            navigate(lastPlatformPath);
+                          } else {
+                            navigate('/workspace/settings');
+                          }
+                        }}
+                        collapsed={collapsed}
+                      />
+                    </div>
+                  )}
+
+                  {isSidebarReallyOpen ? (
+                    <button
+                      onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                      className={cn(
+                        "h-full px-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50 transition-colors shrink-0 flex items-center justify-center",
+                        isTenantAdmin && !isAdminPath ? "border-l border-zinc-200 dark:border-zinc-800" : "ml-auto"
+                      )}
+                      title="Collapse Sidebar"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                  ) : (
+                    <>
+                      {isTenantAdmin && !isAdminPath && (
+                        <div className="w-6 h-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                      )}
+                      <button
+                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        className="w-full flex items-center justify-center py-2 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors shrink-0"
+                        title="Expand Sidebar"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {isSidebarReallyOpen && (
               <div 
@@ -973,9 +1027,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         <main 
           style={{ marginLeft: `${currentWidth}px` }}
           className={cn(
-            "flex-1 flex flex-col overflow-y-auto",
+            "flex-1 flex flex-col min-h-0",
+            (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder) ? "overflow-hidden" : "overflow-y-auto",
             !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300",
-            isBuilderFullscreen 
+            (isBuilderFullscreen || isModuleBuilder)
               ? "h-screen" 
               : (layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
                   ? "h-[calc(100vh-7rem)]" 
@@ -983,9 +1038,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           )}
         >
           <div className={cn(
-            "mx-auto flex flex-col min-h-full",
-            (fullBleed || isAdminPath || isBuilderFullscreen) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
-
+            "mx-auto flex flex-col min-h-0 flex-1 h-full",
+            (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
           )}>
             {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">

@@ -164,7 +164,8 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
       sortKey: subField.id
     })),
     {
-      header: '',
+      header: 'Actions',
+      align: 'right',
       className: 'text-right',
       accessor: (row: any) => {
         const activeDensity = field.density || 'standard';

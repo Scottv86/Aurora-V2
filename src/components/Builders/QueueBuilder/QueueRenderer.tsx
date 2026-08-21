@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,12 +10,236 @@ import { useAuth } from '../../../hooks/useAuth';
 import { DATA_API_URL, API_BASE_URL } from '../../../config';
 import { fetchRecords } from '../../../services/dataService';
 import { checkCondition, getFieldValue, cn, flattenFields, slugify } from '../../../lib/utils';
-import { DynamicIcon } from '../../UI/DynamicIcon';
-import { Skeleton } from '../../UI/Skeleton';
 import { UserAvatarWithPresence } from '../../Common/UserPresenceBadge';
 import { QueueEntity } from '../../../types/platform';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
-import { builderCache } from '../../../utils/builderCache';
+import { Table, Column } from '../../UI/Table';
+import { ShareRecordModal } from '../../Platform/ShareRecordModal';
+
+const InlineAssigneeCell = ({
+  record,
+  members = [],
+  platformUser,
+  updateMutation
+}: {
+  record: any;
+  members?: any[];
+  platformUser: any;
+  updateMutation: any;
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const [search, setSearch] = useState('');
+  const [coords, setCoords] = useState<{ buttonTop: number; buttonBottom: number; left: number; width: number; openUpward: boolean; maxHeight: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const clickedInsideButton = menuRef.current && menuRef.current.contains(target);
+      const clickedInsideDropdown = dropdownRef.current && dropdownRef.current.contains(target);
+      if (!clickedInsideButton && !clickedInsideDropdown) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showMenu]);
+
+  useEffect(() => {
+    if (!showMenu || !buttonRef.current) return;
+
+    const updateCoords = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const headerHeight = 110;
+      const spaceBelow = window.innerHeight - rect.bottom - 16;
+      const spaceAbove = rect.top - headerHeight;
+      const dropdownHeight = 240;
+      
+      let openUp = false;
+      let maxHeight = dropdownHeight;
+
+      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow && spaceAbove >= 120) {
+        openUp = true;
+        maxHeight = Math.min(dropdownHeight, spaceAbove - 10);
+      } else {
+        openUp = false;
+        maxHeight = Math.max(120, Math.min(dropdownHeight, spaceBelow - 10));
+      }
+      
+      setCoords({
+        buttonTop: rect.top,
+        buttonBottom: rect.bottom,
+        left: rect.left,
+        width: Math.max(rect.width, 224),
+        openUpward: openUp,
+        maxHeight
+      });
+    };
+
+    updateCoords();
+    window.addEventListener('scroll', updateCoords, true);
+    window.addEventListener('resize', updateCoords);
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [showMenu]);
+
+  const val = record.assigneeId;
+  const resolvedUser = members?.find((m: any) => m.id === val || m.cuid === val || m.memberId === val);
+
+  const handleUpdate = (newId: string | null) => {
+    updateMutation.mutate({
+      recordId: record.id,
+      moduleId: record.moduleId,
+      assigneeId: newId
+    });
+  };
+
+  const filteredMembers = (members || []).filter((m: any) => 
+    !search.trim() || m.name?.toLowerCase().includes(search.toLowerCase().trim())
+  );
+
+  return (
+    <div className="relative inline-block text-left" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowMenu(!showMenu);
+        }}
+        className={cn(
+          "flex items-center gap-1.5 px-2 py-1 rounded-xl transition-all border text-left group",
+          showMenu 
+            ? "bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500/50 text-indigo-900 dark:text-indigo-100" 
+            : "bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900/50 dark:hover:bg-zinc-800 border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700 text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
+        )}
+      >
+        {resolvedUser ? (
+          <>
+            <UserAvatarWithPresence
+              avatarUrl={resolvedUser.avatarUrl}
+              name={resolvedUser.name}
+              status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
+              size="xs"
+            />
+            <span className="text-[11px] font-bold truncate max-w-[80px]">
+              {resolvedUser.name}
+            </span>
+          </>
+        ) : (
+          <>
+            <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 dark:text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500 transition-colors">
+              <LucideIcons.User size={10} />
+            </div>
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-bold group-hover:text-zinc-900 dark:group-hover:text-zinc-300 transition-colors">
+              Unassigned
+            </span>
+          </>
+        )}
+        <LucideIcons.ChevronDown size={12} className="text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors shrink-0" />
+      </button>
+
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showMenu && coords && (
+            <motion.div
+              ref={dropdownRef}
+              initial={{ opacity: 0, y: coords.openUpward ? -4 : 4, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: coords.openUpward ? -4 : 4, scale: 0.95 }}
+              transition={{ duration: 0.1 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                left: `${Math.max(16, Math.min(coords.left, window.innerWidth - coords.width - 16))}px`,
+                width: `${coords.width}px`,
+                zIndex: 99999,
+                maxHeight: `${coords.maxHeight}px`,
+                ...(coords.openUpward 
+                  ? { bottom: `${window.innerHeight - coords.buttonTop + 4}px` } 
+                  : { top: `${coords.buttonBottom + 4}px` })
+              }}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl overflow-hidden flex flex-col"
+            >
+              {/* Quick Actions */}
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid || m.id === platformUser?.id);
+                    if (me) handleUpdate(me.id);
+                    setShowMenu(false);
+                  }}
+                  className="w-full text-left px-2 py-1 rounded-lg text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <LucideIcons.UserCheck size={10} />
+                  <span>Assign to me</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdate(null);
+                    setShowMenu(false);
+                  }}
+                  className="w-full text-left px-2 py-1 rounded-lg text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <LucideIcons.UserMinus size={10} />
+                  <span>Clear Assignee</span>
+                </button>
+              </div>
+
+              {/* Search Input */}
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800 relative">
+                <LucideIcons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={10} />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-1 text-[10px] text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Members List */}
+              <div className="overflow-y-auto max-h-40 p-1 divide-y divide-zinc-100/50 dark:divide-zinc-800/50">
+                {filteredMembers.map((m: any) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      handleUpdate(m.id);
+                      setShowMenu(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-2 py-1.5 rounded-lg text-[10px] flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer",
+                      m.id === val ? "bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 font-bold" : "text-zinc-700 dark:text-zinc-300"
+                    )}
+                  >
+                    <UserAvatarWithPresence
+                      avatarUrl={m.avatarUrl}
+                      name={m.name}
+                      status={(m as any).status || (m as any).presenceStatus}
+                      size="xs"
+                    />
+                    <span className="truncate flex-1">{m.name}</span>
+                    {m.id === val && <LucideIcons.Check size={10} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
+  );
+};
 
 export interface QueueRendererProps {
   queue?: QueueEntity | null;
@@ -28,6 +254,11 @@ export interface QueueRendererProps {
   onRowClick?: (record: any) => void;
   readOnly?: boolean;
   name?: string;
+  noContainer?: boolean;
+  searchable?: boolean;
+  searchValue?: string;
+  onSearchChange?: (val: string) => void;
+  density?: 'compact' | 'standard' | 'spacious';
 }
 
 export const QueueRenderer: React.FC<QueueRendererProps> = ({
@@ -42,57 +273,32 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   className,
   onRowClick,
   readOnly = false,
-  name: propName
+  name: propName,
+  noContainer = false,
+  searchable = true,
+  searchValue: controlledSearchValue,
+  onSearchChange: controlledOnSearchChange,
+  density = 'standard'
 }) => {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { tenant, modules, menuConfig, members, user: platformUser, isLoading: platformLoading } = usePlatform();
+  const { pageId: routePageId, queueId: routeQueueId } = useParams<{ pageId?: string; queueId?: string }>();
+  const location = useLocation();
   const queryClient = useQueryClient();
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [page, setPage] = useState(1);
-  const pageSize = customPageSize;
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [internalSearchQuery, setInternalSearchQuery] = useState('');
+  const searchQuery = controlledSearchValue !== undefined ? controlledSearchValue : internalSearchQuery;
+  const setSearchQuery = controlledOnSearchChange || setInternalSearchQuery;
+  const [recordToDelete, setRecordToDelete] = useState<any | null>(null);
+  const [recordToShare, setRecordToShare] = useState<any | null>(null);
+  const [pageSize, setPageSize] = useState<number>(customPageSize || 10);
 
   const hasInlineConfig = Boolean(overrideConfig || propModuleId || (propModuleIds && propModuleIds.length > 0));
 
-  // 1. Fetch queue entity by queueId only if not passed directly and not already configured inline
-  const { data: fetchedQueue } = useQuery<QueueEntity | null>({
-    queryKey: ['queue-renderer-entity', tenant?.id, queueId, session?.access_token],
-    queryFn: async () => {
-      if (!queueId || !tenant?.id) return null;
-      try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
-        const res = await fetch(`${API_BASE_URL}/api/queues/${queueId}`, {
-          headers: { 'x-tenant-id': tenant.id, ...authHeader }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.id) return data;
-        }
-        // Fallback: list all queues
-        const allRes = await fetch(`${API_BASE_URL}/api/queues`, {
-          headers: { 'x-tenant-id': tenant.id, ...authHeader }
-        });
-        if (allRes.ok) {
-          const allData = await allRes.json();
-          const match = (allData || []).find((q: any) => q.id === queueId || q.slug === queueId);
-          if (match) return match;
-        }
-      } catch (err) {
-        console.error('Failed to fetch queue in QueueRenderer:', err);
-      }
-      return null;
-    },
-    enabled: !!queueId && !initialQueue && !hasInlineConfig && !!tenant?.id,
-    staleTime: 60000,
-    gcTime: 300000
-  });
-
-  // 2. Search menuConfig / modules for navigation queue definition
+  // 1. Search menuConfig / modules synchronously first for navigation queue definition
   const navExtractedQueue = useMemo<QueueEntity | null>(() => {
-    if (!queueId || initialQueue || fetchedQueue) return null;
+    if (!queueId || initialQueue) return null;
 
     let foundItem: any = null;
     const walk = (items: any[]) => {
@@ -133,7 +339,41 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       };
     }
     return null;
-  }, [queueId, initialQueue, fetchedQueue, menuConfig, tenant?.menuConfig, tenant?.id]);
+  }, [queueId, initialQueue, menuConfig, tenant?.menuConfig, tenant?.id]);
+
+  // 2. Fetch queue entity by queueId only if not passed directly, not in menuConfig, and not configured inline
+  const { data: fetchedQueue } = useQuery<QueueEntity | null>({
+    queryKey: ['queue-renderer-entity', tenant?.id, queueId, session?.access_token],
+    queryFn: async () => {
+      if (!queueId || !tenant?.id) return null;
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`${API_BASE_URL}/api/queues/${queueId}`, {
+          headers: { 'x-tenant-id': tenant.id, ...authHeader }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) return data;
+        }
+        // Fallback: list all queues
+        const allRes = await fetch(`${API_BASE_URL}/api/queues`, {
+          headers: { 'x-tenant-id': tenant.id, ...authHeader }
+        });
+        if (allRes.ok) {
+          const allData = await allRes.json();
+          const match = (allData || []).find((q: any) => q.id === queueId || q.slug === queueId);
+          if (match) return match;
+        }
+      } catch (err) {
+        console.error('Failed to fetch queue in QueueRenderer:', err);
+      }
+      return null;
+    },
+    enabled: !!queueId && !initialQueue && !hasInlineConfig && !navExtractedQueue && !!tenant?.id,
+    staleTime: 60000,
+    gcTime: 300000
+  });
 
   // Helper to dynamically resolve module metadata (by id, slug, table name, or platform module)
   const getRecordModule = (recOrId: any) => {
@@ -199,8 +439,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         id: queueId || 'custom-queue',
         tenantId: tenant?.id || 't1',
         name: queueName,
-        isUnifiedQueue: propIsUnified ?? overrideConfig?.isUnifiedQueue ?? (explicitModuleIds.length > 1),
-        moduleId: propModuleId || overrideConfig?.moduleId,
+        isUnifiedQueue: propIsUnified ?? Boolean(overrideConfig?.isUnifiedQueue),
+        moduleId: propModuleId || overrideConfig?.moduleId || (explicitModuleIds.length === 1 ? explicitModuleIds[0] : fallbackModId),
         moduleIds: explicitModuleIds.length > 0 ? explicitModuleIds : (fallbackModId ? [fallbackModId] : []),
         queueConfig: overrideConfig || {
           conditions: { type: 'group', logicalOperator: 'AND', rules: [] },
@@ -210,145 +450,93 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       };
     }
     return null;
-  }, [initialQueue, fetchedQueue, navExtractedQueue, overrideConfig, propModuleId, propModuleIds, propIsUnified, queueId, tenant?.id, modules, propName]);
+  }, [initialQueue, fetchedQueue, navExtractedQueue, overrideConfig, propModuleId, propModuleIds, propIsUnified, propName, queueId, tenant?.id, modules]);
 
+  // Target module IDs
   const targetModuleIds = useMemo(() => {
     if (!activeQueue) return [];
-    if (activeQueue.isUnifiedQueue && activeQueue.moduleIds?.length) {
-      return activeQueue.moduleIds.filter(Boolean);
-    }
-    if (activeQueue.moduleId) {
-      return [activeQueue.moduleId];
-    }
-    if (activeQueue.moduleIds?.length) {
-      return activeQueue.moduleIds.filter(Boolean);
-    }
-    // Fallback to all custom modules if unified queue without explicit moduleIds
     if (activeQueue.isUnifiedQueue) {
-      return (modules || []).filter((m: any) => m.type !== 'PAGE').map((m: any) => m.id);
+      return (activeQueue.moduleIds && activeQueue.moduleIds.length > 0)
+        ? activeQueue.moduleIds
+        : (modules || []).filter((m: any) => m.type !== 'PAGE').map((m: any) => m.id);
     }
-    // Fallback to first custom module
-    const firstCustomMod = (modules || []).find((m: any) => m.type !== 'PAGE');
-    if (firstCustomMod) return [firstCustomMod.id];
+    if (activeQueue.moduleId) return [activeQueue.moduleId];
+    if (activeQueue.moduleIds && activeQueue.moduleIds.length > 0) return activeQueue.moduleIds;
     return [];
   }, [activeQueue, modules]);
 
-  const recordsCacheKey = `queue_records_${tenant?.id || 't1'}_${targetModuleIds.join('_')}_${activeQueue?.id || 'default'}`;
-
-  // Fetch all records for target modules with instant cache hydration
-  const { data: rawRecords = [], isLoading: recordsQueryLoading } = useQuery({
-    queryKey: ['queue-renderer-records', tenant?.id, targetModuleIds, activeQueue?.id],
+  // Fetch records across all target modules
+  const { data: rawRecords = [], isLoading: recordsQueryLoading } = useQuery<any[]>({
+    queryKey: ['queue-renderer-records', tenant?.id, targetModuleIds.sort().join(','), session?.access_token],
     queryFn: async () => {
       if (!tenant?.id || targetModuleIds.length === 0) return [];
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-
-      const promises = targetModuleIds.map((mId: string) =>
-        fetchRecords(mId, tenant.id, token, 1, 100).catch(() => ({ records: [] as any[] }))
-      );
-      const results = await Promise.all(promises);
-
-      const combined = results.flatMap((res: any, idx) => {
-        const mId = targetModuleIds[idx];
-        const mod = getRecordModule(mId);
-        return (res?.records || []).map((r: any) => ({
-          ...r,
-          moduleId: r.moduleId || mId,
-          _moduleName: r.moduleName || mod?.name || getRecordModuleName(r.moduleId || mId),
-          _moduleIcon: r.moduleIcon || mod?.icon || mod?.iconName || 'Box'
-        }));
+      
+      const promises = targetModuleIds.map(async (mId) => {
+        try {
+          const res = await fetchRecords(mId, tenant.id, token, 1, 100);
+          const records = res?.records || [];
+          return records.map((r: any) => ({
+            ...r,
+            moduleId: r.moduleId || mId,
+            moduleName: getRecordModuleName(mId),
+            moduleIcon: getRecordModuleIcon(mId)
+          }));
+        } catch (err) {
+          console.error(`Failed to fetch records for module ${mId} in QueueRenderer:`, err);
+          return [];
+        }
       });
 
-      builderCache.set(recordsCacheKey, combined);
-      return combined;
+      const results = await Promise.all(promises);
+      return results.flat();
     },
-    placeholderData: () => {
-      const cached = builderCache.get<any[]>(recordsCacheKey);
-      return Array.isArray(cached) && cached.length > 0 ? cached : undefined;
-    },
-    enabled: !!tenant?.id && targetModuleIds.length > 0 && !!(session?.access_token || (import.meta as any).env.VITE_DEV_TOKEN),
-    staleTime: 10000,
-    gcTime: 300000
+    enabled: targetModuleIds.length > 0 && !!tenant?.id,
+    staleTime: 30000,
+    gcTime: 120000
   });
 
+  // Evaluate queue condition groups
   const visibilityContext = useMemo(() => ({
     user: platformUser,
-    tenant,
-    session
-  }), [platformUser, tenant, session]);
+    currentUser: platformUser,
+    tenant
+  }), [platformUser, tenant]);
 
-  // Filter records based on condition and search query
   const filteredRecords = useMemo(() => {
-    let result = Array.isArray(rawRecords) ? rawRecords : [];
+    if (!Array.isArray(rawRecords)) return [];
 
-    const conditions = activeQueue?.queueConfig?.conditions;
-    if (conditions && conditions.rules && conditions.rules.length > 0) {
-      result = result.filter(record =>
-        checkCondition(conditions, record, visibilityContext)
-      );
-    }
+    let result = rawRecords.filter((record: any) => {
+      // 1. Evaluate queue conditions
+      if (activeQueue?.queueConfig?.conditions) {
+        const cond = activeQueue.queueConfig.conditions;
+        const matches = checkCondition(cond, record, visibilityContext);
+        if (!matches) return false;
+      }
 
-    if (searchQuery.trim() !== '') {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(record =>
-        Object.entries(record).some(([key, val]) => {
-          if (key.startsWith('_') || val === null || val === undefined) return false;
-          if (typeof val === 'object') return false;
-          return String(val).toLowerCase().includes(query);
-        })
-      );
-    }
+      // 2. Client-side search query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const title = record.title || record.data?.title || record.name || record.data?.name || record.id || '';
+        const status = record.status || record.data?.status || '';
+        const priority = record.priority || record.data?.priority || '';
+        const modName = getRecordModuleName(record);
 
-    if (sortConfig) {
-      const { key, direction } = sortConfig;
-      result = [...result].sort((a, b) => {
-        let valA = a[key];
-        let valB = b[key];
+        const matchesSearch = 
+          String(title).toLowerCase().includes(query) ||
+          String(status).toLowerCase().includes(query) ||
+          String(priority).toLowerCase().includes(query) ||
+          String(modName).toLowerCase().includes(query) ||
+          String(record.id).toLowerCase().includes(query);
 
-        if (key === 'moduleId') {
-          valA = getRecordModuleName(a);
-          valB = getRecordModuleName(b);
-        } else if (key === 'assigneeId') {
-          const userA = members.find((m: any) => m.cuid === a.assigneeId || m.memberId === a.assigneeId);
-          const userB = members.find((m: any) => m.cuid === b.assigneeId || m.memberId === b.assigneeId);
-          valA = userA ? userA.name : '';
-          valB = userB ? userB.name : '';
-        } else if (key === 'title') {
-          valA = a.data?.title || a.data?.name || a.title || a.name || a.id;
-          valB = b.data?.title || b.data?.name || b.title || b.name || b.id;
-        } else if (key === 'createdAt' || key === 'updatedAt') {
-          valA = new Date(valA || 0).getTime();
-          valB = new Date(valB || 0).getTime();
-        } else if (valA === undefined || valA === null) {
-          valA = a.data?.[key];
-          valB = b.data?.[key];
-        }
+        if (!matchesSearch) return false;
+      }
 
-        if (valA === undefined || valA === null) valA = '';
-        if (valB === undefined || valB === null) valB = '';
-
-        if (typeof valA === 'string' && typeof valB === 'string') {
-          return direction === 'asc'
-            ? valA.localeCompare(valB)
-            : valB.localeCompare(valA);
-        }
-
-        if (valA < valB) return direction === 'asc' ? -1 : 1;
-        if (valA > valB) return direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
+      return true;
+    });
 
     return result;
-  }, [rawRecords, activeQueue, searchQuery, visibilityContext, sortConfig, members, modules]);
-
-  // Paginated records
-  const totalRecords = Array.isArray(filteredRecords) ? filteredRecords.length : 0;
-  const totalPages = Math.ceil(totalRecords / pageSize) || 1;
-  const paginatedRecords = useMemo(() => {
-    if (!Array.isArray(filteredRecords)) return [];
-    const start = (page - 1) * pageSize;
-    return filteredRecords.slice(start, start + pageSize);
-  }, [filteredRecords, page, pageSize]);
+  }, [rawRecords, activeQueue, searchQuery, visibilityContext, members, modules]);
 
   // Inline Assignee Claim/Update mutation
   const updateMutation = useMutation({
@@ -375,23 +563,85 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     }
   });
 
-  const handleClaim = (record: any) => {
-    const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
-    if (!me) return;
-    updateMutation.mutate({ recordId: record.id, moduleId: record.moduleId, assigneeId: me });
-  };
-
-  const handleRelease = (record: any) => {
-    updateMutation.mutate({ recordId: record.id, moduleId: record.moduleId, assigneeId: null });
-  };
-
-  const handleSort = (colId: string) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === colId && sortConfig.direction === 'asc') {
-      direction = 'desc';
+  // Bulk records mutation
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ records, patchData }: { records: any[]; patchData: any }) => {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      await Promise.all(records.map(async (r) => {
+        const mId = r.moduleId || activeQueue?.moduleId || (activeQueue?.moduleIds && activeQueue.moduleIds[0]);
+        return fetch(`${DATA_API_URL}/records/${r.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          },
+          body: JSON.stringify({ moduleId: mId, ...patchData })
+        });
+      }));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+      toast.success('Updated selected records');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to update selected records');
     }
-    setSortConfig({ key: colId, direction });
-  };
+  });
+
+  // Single delete mutation
+  const singleDeleteMutation = useMutation({
+    mutationFn: async (record: any) => {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const mId = record.moduleId || activeQueue?.moduleId || (activeQueue?.moduleIds && activeQueue.moduleIds[0]);
+      const res = await fetch(`${DATA_API_URL}/records/${record.id}?moduleId=${mId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to delete record');
+      }
+      return record;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      toast.success('Record moved to Recycling Bin');
+      setRecordToDelete(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to delete record');
+    }
+  });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async ({ records }: { records: any[] }) => {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      await Promise.all(records.map(async (r) => {
+        const mId = r.moduleId || activeQueue?.moduleId || (activeQueue?.moduleIds && activeQueue.moduleIds[0]);
+        return fetch(`${DATA_API_URL}/records/${r.id}?moduleId=${mId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || ''
+          }
+        });
+      }));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      toast.success('Moved selected records to Recycling Bin');
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to delete selected records');
+    }
+  });
 
   // Columns definition
   const columnsToRender = useMemo(() => {
@@ -431,238 +681,322 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     }
 
     if (value === undefined || value === null || value === '') {
-      return <span className="text-zinc-300 dark:text-zinc-700 font-medium">-</span>;
+      return <span className="text-zinc-400 dark:text-zinc-600">-</span>;
     }
 
     switch (colId) {
       case 'id':
-        return <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{String(value).slice(-6)}</span>;
+      case '_record_key':
+      case 'key':
+        return (
+          <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
+            {record._record_key || record.key || record.id || '-'}
+          </span>
+        );
       case 'moduleId':
         return (
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-indigo-500">
-              <DynamicIcon name={getRecordModuleIcon(record)} size={11} />
-            </div>
-            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{getRecordModuleName(record)}</span>
-          </div>
+          <span className="text-xs text-zinc-700 dark:text-zinc-300 truncate">
+            {getRecordModuleName(record)}
+          </span>
         );
       case 'title':
-        return <span className="text-xs font-extrabold text-zinc-900 dark:text-white line-clamp-1">{String(value)}</span>;
+        return <span className="text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1">{String(value)}</span>;
       case 'status':
         return (
-          <span className={cn(
-            "text-[10px] font-bold px-2 py-0.5 rounded-full border inline-block",
-            String(value).toLowerCase().includes('complete') || String(value).toLowerCase().includes('closed')
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-              : String(value).toLowerCase().includes('progress') || String(value).toLowerCase().includes('active')
-              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
-              : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20"
-          )}>
+          <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20 inline-block">
             {String(value)}
           </span>
         );
       case 'priority':
         return (
           <span className={cn(
-            "text-[10px] font-extrabold tracking-tight",
-            String(value).toLowerCase().includes('high') || String(value).toLowerCase().includes('critical') ? "text-rose-600 dark:text-rose-400" :
-            String(value).toLowerCase().includes('med') ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
+            "px-2 py-0.5 rounded-full text-[10px] font-bold border inline-block",
+            String(value).toLowerCase().includes('high') || String(value).toLowerCase().includes('critical')
+              ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+              : String(value).toLowerCase().includes('med')
+              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+              : "bg-blue-500/10 text-blue-400 border-blue-500/20"
           )}>
             {String(value)}
           </span>
         );
       case 'assigneeId': {
-        const userObj = members.find((m: any) => m.id === value || m.cuid === value || m.memberId === value);
-        const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
-        const isMe = value === me;
-
-        if (userObj) {
-          return (
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <UserAvatarWithPresence
-                avatarUrl={userObj.avatarUrl}
-                name={userObj.name}
-                status={(userObj as any).status || (userObj as any).presenceStatus}
-                size="xs"
-              />
-              <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate max-w-[90px]">{userObj.name}</span>
-              {isMe && !readOnly && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleRelease(record); }}
-                  className="text-[9px] font-black uppercase text-rose-500 hover:underline ml-1 cursor-pointer"
-                >
-                  Release
-                </button>
-              )}
-            </div>
-          );
-        }
-        if (readOnly) {
-          return <span className="text-xs text-zinc-400 italic">Unassigned</span>;
-        }
         return (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleClaim(record); }}
-            className="text-[10px] font-extrabold uppercase text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
-          >
-            Claim Case
-          </button>
+          <InlineAssigneeCell
+            record={record}
+            members={members}
+            platformUser={platformUser}
+            updateMutation={updateMutation}
+          />
         );
       }
       case 'createdAt':
+        return (
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+            {value ? new Date(value).toLocaleDateString() : 'Just now'}
+          </span>
+        );
       case 'updatedAt':
-        return <span className="text-xs text-zinc-500">{new Date(value).toLocaleDateString()}</span>;
+        return (
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+            {value ? new Date(value).toLocaleDateString() : 'Just now'}
+          </span>
+        );
       default:
-        return <span className="text-xs text-zinc-700 dark:text-zinc-300 line-clamp-1">{String(value)}</span>;
+        return <span className="text-xs text-zinc-700 dark:text-zinc-300">{valOrDash(value)}</span>;
     }
   };
 
-  if (platformLoading || (recordsQueryLoading && rawRecords.length === 0)) {
-    return (
-      <div className={cn("space-y-4 p-4 bg-white/60 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200 dark:border-zinc-800", className)}>
-        <div className="flex items-center justify-between">
-          <Skeleton width={180} height={24} variant="rounded" />
-          <Skeleton width={120} height={32} variant="rounded" />
-        </div>
-        {[1, 2, 3].map(i => (
-          <Skeleton key={i} width="100%" height={40} variant="rounded" />
-        ))}
-      </div>
-    );
-  }
+  const valOrDash = (v: any) => {
+    if (v === undefined || v === null || v === '') return '-';
+    return String(v);
+  };
 
-  if (!activeQueue || targetModuleIds.length === 0) {
-    return (
-      <div className={cn("p-8 text-center bg-white/40 dark:bg-zinc-900/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-2", className)}>
-        <LucideIcons.Layers className="mx-auto text-zinc-400 dark:text-zinc-600" size={32} />
-        <h4 className="text-xs font-bold text-zinc-700 dark:text-zinc-300">No Target Modules Assigned</h4>
-        <p className="text-[11px] text-zinc-400 max-w-xs mx-auto">Select at least one module in the Queue configuration to populate records.</p>
-      </div>
-    );
-  }
+  const densityClass = useMemo(() => {
+    if (density === 'compact') return 'px-3.5 py-1.5 text-[11px] leading-normal font-medium';
+    if (density === 'spacious') return 'px-6 py-4 text-sm leading-relaxed';
+    return 'px-4 py-2 text-xs';
+  }, [density]);
+
+  // Dynamic filter fields schema for Queues
+  const queueFilterFields = useMemo(() => {
+    const systemFields = [
+      { id: 'id', label: 'Record ID / Key', type: 'text' as const },
+      ...(targetModuleIds.length > 1 || activeQueue?.isUnifiedQueue ? [{
+        id: 'moduleId',
+        label: 'Module',
+        type: 'select' as const,
+        options: targetModuleIds.map(mId => {
+          const mod = getRecordModule(mId);
+          return {
+            label: mod?.name || mod?.label || mId,
+            value: mId
+          };
+        })
+      }] : []),
+      { id: 'title', label: 'Title / Summary', type: 'text' as const },
+      { 
+        id: 'status', 
+        label: 'Status', 
+        type: 'status' as const, 
+        options: ['Open', 'In Progress', 'Under Review', 'Completed', 'Closed'] 
+      },
+      { 
+        id: 'priority', 
+        label: 'Priority', 
+        type: 'select' as const, 
+        options: ['Low', 'Medium', 'High', 'Critical'] 
+      },
+      { 
+        id: 'assigneeId', 
+        label: 'Assignee', 
+        type: 'user' as const, 
+        userOptions: members 
+      },
+      { id: 'createdAt', label: 'Created At', type: 'date' as const },
+      { id: 'updatedAt', label: 'Updated At', type: 'date' as const }
+    ];
+
+    // Extract custom fields from target modules
+    const customFieldsMap = new Map<string, any>();
+    targetModuleIds.forEach(mId => {
+      const mod = getRecordModule(mId);
+      if (mod) {
+        const rawFields = mod.fields || mod.config?.fields || (mod.layout ? flattenFields(mod.layout) : []) || mod.tabs?.flatMap((t: any) => t.fields || []) || [];
+        rawFields.forEach((f: any) => {
+          if (f.id && !customFieldsMap.has(f.id) && !systemFields.some(sf => sf.id === f.id)) {
+            customFieldsMap.set(f.id, {
+              id: f.id,
+              label: f.label || f.name || f.id,
+              type: f.type || 'text',
+              options: f.options,
+              userOptions: ['user', 'member', 'assignee'].includes(f.type) || f.id === 'assigneeId' || f.id === 'assignee' ? members : undefined
+            });
+          }
+        });
+      }
+    });
+
+    return [...systemFields, ...Array.from(customFieldsMap.values())];
+  }, [targetModuleIds, activeQueue, modules, members]);
+
+  const tableColumns: Column<any>[] = useMemo(() => {
+    const cols: Column<any>[] = columnsToRender.map((colId: string) => ({
+      header: columnLabel(colId),
+      accessor: (record: any) => renderCell(record, colId),
+      sortable: true,
+      sortKey: colId,
+      filterKey: colId,
+      className: densityClass
+    }));
+
+    if (!readOnly) {
+      cols.push({
+        header: 'Actions',
+        align: 'right',
+        filterable: false,
+        className: cn('text-right', densityClass),
+        accessor: (record: any) => (
+          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setRecordToShare(record)}
+              className="p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
+              title="Share Record"
+            >
+              <LucideIcons.Share2 size={14} />
+            </button>
+            <button
+              onClick={() => setRecordToDelete(record)}
+              className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-400/10 rounded-lg transition-all cursor-pointer"
+              title="Move to Recycling Bin"
+            >
+              <LucideIcons.Trash2 size={14} />
+            </button>
+          </div>
+        )
+      });
+    }
+
+    return cols;
+  }, [columnsToRender, members, platformUser, readOnly, densityClass]);
 
   return (
-    <div className={cn("flex flex-col bg-white/60 dark:bg-zinc-900/35 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800/50 rounded-2xl shadow-sm overflow-hidden", className)}>
-      {/* Header & Search */}
-      {showHeader && (
-        <div className="p-4 border-b border-zinc-200/50 dark:border-zinc-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/30 dark:bg-zinc-900/20">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-              <DynamicIcon name={activeQueue.iconName || 'ListOrdered'} size={18} />
+    <div className={cn("w-full h-full flex flex-col min-h-0", className)}>
+      <Table
+        key={`queue_table_${activeQueue?.id || queueId || 'queue'}`}
+        filterScopeId={activeQueue?.id || queueId || 'queue'}
+        enableSavedViews={true}
+        scopeType="QUEUE"
+        scopeId={activeQueue?.id || queueId || 'queue'}
+        tenantId={tenant?.id}
+        token={(session as any)?.access_token}
+        className="h-full flex-1 w-full"
+        data={filteredRecords}
+        columns={tableColumns}
+        loading={recordsQueryLoading || platformLoading}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        pageSizeOptions={[10, 25, 50, 100]}
+        density={density}
+        enableSelection={!readOnly}
+        enableFilters={true}
+        filterFields={queueFilterFields}
+        currentUserId={(platformUser as any)?.memberId || (platformUser as any)?.cuid || (platformUser as any)?.id || (session?.user as any)?.id}
+        currentUserName={(platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email}
+        assigneeOptions={members}
+        statusOptions={['Open', 'In Progress', 'Under Review', 'Completed', 'Closed']}
+        title={showHeader ? activeQueue?.name : undefined}
+        subtitle={showHeader ? activeQueue?.description : undefined}
+        searchable={searchable}
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search queue records..."
+        noContainer={noContainer}
+        onRowClick={(record) => {
+          if (onRowClick) {
+            onRowClick(record);
+          } else if (!readOnly) {
+            const effectivePageId = routePageId || (location.pathname.startsWith('/workspace/pages/') ? location.pathname.split('/')[3] : null);
+            const effectiveQueueId = routeQueueId || queueId || (location.pathname.startsWith('/workspace/queues/') ? location.pathname.split('/')[3] : null);
+            
+            if (effectivePageId) {
+              navigate(`/workspace/pages/${effectivePageId}/modules/${record.moduleId}/records/${record.id}`);
+            } else if (effectiveQueueId) {
+              navigate(`/workspace/queues/${effectiveQueueId}/modules/${record.moduleId}/records/${record.id}`);
+            } else {
+              navigate(`/workspace/modules/${record.moduleId}/records/${record.id}`);
+            }
+          }
+        }}
+        onBulkAssign={(_selectedIds, selectedItems, assigneeId, clearSelection) => {
+          bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId } });
+          clearSelection();
+        }}
+        onBulkStatusChange={(_selectedIds, selectedItems, status, clearSelection) => {
+          bulkUpdateMutation.mutate({ records: selectedItems, patchData: { status } });
+          clearSelection();
+        }}
+        onBulkDelete={(_selectedIds, selectedItems, clearSelection) => {
+          bulkDeleteMutation.mutate({ records: selectedItems });
+          clearSelection();
+        }}
+        bulkActions={(_selectedIds, selectedItems, clearSelection) => {
+          const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
+          if (!me) return null;
+          return (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId: me } });
+                  clearSelection();
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+              >
+                Claim All
+              </button>
             </div>
-            <div>
-              <h3 className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                {activeQueue.name}
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                  {totalRecords} records
-                </span>
-              </h3>
-              {activeQueue.description && (
-                <p className="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">{activeQueue.description}</p>
-              )}
-            </div>
-          </div>
+          );
+        }}
+      />
 
-          <div className="relative w-full sm:w-56">
-            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
-            <input
-              type="text"
-              placeholder="Search queue records..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              className="w-full bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-all"
-            />
-          </div>
-        </div>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {recordToDelete && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setRecordToDelete(null)}
+                className="absolute inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-md"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative w-[440px] max-w-[95vw] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl p-10 space-y-8"
+              >
+                <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center text-rose-500 mx-auto">
+                  <LucideIcons.AlertCircle size={32} />
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Delete Entry?</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed">
+                    Are you sure you want to delete this record? This record will be moved to the Recycling Bin and can be restored at any time.
+                  </p>
+                </div>
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    onClick={() => setRecordToDelete(null)}
+                    className="flex-1 py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white rounded-xl font-bold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => singleDeleteMutation.mutate(recordToDelete)}
+                    disabled={singleDeleteMutation.isPending}
+                    className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-all shadow-xl shadow-rose-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {singleDeleteMutation.isPending ? 'Moving...' : 'Move to Recycling Bin'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
 
-      {/* Main Table */}
-      <div className="overflow-x-auto custom-scrollbar flex-1">
-        {paginatedRecords.length > 0 ? (
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50/40 dark:bg-zinc-900/30">
-                {columnsToRender.map((colId: string) => {
-                  const isSorted = sortConfig?.key === colId;
-                  return (
-                    <th
-                      key={colId}
-                      onClick={() => handleSort(colId)}
-                      className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 cursor-pointer hover:bg-zinc-100/30 dark:hover:bg-white/[0.02] select-none transition-colors group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>{columnLabel(colId)}</span>
-                        {isSorted ? (
-                          sortConfig.direction === 'asc' ? (
-                            <LucideIcons.ChevronUp size={11} className="text-indigo-500 shrink-0" />
-                          ) : (
-                            <LucideIcons.ChevronDown size={11} className="text-indigo-500 shrink-0" />
-                          )
-                        ) : (
-                          <LucideIcons.ArrowUpDown size={10} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-all shrink-0" />
-                        )}
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200/30 dark:divide-zinc-800/40">
-              {paginatedRecords.map((record) => (
-                <tr
-                  key={record.id}
-                  onClick={() => {
-                    if (onRowClick) {
-                      onRowClick(record);
-                    } else if (!readOnly) {
-                      navigate(`/workspace/modules/${record.moduleId}/records/${record.id}`);
-                    }
-                  }}
-                  className="hover:bg-zinc-50/60 dark:hover:bg-white/[0.02] cursor-pointer transition-all group"
-                >
-                  {columnsToRender.map((colId: string) => (
-                    <td key={colId} className="px-4 py-3 align-middle">
-                      {renderCell(record, colId)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="py-12 flex flex-col items-center justify-center text-center p-4">
-            <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 mb-2">
-              <LucideIcons.Inbox size={18} />
-            </div>
-            <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">No records found</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">All matching queue items have been cleared or filter conditions returned zero results.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Pagination Footer */}
-      {totalPages > 1 && (
-        <div className="px-4 py-2.5 border-t border-zinc-200/40 dark:border-zinc-800/40 flex items-center justify-between bg-zinc-50/20 dark:bg-zinc-900/10 text-xs">
-          <span className="text-[10px] text-zinc-400 font-bold uppercase">
-            Page {page} of {totalPages} ({totalRecords} records)
-          </span>
-          <div className="flex gap-1.5">
-            <button
-              disabled={page === 1}
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="p-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-500 disabled:opacity-40 hover:bg-zinc-50"
-            >
-              <LucideIcons.ChevronLeft size={13} />
-            </button>
-            <button
-              disabled={page === totalPages}
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              className="p-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-500 disabled:opacity-40 hover:bg-zinc-50"
-            >
-              <LucideIcons.ChevronRight size={13} />
-            </button>
-          </div>
-        </div>
+      {/* Share Record Modal */}
+      {recordToShare && (
+        <ShareRecordModal
+          isOpen={!!recordToShare}
+          onClose={() => setRecordToShare(null)}
+          record={recordToShare}
+          moduleId={recordToShare?.moduleId || activeQueue?.moduleId}
+          moduleName={getRecordModuleName(recordToShare)}
+        />
       )}
     </div>
   );
