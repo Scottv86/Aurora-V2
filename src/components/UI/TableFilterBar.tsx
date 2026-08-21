@@ -261,12 +261,20 @@ export const evaluateTableFilterClause = (
     return !actuals.some(a => expected.includes(a));
   }
 
-  // String operators
+  // String & Equality operators
   const compareStr = String(value || '').toLowerCase();
   switch (operator) {
+    case 'is':
     case 'equals':
-      return actuals.includes(compareStr);
+      if (Array.isArray(value)) {
+        return value.some(v => actuals.includes(String(v).toLowerCase()));
+      }
+      return actuals.includes(compareStr) || actuals.some(a => a.toLowerCase() === compareStr);
+    case 'is_not':
     case 'not_equals':
+      if (Array.isArray(value)) {
+        return !value.some(v => actuals.includes(String(v).toLowerCase()));
+      }
       return !actuals.includes(compareStr);
     case 'contains':
       if (!compareStr) return true;
@@ -752,6 +760,8 @@ export interface TableFilterBarProps {
   scopeId?: string;
   tenantId?: string;
   token?: string;
+  leftSlot?: React.ReactNode;
+  rightSlot?: React.ReactNode;
 }
 
 export const TableFilterBar: React.FC<TableFilterBarProps> = ({
@@ -769,7 +779,9 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
   scopeType,
   scopeId,
   tenantId,
-  token
+  token,
+  leftSlot,
+  rightSlot
 }) => {
   const [addMenuRect, setAddMenuRect] = useState<DOMRect | null>(null);
   const [activeEditingClauseId, setActiveEditingClauseId] = useState<string | null>(null);
@@ -869,100 +881,106 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
   const activeEditingFieldDef = activeEditingClause ? fieldMap.get(activeEditingClause.fieldId) : undefined;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-2 py-2 px-3 bg-zinc-50/70 dark:bg-zinc-900/30 border-b border-zinc-200/50 dark:border-white/5 min-h-[44px]", className)}>
-      {/* Saved Views Selector */}
-      {enableSavedViews && scopeId && (
-        <div className="flex items-center gap-2">
-          <SavedViewsSelector
-            fields={fields}
-            scopeType={scopeType || 'MODULE'}
-            scopeId={scopeId}
-            tenantId={tenantId}
-            token={token}
-            currentUserId={currentUserId}
-            activeFilterState={filterState}
-            onApplyView={(_view, newFilterState) => {
-              onChange(newFilterState);
-            }}
-          />
-          <div className="h-4 w-px bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800 shrink-0" />
-        </div>
-      )}
+    <div className={cn("flex flex-wrap items-center justify-between gap-2.5 py-2 px-3 sm:px-4 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md border-b border-zinc-200/80 dark:border-zinc-800 min-h-[44px]", className)}>
+      {/* Left side items: Title/LeftSlot + Saved Views + Filter + Pills */}
+      <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+        {leftSlot}
 
-      {/* Filter Icon & Label */}
-      <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500 font-bold text-[11px] uppercase tracking-wider shrink-0 select-none mr-1">
-        <SlidersHorizontal size={13} />
-        <span>Filters</span>
+        {/* Saved Views Selector */}
+        {enableSavedViews && scopeId && (
+          <div className="flex items-center gap-2">
+            <SavedViewsSelector
+              fields={fields}
+              scopeType={scopeType || 'MODULE'}
+              scopeId={scopeId}
+              tenantId={tenantId}
+              token={token}
+              currentUserId={currentUserId}
+              activeFilterState={filterState}
+              onApplyView={(_view, newFilterState) => {
+                onChange(newFilterState);
+              }}
+            />
+            <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+          </div>
+        )}
+
+        {/* Active Filter Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <AnimatePresence mode="popLayout">
+            {filterState.clauses.map(clause => (
+              <motion.div
+                key={clause.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15 }}
+              >
+                <FilterPill
+                  clause={clause}
+                  fieldDef={fieldMap.get(clause.fieldId)}
+                  onUpdate={(updated) => handleUpdateClause(clause.id, updated)}
+                  onDelete={() => handleDeleteClause(clause.id)}
+                  isActiveEditing={activeEditingClauseId === clause.id}
+                  onOpenEdit={(rect) => {
+                    setActiveEditingClauseId(clause.id);
+                    setClausePopoverRect(rect);
+                  }}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* "+ Filter" Button */}
+        <button
+          ref={addBtnRef}
+          type="button"
+          onClick={() => {
+            if (addBtnRef.current) {
+              setAddMenuRect(addBtnRef.current.getBoundingClientRect());
+            }
+          }}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-500 bg-white/50 dark:bg-zinc-800/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-300 text-xs font-medium transition-all shadow-2xs cursor-pointer"
+        >
+          <SlidersHorizontal size={12} className="text-zinc-400" />
+          <span>Filter</span>
+          {filterState.clauses.length > 0 && (
+            <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] flex items-center justify-center font-bold ml-0.5">
+              {filterState.clauses.length}
+            </span>
+          )}
+        </button>
+
+        {/* Match Condition (AND / OR) if multiple clauses */}
+        {filterState.clauses.length > 1 && (
+          <button
+            type="button"
+            onClick={toggleMatchType}
+            className="px-2 py-0.5 rounded-md bg-zinc-200/70 dark:bg-zinc-800 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+            title="Click to toggle between matching ALL or ANY conditions"
+          >
+            Match: <span className="text-indigo-600 dark:text-indigo-400">{filterState.matchType.toUpperCase()}</span>
+          </button>
+        )}
+
+        {/* Clear All Button */}
         {filterState.clauses.length > 0 && (
-          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] flex items-center justify-center font-bold">
-            {filterState.clauses.length}
-          </span>
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+          >
+            Clear all
+          </button>
         )}
       </div>
 
-      {/* Match Condition (AND / OR) if multiple clauses */}
-      {filterState.clauses.length > 1 && (
-        <button
-          type="button"
-          onClick={toggleMatchType}
-          className="px-2 py-0.5 rounded-lg bg-zinc-200/70 dark:bg-zinc-800 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
-          title="Click to toggle between matching ALL or ANY conditions"
-        >
-          Match: <span className="text-indigo-600 dark:text-indigo-400">{filterState.matchType.toUpperCase()}</span>
-        </button>
-      )}
-
-      {/* Active Filter Pills */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <AnimatePresence mode="popLayout">
-          {filterState.clauses.map(clause => (
-            <motion.div
-              key={clause.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.15 }}
-            >
-              <FilterPill
-                clause={clause}
-                fieldDef={fieldMap.get(clause.fieldId)}
-                onUpdate={(updated) => handleUpdateClause(clause.id, updated)}
-                onDelete={() => handleDeleteClause(clause.id)}
-                isActiveEditing={activeEditingClauseId === clause.id}
-                onOpenEdit={(rect) => {
-                  setActiveEditingClauseId(clause.id);
-                  setClausePopoverRect(rect);
-                }}
-              />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {/* "+ Filter" Button */}
-      <button
-        ref={addBtnRef}
-        type="button"
-        onClick={() => {
-          if (addBtnRef.current) {
-            setAddMenuRect(addBtnRef.current.getBoundingClientRect());
-          }
-        }}
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-500 bg-white/50 dark:bg-zinc-800/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-300 text-xs font-medium transition-all shadow-2xs"
-      >
-        <Plus size={12} />
-        <span>Filter</span>
-      </button>
-
-      {/* Clear All Button */}
-      {filterState.clauses.length > 0 && (
-        <button
-          type="button"
-          onClick={handleClearAll}
-          className="text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 ml-auto transition-colors"
-        >
-          Clear all
-        </button>
+      {/* Right side items: Search + Charts + Edit Mode + Focus + HeaderActions */}
+      {rightSlot && (
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {rightSlot}
+        </div>
       )}
 
       {/* Add Filter Menu Popover */}

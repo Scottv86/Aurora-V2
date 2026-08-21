@@ -12,7 +12,8 @@ import {
   fetchSavedViews, 
   saveSavedView, 
   deleteSavedView, 
-  setDefaultSavedView 
+  setDefaultSavedView,
+  clearDefaultSavedView
 } from '../../services/savedViewService';
 import { TableFilterState, getOperatorLabel, FilterFieldOption } from './TableFilterBar';
 
@@ -263,6 +264,23 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
     }
   };
 
+  const hasCustomDefault = useMemo(() => views.some(v => v.isDefault), [views]);
+
+  const handleClearAllDefaults = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!tenantId || !scopeId) return;
+    try {
+      await clearDefaultSavedView(scopeType, scopeId, tenantId, token);
+      setViews(prev => prev.map(v => ({ ...v, isDefault: false })));
+      if (activeView) {
+        setActiveView(prev => prev ? { ...prev, isDefault: false } : null);
+      }
+      toast.success('Set "All Records" as default');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update default view');
+    }
+  };
+
   const handleToggleDefault = async (view: SavedViewEntity, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!tenantId) return;
@@ -322,7 +340,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
         <span className="max-w-[130px] truncate">
           {activeView ? activeView.name : 'All Records'}
         </span>
-        {activeView?.isDefault && (
+        {((activeView && activeView.isDefault) || (!activeView && !hasCustomDefault)) && (
           <span title="Default View" className="shrink-0 flex items-center">
             <Star size={10} className="text-amber-500 fill-amber-500" />
           </span>
@@ -363,11 +381,17 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
         </div>
       )}
 
-      {/* Dropdown Menu */}
-      {isDropdownOpen && (
+      {/* Dropdown Menu in Portal */}
+      {isDropdownOpen && triggerRef.current && typeof document !== 'undefined' && createPortal(
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 mt-1.5 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-2 z-[9999] flex flex-col gap-1 text-xs animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            position: 'fixed',
+            top: Math.min(triggerRef.current.getBoundingClientRect().bottom + 6, window.innerHeight - 360),
+            left: Math.min(Math.max(12, triggerRef.current.getBoundingClientRect().left), window.innerWidth - 300),
+            zIndex: 99999
+          }}
+          className="w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 text-xs animate-in fade-in zoom-in-95 duration-150"
         >
           {/* Search Box */}
           {views.length > 4 && (
@@ -385,22 +409,41 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
 
           <div className="max-h-64 overflow-y-auto custom-scrollbar flex flex-col gap-1">
             {/* Standard "All Records" Item */}
-            <button
-              type="button"
+            <div
               onClick={() => handleSelectView(null)}
               className={cn(
-                "flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors",
+                "group flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer",
                 activeView === null
                   ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold"
                   : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
               )}
             >
-              <div className="flex items-center gap-2 truncate">
+              <div className="flex items-center gap-2 truncate flex-1">
                 <Layers size={13} className="text-zinc-400" />
-                <span>All Records (Default)</span>
+                <span>All Records</span>
+                {!hasCustomDefault && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                    Default
+                  </span>
+                )}
               </div>
-              {activeView === null && <Check size={13} className="text-indigo-600 dark:text-indigo-400" />}
-            </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleClearAllDefaults}
+                  className={cn(
+                    "p-1 rounded cursor-pointer transition-all",
+                    !hasCustomDefault 
+                      ? "text-amber-500 opacity-100" 
+                      : "text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-amber-500"
+                  )}
+                  title={!hasCustomDefault ? "Default View (Active)" : "Set All Records as Default"}
+                >
+                  <Star size={12} className={!hasCustomDefault ? "fill-amber-500" : ""} />
+                </button>
+                {activeView === null && <Check size={13} className="text-indigo-600 dark:text-indigo-400" />}
+              </div>
+            </div>
 
             {/* My Saved Views */}
             {myViews.length > 0 && (
@@ -435,7 +478,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleToggleDefault(view, e)}
-                          className={cn("p-1 hover:text-amber-500 rounded", view.isDefault && "text-amber-500 opacity-100")}
+                          className={cn("p-1 hover:text-amber-500 rounded cursor-pointer", view.isDefault && "text-amber-500 opacity-100")}
                           title={view.isDefault ? "Default View" : "Set as Default"}
                         >
                           <Star size={11} className={view.isDefault ? "fill-amber-500" : ""} />
@@ -443,7 +486,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
                         <button
                           type="button"
                           onClick={(e) => openEditModal(view, e)}
-                          className="p-1 hover:text-indigo-500 rounded"
+                          className="p-1 hover:text-indigo-500 rounded cursor-pointer"
                           title="Edit View"
                         >
                           <Edit2 size={11} />
@@ -451,7 +494,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleDeleteView(view.id, e)}
-                          className="p-1 hover:text-red-500 rounded"
+                          className="p-1 hover:text-red-500 rounded cursor-pointer"
                           title="Delete View"
                         >
                           <Trash2 size={11} />
@@ -497,7 +540,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleToggleDefault(view, e)}
-                          className={cn("p-1 hover:text-amber-500 rounded", view.isDefault && "text-amber-500 opacity-100")}
+                          className={cn("p-1 hover:text-amber-500 rounded cursor-pointer", view.isDefault && "text-amber-500 opacity-100")}
                           title={view.isDefault ? "Default View" : "Set as Default"}
                         >
                           <Star size={11} className={view.isDefault ? "fill-amber-500" : ""} />
@@ -505,7 +548,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
                         <button
                           type="button"
                           onClick={(e) => openEditModal(view, e)}
-                          className="p-1 hover:text-indigo-500 rounded"
+                          className="p-1 hover:text-indigo-500 rounded cursor-pointer"
                           title="Edit View"
                         >
                           <Edit2 size={11} />
@@ -513,7 +556,7 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleDeleteView(view.id, e)}
-                          className="p-1 hover:text-red-500 rounded"
+                          className="p-1 hover:text-red-500 rounded cursor-pointer"
                           title="Delete View"
                         >
                           <Trash2 size={11} />
@@ -527,17 +570,18 @@ export const SavedViewsSelector: React.FC<SavedViewsSelectorProps> = ({
           </div>
 
           {/* "+ Save Current View" Button */}
-          <div className="border-t border-zinc-150 dark:border-zinc-800 pt-1 mt-1">
+          <div className="border-t border-zinc-100 dark:border-zinc-800 pt-1 mt-1">
             <button
               type="button"
               onClick={openCreateModal}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold transition-colors shadow-2xs"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold transition-colors shadow-2xs cursor-pointer"
             >
               <Plus size={13} />
               <span>Save Current View</span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Save / Edit View Modal */}

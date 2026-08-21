@@ -161,6 +161,32 @@ router.post('/', async (req: TenantRequest, res: Response) => {
   }
 });
 
+// POST /api/saved-views/clear-default - Clear all default views for a scope
+router.post('/clear-default', async (req: TenantRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 't1';
+    const { scopeType, scopeId } = req.body;
+
+    if (!scopeId) {
+      return res.status(400).json({ error: 'scopeId is required' });
+    }
+
+    await globalPrisma.savedView.updateMany({
+      where: {
+        tenantId,
+        scopeType: String(scopeType || 'MODULE').toUpperCase(),
+        scopeId: String(scopeId)
+      },
+      data: { isDefault: false }
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('[SavedViewsAPI] POST /clear-default Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to clear default views' });
+  }
+});
+
 // PATCH /api/saved-views/:id/default - Toggle / set default view
 router.patch('/:id/default', async (req: TenantRequest, res: Response) => {
   try {

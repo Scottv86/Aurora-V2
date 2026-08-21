@@ -23,7 +23,7 @@ const pendingRequests = new Map<string, Promise<string>>();
 const responseCache = new Map<string, { timestamp: number; text: string }>();
 const CACHE_TTL_MS = 10000; // 10 seconds TTL cache for identical requests
 
-const executeServerCompletion = async (
+export const executeServerCompletion = async (
   prompt: string,
   systemInstruction?: string,
   responseMimeType?: string,

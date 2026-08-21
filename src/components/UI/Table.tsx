@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import { cn, Button } from './Primitives';
 import { 
   ChevronLeft, ChevronRight, ArrowUpDown, ChevronUp, ChevronDown, 
-  Check, Minus, Download, Trash2, UserCheck, Tag, X, Inbox, Search, Filter
+  Check, Minus, Download, Trash2, UserCheck, Tag, X, Inbox, Search, Filter,
+  BarChart3, Table as TableIcon, Edit3, MoreHorizontal,
+  Sparkles, Layers
 } from 'lucide-react';
 import { Skeleton } from './Skeleton';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,6 +16,22 @@ import {
   FilterFieldOption, 
   filterRecordsByTableFilterState 
 } from './TableFilterBar';
+
+// New Sub-components
+import { 
+  PersonCell, 
+  StatusCell, 
+  DateCell, 
+  CurrencyCell, 
+  CalculatedCell, 
+  LineageInfo 
+} from './table/TableSemanticCells';
+import { SpreadsheetGrid } from './table/SpreadsheetGrid';
+import { GroupConfig, GroupHeaderRow, groupDataRecords, getColKey, getRecordValue } from './table/TableGrouping';
+import { GroupBySelector } from './table/GroupBySelector';
+import { AskAuroraFilter } from './table/AskAuroraFilter';
+import { TableChartVisualizer } from './table/TableChartVisualizer';
+import { DataLineageModal } from './table/DataLineageModal';
 
 export interface Column<T> {
   header: string;
@@ -26,12 +44,26 @@ export interface Column<T> {
   style?: React.CSSProperties;
   align?: 'left' | 'center' | 'right';
   width?: string | number;
+  
+  // Semantic Intelligence
+  type?: 'text' | 'person' | 'status' | 'date' | 'currency' | 'number' | 'calculated';
+  currency?: string;
+  statusOptions?: (string | { label: string; value: string; color?: string })[];
+  lineage?: LineageInfo | ((item: T) => LineageInfo | undefined);
 }
 
 export interface BulkActionOption {
   label: string;
   value: string;
   color?: string;
+}
+
+export interface TableRowAction<T> {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: (item: T) => void;
+  variant?: 'default' | 'danger';
+  disabled?: boolean;
 }
 
 export interface TableProps<T> {
@@ -87,6 +119,33 @@ export interface TableProps<T> {
   token?: string;
   currentUserId?: string;
   currentUserName?: string;
+
+  // NEW: Opt-in Spreadsheet Edit Mode (Mode, not default)
+  enableSpreadsheetMode?: boolean;
+  isEditMode?: boolean;
+  onEditModeChange?: (isEdit: boolean) => void;
+  onSaveBatch?: (records: Partial<T>[]) => Promise<void> | void;
+
+  // NEW: Grouping & Aggregations
+  enableGrouping?: boolean;
+  groupConfig?: GroupConfig | null;
+  onGroupChange?: (group: GroupConfig | null) => void;
+
+  // NEW: Multi-Modal Layouts & View Modes
+  enableChartToggle?: boolean;
+  viewMode?: 'table' | 'chart';
+  onViewModeChange?: (mode: 'table' | 'chart') => void;
+
+  // NEW: Ask Aurora Natural Language
+  enableAskAurora?: boolean;
+
+  // NEW: Row Actions & Command Palette
+  rowActions?: (item: T) => TableRowAction<T>[];
+  renderRowActions?: (item: T) => React.ReactNode;
+
+  // NEW: Data Lineage & Calculation Explanation
+  enableLineage?: boolean;
+  onExplainLineage?: (lineage: LineageInfo, item: T, col: Column<T>) => void;
 }
 
 // Custom Glass Checkbox
@@ -174,18 +233,69 @@ export function Table<T extends { id: string | number }>({
   searchValue,
   onSearchChange,
   searchPlaceholder = 'Search records...',
-  stickyHeader = true
+  stickyHeader = true,
+
+  // New Features
+  enableSpreadsheetMode = false,
+  isEditMode: controlledEditMode,
+  onEditModeChange,
+  onSaveBatch,
+
+  enableGrouping = true,
+  groupConfig: controlledGroupConfig,
+  onGroupChange,
+
+  enableChartToggle = true,
+  viewMode: controlledViewMode,
+  onViewModeChange,
+
+  enableAskAurora = true,
+  rowActions,
+  renderRowActions,
+  enableLineage = true,
+  onExplainLineage
 }: TableProps<T>) {
   const [internalPage, setInternalPage] = useState(1);
   const [internalPageSize, setInternalPageSize] = useState(initialPageSize);
   const [sortConfig, setSortConfig] = useState<{ key: keyof T; direction: 'asc' | 'desc' } | null>(null);
   const [internalSearch, setInternalSearch] = useState('');
   
+  // View Modes & Modes
+  const [internalEditMode, setInternalEditMode] = useState(false);
+  const isEditMode = controlledEditMode !== undefined ? controlledEditMode : internalEditMode;
+  const setEditMode = (mode: boolean) => {
+    if (onEditModeChange) onEditModeChange(mode);
+    else setInternalEditMode(mode);
+  };
+
+  const [internalViewMode, setInternalViewMode] = useState<'table' | 'chart'>('table');
+  const activeViewMode = controlledViewMode !== undefined ? controlledViewMode : internalViewMode;
+  const setViewMode = (mode: 'table' | 'chart') => {
+    if (onViewModeChange) onViewModeChange(mode);
+    else setInternalViewMode(mode);
+  };
+
+  // Grouping State
+  const [internalGroupConfig, setInternalGroupConfig] = useState<GroupConfig | null>(null);
+  const activeGroupConfig = controlledGroupConfig !== undefined ? controlledGroupConfig : internalGroupConfig;
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Lineage Modal State
+  const [lineageModalState, setLineageModalState] = useState<{
+    isOpen: boolean;
+    lineage: LineageInfo | null;
+    recordId?: string | number;
+    fieldName?: string;
+  }>({ isOpen: false, lineage: null });
+
+  // Row Action Open State
+  const [activeRowActionMenuId, setActiveRowActionMenuId] = useState<string | number | null>(null);
+
   // Filter Bar State
   const [internalFilterState, setInternalFilterState] = useState<TableFilterState>({ matchType: 'and', clauses: [] });
   const [targetFieldToOpen, setTargetFieldToOpen] = useState<string | null>(null);
 
-  // Reset internal filter state when filterScopeId changes (e.g. navigation between modules/queues)
+  // Reset internal filter state when filterScopeId changes
   const prevScopeRef = useRef(filterScopeId);
   useEffect(() => {
     if (filterScopeId !== prevScopeRef.current) {
@@ -214,7 +324,7 @@ export function Table<T extends { id: string | number }>({
         return {
           id: String(id),
           label: col.header,
-          type: 'text' as const
+          type: (col.type === 'person' ? 'user' : col.type === 'status' ? 'select' : col.type || 'text') as any
         };
       });
   }, [filterFields, columns]);
@@ -248,224 +358,196 @@ export function Table<T extends { id: string | number }>({
 
   const isControlledPageSize = onPageSizeChange !== undefined;
   const currentPageSize = isControlledPageSize && initialPageSize ? initialPageSize : internalPageSize;
-
-  const prevInitialPageSizeRef = useRef(initialPageSize);
-  useEffect(() => {
-    if (initialPageSize !== undefined && initialPageSize !== prevInitialPageSizeRef.current) {
-      prevInitialPageSizeRef.current = initialPageSize;
-      setInternalPageSize(initialPageSize);
-    }
-  }, [initialPageSize]);
-
-  const handlePageSizeChange = (newSize: number) => {
-    setInternalPageSize(newSize);
+  const handlePageSizeChange = (newPageSize: number) => {
     if (isControlledPageSize && onPageSizeChange) {
-      onPageSizeChange(newSize);
+      onPageSizeChange(newPageSize);
+    } else {
+      setInternalPageSize(newPageSize);
+      setInternalPage(1);
     }
-    setCurrentPage(1);
   };
-  
-  // Local selection state if not controlled
-  const [internalSelectedIds, setInternalSelectedIds] = useState<Set<string | number>>(new Set());
-  const lastSelectedIdxRef = useRef<number | null>(null);
 
-  // Active bulk popover states
+  const isControlledSearch = searchValue !== undefined;
+  const activeSearch = isControlledSearch ? searchValue : internalSearch;
+  const handleSearchChange = (query: string) => {
+    if (isControlledSearch && onSearchChange) {
+      onSearchChange(query);
+    } else {
+      setInternalSearch(query);
+      setCurrentPage(1);
+    }
+  };
+
+  // Multi-selection state
+  const isControlledSelection = controlledSelectedIds !== undefined;
+  const [internalSelectedIds, setInternalSelectedIds] = useState<(string | number)[]>([]);
+  const selectedIds = isControlledSelection ? controlledSelectedIds : internalSelectedIds;
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null);
+
+  // Bulk Action Menus
   const [showAssignMenu, setShowAssignMenu] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
-  const [assignSearch, setAssignSearch] = useState('');
 
-  const isControlled = controlledSelectedIds !== undefined;
-  const selectedSet = useMemo(() => {
-    return isControlled ? new Set(controlledSelectedIds) : internalSelectedIds;
-  }, [isControlled, controlledSelectedIds, internalSelectedIds]);
-
-  const activeSearch = searchValue !== undefined ? searchValue : internalSearch;
-  const handleSearchChange = (val: string) => {
-    if (onSearchChange) {
-      onSearchChange(val);
-    } else {
-      setInternalSearch(val);
-    }
-  };
-
-  // Reset to page 1 when sort, search, or pageSize changes (if uncontrolled)
-  useEffect(() => {
-    if (!isControlledPage) {
-      setInternalPage(1);
-    }
-  }, [sortConfig, activeSearch, currentPageSize, isControlledPage, activeFilterState]);
-
-  const handleSort = (column: Column<T>) => {
-    if (!column.sortable) return;
-    const key = column.sortKey || (typeof column.accessor === 'string' ? column.accessor as keyof T : null);
-    if (!key) return;
-
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  // Client-side search if onSearchChange is not passed
-  const searchedData = useMemo(() => {
-    if (!searchable || onSearchChange || !activeSearch.trim()) return data;
-    const s = activeSearch.toLowerCase().trim();
-    return data.filter((item: any) => {
-      return Object.values(item).some(val => {
-        if (val === null || val === undefined) return false;
-        if (typeof val === 'object') {
-          return Object.values(val).some(nested => nested && String(nested).toLowerCase().includes(s));
-        }
-        return String(val).toLowerCase().includes(s);
-      });
-    });
-  }, [data, searchable, onSearchChange, activeSearch]);
-
-  // Client-side table filter clauses
+  // Client-side search & filter
   const filteredData = useMemo(() => {
-    if (!enableFilters && !controlledFilterState && (!filterFields || filterFields.length === 0) && activeFilterState.clauses.length === 0) {
-      return searchedData;
-    }
-    return filterRecordsByTableFilterState(searchedData, activeFilterState, computedFilterFields, currentUserId);
-  }, [searchedData, enableFilters, controlledFilterState, filterFields, activeFilterState, computedFilterFields, currentUserId]);
+    let result = [...data];
 
+    if (activeSearch && !isControlledSearch) {
+      const q = activeSearch.toLowerCase();
+      result = result.filter(item => {
+        return Object.entries(item).some(([key, val]) => {
+          if (val === null || val === undefined) return false;
+          if (typeof val === 'object') {
+            return JSON.stringify(val).toLowerCase().includes(q);
+          }
+          return String(val).toLowerCase().includes(q);
+        });
+      });
+    }
+
+    if (activeFilterState && activeFilterState.clauses.length > 0 && !onFilterChange) {
+      result = filterRecordsByTableFilterState(result, activeFilterState);
+    }
+
+    return result;
+  }, [data, activeSearch, isControlledSearch, activeFilterState, onFilterChange]);
+
+  // Client-side Sort
   const sortedData = useMemo(() => {
     if (!sortConfig) return filteredData;
-
     return [...filteredData].sort((a, b) => {
-      const aVal = a[sortConfig.key];
-      const bVal = b[sortConfig.key];
-
+      const aVal = getRecordValue(a, String(sortConfig.key));
+      const bVal = getRecordValue(b, String(sortConfig.key));
       if (aVal === bVal) return 0;
-      if (aVal === null || aVal === undefined) return 1;
-      if (bVal === null || bVal === undefined) return -1;
-
-      const comparison = aVal < bVal ? -1 : 1;
-      return sortConfig.direction === 'asc' ? comparison : -comparison;
+      if (aVal === null || aVal === undefined || aVal === '') return 1;
+      if (bVal === null || bVal === undefined || bVal === '') return -1;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      return sortConfig.direction === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
     });
   }, [filteredData, sortConfig]);
 
-  const isServerSidePaginated = totalCount !== undefined;
-  const totalItems = isServerSidePaginated ? totalCount : sortedData.length;
-  const totalPages = Math.ceil(totalItems / currentPageSize) || 1;
-  const startIndex = (currentPage - 1) * currentPageSize;
-  const endIndex = Math.min(startIndex + (isServerSidePaginated ? data.length : currentPageSize), totalItems);
+  // Grouping computation
+  const groupedData = useMemo(() => {
+    if (!activeGroupConfig) return null;
+    return groupDataRecords(sortedData, activeGroupConfig, columns, assigneeOptions, computedFilterFields);
+  }, [sortedData, activeGroupConfig, columns, assigneeOptions, computedFilterFields]);
+
+  // Client-side pagination
+  const totalItems = totalCount !== undefined ? totalCount : sortedData.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / currentPageSize));
 
   const paginatedData = useMemo(() => {
-    if (!pagination) return sortedData;
-    if (isServerSidePaginated) {
+    if (!pagination || totalCount !== undefined) {
       return sortedData;
     }
-    return sortedData.slice(startIndex, startIndex + currentPageSize);
-  }, [sortedData, pagination, isServerSidePaginated, startIndex, currentPageSize]);
-
-  // Generate sliding window of pages around currentPage
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-    if (currentPage <= 4) {
-      return [1, 2, 3, 4, 5, '...', totalPages];
-    }
-    if (currentPage >= totalPages - 3) {
-      return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    }
-    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
-  }, [totalPages, currentPage]);
-
-  const normalizedPageSizeOptions = useMemo(() => {
-    const opts = pageSizeOptions || [10, 25, 50, 100];
-    if (currentPageSize && !opts.includes(currentPageSize)) {
-      return [...opts, currentPageSize].sort((a, b) => a - b);
-    }
-    return opts;
-  }, [pageSizeOptions, currentPageSize]);
+    const start = (currentPage - 1) * currentPageSize;
+    return sortedData.slice(start, start + currentPageSize);
+  }, [sortedData, pagination, totalCount, currentPage, currentPageSize]);
 
   // Selection helpers
-  const updateSelection = useCallback((newSet: Set<string | number>) => {
-    if (!isControlled) {
-      setInternalSelectedIds(newSet);
-    }
-    if (onSelectionChange) {
-      const selectedIdsArray = Array.from(newSet);
-      const selectedItems = data.filter(item => newSet.has(item.id));
-      onSelectionChange(selectedIdsArray, selectedItems);
-    }
-  }, [isControlled, onSelectionChange, data]);
-
-  const clearSelection = useCallback(() => {
-    updateSelection(new Set());
-    lastSelectedIdxRef.current = null;
-  }, [updateSelection]);
-
-  const toggleRow = (item: T, index: number, shiftKey: boolean) => {
-    const newSet = new Set(selectedSet);
-    const id = item.id;
-
-    if (shiftKey && lastSelectedIdxRef.current !== null && paginatedData.length > 0) {
-      const start = Math.min(lastSelectedIdxRef.current, index);
-      const end = Math.max(lastSelectedIdxRef.current, index);
-      const shouldSelect = !selectedSet.has(id);
-
-      for (let i = start; i <= end; i++) {
-        const rowItem = paginatedData[i];
-        if (rowItem) {
-          if (shouldSelect) newSet.add(rowItem.id);
-          else newSet.delete(rowItem.id);
-        }
-      }
-    } else {
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-    }
-
-    lastSelectedIdxRef.current = index;
-    updateSelection(newSet);
-  };
-
-  const isPageFullySelected = paginatedData.length > 0 && paginatedData.every(item => selectedSet.has(item.id));
-  const isPagePartiallySelected = paginatedData.some(item => selectedSet.has(item.id)) && !isPageFullySelected;
-
-  const toggleSelectAllPage = () => {
-    const newSet = new Set(selectedSet);
-    if (isPageFullySelected) {
-      paginatedData.forEach(item => newSet.delete(item.id));
-    } else {
-      paginatedData.forEach(item => newSet.add(item.id));
-    }
-    updateSelection(newSet);
-  };
-
-  // Selected items objects for bulk actions
   const selectedItems = useMemo(() => {
-    return data.filter(item => selectedSet.has(item.id));
+    return data.filter(d => selectedSet.has(d.id));
   }, [data, selectedSet]);
 
-  const selectedCount = selectedSet.size;
+  const updateSelection = useCallback((nextIds: (string | number)[]) => {
+    if (isControlledSelection && onSelectionChange) {
+      const nextItems = data.filter(d => nextIds.includes(d.id));
+      onSelectionChange(nextIds, nextItems);
+    } else {
+      setInternalSelectedIds(nextIds);
+      if (onSelectionChange) {
+        const nextItems = data.filter(d => nextIds.includes(d.id));
+        onSelectionChange(nextIds, nextItems);
+      }
+    }
+  }, [isControlledSelection, onSelectionChange, data]);
 
-  // Built-in Default CSV Export
+  const clearSelection = useCallback(() => {
+    updateSelection([]);
+  }, [updateSelection]);
+
+  const toggleRow = useCallback((item: T, index: number, isShiftKey: boolean) => {
+    const id = item.id;
+    let next: (string | number)[];
+
+    if (isShiftKey && lastSelectedIdx !== null && lastSelectedIdx !== index) {
+      const start = Math.min(lastSelectedIdx, index);
+      const end = Math.max(lastSelectedIdx, index);
+      const rangeIds = paginatedData.slice(start, end + 1).map(r => r.id);
+      const newSet = new Set(selectedIds);
+      rangeIds.forEach(rId => newSet.add(rId));
+      next = Array.from(newSet);
+    } else {
+      if (selectedSet.has(id)) {
+        next = selectedIds.filter(x => x !== id);
+      } else {
+        next = [...selectedIds, id];
+      }
+      setLastSelectedIdx(index);
+    }
+
+    updateSelection(next);
+  }, [lastSelectedIdx, paginatedData, selectedIds, selectedSet, updateSelection]);
+
+  const isPageFullySelected = useMemo(() => {
+    if (paginatedData.length === 0) return false;
+    return paginatedData.every(r => selectedSet.has(r.id));
+  }, [paginatedData, selectedSet]);
+
+  const isPagePartiallySelected = useMemo(() => {
+    if (isPageFullySelected) return false;
+    return paginatedData.some(r => selectedSet.has(r.id));
+  }, [paginatedData, selectedSet, isPageFullySelected]);
+
+  const toggleSelectAllPage = useCallback(() => {
+    if (isPageFullySelected) {
+      const pageIds = new Set(paginatedData.map(r => r.id));
+      const next = selectedIds.filter(id => !pageIds.has(id));
+      updateSelection(next);
+    } else {
+      const newSet = new Set(selectedIds);
+      paginatedData.forEach(r => newSet.add(r.id));
+      updateSelection(Array.from(newSet));
+    }
+  }, [isPageFullySelected, paginatedData, selectedIds, updateSelection]);
+
+  const handleSort = (col: Column<T>) => {
+    const sortKey = col.sortKey || (typeof col.accessor === 'string' ? col.accessor as keyof T : null);
+    if (!sortKey) return;
+
+    setSortConfig(prev => {
+      if (prev?.key === sortKey) {
+        if (prev.direction === 'asc') return { key: sortKey, direction: 'desc' };
+        return null;
+      }
+      return { key: sortKey, direction: 'asc' };
+    });
+  };
+
   const handleDefaultExport = () => {
     if (onExportSelected) {
       onExportSelected(Array.from(selectedSet), selectedItems);
       return;
     }
-    if (selectedItems.length === 0) return;
+    const itemsToExport = selectedItems.length > 0 ? selectedItems : paginatedData;
+    if (itemsToExport.length === 0) {
+      toast.error('No records available to export');
+      return;
+    }
 
-    // Generate CSV from columns or keys
     const headers = columns.map(c => c.header).join(',');
-    const rows = selectedItems.map(item => {
+    const rows = itemsToExport.map(item => {
       return columns.map(col => {
-        let val: any = typeof col.accessor === 'function' ? '' : (item as any)[col.accessor];
-        if (val === undefined || val === null) {
-          val = (item as any).data?.[col.accessor as string] ?? '';
-        }
-        if (typeof val === 'object') val = JSON.stringify(val);
-        return `"${String(val).replace(/"/g, '""')}"`;
+        let val = typeof col.accessor === 'string' ? (item as any)[col.accessor] : '';
+        if (typeof val === 'string') val = `"${val.replace(/"/g, '""')}"`;
+        return val ?? '';
       }).join(',');
     });
 
@@ -473,350 +555,607 @@ export function Table<T extends { id: string | number }>({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `${(title || 'records').toLowerCase().replace(/\s+/g, '_')}_export.csv`);
+    link.setAttribute('download', `aurora_export_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success(`Exported ${selectedItems.length} selected record(s) to CSV`);
+    toast.success(`Exported ${itemsToExport.length} record(s) to CSV`);
   };
 
-  // Density classes
-  const paddingClass = 
-    density === 'compact' ? 'px-3.5 py-1.5' : 
-    density === 'spacious' ? 'px-6 py-4' : 
-    'px-4 py-2';
+  // Density styles
+  const paddingClass = density === 'compact' ? 'px-3 py-1.5' : density === 'spacious' ? 'px-6 py-4' : 'px-4 py-2.5';
+  const checkboxPaddingClass = density === 'compact' ? 'py-1.5' : density === 'spacious' ? 'py-4' : 'py-2.5';
+  const actionsPadding = density === 'compact' ? 'px-3 py-1.5' : density === 'spacious' ? 'px-6 py-4' : 'px-4 py-2.5';
+  const headerTextSize = density === 'compact' ? 'text-[10px]' : 'text-xs';
+  const bodyTextSize = density === 'compact' ? 'text-xs' : 'text-sm';
 
-  const headerTextSize = 'text-[10px]';
+  // Pagination bounds
+  const startIndex = (currentPage - 1) * currentPageSize;
+  const endIndex = Math.min(startIndex + currentPageSize, totalItems);
 
-  const bodyTextSize = 
-    density === 'compact' ? 'text-[11px]' : 
-    density === 'spacious' ? 'text-sm' :
-    'text-xs';
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push('...');
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (currentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
-  const checkboxPaddingClass = 
-    density === 'compact' ? 'py-1.5' :
-    density === 'spacious' ? 'py-4' :
-    'py-2';
+  const pageNumbers = getPageNumbers();
+  const normalizedPageSizeOptions = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 25, 50, 100];
+  const selectedCount = selectedSet.size;
 
-  const customPaddingClass = columns.find(col => col.className && (col.className.includes('px-') || col.className.includes('py-')))?.className;
-  const actionsPadding = customPaddingClass 
-    ? customPaddingClass.split(' ').filter(c => c.startsWith('px-') || c.startsWith('py-') || c.includes('px-') || c.includes('py-')).join(' ') 
-    : paddingClass;
+  // Render Cell Content with Semantic Intelligence
+  const renderCellContent = (item: T, col: Column<T>) => {
+    // If accessor is a function, execute it
+    if (typeof col.accessor === 'function') {
+      return col.accessor(item);
+    }
+
+    const rawVal = (item as any)[col.accessor];
+
+    // Check semantic column type
+    const colType = col.type || (() => {
+      const key = String(col.accessor).toLowerCase();
+      if (key.includes('status') || key.includes('state')) return 'status';
+      if (key.includes('assignee') || key.includes('user') || key.includes('owner') || key.includes('member')) return 'person';
+      if (key.includes('date') || key.includes('due') || key.includes('createdat') || key.includes('updatedat')) return 'date';
+      if (key.includes('price') || key.includes('amount') || key.includes('cost') || key.includes('revenue') || key.includes('salary') || key.includes('fee')) return 'currency';
+      return 'text';
+    })();
+
+    if (colType === 'person') {
+      const memberObj = assigneeOptions.find(m => m.id === rawVal || m.name === rawVal);
+      const personData = memberObj || (typeof rawVal === 'object' ? rawVal : { name: String(rawVal || '') });
+      return <PersonCell person={personData} />;
+    }
+
+    if (colType === 'status') {
+      const opts = col.statusOptions || statusOptions;
+      return (
+        <StatusCell 
+          value={String(rawVal ?? '')} 
+          options={opts}
+          canTransition={true}
+          onStatusChange={(newStatus) => {
+            if (onBulkStatusChange) {
+              onBulkStatusChange([item.id], [item], newStatus, () => {});
+            }
+          }}
+        />
+      );
+    }
+
+    if (colType === 'date') {
+      return <DateCell value={rawVal} includeTime={String(col.accessor).toLowerCase().includes('at')} />;
+    }
+
+    if (colType === 'currency') {
+      return <CurrencyCell amount={rawVal} currency={col.currency || 'USD'} />;
+    }
+
+    if (colType === 'calculated' || col.lineage) {
+      const lin = typeof col.lineage === 'function' ? col.lineage(item) : col.lineage;
+      return (
+        <CalculatedCell 
+          value={rawVal} 
+          lineage={lin}
+          onExplain={(l) => {
+            if (onExplainLineage) onExplainLineage(l, item, col);
+            setLineageModalState({
+              isOpen: true,
+              lineage: l,
+              recordId: item.id,
+              fieldName: col.header
+            });
+          }}
+        />
+      );
+    }
+
+    return rawVal === null || rawVal === undefined ? '' : String(rawVal);
+  };
 
   const content = (
-    <div className="flex flex-col w-full h-full min-h-0 relative">
-      {/* Optional Toolbar */}
-      {(title || subtitle || searchable || headerActions) && (
-        <div className="p-4 border-b border-zinc-200/50 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/40 dark:bg-zinc-900/20 shrink-0">
-          <div className="flex items-center gap-2.5">
+    <div className="flex flex-col h-full w-full min-h-0 relative">
+      
+      {/* Unified Single-Row Workbench Toolbar & Filter Bar */}
+      <TableFilterBar
+        fields={computedFilterFields}
+        filterState={activeFilterState}
+        onChange={handleFilterChange}
+        enableSavedViews={enableSavedViews}
+        scopeType={scopeType}
+        scopeId={scopeId || filterScopeId}
+        tenantId={tenantId}
+        token={token}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        targetFieldToOpen={targetFieldToOpen}
+        onClearTargetFieldToOpen={() => setTargetFieldToOpen(null)}
+        totalFilteredRecords={sortedData.length}
+        totalRecords={data.length}
+        leftSlot={
+          <div className="flex items-center gap-2.5 flex-wrap">
             {title && (
-              <div>
-                <h3 className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-2 uppercase tracking-wider">
-                  {title}
-                  {totalItems > 0 ? (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 lowercase">
-                      {totalItems} records
-                    </span>
-                  ) : loading ? (
-                    <Skeleton variant="rounded" className="w-14 h-3.5 rounded" />
-                  ) : null}
+              <div className="flex items-center gap-2 mr-1">
+                <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5 truncate">
+                  <span>{title}</span>
+                  {totalCount !== undefined && (
+                    <span className="text-[11px] font-normal text-zinc-400 font-mono">({totalCount})</span>
+                  )}
                 </h3>
-                {subtitle && (
-                  <p className="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">{subtitle}</p>
-                )}
+                {subtitle && <p className="text-[10px] text-zinc-400 hidden lg:inline truncate">· {subtitle}</p>}
               </div>
             )}
-          </div>
 
-          <div className="flex items-center gap-2.5">
+            {/* Group By Selector matching Views and Filters styling */}
+            {enableGrouping && (
+              <GroupBySelector
+                columns={columns}
+                activeGroupConfig={activeGroupConfig}
+                onChange={(newConfig) => {
+                  if (onGroupChange) onGroupChange(newConfig);
+                  else setInternalGroupConfig(newConfig);
+                }}
+              />
+            )}
+          </div>
+        }
+        rightSlot={
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Ask Aurora AI Natural Language Query */}
+            {enableAskAurora && (
+              <AskAuroraFilter 
+                fields={computedFilterFields} 
+                data={sortedData && sortedData.length > 0 ? sortedData : (data || [])}
+                assigneeOptions={assigneeOptions}
+                currentUserId={currentUserId}
+                currentUserName={currentUserName}
+                onApplyFilters={handleFilterChange}
+                onViewModeChange={setViewMode}
+              />
+            )}
+
             {searchable && (
-              <div className="relative w-full sm:w-56">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
+              <div className="relative w-36 sm:w-48">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={12} />
                 <input
                   type="text"
                   placeholder={searchPlaceholder}
                   value={activeSearch}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-all shadow-xs"
+                  className="w-full bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 rounded-lg pl-7 pr-2.5 py-1 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-all shadow-2xs"
                 />
               </div>
             )}
+
+            {/* Multi-modal View Switcher (Table | Chart) */}
+            {enableChartToggle && (
+              <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/80 dark:border-zinc-700/80">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={cn(
+                    "p-1 rounded text-xs font-medium transition-all cursor-pointer",
+                    activeViewMode === 'table' ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  )}
+                  title="Table Grid View"
+                >
+                  <TableIcon size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('chart')}
+                  className={cn(
+                    "p-1 rounded text-xs font-medium transition-all cursor-pointer",
+                    activeViewMode === 'chart' ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  )}
+                  title="Instant Chart Visualizer"
+                >
+                  <BarChart3 size={13} />
+                </button>
+              </div>
+            )}
+
+            {/* Opt-In Spreadsheet Edit Mode Toggle */}
+            {(enableSpreadsheetMode || onSaveBatch) && activeViewMode === 'table' && (
+              <Button
+                variant={isEditMode ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setEditMode(!isEditMode)}
+                className={cn(
+                  "h-7 text-xs font-semibold gap-1.5 transition-all px-2.5",
+                  isEditMode ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-sm shadow-amber-500/20" : "text-zinc-700 dark:text-zinc-300"
+                )}
+                title="Toggle Excel-style keyboard navigation and multi-cell edit mode"
+              >
+                <Edit3 size={12} />
+                <span>{isEditMode ? 'Exit Edit' : 'Edit Mode'}</span>
+              </Button>
+            )}
+
             {headerActions}
           </div>
+        }
+      />
+
+      {/* VIEW MODE 1: SPREADSHEET EDIT MODE (OPT-IN ONLY) */}
+      {isEditMode && activeViewMode === 'table' ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <SpreadsheetGrid
+            data={sortedData}
+            columns={columns}
+            onSaveBatch={async (records) => {
+              if (onSaveBatch) await onSaveBatch(records);
+            }}
+            onExitEditMode={() => setEditMode(false)}
+          />
         </div>
-      )}
-
-      {/* Filter Bar */}
-      {(enableFilters || (filterFields && filterFields.length > 0) || activeFilterState.clauses.length > 0) && (
-        <TableFilterBar
-          fields={computedFilterFields}
-          filterState={activeFilterState}
-          onChange={handleFilterChange}
-          enableSavedViews={enableSavedViews}
-          scopeType={scopeType}
-          scopeId={scopeId || filterScopeId}
-          tenantId={tenantId}
-          token={token}
-          currentUserId={currentUserId}
-          currentUserName={currentUserName}
-          targetFieldToOpen={targetFieldToOpen}
-          onClearTargetFieldToOpen={() => setTargetFieldToOpen(null)}
-          totalFilteredRecords={sortedData.length}
-          totalRecords={data.length}
-        />
-      )}
-
-      {/* Main Table Scroll Container */}
-      <div className="overflow-auto custom-scrollbar flex-1 min-h-0 relative">
-        <table className={cn("w-full text-left border-separate border-spacing-0", bodyTextSize)}>
-          <thead className={cn(
-            "bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500",
-            stickyHeader && "sticky top-0 z-20",
-            headerTextSize
-          )}>
-            <tr>
-              {/* Checkbox Column */}
-              {enableSelection && (
-                <th className={cn("w-12 py-2 text-center transition-colors relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none", noContainer ? "pl-6 pr-2" : "px-3", stickyHeader && "sticky top-0")}>
-                  <div className="flex items-center justify-center">
-                    <GlassCheckbox
-                      checked={isPageFullySelected}
-                      indeterminate={isPagePartiallySelected}
-                      onChange={toggleSelectAllPage}
-                      ariaLabel="Select all visible rows"
-                    />
-                  </div>
-                </th>
-              )}
-
-              {columns.map((col, idx) => {
-                const isSortable = col.sortable && (col.sortKey || typeof col.accessor === 'string');
-                const sortKey = col.sortKey || (typeof col.accessor === 'string' ? col.accessor as keyof T : null);
-                const isSorted = sortConfig?.key === sortKey;
-                const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
-                const isFirstCol = idx === 0 && !enableSelection;
-                const isLastCol = idx === columns.length - 1 && !headerActions;
-                const headerCustomClass = col.className 
-                  ? col.className.split(' ').filter(c => !c.startsWith('text-') && !c.startsWith('leading-') && !c.startsWith('font-')).join(' ') 
-                  : '';
-
-                const colFilterKey = col.filterKey || (typeof col.accessor === 'string' ? String(col.accessor) : null);
-                const matchingFilterField = colFilterKey ? computedFilterFields.find(f => f.id === colFilterKey || f.label.toLowerCase() === col.header.toLowerCase()) : null;
-                const isFilterActiveOnCol = matchingFilterField ? activeFilterState.clauses.some(c => c.fieldId === matchingFilterField.id) : false;
-
-                return (
-                  <th 
-                    key={idx} 
-                    className={cn(
-                      !hasCustomPadding && paddingClass,
-                      isFirstCol && noContainer && !hasCustomPadding && "pl-6",
-                      isLastCol && noContainer && !hasCustomPadding && "pr-6",
-                      col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                      'transition-colors text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 select-none group relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none',
-                      isSortable && 'cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-200',
-                      headerCustomClass
-                    )}
-                    style={{ width: col.width, ...col.style }}
-                    onClick={() => isSortable && handleSort(col)}
-                  >
-                    <div className={cn(
-                      "flex items-center gap-1.5",
-                      col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'
-                    )}>
-                      <span>{col.header}</span>
-                      
-                      {/* Sort Icon */}
-                      {isSortable && (
-                        <div className="flex items-center opacity-40 group-hover:opacity-100 transition-opacity">
-                          {isSorted ? (
-                            sortConfig.direction === 'asc' ? (
-                              <ChevronUp size={11} className="text-indigo-500 opacity-100" />
-                            ) : (
-                              <ChevronDown size={11} className="text-indigo-500 opacity-100" />
-                            )
-                          ) : (
-                            <ArrowUpDown size={10} className="text-zinc-400" />
-                          )}
-                        </div>
-                      )}
-
-                      {/* Column Filter Icon Button */}
-                      {matchingFilterField && col.filterable !== false && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTargetFieldToOpen(matchingFilterField.id);
-                          }}
-                          className={cn(
-                            "p-0.5 rounded transition-all",
-                            isFilterActiveOnCol 
-                              ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 opacity-100" 
-                              : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 opacity-0 group-hover:opacity-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800"
-                          )}
-                          title={`Filter by ${col.header}`}
-                        >
-                          <Filter size={10} className={isFilterActiveOnCol ? "fill-indigo-600 dark:fill-indigo-400" : ""} />
-                        </button>
-                      )}
+      ) : activeViewMode === 'chart' ? (
+        /* VIEW MODE 2: INSTANT CHART VISUALIZER */
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <TableChartVisualizer
+            data={sortedData}
+            columns={columns}
+            groupByField={activeGroupConfig?.fieldKey}
+            assigneeOptions={assigneeOptions}
+            filterFields={computedFilterFields}
+          />
+        </div>
+      ) : (
+        /* VIEW MODE 3: STANDARD HIGH-SPEED READ & TRIAGE GRID (DEFAULT) */
+        <div className="overflow-auto custom-scrollbar flex-1 min-h-0 relative">
+          <table className={cn("w-full text-left border-separate border-spacing-0", bodyTextSize)}>
+            <thead className={cn(
+              "bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500",
+              stickyHeader && "sticky top-0 z-20",
+              headerTextSize
+            )}>
+              <tr>
+                {/* Selection Checkbox */}
+                {enableSelection && (
+                  <th className={cn("w-12 py-2 text-center transition-colors relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none", noContainer ? "pl-6 pr-2" : "px-3", stickyHeader && "sticky top-0")}>
+                    <div className="flex items-center justify-center">
+                      <GlassCheckbox
+                        checked={isPageFullySelected}
+                        indeterminate={isPagePartiallySelected}
+                        onChange={toggleSelectAllPage}
+                        ariaLabel="Select all visible rows"
+                      />
                     </div>
                   </th>
-                );
-              })}
+                )}
 
-              {headerActions && !title && (
-                <th className={cn(actionsPadding, "text-right relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none")}>
-                  {headerActions}
-                </th>
-              )}
-            </tr>
-          </thead>
+                {columns.map((col, idx) => {
+                  const isSortable = col.sortable && (col.sortKey || typeof col.accessor === 'string');
+                  const sortKey = col.sortKey || (typeof col.accessor === 'string' ? col.accessor as keyof T : null);
+                  const isSorted = sortConfig?.key === sortKey;
+                  const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
+                  const isFirstCol = idx === 0 && !enableSelection;
+                  const isLastCol = idx === columns.length - 1 && !headerActions && !rowActions;
 
-          <tbody>
-            {loading ? (
-              Array.from({ length: currentPageSize }).map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  {enableSelection && (
-                    <td className={cn("w-12 text-center border-b border-zinc-200/50 dark:border-zinc-800/50", checkboxPaddingClass, noContainer ? "pl-6 pr-2" : "px-3")}>
-                      <Skeleton variant="rounded" className="w-4 h-4 rounded-md mx-auto" />
-                    </td>
-                  )}
-                  {columns.map((col, j) => {
-                    const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
-                    const isFirstCol = j === 0 && !enableSelection;
-                    const isLastCol = j === columns.length - 1 && !headerActions;
-                    const colKey = String(col.filterKey || col.sortKey || col.accessor || col.header || '').toLowerCase();
-                    
-                    const isStatus = colKey.includes('status') || colKey.includes('state') || colKey.includes('priority') || colKey.includes('stage') || colKey.includes('phase') || colKey.includes('badge');
-                    const isUser = colKey.includes('assignee') || colKey.includes('user') || colKey.includes('owner') || colKey.includes('member') || colKey.includes('author') || colKey.includes('assigned');
-                    const isId = colKey.includes('id') || colKey.includes('sku') || colKey.includes('code') || colKey.includes('ref') || colKey === '#' || colKey.includes('ticket');
-                    const isDate = colKey.includes('date') || colKey.includes('created') || colKey.includes('updated') || colKey.includes('due') || colKey.includes('time') || colKey.includes('timestamp');
-                    const isAction = colKey.includes('action') || colKey.includes('menu') || colKey.includes('more');
-                    const widths = ['w-3/4', 'w-1/2', 'w-2/3', 'w-4/5', 'w-3/5'];
-                    const chosenWidth = col.width ? 'w-full' : widths[(i + j) % widths.length];
+                  const colFilterKey = col.filterKey || (typeof col.accessor === 'string' ? String(col.accessor) : null);
+                  const matchingFilterField = colFilterKey ? computedFilterFields.find(f => f.id === colFilterKey || f.label.toLowerCase() === col.header.toLowerCase()) : null;
+                  const isFilterActiveOnCol = matchingFilterField ? activeFilterState.clauses.some(c => c.fieldId === matchingFilterField.id) : false;
 
-                    return (
-                      <td 
-                        key={j} 
-                        className={cn(
-                          !hasCustomPadding && paddingClass,
-                          isFirstCol && noContainer && !hasCustomPadding && "pl-6",
-                          isLastCol && noContainer && !hasCustomPadding && "pr-6",
-                          col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                          "border-b border-zinc-200/50 dark:border-zinc-800/50",
-                          col.className
-                        )}
-                      >
-                        <div className={cn(
-                          "flex items-center",
-                          col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'
-                        )}>
-                          {isStatus ? (
-                            <Skeleton variant="rounded" className="h-5 w-16 sm:w-20 rounded-full" />
-                          ) : isUser ? (
-                            <div className="flex items-center gap-2">
-                              <Skeleton variant="circular" className="w-5 h-5 shrink-0" />
-                              <Skeleton variant="text" className="w-20 h-3 hidden sm:block" />
-                            </div>
-                          ) : isId ? (
-                            <Skeleton variant="text" className="w-12 h-3 font-mono" />
-                          ) : isDate ? (
-                            <Skeleton variant="text" className="w-20 sm:w-24 h-3" />
-                          ) : isAction ? (
-                            <Skeleton variant="rounded" className="w-7 h-7 rounded-lg" />
-                          ) : (
-                            <Skeleton variant="text" className={cn(chosenWidth, "h-3 opacity-60")} />
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                  {headerActions && !title && <td className={cn(actionsPadding, "border-b border-zinc-200/50 dark:border-zinc-800/50")} />}
-                </tr>
-              ))
-            ) : paginatedData.length === 0 ? (
-              <tr>
-                <td 
-                  colSpan={columns.length + (enableSelection ? 1 : 0) + (headerActions && !title ? 1 : 0)} 
-                  className="py-16 text-center"
-                >
-                  <div className="flex flex-col items-center justify-center space-y-3">
-                    <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
-                      {emptyIcon || <Inbox size={24} />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{emptyMessage}</p>
-                      {activeSearch && (
-                        <p className="text-xs text-zinc-400 mt-0.5">Try adjusting your search query</p>
+                  return (
+                    <th 
+                      key={idx} 
+                      className={cn(
+                        !hasCustomPadding && paddingClass,
+                        isFirstCol && noContainer && !hasCustomPadding && "pl-6",
+                        isLastCol && noContainer && !hasCustomPadding && "pr-6",
+                        col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
+                        'transition-colors text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 select-none group relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none',
+                        isSortable && 'cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-200'
                       )}
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedData.map((item, rowIdx) => {
-                const rowId = item.id;
-                const isSelected = selectedSet.has(rowId);
+                      style={{ width: col.width, ...col.style }}
+                      onClick={() => isSortable && handleSort(col)}
+                    >
+                      <div className={cn(
+                        "flex items-center gap-1.5",
+                        col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'
+                      )}>
+                        <span>{col.header}</span>
+                        {isSortable && (
+                          <div className="flex items-center opacity-40 group-hover:opacity-100 transition-opacity">
+                            {isSorted ? (
+                              sortConfig.direction === 'asc' ? <ChevronUp size={11} className="text-indigo-500" /> : <ChevronDown size={11} className="text-indigo-500" />
+                            ) : (
+                              <ArrowUpDown size={10} className="text-zinc-400" />
+                            )}
+                          </div>
+                        )}
+                        {matchingFilterField && col.filterable !== false && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTargetFieldToOpen(matchingFilterField.id);
+                            }}
+                            className={cn(
+                              "p-0.5 rounded transition-all",
+                              isFilterActiveOnCol ? "text-indigo-600 opacity-100" : "text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-200/50 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            <Filter size={10} className={isFilterActiveOnCol ? "fill-indigo-600" : ""} />
+                          </button>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
 
-                return (
-                  <tr 
-                    key={String(rowId)} 
-                    onClick={() => onRowClick?.(item)}
-                    className={cn(
-                      'group transition-colors duration-100',
-                      isSelected
-                        ? 'bg-indigo-50/70 dark:bg-indigo-950/30'
-                        : 'hover:bg-zinc-50/80 dark:hover:bg-white/[0.02]',
-                      onRowClick && 'cursor-pointer'
-                    )}
-                  >
-                    {/* Checkbox Cell */}
+                {/* Contextual Row Action Column */}
+                {(rowActions || renderRowActions) && (
+                  <th className="w-12 text-center text-[10px] font-bold uppercase tracking-wider text-zinc-400 py-2 relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none">
+                    Actions
+                  </th>
+                )}
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                Array.from({ length: currentPageSize }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
                     {enableSelection && (
-                      <td 
-                        className={cn("w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50", checkboxPaddingClass, noContainer ? "pl-6 pr-2" : "px-3")}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-center">
-                          <GlassCheckbox
-                            checked={isSelected}
-                            onChange={(e) => toggleRow(item, rowIdx, e.shiftKey)}
-                          />
-                        </div>
+                      <td className={cn("w-12 text-center border-b border-zinc-200/50 dark:border-zinc-800/50", checkboxPaddingClass, noContainer ? "pl-6 pr-2" : "px-3")}>
+                        <Skeleton variant="rounded" className="w-4 h-4 rounded-md mx-auto" />
                       </td>
                     )}
+                    {columns.map((col, j) => (
+                      <td key={j} className={cn("border-b border-zinc-200/50 dark:border-zinc-800/50", paddingClass)}>
+                        <Skeleton variant="text" className="w-24 h-3 opacity-60" />
+                      </td>
+                    ))}
+                    {(rowActions || renderRowActions) && <td className="border-b border-zinc-200/50 dark:border-zinc-800/50" />}
+                  </tr>
+                ))
+              ) : paginatedData.length === 0 ? (
+                <tr>
+                  <td 
+                    colSpan={columns.length + (enableSelection ? 1 : 0) + (rowActions || renderRowActions ? 1 : 0)} 
+                    className="py-16 text-center"
+                  >
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                        {emptyIcon || <Inbox size={24} />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{emptyMessage}</p>
+                        {activeSearch && <p className="text-xs text-zinc-400 mt-0.5">Try adjusting your search</p>}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ) : groupedData ? (
+                /* GROUPED RENDERING */
+                groupedData.map((group, gIdx) => {
+                  const isCollapsed = collapsedGroups.has(group.groupValue);
+                  const colSpanTotal = columns.length + (enableSelection ? 1 : 0) + (rowActions || renderRowActions ? 1 : 0);
 
-                    {columns.map((col, idx) => {
-                      const hasCustomPadding = col.className && (col.className.includes('px-') || col.className.includes('py-'));
-                      const isFirstCol = idx === 0 && !enableSelection;
-                      const isLastCol = idx === columns.length - 1 && !headerActions;
-                      return (
+                  return (
+                    <React.Fragment key={`group_${gIdx}`}>
+                      <GroupHeaderRow
+                        groupValue={group.groupValue}
+                        count={group.count}
+                        isCollapsed={isCollapsed}
+                        onToggle={() => {
+                          setCollapsedGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(group.groupValue)) next.delete(group.groupValue);
+                            else next.add(group.groupValue);
+                            return next;
+                          });
+                        }}
+                        colSpan={colSpanTotal}
+                        groupConfig={activeGroupConfig!}
+                        aggregates={group.aggregates}
+                      />
+                      {!isCollapsed && group.items.map((item, rowIdx) => {
+                        const rowId = item.id;
+                        const isSelected = selectedSet.has(rowId);
+
+                        return (
+                          <tr 
+                            key={String(rowId)} 
+                            onClick={() => onRowClick?.(item)}
+                            className={cn(
+                              'group transition-colors duration-100',
+                              isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-white/[0.02]',
+                              onRowClick && 'cursor-pointer'
+                            )}
+                          >
+                            {enableSelection && (
+                              <td 
+                                className={cn("w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50", checkboxPaddingClass, noContainer ? "pl-6 pr-2" : "px-3")}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="flex items-center justify-center">
+                                  <GlassCheckbox
+                                    checked={isSelected}
+                                    onChange={(e) => toggleRow(item, rowIdx, e.shiftKey)}
+                                  />
+                                </div>
+                              </td>
+                            )}
+
+                            {columns.map((col, idx) => (
+                              <td 
+                                key={idx} 
+                                className={cn(
+                                  paddingClass,
+                                  col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
+                                  'text-zinc-700 dark:text-zinc-300 align-middle border-b border-zinc-200/50 dark:border-zinc-800/50', 
+                                  col.className
+                                )} 
+                                style={{ width: col.width, ...col.style }}
+                              >
+                                {renderCellContent(item, col)}
+                              </td>
+                            ))}
+
+                            {(rowActions || renderRowActions) && (
+                              <td 
+                                className="w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {renderRowActions ? (
+                                  renderRowActions(item)
+                                ) : rowActions ? (
+                                  <div className="relative inline-block text-left">
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveRowActionMenuId(activeRowActionMenuId === item.id ? null : item.id)}
+                                      className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                    >
+                                      <MoreHorizontal size={14} />
+                                    </button>
+                                    {activeRowActionMenuId === item.id && (
+                                      <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setActiveRowActionMenuId(null)} />
+                                        <div className="absolute right-0 top-full mt-1 z-50 w-44 p-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl animate-in fade-in zoom-in-95 duration-100 text-xs">
+                                          {rowActions(item).map((act, aIdx) => (
+                                            <button
+                                              key={aIdx}
+                                              disabled={act.disabled}
+                                              onClick={() => {
+                                                setActiveRowActionMenuId(null);
+                                                act.onClick(item);
+                                              }}
+                                              className={cn(
+                                                "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors",
+                                                act.variant === 'danger' 
+                                                  ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40" 
+                                                  : "text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                              )}
+                                            >
+                                              {act.icon}
+                                              <span className="truncate">{act.label}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })
+              ) : (
+                /* STANDARD FLAT RENDERING */
+                paginatedData.map((item, rowIdx) => {
+                  const rowId = item.id;
+                  const isSelected = selectedSet.has(rowId);
+
+                  return (
+                    <tr 
+                      key={String(rowId)} 
+                      onClick={() => onRowClick?.(item)}
+                      className={cn(
+                        'group transition-colors duration-100',
+                        isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-white/[0.02]',
+                        onRowClick && 'cursor-pointer'
+                      )}
+                    >
+                      {enableSelection && (
+                        <td 
+                          className={cn("w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50", checkboxPaddingClass, noContainer ? "pl-6 pr-2" : "px-3")}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-center">
+                            <GlassCheckbox
+                              checked={isSelected}
+                              onChange={(e) => toggleRow(item, rowIdx, e.shiftKey)}
+                            />
+                          </div>
+                        </td>
+                      )}
+
+                      {columns.map((col, idx) => (
                         <td 
                           key={idx} 
                           className={cn(
-                            !hasCustomPadding && paddingClass,
-                            isFirstCol && noContainer && !hasCustomPadding && "pl-6",
-                            isLastCol && noContainer && !hasCustomPadding && "pr-6",
+                            paddingClass,
                             col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
                             'text-zinc-700 dark:text-zinc-300 align-middle border-b border-zinc-200/50 dark:border-zinc-800/50', 
                             col.className
                           )} 
                           style={{ width: col.width, ...col.style }}
                         >
-                          {typeof col.accessor === 'function'
-                            ? col.accessor(item)
-                            : (item[col.accessor] as React.ReactNode)}
+                          {renderCellContent(item, col)}
                         </td>
-                      );
-                    })}
+                      ))}
 
-                    {headerActions && !title && <td className={cn(actionsPadding, "border-b border-zinc-200/50 dark:border-zinc-800/50")} />}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                      {(rowActions || renderRowActions) && (
+                        <td 
+                          className="w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {renderRowActions ? (
+                            renderRowActions(item)
+                          ) : rowActions ? (
+                            <div className="relative inline-block text-left">
+                              <button
+                                type="button"
+                                onClick={() => setActiveRowActionMenuId(activeRowActionMenuId === item.id ? null : item.id)}
+                                className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              >
+                                <MoreHorizontal size={14} />
+                              </button>
+                              {activeRowActionMenuId === item.id && (
+                                <>
+                                  <div className="fixed inset-0 z-40" onClick={() => setActiveRowActionMenuId(null)} />
+                                  <div className="absolute right-0 top-full mt-1 z-50 w-44 p-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl animate-in fade-in zoom-in-95 duration-100 text-xs">
+                                    {rowActions(item).map((act, aIdx) => (
+                                      <button
+                                        key={aIdx}
+                                        disabled={act.disabled}
+                                        onClick={() => {
+                                          setActiveRowActionMenuId(null);
+                                          act.onClick(item);
+                                        }}
+                                        className={cn(
+                                          "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors",
+                                          act.variant === 'danger' 
+                                            ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40" 
+                                            : "text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                        )}
+                                      >
+                                        {act.icon}
+                                        <span className="truncate">{act.label}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ) : null}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Floating Glass Bulk Action Bar */}
       <AnimatePresence>
@@ -829,8 +1168,6 @@ export function Table<T extends { id: string | number }>({
             className="sticky bottom-4 left-0 right-0 z-30 mx-auto w-fit max-w-[95%] sm:max-w-xl"
           >
             <div className="flex items-center gap-2 p-1.5 px-3 rounded-xl bg-zinc-950/95 dark:bg-zinc-900/95 text-zinc-200 backdrop-blur-xl border border-zinc-800 shadow-2xl shadow-black/60">
-              
-              {/* Selected Count & Dismiss */}
               <div className="flex items-center gap-1.5 pr-2.5 border-r border-zinc-800">
                 <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-md bg-zinc-800 text-zinc-200 text-[11px] font-semibold">
                   {selectedCount}
@@ -846,9 +1183,7 @@ export function Table<T extends { id: string | number }>({
                 </button>
               </div>
 
-              {/* Bulk Action Buttons */}
               <div className="flex items-center gap-1">
-                {/* Bulk Assign */}
                 {onBulkAssign && assigneeOptions.length > 0 && (
                   <div className="relative">
                     <button
@@ -862,46 +1197,27 @@ export function Table<T extends { id: string | number }>({
                       <UserCheck size={13} className="text-zinc-400" />
                       <span>Assign</span>
                     </button>
-
                     {showAssignMenu && (
-                      <div className="absolute bottom-full mb-2 left-0 w-56 p-1.5 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50">
-                        <input
-                          type="text"
-                          placeholder="Search member..."
-                          value={assignSearch}
-                          onChange={(e) => setAssignSearch(e.target.value)}
-                          className="w-full px-2.5 py-1.5 mb-1 text-xs bg-zinc-800/80 border border-zinc-700/60 rounded-lg text-zinc-100 placeholder-zinc-500 outline-none focus:border-zinc-500"
-                        />
-                        <div className="max-h-40 overflow-y-auto custom-scrollbar">
-                          {assigneeOptions
-                            .filter(m => m.name.toLowerCase().includes(assignSearch.toLowerCase()))
-                            .map((member) => (
-                              <button
-                                key={member.id}
-                                type="button"
-                                onClick={() => {
-                                  onBulkAssign(Array.from(selectedSet), selectedItems, member.id, clearSelection);
-                                  setShowAssignMenu(false);
-                                }}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
-                              >
-                                {member.avatarUrl ? (
-                                  <img src={member.avatarUrl} alt="" className="w-4 h-4 rounded-full object-cover" />
-                                ) : (
-                                  <div className="w-4 h-4 rounded-full bg-zinc-700 text-[9px] font-medium text-zinc-300 flex items-center justify-center">
-                                    {member.name.charAt(0)}
-                                  </div>
-                                )}
-                                <span className="truncate">{member.name}</span>
-                              </button>
-                            ))}
-                        </div>
+                      <div className="absolute bottom-full mb-2 left-0 w-48 p-1.5 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50">
+                        {assigneeOptions.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => {
+                              onBulkAssign(Array.from(selectedSet), selectedItems, user.id, clearSelection);
+                              setShowAssignMenu(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                            <span className="truncate">{user.name}</span>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Bulk Status */}
                 {onBulkStatusChange && statusOptions.length > 0 && (
                   <div className="relative">
                     <button
@@ -915,7 +1231,6 @@ export function Table<T extends { id: string | number }>({
                       <Tag size={13} className="text-zinc-400" />
                       <span>Status</span>
                     </button>
-
                     {showStatusMenu && (
                       <div className="absolute bottom-full mb-2 left-0 w-44 p-1.5 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50">
                         {statusOptions.map((opt, i) => {
@@ -941,7 +1256,6 @@ export function Table<T extends { id: string | number }>({
                   </div>
                 )}
 
-                {/* CSV Export */}
                 <button
                   type="button"
                   onClick={handleDefaultExport}
@@ -952,17 +1266,15 @@ export function Table<T extends { id: string | number }>({
                   <span className="hidden sm:inline">Export</span>
                 </button>
 
-                {/* Custom Action Slot */}
                 {typeof bulkActions === 'function' 
                   ? bulkActions(Array.from(selectedSet), selectedItems, clearSelection)
                   : bulkActions}
 
-                {/* Bulk Delete */}
                 {onBulkDelete && (
                   <button
                     type="button"
                     onClick={() => setShowBulkDeleteModal(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-0.5 cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-0.5"
                   >
                     <Trash2 size={13} />
                     <span className="hidden sm:inline">Delete</span>
@@ -975,7 +1287,7 @@ export function Table<T extends { id: string | number }>({
       </AnimatePresence>
 
       {/* Pagination & Footer Bar */}
-      {pagination && (
+      {pagination && activeViewMode === 'table' && (
         totalItems > 0 ? (
           <div className="h-12 flex flex-col sm:flex-row items-center justify-between border-t border-zinc-200 dark:border-zinc-800 px-6 gap-3 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md shrink-0">
             <div className="flex items-center gap-3">
@@ -983,7 +1295,6 @@ export function Table<T extends { id: string | number }>({
                 Showing <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}</span> to <span className="text-zinc-900 dark:text-zinc-100">{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span> records
               </div>
 
-              {/* Page Size Selector */}
               {normalizedPageSizeOptions.length > 1 && (
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                   <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Per page:</span>
@@ -1054,23 +1365,19 @@ export function Table<T extends { id: string | number }>({
               </Button>
             </div>
           </div>
-        ) : loading ? (
-          <div className="h-12 flex flex-col sm:flex-row items-center justify-between border-t border-zinc-200/50 dark:border-zinc-800/50 px-6 gap-3 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md shrink-0 animate-pulse">
-            <div className="flex items-center gap-3">
-              <Skeleton variant="text" className="w-36 h-3" />
-              <Skeleton variant="rounded" className="w-16 h-6 rounded-lg hidden sm:block" />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Skeleton variant="rounded" className="w-7 h-7 rounded-lg" />
-              <Skeleton variant="rounded" className="w-7 h-7 rounded-lg" />
-              <Skeleton variant="rounded" className="w-7 h-7 rounded-lg" />
-              <Skeleton variant="rounded" className="w-7 h-7 rounded-lg" />
-            </div>
-          </div>
         ) : null
       )}
 
-      {/* Premium Aurora Bulk Delete Confirmation Dialog */}
+      {/* Data Lineage Modal */}
+      <DataLineageModal
+        isOpen={lineageModalState.isOpen}
+        onClose={() => setLineageModalState(prev => ({ ...prev, isOpen: false }))}
+        lineage={lineageModalState.lineage}
+        recordId={lineageModalState.recordId}
+        fieldName={lineageModalState.fieldName}
+      />
+
+      {/* Bulk Delete Modal */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showBulkDeleteModal && (
@@ -1138,4 +1445,3 @@ export function Table<T extends { id: string | number }>({
     </div>
   );
 }
-

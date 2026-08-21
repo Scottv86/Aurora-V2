@@ -12,6 +12,11 @@ export interface SavedViewEntity {
   icon?: string;
   color?: string | null;
   filterState: TableFilterState;
+  sortConfig?: { key: string; direction: 'asc' | 'desc' } | null;
+  groupConfig?: any | null;
+  density?: 'compact' | 'standard' | 'spacious';
+  viewMode?: 'table' | 'chart' | 'cards';
+  columnVisibility?: Record<string, boolean>;
   isShared: boolean;
   isDefault: boolean;
   createdAt?: string;
@@ -58,7 +63,7 @@ export const saveSavedView = async (
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to save view');
+    throw new Error(err.message || 'Failed to save view');
   }
 
   return res.json();
@@ -68,7 +73,7 @@ export const deleteSavedView = async (
   viewId: string,
   tenantId: string,
   token?: string
-): Promise<{ success: boolean; id: string }> => {
+): Promise<{ success: boolean }> => {
   if (!tenantId || !viewId) throw new Error('Tenant ID and View ID are required');
 
   const res = await fetch(`${API_BASE_URL}/api/saved-views/${viewId}`, {
@@ -81,7 +86,7 @@ export const deleteSavedView = async (
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to delete saved view');
+    throw new Error(err.message || 'Failed to delete view');
   }
 
   return res.json();
@@ -107,7 +112,33 @@ export const setDefaultSavedView = async (
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to update default view');
+    throw new Error(err.message || 'Failed to update default view');
+  }
+
+  return res.json();
+};
+
+export const clearDefaultSavedView = async (
+  scopeType: string,
+  scopeId: string,
+  tenantId: string,
+  token?: string
+): Promise<{ success: boolean }> => {
+  if (!tenantId || !scopeId) throw new Error('Tenant ID and Scope ID are required');
+
+  const res = await fetch(`${API_BASE_URL}/api/saved-views/clear-default`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': tenantId,
+      'Authorization': token ? `Bearer ${token}` : ''
+    },
+    body: JSON.stringify({ scopeType, scopeId })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to clear default view');
   }
 
   return res.json();

@@ -3902,6 +3902,18 @@ export const ModuleView = () => {
       return Array.from(map.values());
     })();
 
+    const activeTenantMember = (members || []).find((m: any) => {
+      const authId = (platformUser as any)?.id || (session?.user as any)?.id;
+      const authEmail = (platformUser as any)?.email || (session?.user as any)?.email;
+      return (
+        (authId && (m.id === authId || m.userId === authId || m.cuid === authId || m.memberId === authId)) ||
+        (authEmail && m.email?.toLowerCase() === authEmail?.toLowerCase())
+      );
+    });
+
+    const resolvedCurrentUserId = activeTenantMember?.id || (platformUser as any)?.id || (session?.user as any)?.id;
+    const resolvedCurrentUserName = activeTenantMember?.name || (platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email;
+
     return (
       <div className="flex-1 h-full min-h-0 flex flex-col w-full overflow-hidden">
         <Table 
@@ -3923,8 +3935,8 @@ export const ModuleView = () => {
           onSearchChange={setSearchQuery}
           enableFilters={true}
           filterFields={moduleFilterFields}
-          currentUserId={(platformUser as any)?.id || (session?.user as any)?.id}
-          currentUserName={(platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email}
+          currentUserId={resolvedCurrentUserId}
+          currentUserName={resolvedCurrentUserName}
           pagination={interfaceSettings.master.pagination?.enabled !== false}
           page={page}
           onPageChange={setPage}
