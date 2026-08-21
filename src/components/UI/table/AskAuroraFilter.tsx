@@ -332,8 +332,50 @@ If the user asks an analytical or data query, inspect the records and answer acc
       };
     }
 
-    // 2. Check for numeric value search (e.g. "value of 12", "value 12", "amount 500")
-    const numberMatch = q.match(/\b\d+(\.\d+)?\b/);
+    // 2a. Check for date search (e.g. "created on 3/5/2026", "2026-03-05", "March 5 2026")
+    const datePattern = q.match(/\b(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4})\b/) || q.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*\d{4}\b/i);
+    if (datePattern) {
+      const rawDateStr = datePattern[0];
+      const parsedDate = new Date(rawDateStr);
+      if (!isNaN(parsedDate.getTime())) {
+        const targetIso = parsedDate.toISOString().split('T')[0];
+        const dateField = fList.find(f => f.type === 'date' || f.id.toLowerCase().includes('created') || f.id.toLowerCase().includes('date')) || fList.find(f => f.id === 'createdAt');
+        const fieldKey = dateField ? dateField.id : 'createdAt';
+        const fieldLabel = dateField?.label || 'Created Date';
+
+        const matchingRecords = rows.filter(r => {
+          const raw = r[`__raw_${fieldKey}`] ?? r[fieldKey] ?? r[fieldLabel];
+          if (!raw) return false;
+          try {
+            const rDate = new Date(raw);
+            if (!isNaN(rDate.getTime())) {
+              return rDate.toISOString().split('T')[0] === targetIso || rDate.toLocaleDateString() === parsedDate.toLocaleDateString();
+            }
+          } catch (e) {}
+          return false;
+        });
+
+        const count = matchingRecords.length;
+        return {
+          answer: `Found ${count} record(s) where ${fieldLabel} is ${parsedDate.toLocaleDateString()} (${targetIso}).`,
+          metric: `${count} records`,
+          filterState: {
+            matchType: 'and',
+            clauses: [
+              {
+                id: Math.random().toString(36).substring(2, 9),
+                fieldId: fieldKey,
+                operator: 'date_is',
+                value: targetIso
+              }
+            ]
+          }
+        };
+      }
+    }
+
+    // 2b. Check for numeric value search (e.g. "value of 12", "value 12", "amount 500")
+    const numberMatch = !datePattern && q.match(/\b\d+(\.\d+)?\b/);
     if (numberMatch) {
       const targetNum = numberMatch[0];
 

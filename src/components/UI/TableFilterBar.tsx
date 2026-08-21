@@ -211,6 +211,21 @@ export const evaluateTableFilterClause = (
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
         return dateVal >= startOfMonth && dateVal <= endOfMonth;
       }
+      case 'date_is':
+      case 'date_on':
+      case 'date_equals': {
+        if (!value) return true;
+        const targetDate = new Date(value);
+        if (isNaN(targetDate.getTime())) return false;
+        try {
+          const rowIso = new Date(rawVal).toISOString().split('T')[0];
+          const targetIso = targetDate.toISOString().split('T')[0];
+          if (rowIso === targetIso) return true;
+        } catch (e) {}
+        const rowLocal = new Date(rawVal).toLocaleDateString();
+        const targetLocal = targetDate.toLocaleDateString();
+        return rowLocal === targetLocal;
+      }
       case 'date_before': {
         if (!value) return true;
         const target = new Date(value).getTime();
@@ -263,6 +278,25 @@ export const evaluateTableFilterClause = (
 
   // String & Equality operators
   const compareStr = String(value || '').toLowerCase();
+
+  // If this is a date field or value is a date, check calendar day match
+  if (_fieldDef?.type === 'date' || fieldId.toLowerCase().includes('date') || fieldId.toLowerCase().includes('at')) {
+    if (rawVal && value) {
+      try {
+        const rowDate = new Date(rawVal);
+        const targetDate = new Date(value);
+        if (!isNaN(rowDate.getTime()) && !isNaN(targetDate.getTime())) {
+          const rowIso = rowDate.toISOString().split('T')[0];
+          const targetIso = targetDate.toISOString().split('T')[0];
+          if (rowIso === targetIso || rowDate.toLocaleDateString() === targetDate.toLocaleDateString()) {
+            if (operator === 'is' || operator === 'equals' || operator === 'contains') return true;
+            if (operator === 'is_not' || operator === 'not_equals') return false;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
   switch (operator) {
     case 'is':
     case 'equals':
