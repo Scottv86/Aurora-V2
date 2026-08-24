@@ -428,10 +428,8 @@ export const PageBuilder = () => {
 
       {/* Main Split Screen Workspace */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-500/[0.02] rounded-full blur-[100px] pointer-events-none" />
-        
         {/* Left Sidebar (Widget Toolbox) */}
-        <div className="w-64 border-r border-zinc-200/50 dark:border-white/10 p-4 bg-white/20 dark:bg-zinc-900/10 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
+        <div className="w-64 border-r border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50 dark:bg-zinc-950 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
           <div>
             <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-250 uppercase tracking-widest">Widget Toolbox</h3>
             <p className="text-[10px] text-zinc-500 mt-0.5">Click a widget to place it on the layout canvas.</p>

@@ -408,11 +408,9 @@ export const APISettings = () => {
 
   return (
     <div className="flex flex-col w-full text-left px-6 lg:px-12 py-10 relative">
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start relative z-10">
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white/40 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200/50 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4">
             <div>
               <h3 className="text-lg font-bold text-zinc-900 dark:text-white">API</h3>
               <p className="text-xs text-zinc-450 mt-1">Tenant-scoped master data endpoints and programmatic automation triggers.</p>

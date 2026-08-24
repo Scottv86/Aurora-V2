@@ -2479,65 +2479,9 @@ export const AntigravityChat = () => {
       <Navbar />
       
       <div className="flex-1 flex min-h-0 relative z-10">
-      {/* Background glow effects matching Aurora PlatformShell */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20">
-        <motion.div 
-          animate={{
-            scale: [1, 1.2, 1],
-            x: [0, 50, 0],
-            y: [0, 30, 0],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-indigo-500/20 dark:bg-indigo-500/40 blur-[120px] rounded-full" 
-        />
-        <motion.div 
-          animate={{
-            scale: [1.2, 1, 1.2],
-            x: [0, -40, 0],
-            y: [0, -20, 0],
-          }}
-          transition={{
-            duration: 25,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-teal-500/20 dark:bg-teal-500/30 blur-[120px] rounded-full" 
-        />
-        <motion.div 
-          animate={{
-            scale: [1, 1.3, 1],
-            x: [0, 30, 0],
-            y: [0, -40, 0],
-          }}
-          transition={{
-            duration: 18,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          className="absolute top-[20%] right-[10%] w-[40%] h-[40%] bg-purple-500/10 dark:bg-purple-500/20 blur-[120px] rounded-full" 
-        />
-        <motion.div 
-          animate={{
-            scale: [1.3, 1, 1.3],
-            x: [0, -20, 0],
-            y: [0, 50, 0],
-          }}
-          transition={{
-            duration: 22,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          className="absolute bottom-[10%] left-[20%] w-[35%] h-[35%] bg-emerald-500/10 dark:bg-emerald-500/20 blur-[120px] rounded-full" 
-        />
-      </div>
-
       <div 
         style={{ width: `${sidebarWidth}px` }}
-        className="relative bg-white/60 dark:bg-zinc-950/65 backdrop-blur-xl border-r border-zinc-200/50 dark:border-zinc-800/40 flex flex-col flex-shrink-0 z-10"
+        className="relative bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col flex-shrink-0 z-10"
       >
         <div 
           onMouseDown={startResizing}

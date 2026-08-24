@@ -63,10 +63,10 @@ export function GroupBySelector<T>({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-xs select-none cursor-pointer",
+          "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg border text-xs font-medium transition-all shadow-2xs select-none cursor-pointer",
           activeGroupConfig
-            ? "bg-white dark:bg-zinc-800/90 border-indigo-300 dark:border-indigo-700/60 text-indigo-700 dark:text-indigo-300 font-bold"
-            : "bg-white/80 dark:bg-zinc-900/60 border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+            ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700/60 text-indigo-700 dark:text-indigo-300 font-semibold"
+            : "bg-white dark:bg-zinc-800/80 border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 hover:border-zinc-300 dark:hover:border-zinc-700"
         )}
       >
         <Layers size={13} className={activeGroupConfig ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />

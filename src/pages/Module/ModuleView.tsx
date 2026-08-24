@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { RecordDetailView } from '../Record/RecordDetailView';
 import { createPortal } from 'react-dom';
 import { Table } from '../../components/UI/Table';
+import { Breadcrumbs } from '../../components/Navigation/Breadcrumbs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   motion, 
@@ -15,7 +16,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Share2
+  Share2,
+  SlidersHorizontal
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -42,6 +44,7 @@ import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { useModalStack } from '../../context/ModalStackContext';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
+import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 
 const InlineAssigneeCell = ({
   record,
@@ -175,7 +178,7 @@ const InlineAssigneeCell = ({
               status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
               size="xs"
             />
-            <span className="text-[11px] font-bold truncate max-w-[80px]">
+            <span className="text-[11px] font-bold truncate max-w-[140px]">
               {resolvedUser.name}
             </span>
           </>
@@ -525,13 +528,331 @@ const InlineParticipantCell = ({
   );
 };
 
+interface RecordActionsCellProps {
+  record: any;
+  onView: () => void;
+  onShare: () => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onMove?: () => void;
+  onToggleStar?: () => void;
+  isStarred?: boolean;
+  onCopyKey: () => void;
+  onCopyLink: () => void;
+  onQuickStatus?: (status: string) => void;
+  onQuickAssign?: (assigneeId: string) => void;
+  statusOptions?: (string | { label: string; value: string; color?: string })[];
+  members?: any[];
+  currentUserId?: string;
+}
+
+const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
+  record,
+  onView,
+  onShare,
+  onDelete,
+  onDuplicate,
+  onMove,
+  onToggleStar,
+  isStarred = false,
+  onCopyKey,
+  onCopyLink,
+  onQuickStatus,
+  onQuickAssign,
+  statusOptions = [],
+  members = [],
+  currentUserId
+}) => {
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; openUpward: boolean } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handleOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (buttonRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      setShowMoreMenu(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showMoreMenu]);
+
+  useEffect(() => {
+    if (!showMoreMenu || !buttonRef.current) return;
+    const updateCoords = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const menuHeight = 240;
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const spaceAbove = rect.top - 70;
+      const openUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+
+      setCoords({
+        top: openUp ? rect.top - 6 : rect.bottom + 6,
+        left: Math.max(12, rect.right - 208),
+        openUpward: openUp
+      });
+    };
+    updateCoords();
+    window.addEventListener('scroll', updateCoords, true);
+    window.addEventListener('resize', updateCoords);
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [showMoreMenu]);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCopyKey();
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 1500);
+  };
+
+  const isAssignedToCurrent = currentUserId && (record.assigneeId === currentUserId);
+
+  return (
+    <div className="flex items-center justify-center gap-1 select-none" onClick={(e) => e.stopPropagation()}>
+      {/* 1. Quick View / Edit details */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onView();
+        }}
+        className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+        title="View details"
+      >
+        <LucideIcons.Eye size={13} />
+      </button>
+
+      {/* 2. Quick Copy Key */}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+        title={copiedKey ? "Copied!" : `Copy Key (${record._record_key || record.id})`}
+      >
+        {copiedKey ? (
+          <LucideIcons.Check size={13} className="text-emerald-500 animate-in zoom-in-50 duration-150" />
+        ) : (
+          <LucideIcons.Copy size={13} />
+        )}
+      </button>
+
+      {/* 3. Quick Share */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onShare();
+        }}
+        className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+        title="Share Record"
+      >
+        <LucideIcons.Share2 size={13} />
+      </button>
+
+      {/* 4. Quick Star */}
+      {onToggleStar && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleStar();
+          }}
+          className={cn(
+            "p-1.5 rounded-lg transition-all cursor-pointer",
+            isStarred 
+              ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/30" 
+              : "text-zinc-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+          )}
+          title={isStarred ? "Unstar Record" : "Star Record"}
+        >
+          <LucideIcons.Star size={13} className={cn(isStarred && "fill-amber-400 text-amber-400")} />
+        </button>
+      )}
+
+      {/* 5. More Actions Menu Button */}
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowMoreMenu(!showMoreMenu);
+        }}
+        className={cn(
+          "p-1.5 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all cursor-pointer",
+          showMoreMenu && "bg-zinc-200/70 dark:bg-zinc-700 text-zinc-900 dark:text-white"
+        )}
+        title="More Actions"
+      >
+        <LucideIcons.MoreHorizontal size={13} />
+      </button>
+
+      {/* 6. More Actions Portal Menu */}
+      {showMoreMenu && coords && createPortal(
+        <div 
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: coords.openUpward ? undefined : coords.top,
+            bottom: coords.openUpward ? window.innerHeight - coords.top : undefined,
+            left: coords.left,
+            zIndex: 99999
+          }}
+          className="w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-1.5 text-xs text-zinc-700 dark:text-zinc-200 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header info */}
+          <div className="px-2.5 py-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+            {record._record_key || 'Record Actions'}
+          </div>
+
+          {/* Star / Unstar in menu */}
+          {onToggleStar && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowMoreMenu(false);
+                onToggleStar();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer"
+            >
+              <LucideIcons.Star size={13} className={cn(isStarred ? "fill-amber-400 text-amber-400" : "text-zinc-400")} />
+              <span>{isStarred ? "Unstar Record" : "Star Record"}</span>
+            </button>
+          )}
+
+          {/* Duplicate Record */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onDuplicate();
+            }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+          >
+            <LucideIcons.CopyPlus size={13} className="text-zinc-400" />
+            <span>Duplicate Record</span>
+          </button>
+
+          {/* Move to Another Module */}
+          {onMove && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowMoreMenu(false);
+                onMove();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+            >
+              <LucideIcons.FolderInput size={13} className="text-zinc-400" />
+              <span>Move to Another Module</span>
+            </button>
+          )}
+
+          {/* Copy Link */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onCopyLink();
+            }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+          >
+            <LucideIcons.Link2 size={13} className="text-zinc-400" />
+            <span>Copy Record Link</span>
+          </button>
+
+          {/* Assign to Me */}
+          {currentUserId && !isAssignedToCurrent && onQuickAssign && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowMoreMenu(false);
+                onQuickAssign(currentUserId);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+            >
+              <LucideIcons.UserCheck size={13} className="text-indigo-400" />
+              <span>Assign to Me</span>
+            </button>
+          )}
+
+          {/* Quick Status Submenu */}
+          {onQuickStatus && statusOptions && statusOptions.length > 0 && (
+            <div className="my-1 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="px-2.5 py-1 text-[9px] uppercase font-semibold tracking-wider text-zinc-400">
+                Change Status
+              </div>
+              <div className="flex flex-wrap gap-1 px-1.5 py-1">
+                {statusOptions.slice(0, 4).map((opt: any, idx: number) => {
+                  const optVal = typeof opt === 'string' ? opt : opt.value || opt.label;
+                  const isCurrent = (record.status || '').toLowerCase() === optVal.toLowerCase();
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        onQuickStatus(optVal);
+                      }}
+                      className={cn(
+                        "px-2 py-0.5 rounded-md text-[10.5px] font-medium transition-colors",
+                        isCurrent 
+                          ? "bg-indigo-600 text-white font-semibold"
+                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      )}
+                    >
+                      {typeof opt === 'string' ? opt : opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+
+          {/* Delete Record */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowMoreMenu(false);
+              onDelete();
+            }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+          >
+            <LucideIcons.Trash2 size={13} />
+            <span>Move to Recycling Bin</span>
+          </button>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 export const ModuleView = () => {
   const { moduleId: moduleIdRaw } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const queueIdRaw = searchParams.get('queueId');
   const { session, user } = useAuth();
-  const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig } = usePlatform();
+  const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig, isDeveloper } = usePlatform();
+
+  const isTenantAdmin = isDeveloper || 
+    platformUser?.role === 'TENANT_ADMIN' || 
+    platformUser?.role?.toLowerCase() === 'tenant admin' || 
+    platformUser?.role?.toLowerCase() === 'admin' || 
+    platformUser?.isSuperAdmin === true || 
+    platformUser?.licenceType === 'Developer';
 
   const moduleId = useMemo(() => {
     if (!moduleIdRaw || !modules) return moduleIdRaw || '';
@@ -583,6 +904,7 @@ export const ModuleView = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [recordToShare, setRecordToShare] = useState<any | null>(null);
+  const [recordsToMove, setRecordsToMove] = useState<any[] | null>(null);
   const [page, setPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState<number | null>(null);
   const defaultPageSize = (moduleData as any)?.interfaceSettings?.master?.pagination?.pageSize || 25;
@@ -731,7 +1053,8 @@ export const ModuleView = () => {
   const recordsLoading = recordsQueryLoading;
 
   const createMutation = useMutation({
-    mutationFn: async (finalData: any) => {
+    mutationFn: async (payload: any) => {
+      const { _silentToast, ...finalData } = payload || {};
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${DATA_API_URL}/records`, {
         method: 'POST',
@@ -753,7 +1076,7 @@ export const ModuleView = () => {
 
       return res.json();
     },
-    onSuccess: (savedRecord) => {
+    onSuccess: (savedRecord, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
       
       const queryKey = ['records', tenant?.id, moduleId, page, pageSize];
@@ -773,7 +1096,9 @@ export const ModuleView = () => {
       });
       setTotalRecords(t => t + 1);
 
-      toast.success("Record created successfully");
+      if (!variables?._silentToast) {
+        toast.success("Record created successfully");
+      }
       setShowNewEntryModal(false);
       setNewEntryData({});
     },
@@ -1304,6 +1629,169 @@ export const ModuleView = () => {
       setActiveDetailRecordId(recordId);
     } else {
       navigate(`/workspace/modules/${moduleIdRaw}/records/${recordId}`);
+    }
+  };
+
+  const handleDuplicateRecord = async (record: any) => {
+    const recordLabel = record._record_key || record.name || record.title || 'record';
+    const toastId = toast.loading(`Cloning ${recordLabel}...`);
+
+    try {
+      const duplicateData: Record<string, any> = {};
+
+      // 1. Copy values for all fields configured in the module
+      (allFields || []).forEach((f: any) => {
+        const val = record[f.id] !== undefined ? record[f.id] : (record.data ? record.data[f.id] : undefined);
+        if (val !== undefined && val !== null) {
+          // Deep clone objects/arrays if present
+          duplicateData[f.id] = typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
+        }
+      });
+
+      // 2. Also copy all other custom properties present on the record
+      const systemKeys = new Set([
+        'id', '_record_key', 'createdAt', 'updatedAt', 'createdBy', 'createdByMember',
+        'module', 'moduleName', 'moduleIcon', 'workflowState', 'slaDeadline', 'data'
+      ]);
+
+      Object.entries(record).forEach(([key, val]) => {
+        if (!systemKeys.has(key) && !key.startsWith('_') && val !== undefined && val !== null) {
+          if (duplicateData[key] === undefined) {
+            duplicateData[key] = typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
+          }
+        }
+      });
+
+      // 3. Update title or name with (Copy) if present
+      if (duplicateData.name && typeof duplicateData.name === 'string') {
+        duplicateData.name = `${duplicateData.name} (Copy)`;
+      }
+      if (duplicateData.title && typeof duplicateData.title === 'string') {
+        duplicateData.title = `${duplicateData.title} (Copy)`;
+      }
+
+      // 4. Carry over assignee and status if defined
+      if (record.assigneeId) {
+        duplicateData.assigneeId = record.assigneeId;
+      }
+      if (record.status) {
+        duplicateData.status = record.status;
+      }
+
+      await createMutation.mutateAsync({
+        ...duplicateData,
+        _silentToast: true
+      });
+
+      toast.success(`Successfully cloned ${recordLabel}`, { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to clone record', { id: toastId });
+    }
+  };
+
+  const handleCopyRecordKey = (record: any) => {
+    const key = record._record_key || String(record.id);
+    navigator.clipboard.writeText(key);
+    toast.success(`Copied "${key}" to clipboard`);
+  };
+
+  const handleCopyRecordLink = (record: any) => {
+    const url = `${window.location.origin}/workspace/modules/${moduleIdRaw || moduleId}/records/${record.id}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Copied record link to clipboard');
+  };
+
+  const handleQuickUpdateStatus = async (record: any, newStatus: string) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${record.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ moduleId, status: newStatus, data: { status: newStatus } })
+      });
+      if (!res.ok) throw new Error('Failed to update status');
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      toast.success(`Status updated to "${newStatus}"`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update status');
+    }
+  };
+
+  const handleQuickUpdateAssignee = async (record: any, assigneeId: string) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${record.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ moduleId, assigneeId })
+      });
+      if (!res.ok) throw new Error('Failed to update assignee');
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      toast.success('Assignee updated');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update assignee');
+    }
+  };
+
+  const handleToggleStar = async (record: any) => {
+    const currentStarred = (record._starredUserIds || []).includes(resolvedCurrentUserId) || record.is_starred || record._is_starred;
+    const nextStarred = !currentStarred;
+
+    // Optimistic UI update
+    setRecords(prev => prev.map(r => {
+      if (r.id !== record.id) return r;
+      const list = Array.isArray(r._starredUserIds) ? [...r._starredUserIds] : [];
+      const updatedList = nextStarred 
+        ? Array.from(new Set([...list, resolvedCurrentUserId]))
+        : list.filter(uid => uid !== resolvedCurrentUserId);
+      return { ...r, _starredUserIds: updatedList, is_starred: nextStarred };
+    }));
+
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      await fetch(`${DATA_API_URL}/records/${record.id}/star`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ starred: nextStarred })
+      });
+
+      toast.success(nextStarred ? `Starred ${record._record_key || 'record'}` : `Unstarred ${record._record_key || 'record'}`);
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update star');
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+    }
+  };
+
+  const handleBulkStar = async (selectedIds: (string | number)[], _selectedItems: any[], star: boolean, clearSelection: () => void) => {
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      await fetch(`${DATA_API_URL}/records/star-batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ recordIds: selectedIds, star })
+      });
+      toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      clearSelection();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update star for records');
     }
   };
 
@@ -3860,39 +4348,42 @@ export const ModuleView = () => {
       ...builtColumns,
       {
         header: 'Actions',
-        align: 'right',
-        className: cn('text-right', densityClass),
+        align: 'center',
+        width: 165,
+        minWidth: 165,
+        maxWidth: 190,
+        sticky: 'right',
+        className: cn('text-center', densityClass),
         filterable: false,
-        accessor: (record: any) => (
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setRecordToShare(record);
-              }}
-              className="p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
-              title="Share Record"
-            >
-              <Share2 size={14} />
-            </button>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setRecordToDelete(record.id);
-              }}
-              className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-400/10 rounded-lg transition-all cursor-pointer"
-              title="Delete Record"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )
+        accessor: (record: any) => {
+          const isStarred = (record._starredUserIds || []).includes(resolvedCurrentUserId) || record.is_starred || record._is_starred || false;
+          return (
+            <RecordActionsCell
+              record={record}
+              onView={() => handleRecordClick(String(record.id))}
+              onShare={() => setRecordToShare(record)}
+              onDelete={() => setRecordToDelete(record.id)}
+              onDuplicate={() => handleDuplicateRecord(record)}
+              onMove={() => setRecordsToMove([record])}
+              onToggleStar={() => handleToggleStar(record)}
+              isStarred={isStarred}
+              onCopyKey={() => handleCopyRecordKey(record)}
+              onCopyLink={() => handleCopyRecordLink(record)}
+              onQuickStatus={(status) => handleQuickUpdateStatus(record, status)}
+              onQuickAssign={(assigneeId) => handleQuickUpdateAssignee(record, assigneeId)}
+              statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+              members={members}
+              currentUserId={resolvedCurrentUserId}
+            />
+          );
+        }
       }
     ];
 
     const moduleFilterFields = (() => {
       const systemFieldOptions = [
         { id: '_record_key', label: 'Key', type: 'text' as const },
+        { id: '_starred', label: 'Starred', type: 'boolean' as const },
         { id: 'assigneeId', label: 'Assignee', type: 'user' as const, userOptions: members },
         { id: 'status', label: 'Status', type: 'status' as const, options: allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived'] },
         { id: 'createdAt', label: 'Created At', type: 'date' as const },
@@ -3938,9 +4429,13 @@ export const ModuleView = () => {
           columns={tableColumns}
           loading={recordsQueryLoading || recordsQueryFetching}
           noContainer={true}
-          searchable={false}
+          searchable={true}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
+          searchPlaceholder="Search records..."
+          enableGrouping={true}
+          enableAskAurora={true}
+          enableChartToggle={true}
           enableFilters={true}
           filterFields={moduleFilterFields}
           currentUserId={resolvedCurrentUserId}
@@ -3955,6 +4450,7 @@ export const ModuleView = () => {
           enableSelection={true}
           assigneeOptions={members}
           statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+          onBulkStar={handleBulkStar}
           onBulkAssign={(selectedIds, _selectedItems, assigneeId, clearSelection) => {
             const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
             Promise.all(selectedIds.map(id => 
@@ -3994,6 +4490,9 @@ export const ModuleView = () => {
             }).catch(err => {
               toast.error(err.message || 'Failed to update status');
             });
+          }}
+          onBulkMove={(selectedIds, selectedItems, clearSelection) => {
+            setRecordsToMove(selectedItems);
           }}
           onBulkDelete={(selectedIds, _selectedItems, clearSelection) => {
             const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
@@ -4054,37 +4553,27 @@ export const ModuleView = () => {
   return (
     <div className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden">
       
-      {/* Header Panel */}
-      <div className="px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
-        <div className="flex items-center gap-3">
-          {Icon && (
-            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-              <Icon size={20} />
-            </div>
-          )}
-          <div>
-            <h1 className="text-base font-bold text-zinc-950 dark:text-white leading-none">{moduleData?.name || 'Loading...'}</h1>
-            {moduleData?.description && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                {moduleData.description}
-              </p>
-            )}
-          </div>
-        </div>
+      {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
+      <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">
+        <Breadcrumbs />
 
-        {/* Toolbar Controls / Actions */}
-        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
-          {/* Always Available Header Search */}
-          <div className="relative">
-            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
-            <input 
-              type="text" 
-              placeholder="Search records..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 w-52 sm:w-60 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg pl-8 pr-3 text-xs text-zinc-900 dark:text-zinc-200 placeholder-zinc-400 outline-none focus:border-indigo-500 transition-all shadow-xs"
-            />
-          </div>
+        {/* Right: Context Actions + Primary CTA */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Configure Module (Admin only) */}
+          {isTenantAdmin && (
+            <button
+              onClick={() => {
+                const currentPath = location.pathname + location.search;
+                const targetUrl = `/workspace/settings/builder/${moduleData?.id || moduleId}`;
+                navigate(`${targetUrl}?returnUrl=${encodeURIComponent(currentPath)}`, { state: { returnUrl: currentPath } });
+              }}
+              className="flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-semibold transition-all shadow-2xs group shrink-0 cursor-pointer"
+              title="Configure Module in Builder"
+            >
+              <SlidersHorizontal size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+              <span>Configure Module</span>
+            </button>
+          )}
 
           {/* Custom Action Buttons */}
           {interfaceSettings.actions?.map((act: any) => {
@@ -4117,9 +4606,9 @@ export const ModuleView = () => {
                   setActionFormErrors({});
                   setShowQuickActionModal(true);
                 }}
-                className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs"
+                className="flex items-center gap-1.5 h-7.5 px-2.5 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs cursor-pointer select-none"
               >
-                <ActionIcon size={12} className="text-zinc-500 dark:text-zinc-400" />
+                <ActionIcon size={13} className="text-zinc-500 dark:text-zinc-400" />
                 <span>{act.label}</span>
               </button>
             );
@@ -4153,7 +4642,7 @@ export const ModuleView = () => {
               
               setShowNewEntryModal(true);
             }}
-            className="h-8 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5"
+            className="flex items-center gap-1.5 h-7.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-xs transition-all shadow-xs cursor-pointer select-none"
           >
             <Plus size={13} />
             <span>{createForm?.settings?.workspaceButtonLabel || 'New Entry'}</span>
@@ -4956,6 +5445,23 @@ export const ModuleView = () => {
           record={recordToShare}
           moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
           moduleName={moduleData?.name}
+        />
+      )}
+
+      {/* Move Record(s) Modal */}
+      {recordsToMove && recordsToMove.length > 0 && (
+        <MoveRecordModal
+          isOpen={!!recordsToMove}
+          onClose={() => setRecordsToMove(null)}
+          sourceRecords={recordsToMove}
+          sourceModuleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
+          sourceModuleName={moduleData?.name}
+          sourceFields={allFields}
+          onSuccess={({ targetModuleId, targetModuleName, count }) => {
+            queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+            queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, targetModuleId] });
+            setRecordsToMove(null);
+          }}
         />
       )}
     </div>

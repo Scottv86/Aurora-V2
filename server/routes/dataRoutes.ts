@@ -663,6 +663,301 @@ router.post('/records', async (req: TenantRequest, res) => {
   }
 });
 
+// MOVE / ROUTE BATCH RECORDS ACROSS MODULES
+router.post('/records/move-batch', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { 
+      sourceRecordIds, 
+      sourceModuleId, 
+      targetModuleId, 
+      fieldMapping = {}, 
+      archiveSource = true,
+      preserveAssignee = true,
+      preserveStatus = true
+    } = req.body;
+
+    if (!Array.isArray(sourceRecordIds) || sourceRecordIds.length === 0) {
+      return res.status(400).json({ error: 'sourceRecordIds array is required' });
+    }
+    if (!targetModuleId) {
+      return res.status(400).json({ error: 'targetModuleId is required' });
+    }
+
+    const targetModule = await db.module.findUnique({ where: { id: targetModuleId } });
+    if (!targetModule) return res.status(404).json({ error: 'Target module not found' });
+
+    // Fetch all source records
+    const sourceRecords = await db.record.findMany({
+      where: {
+        id: { in: sourceRecordIds }
+      }
+    });
+
+    if (sourceRecords.length === 0) {
+      return res.status(404).json({ error: 'No matching source records found' });
+    }
+
+    const targetConfig = (targetModule.config || {}) as any;
+    let configChanged = false;
+    let updatedConfig = { ...targetConfig };
+
+    const workflow = targetConfig.workflow || (targetConfig.workflows && targetConfig.workflows[0]);
+    let defaultWorkflowState: any = null;
+    if (workflow && workflow.nodes && workflow.nodes.length > 0) {
+      const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
+      defaultWorkflowState = {
+        currentNodeId: startNode.id,
+        activeNodeIds: [startNode.id],
+        history: [{
+          nodeId: startNode.id,
+          timestamp: new Date().toISOString(),
+          action: 'Moved from Module',
+          triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+        }]
+      };
+    }
+
+    let slaDeadline = undefined;
+    if (targetConfig.slaConfig?.breachHours) {
+      slaDeadline = new Date(Date.now() + parseFloat(targetConfig.slaConfig.breachHours) * 60 * 60 * 1000);
+    }
+
+    const createdRecords: any[] = [];
+
+    for (const srcRec of sourceRecords) {
+      const srcData = (srcRec.data && typeof srcRec.data === 'object') ? (srcRec.data as Record<string, any>) : {};
+      const combinedSrc: Record<string, any> = { 
+        ...srcData, 
+        id: srcRec.id, 
+        status: srcRec.status, 
+        assigneeId: (srcRec as any).assigneeId || srcData.assigneeId 
+      };
+
+      const targetData: Record<string, any> = {};
+
+      // Apply field mappings (targetFieldId -> sourceFieldId or static value)
+      for (const [targetFieldId, sourceRef] of Object.entries(fieldMapping)) {
+        if (!sourceRef) continue;
+        if (typeof sourceRef === 'string' && sourceRef.startsWith('static:')) {
+          targetData[targetFieldId] = sourceRef.replace('static:', '');
+        } else if (typeof sourceRef === 'string') {
+          targetData[targetFieldId] = combinedSrc[sourceRef] !== undefined ? combinedSrc[sourceRef] : '';
+        }
+      }
+
+      // Handle Key generation
+      if (updatedConfig.recordKeyPrefix) {
+        const nextNum = updatedConfig.nextKeyNumber !== undefined ? Number(updatedConfig.nextKeyNumber) : 1;
+        const prefix = updatedConfig.recordKeyPrefix || '';
+        const suffix = updatedConfig.recordKeySuffix || '';
+        targetData._record_key = `${prefix}-${nextNum}${suffix}`;
+        updatedConfig.nextKeyNumber = nextNum + 1;
+        configChanged = true;
+      }
+
+      // Process autonumbers
+      const autonumbersChanged = processAutonumbers(targetData, updatedConfig.layout || [], updatedConfig);
+      if (autonumbersChanged) configChanged = true;
+
+      // Associations
+      const associations = Array.isArray(srcRec.associations) ? [...(srcRec.associations as any[])] : [];
+      if (sourceModuleId && srcRec.id) {
+        associations.push({
+          module_id: sourceModuleId,
+          record_id: srcRec.id,
+          relationship_type: 'moved_from'
+        });
+      }
+
+      const newRec = await db.record.create({
+        data: {
+          tenantId,
+          moduleId: targetModuleId,
+          data: targetData as any,
+          associations,
+          path: srcRec.path || null,
+          status: preserveStatus && srcRec.status ? srcRec.status : (defaultWorkflowState ? getStatusFromState(defaultWorkflowState, workflow, 'New') : 'New'),
+          createdByMemberId: (req as any).user?.memberId,
+          workflowState: defaultWorkflowState as any,
+          slaDeadline
+        }
+      });
+
+      createdRecords.push(newRec);
+
+      // Trigger RECORD_CREATED event
+      AutomationEngine.handleEvent({
+        type: 'RECORD_CREATED',
+        tenantId,
+        moduleId: targetModuleId,
+        record: { id: newRec.id, ...targetData }
+      }, db).catch(err => console.error('[Automation Error on Move Record]:', err));
+    }
+
+    if (configChanged) {
+      await db.module.update({
+        where: { id: targetModuleId },
+        data: { config: updatedConfig }
+      });
+    }
+
+    // If archiveSource is true, back up to recycling bin and delete source records
+    if (archiveSource) {
+      const trashModel = (db as any).recyclingBinItem || (globalPrisma as any).recyclingBinItem;
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      for (const srcRec of sourceRecords) {
+        try {
+          const srcData = (srcRec.data as any) || {};
+          const recordKey = srcData._record_key || srcRec.id;
+          const title = srcData.name || srcData.title || recordKey;
+
+          if (trashModel) {
+            await trashModel.create({
+              data: {
+                tenantId,
+                itemType: 'RECORD',
+                itemId: srcRec.id,
+                title: String(title),
+                subtitle: `Moved to ${targetModule.name}`,
+                payload: { ...srcRec, _record_key: recordKey, movedToModuleId: targetModuleId },
+                deletedBy: (req as any).user?.email || 'User',
+                deletedAt: new Date(),
+                expiresAt
+              }
+            }).catch((err: any) => console.warn('[Move Records] Trash backup warning:', err.message));
+          }
+
+          await db.record.delete({ where: { id: srcRec.id } });
+          emitTenantUpdate(tenantId, 'record_deleted', { id: srcRec.id, moduleId: sourceModuleId || srcRec.moduleId });
+        } catch (delErr) {
+          console.error(`[Move Records] Error deleting source record ${srcRec.id}:`, delErr);
+        }
+      }
+    }
+
+    emitTenantUpdate(tenantId, 'records_batch_moved', {
+      sourceModuleId,
+      targetModuleId,
+      movedCount: createdRecords.length
+    });
+
+    res.json({
+      success: true,
+      movedCount: createdRecords.length,
+      targetModuleId,
+      targetModuleName: targetModule.name,
+      records: createdRecords
+    });
+  } catch (err: any) {
+    console.error('[Move Batch Records Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to move records' });
+  }
+});
+
+// TOGGLE / UPDATE STAR FOR RECORD
+router.post('/records/:id/star', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const userId = (req as any).user?.memberId || (req as any).user?.id || 'anonymous';
+    const { starred } = req.body;
+
+    const existing = await db.record.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Record not found' });
+
+    const currentData = (existing.data as any) || {};
+    const starredUserIds: string[] = Array.isArray(currentData._starredUserIds) ? [...currentData._starredUserIds] : [];
+    
+    const isCurrentlyStarred = starredUserIds.includes(userId);
+    const shouldBeStarred = typeof starred === 'boolean' ? starred : !isCurrentlyStarred;
+
+    let updatedStarredUserIds: string[];
+    if (shouldBeStarred && !isCurrentlyStarred) {
+      updatedStarredUserIds = [...starredUserIds, userId];
+    } else if (!shouldBeStarred && isCurrentlyStarred) {
+      updatedStarredUserIds = starredUserIds.filter(uid => uid !== userId);
+    } else {
+      updatedStarredUserIds = starredUserIds;
+    }
+
+    await db.record.update({
+      where: { id },
+      data: {
+        data: {
+          ...currentData,
+          _starredUserIds: updatedStarredUserIds
+        }
+      }
+    });
+
+    emitTenantUpdate(tenantId, 'record_updated', {
+      id,
+      moduleId: existing.moduleId,
+      _starredUserIds: updatedStarredUserIds
+    });
+
+    res.json({
+      success: true,
+      id,
+      isStarred: shouldBeStarred,
+      _starredUserIds: updatedStarredUserIds
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// BATCH STAR / UNSTAR RECORDS
+router.post('/records/star-batch', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { recordIds, star = true } = req.body;
+    const userId = (req as any).user?.memberId || (req as any).user?.id || 'anonymous';
+
+    if (!Array.isArray(recordIds) || recordIds.length === 0) {
+      return res.status(400).json({ error: 'recordIds array is required' });
+    }
+
+    const records = await db.record.findMany({
+      where: { id: { in: recordIds } }
+    });
+
+    for (const rec of records) {
+      const currentData = (rec.data as any) || {};
+      const starredUserIds: string[] = Array.isArray(currentData._starredUserIds) ? [...currentData._starredUserIds] : [];
+      let updatedStarredUserIds: string[];
+      if (star) {
+        updatedStarredUserIds = Array.from(new Set([...starredUserIds, userId]));
+      } else {
+        updatedStarredUserIds = starredUserIds.filter(uid => uid !== userId);
+      }
+      await db.record.update({
+        where: { id: rec.id },
+        data: {
+          data: {
+            ...currentData,
+            _starredUserIds: updatedStarredUserIds
+          }
+        }
+      });
+    }
+
+    emitTenantUpdate(tenantId, 'records_batch_updated', {
+      recordIds,
+      star
+    });
+
+    res.json({ success: true, count: records.length, star });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // UPDATE record
 router.put('/records/:id', async (req: TenantRequest, res) => {
   try {

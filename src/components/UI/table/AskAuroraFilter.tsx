@@ -505,13 +505,13 @@ If the user asks an analytical or data query, inspect the records and answer acc
           }
         }}
         className={cn(
-          "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all shadow-xs cursor-pointer select-none",
+          "inline-flex items-center gap-1.5 h-7.5 px-2.5 text-xs font-medium rounded-lg transition-all shadow-2xs cursor-pointer select-none border",
           isOpen
-            ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20 border border-indigo-500"
-            : "bg-white/80 dark:bg-white/[0.04] backdrop-blur-md hover:bg-indigo-50/50 dark:hover:bg-white/[0.08] text-indigo-600 dark:text-indigo-400 border border-indigo-200/70 dark:border-white/[0.08]"
+            ? "bg-indigo-600 text-white shadow-xs border-indigo-600 font-semibold"
+            : "bg-indigo-50/50 dark:bg-indigo-500/10 hover:bg-indigo-100/70 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-200/60 dark:border-indigo-500/20"
         )}
       >
-        <Sparkles size={13} className="text-indigo-500 animate-pulse" />
+        <Sparkles size={13} className="text-indigo-500 animate-pulse shrink-0" />
         <span>Ask Aurora</span>
       </button>
 

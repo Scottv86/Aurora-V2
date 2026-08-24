@@ -97,7 +97,7 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
 
               {hasDropdown && isOpen && (
                 <div className="absolute left-0 top-full pt-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="w-[300px] bg-white/95 dark:bg-zinc-950/95 border border-zinc-200/90 dark:border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-2xl p-3 space-y-1.5 ring-1 ring-black/5 dark:ring-white/5">
+                  <div className="w-[300px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-3 space-y-1.5">
                     <div className="px-2 py-1 border-b border-zinc-100 dark:border-zinc-850 flex items-center justify-between mb-1">
                       <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{section.title}</span>
                       <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600">{visibleItems.length} items</span>

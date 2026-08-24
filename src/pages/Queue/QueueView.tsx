@@ -1,20 +1,28 @@
 import React, { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import * as LucideIcons from 'lucide-react';
+import { Compass } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
-import { slugify } from '../../lib/utils';
-import { DynamicIcon } from '../../components/UI/DynamicIcon';
+import { Breadcrumbs } from '../../components/Navigation/Breadcrumbs';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
 import { QueueEntity } from '../../types/platform';
 
 export const QueueView: React.FC = () => {
   const { queueId } = useParams<{ queueId: string }>();
   const { session } = useAuth();
-  const { tenant, menuConfig } = usePlatform();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { tenant, menuConfig, user: platformUser, isDeveloper } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
+
+  const isTenantAdmin = isDeveloper || 
+    platformUser?.role === 'TENANT_ADMIN' || 
+    platformUser?.role?.toLowerCase() === 'tenant admin' || 
+    platformUser?.role?.toLowerCase() === 'admin' || 
+    platformUser?.isSuperAdmin === true || 
+    platformUser?.licenceType === 'Developer';
 
   // 1. Synchronously resolve from menu configuration
   const navQueue = useMemo(() => {
@@ -22,7 +30,7 @@ export const QueueView: React.FC = () => {
     let found: any = null;
     const walk = (items: any[]) => {
       for (const item of items || []) {
-        if (item.id === queueId || slugify(item.label || '') === queueId || item.label?.toLowerCase() === queueId.toLowerCase()) {
+        if (item.id === queueId || item.label?.toLowerCase() === queueId.toLowerCase()) {
           found = item;
           return;
         }
@@ -56,45 +64,29 @@ export const QueueView: React.FC = () => {
     staleTime: 60000
   });
 
-  const activeQueue = navQueue || fetchedQueue || {
-    name: queueId ? queueId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Work Queue',
-    description: 'Workspace work distribution and task queue',
-    iconName: 'ClipboardList'
-  };
-
   return (
     <div className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden">
-      {/* Header Panel (matching ModuleView) */}
-      <div className="px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-            <DynamicIcon name={activeQueue.iconName || activeQueue.icon || 'ClipboardList'} size={20} />
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-zinc-950 dark:text-white leading-none">
-              {activeQueue.label || activeQueue.name}
-            </h1>
-            {activeQueue.description && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                {activeQueue.description}
-              </p>
-            )}
-          </div>
-        </div>
+      {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
+      <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">
+        <Breadcrumbs />
 
-        {/* Toolbar Controls */}
-        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
-          <div className="relative">
-            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
-            <input 
-              type="text" 
-              placeholder="Search queue records..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 w-52 sm:w-60 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg pl-8 pr-3 text-xs text-zinc-900 dark:text-zinc-200 placeholder-zinc-400 outline-none focus:border-indigo-500 transition-all shadow-xs"
-            />
+        {/* Right: Configure Queue Context Action */}
+        {isTenantAdmin && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                const currentPath = location.pathname + location.search;
+                const targetUrl = '/workspace/settings/navigation/builder';
+                navigate(`${targetUrl}?returnUrl=${encodeURIComponent(currentPath)}`, { state: { returnUrl: currentPath } });
+              }}
+              className="flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-semibold transition-all shadow-2xs group shrink-0 cursor-pointer"
+              title="Configure Queue Navigation"
+            >
+              <Compass size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+              <span>Configure Queue</span>
+            </button>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Main Content Area - Full Bleed Edge-to-Edge */}
@@ -103,7 +95,7 @@ export const QueueView: React.FC = () => {
           queueId={queueId} 
           showHeader={false} 
           noContainer={true}
-          searchable={false}
+          searchable={true}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           pageSize={25}

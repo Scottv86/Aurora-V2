@@ -15,6 +15,7 @@ import { QueueEntity } from '../../../types/platform';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
 import { Table, Column } from '../../UI/Table';
 import { ShareRecordModal } from '../../Platform/ShareRecordModal';
+import { MoveRecordModal } from '../../Platform/MoveRecordModal';
 
 const InlineAssigneeCell = ({
   record,
@@ -128,7 +129,7 @@ const InlineAssigneeCell = ({
               status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
               size="xs"
             />
-            <span className="text-[11px] font-bold truncate max-w-[80px]">
+            <span className="text-[11px] font-bold truncate max-w-[140px]">
               {resolvedUser.name}
             </span>
           </>
@@ -292,6 +293,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   const setSearchQuery = controlledOnSearchChange || setInternalSearchQuery;
   const [recordToDelete, setRecordToDelete] = useState<any | null>(null);
   const [recordToShare, setRecordToShare] = useState<any | null>(null);
+  const [recordsToMove, setRecordsToMove] = useState<any[] | null>(null);
   const [pageSize, setPageSize] = useState<number>(customPageSize || 10);
 
   const hasInlineConfig = Boolean(overrideConfig || propModuleId || (propModuleIds && propModuleIds.length > 0));
@@ -774,6 +776,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
           };
         })
       }] : []),
+      { id: '_starred', label: 'Starred', type: 'boolean' as const },
       { id: 'title', label: 'Title / Summary', type: 'text' as const },
       { 
         id: 'status', 
@@ -833,27 +836,105 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     if (!readOnly) {
       cols.push({
         header: 'Actions',
-        align: 'right',
+        align: 'center',
+        width: 165,
+        minWidth: 165,
+        maxWidth: 190,
+        sticky: 'right',
         filterable: false,
-        className: cn('text-right', densityClass),
-        accessor: (record: any) => (
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => setRecordToShare(record)}
-              className="p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
-              title="Share Record"
-            >
-              <LucideIcons.Share2 size={14} />
-            </button>
-            <button
-              onClick={() => setRecordToDelete(record)}
-              className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-400/10 rounded-lg transition-all cursor-pointer"
-              title="Move to Recycling Bin"
-            >
-              <LucideIcons.Trash2 size={14} />
-            </button>
-          </div>
-        )
+        className: cn('text-center', densityClass),
+        accessor: (record: any) => {
+          const currentUserId = (platformUser as any)?.memberId || (platformUser as any)?.cuid || (platformUser as any)?.id || (session?.user as any)?.id;
+          const isStarred = (record._starredUserIds || []).includes(currentUserId) || record.is_starred || record._is_starred || false;
+
+          return (
+            <div className="flex items-center justify-center gap-1 select-none" onClick={e => e.stopPropagation()}>
+              <button
+                onClick={() => {
+                  if (onRowClick) {
+                    onRowClick(record);
+                  } else {
+                    const effectivePageId = routePageId || (location.pathname.startsWith('/workspace/pages/') ? location.pathname.split('/')[3] : null);
+                    const effectiveQueueId = routeQueueId || queueId || (location.pathname.startsWith('/workspace/queues/') ? location.pathname.split('/')[3] : null);
+                    if (effectivePageId) {
+                      navigate(`/workspace/pages/${effectivePageId}/modules/${record.moduleId}/records/${record.id}`);
+                    } else if (effectiveQueueId) {
+                      navigate(`/workspace/queues/${effectiveQueueId}/modules/${record.moduleId}/records/${record.id}`);
+                    } else {
+                      navigate(`/workspace/modules/${record.moduleId}/records/${record.id}`);
+                    }
+                  }
+                }}
+                className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+                title="View details"
+              >
+                <LucideIcons.Eye size={13} />
+              </button>
+              <button
+                onClick={() => {
+                  const key = record._record_key || String(record.id);
+                  navigator.clipboard.writeText(key);
+                  toast.success(`Copied "${key}" to clipboard`);
+                }}
+                className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+                title={`Copy Key (${record._record_key || record.id})`}
+              >
+                <LucideIcons.Copy size={13} />
+              </button>
+              <button
+                onClick={() => setRecordToShare(record)}
+                className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+                title="Share Record"
+              >
+                <LucideIcons.Share2 size={13} />
+              </button>
+              <button
+                onClick={async () => {
+                  const nextStarred = !isStarred;
+                  const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+                  try {
+                    await fetch(`${DATA_API_URL}/records/${record.id}/star`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                        'x-tenant-id': tenant?.id || ''
+                      },
+                      body: JSON.stringify({ starred: nextStarred })
+                    });
+                    toast.success(nextStarred ? `Starred ${record._record_key || 'record'}` : `Unstarred ${record._record_key || 'record'}`);
+                    queryClient.invalidateQueries({ queryKey: ['records'] });
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to update star');
+                  }
+                }}
+                className={cn(
+                  "p-1.5 rounded-lg transition-all cursor-pointer",
+                  isStarred 
+                    ? "text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-950/30" 
+                    : "text-zinc-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                )}
+                title={isStarred ? "Unstar Record" : "Star Record"}
+              >
+                <LucideIcons.Star size={13} className={cn(isStarred && "fill-amber-400 text-amber-400")} />
+              </button>
+              <button
+                onClick={() => setRecordsToMove([record])}
+                className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+                title="Move to Another Module"
+              >
+                <LucideIcons.FolderInput size={13} />
+              </button>
+              <button
+                onClick={() => setRecordToDelete(record)}
+                className="p-1.5 text-zinc-400 hover:text-rose-500 hover:bg-rose-400/10 rounded-lg transition-all cursor-pointer"
+                title="Move to Recycling Bin"
+              >
+                <LucideIcons.Trash2 size={13} />
+              </button>
+            </div>
+          );
+        }
       });
     }
 
@@ -881,13 +962,16 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         enableSelection={!readOnly}
         enableFilters={true}
         filterFields={queueFilterFields}
+        enableGrouping={true}
+        enableAskAurora={true}
+        enableChartToggle={true}
         currentUserId={(platformUser as any)?.memberId || (platformUser as any)?.cuid || (platformUser as any)?.id || (session?.user as any)?.id}
         currentUserName={(platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email}
         assigneeOptions={members}
         statusOptions={['Open', 'In Progress', 'Under Review', 'Completed', 'Closed']}
         title={showHeader ? activeQueue?.name : undefined}
         subtitle={showHeader ? activeQueue?.description : undefined}
-        searchable={searchable}
+        searchable={searchable ?? true}
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search queue records..."
@@ -915,6 +999,29 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         onBulkStatusChange={(_selectedIds, selectedItems, status, clearSelection) => {
           bulkUpdateMutation.mutate({ records: selectedItems, patchData: { status } });
           clearSelection();
+        }}
+        onBulkMove={(_selectedIds, selectedItems, clearSelection) => {
+          setRecordsToMove(selectedItems);
+          clearSelection();
+        }}
+        onBulkStar={async (selectedIds, _selectedItems, star, clearSelection) => {
+          const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+          try {
+            await fetch(`${DATA_API_URL}/records/star-batch`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': tenant?.id || ''
+              },
+              body: JSON.stringify({ recordIds: selectedIds, star })
+            });
+            toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
+            queryClient.invalidateQueries({ queryKey: ['records'] });
+            clearSelection();
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to update star for records');
+          }
         }}
         onBulkDelete={(_selectedIds, selectedItems, clearSelection) => {
           bulkDeleteMutation.mutate({ records: selectedItems });
@@ -996,6 +1103,21 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
           record={recordToShare}
           moduleId={recordToShare?.moduleId || activeQueue?.moduleId}
           moduleName={getRecordModuleName(recordToShare)}
+        />
+      )}
+
+      {/* Move Record(s) Modal */}
+      {recordsToMove && recordsToMove.length > 0 && (
+        <MoveRecordModal
+          isOpen={!!recordsToMove}
+          onClose={() => setRecordsToMove(null)}
+          sourceRecords={recordsToMove}
+          sourceModuleId={recordsToMove[0]?.moduleId || activeQueue?.moduleId || ''}
+          sourceModuleName={getRecordModuleName(recordsToMove[0])}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['records'] });
+            setRecordsToMove(null);
+          }}
         />
       )}
     </div>

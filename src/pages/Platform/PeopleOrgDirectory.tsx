@@ -107,12 +107,8 @@ export const PeopleOrgDirectory = () => {
 
   return (
     <div className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
       {/* Header Panel */}
-      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/10 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
+      <div className="px-6 lg:px-12 py-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
             <Users size={24} />

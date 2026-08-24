@@ -2213,7 +2213,7 @@ export const RecordDetailView = ({
 
     return (
       <div className="flex flex-col flex-1 min-h-0 w-full h-full overflow-hidden animate-in fade-in duration-300">
-        <div className="px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md shrink-0">
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Guided Process Wizard</span>
@@ -2298,7 +2298,7 @@ export const RecordDetailView = ({
           })()}
         </div>
 
-        <div className="px-6 py-4 border-t border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md flex justify-between gap-4 shrink-0">
+        <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex justify-between gap-4 shrink-0">
           <button
             onClick={handleBack}
             disabled={safeActiveIdx === 0}
@@ -2336,7 +2336,7 @@ export const RecordDetailView = ({
           const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
           const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
           return (
-            <div key={tab.id} className="bg-white/70 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl shadow-sm overflow-hidden backdrop-blur-sm transition-all shrink-0">
+            <div key={tab.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden transition-all shrink-0">
               <div 
                 onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
                 className="p-5 md:p-6 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100/60 dark:border-zinc-800/60 flex items-center justify-between cursor-pointer select-none"
@@ -2390,7 +2390,7 @@ export const RecordDetailView = ({
   }
 
   const mainContent = (
-    <div className="relative flex flex-col w-full h-full min-h-0 overflow-hidden">
+    <div className="relative flex flex-col w-full h-full min-h-0 overflow-hidden bg-zinc-50 dark:bg-[#101010]">
       <style>{`
         @keyframes shake-field {
           0%, 100% { transform: translateX(0); }
@@ -2402,17 +2402,9 @@ export const RecordDetailView = ({
         }
       `}</style>
 
-      {/* Ambient background glows for workspace page cohesion */}
-      {!isModal && (
-        <>
-          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-        </>
-      )}
-
       {/* Standardized Full-Width Sticky PageHeader */}
       <div className={cn(
-        "w-full px-6 py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-30",
+        "w-full px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-30",
         !isModal && "sticky top-0"
       )}>
         {/* Left: Back + Icon + Title + Metadata */}
@@ -2420,29 +2412,35 @@ export const RecordDetailView = ({
           {isModal ? (
             <button 
               onClick={onClose}
-              className="h-9 w-9 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm shrink-0"
+              className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
               title="Back"
             >
-              <ArrowLeft size={16} />
+              <ArrowLeft size={15} />
             </button>
           ) : (
             <Link 
               to={getBackUrl()}
-              className="h-9 w-9 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-sm shrink-0"
+              className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
               title="Back"
             >
-              <ArrowLeft size={16} />
+              <ArrowLeft size={15} />
             </Link>
+          )}
+
+          {Icon && (
+            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Icon size={20} />
+            </div>
           )}
 
           <div className="min-w-0">
             <div className="flex items-center gap-2.5">
-              <h1 className="text-lg font-bold tracking-tight text-zinc-950 dark:text-white truncate">
+              <h1 className="text-base font-bold text-zinc-950 dark:text-white leading-none truncate">
                 {recordTitle}
               </h1>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               <span className="font-medium text-zinc-600 dark:text-zinc-400">
                 {moduleData.name}
               </span>
@@ -2999,19 +2997,19 @@ export const RecordDetailView = ({
 
       {/* Main Content Area Supporting all 5 Layout Options */}
       {editForm && !editForm.isMultistep ? (
-        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-y-auto custom-scrollbar">
+        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
           {renderFieldsGrid('default')}
         </div>
       ) : interfaceSettings.detail?.layoutType === 'process' || (editForm && editForm.isMultistep) ? (
         renderProcessWizardView()
       ) : interfaceSettings.detail?.layoutType === 'accordion' ? (
-        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-hidden">
+        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {renderAccordionView()}
         </div>
       ) : interfaceSettings.detail?.layoutType === 'split' ? (
-        <div className="flex-1 w-full min-h-0 relative z-10 flex flex-row overflow-hidden">
+        <div className="flex-1 w-full min-h-0 relative z-10 flex flex-row overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {/* Edge-to-Edge Left Navigation Menu */}
-          <div className="w-64 md:w-72 shrink-0 border-r border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md flex flex-col h-full overflow-hidden">
+          <div className="w-64 md:w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex flex-col h-full overflow-hidden">
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1.5 custom-scrollbar">
               {sortedVisibleTabs.map((tab: any) => {
                 const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
@@ -3058,19 +3056,19 @@ export const RecordDetailView = ({
           </div>
 
           {/* Right Field Cards Container */}
-          <div className="flex-1 min-h-0 h-full p-6 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 min-h-0 h-full p-6 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
             {activeTabId ? renderFieldsGrid(activeTabId) : (
               <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
             )}
           </div>
         </div>
       ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
-        <div className="flex-1 min-h-0 w-full h-full p-6 overflow-y-auto custom-scrollbar space-y-6">
+        <div className="flex-1 min-h-0 w-full h-full p-6 overflow-y-auto custom-scrollbar space-y-6 bg-zinc-50 dark:bg-[#101010]">
           {visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id)).map((tab: any) => {
             const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
             const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
             return (
-              <div key={tab.id} className="bg-white/70 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-sm backdrop-blur-sm space-y-6 shrink-0">
+              <div key={tab.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-sm space-y-6 shrink-0">
                 <div className="pb-4 border-b border-zinc-100/80 dark:border-zinc-800/80 flex items-center gap-2">
                   {interfaceSettings.detail?.showTabIcons ? (
                     <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
@@ -3088,7 +3086,7 @@ export const RecordDetailView = ({
         /* Edge-to-Edge Tabbed View */
         <div className="flex-1 w-full min-h-0 relative z-10 flex flex-col overflow-hidden">
           {moduleData?.tabs && moduleData.tabs.length > 0 && (
-            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md">
+            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
               <AnimatePresence>
                 {showLeftScroll && (
                   <motion.div 
@@ -3100,7 +3098,7 @@ export const RecordDetailView = ({
                     <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
                       <button 
                         onClick={() => handleScroll('left')}
-                        className="p-1.5 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
+                        className="p-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
                       >
                         <ChevronLeft size={16} />
                       </button>
@@ -3229,7 +3227,7 @@ export const RecordDetailView = ({
                     <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
                       <button 
                         onClick={() => handleScroll('right')}
-                        className="p-1.5 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
+                        className="p-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
                       >
                         <ChevronRight size={16} />
                       </button>
@@ -3240,7 +3238,7 @@ export const RecordDetailView = ({
             </div>
           )}
 
-          <div className="p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <div className="p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
             {activeTabId === 'activity' ? (
               <RecordActivityFeed recordId={record.id} />
             ) : activeTabId ? (
@@ -3259,11 +3257,11 @@ export const RecordDetailView = ({
   return (
     <>
       {isModal ? (
-        <div className="w-full h-full flex flex-col relative overflow-hidden">
+        <div className="w-full h-full flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {mainContent}
         </div>
       ) : (
-        <PageWrapper className="w-full h-[calc(100vh-4rem)] flex flex-col relative overflow-hidden">
+        <PageWrapper className="w-full h-[calc(100vh-4rem)] flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {mainContent}
         </PageWrapper>
       )}

@@ -538,15 +538,9 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col w-full h-full bg-zinc-950 p-4 space-y-3 overflow-hidden font-sans backdrop-blur-2xl">
-
-
-      {/* Ambient Aurora Radial Background Glows */}
-      <div className="absolute top-0 right-1/4 w-96 h-96 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-teal-500/5 dark:bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
-
+    <div className="fixed inset-0 z-[9999] flex flex-col w-full h-full bg-zinc-950 p-4 space-y-3 overflow-hidden font-sans">
       {/* Aurora Builder Header Toolbar */}
-      <div className="flex items-center justify-between py-2 px-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-sm shrink-0 relative z-10">
+      <div className="flex items-center justify-between py-2 px-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm shrink-0 relative z-10">
         {/* Left Header Info */}
         <div className="flex items-center gap-3">
           <button

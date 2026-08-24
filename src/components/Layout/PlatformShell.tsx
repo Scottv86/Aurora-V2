@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Settings,
   Settings2,
   LayoutDashboard,
@@ -117,103 +118,76 @@ const SidebarSectionRenderer = ({
   collapsed, 
   isActive, 
   expandedItems,
-  onToggleExpand
+  onToggleExpand,
+  isSectionCollapsed,
+  onToggleSectionCollapse
 }: { 
   section: MenuSection, 
   collapsed: boolean,
   isActive: (path: string) => boolean,
   expandedItems: Record<string, boolean>,
-  onToggleExpand: (id: string) => void
+  onToggleExpand: (id: string) => void,
+  isSectionCollapsed: boolean,
+  onToggleSectionCollapse: (id: string) => void
 }) => {
+  const visibleItems = section.items?.filter(item => item.isVisible !== false) || [];
+  if (visibleItems.length === 0) return null;
+  const sectionKey = section.id || section.title;
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <div className="flex items-center group/section">
         {collapsed ? (
           <div className="h-px bg-zinc-200 dark:bg-zinc-800 w-full my-4 mx-2" />
         ) : (
-          <div className="flex items-center justify-between w-full px-3">
-            <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">{section.title}</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => onToggleSectionCollapse(sectionKey)}
+            className="flex items-center justify-between w-full px-3 py-1 -my-0.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors group/header select-none text-left cursor-pointer"
+          >
+            <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-colors truncate">
+              {section.title}
+            </span>
+            <ChevronDown 
+              size={13} 
+              className={cn(
+                "text-zinc-400 dark:text-zinc-500 group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-transform duration-200 shrink-0",
+                isSectionCollapsed ? "-rotate-90" : "rotate-0"
+              )} 
+            />
+          </button>
         )}
       </div>
 
-      <nav className="space-y-0.5">
-        {section.items.map((item) => (
-          item.isVisible !== false && (
-            <SidebarItemRenderer 
-              key={item.id} 
-              item={item} 
-              collapsed={collapsed} 
-              active={item.to ? isActive(item.to) : false}
-              expandedItems={expandedItems}
-              onToggleExpand={onToggleExpand}
-              isActive={isActive}
-              depth={0}
-            />
-          )
-        ))}
-      </nav>
+      <AnimatePresence initial={false}>
+        {(!isSectionCollapsed || collapsed) && (
+          <motion.nav 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="space-y-0.5 overflow-hidden"
+          >
+            {visibleItems.map((item) => (
+              <SidebarItemRenderer 
+                key={item.id} 
+                item={item} 
+                collapsed={collapsed} 
+                active={item.to ? isActive(item.to) : false}
+                expandedItems={expandedItems}
+                onToggleExpand={onToggleExpand}
+                isActive={isActive}
+                depth={0}
+              />
+            ))}
+          </motion.nav>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 
-const AuroraBackground = () => (
-  <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-40 dark:opacity-20">
-    <motion.div 
-      animate={{
-        scale: [1, 1.2, 1],
-        x: [0, 50, 0],
-        y: [0, 30, 0],
-      }}
-      transition={{
-        duration: 20,
-        repeat: Infinity,
-        ease: "linear"
-      }}
-      className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-indigo-500/20 dark:bg-indigo-500/40 blur-[120px] rounded-full" 
-    />
-    <motion.div 
-      animate={{
-        scale: [1.2, 1, 1.2],
-        x: [0, -40, 0],
-        y: [0, -20, 0],
-      }}
-      transition={{
-        duration: 25,
-        repeat: Infinity,
-        ease: "linear"
-      }}
-      className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-teal-500/20 dark:bg-teal-500/30 blur-[120px] rounded-full" 
-    />
-    <motion.div 
-      animate={{
-        scale: [1, 1.3, 1],
-        x: [0, 30, 0],
-        y: [0, -40, 0],
-      }}
-      transition={{
-        duration: 18,
-        repeat: Infinity,
-        ease: "linear"
-      }}
-      className="absolute top-[20%] right-[10%] w-[40%] h-[40%] bg-purple-500/10 dark:bg-purple-500/20 blur-[120px] rounded-full" 
-    />
-    <motion.div 
-      animate={{
-        scale: [1.3, 1, 1.3],
-        x: [0, -20, 0],
-        y: [0, 50, 0],
-      }}
-      transition={{
-        duration: 22,
-        repeat: Infinity,
-        ease: "linear"
-      }}
-      className="absolute bottom-[10%] left-[20%] w-[35%] h-[35%] bg-emerald-500/10 dark:bg-emerald-500/20 blur-[120px] rounded-full" 
-    />
-  </div>
-);
 
 export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fullBleed?: boolean }) => {
   const { user, loading: authLoading } = useAuth();
@@ -276,9 +250,21 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isBuilderFullscreen, setIsBuilderFullscreen]);
   const pathnames = location.pathname.split('/').filter(x => x);
+  const isModuleMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2] && pathnames[3] !== 'records') ||
+    (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[3] === 'modules' && pathnames[4] && pathnames[5] !== 'records');
+  const isQueueMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2] && pathnames[3] !== 'records');
+  const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView;
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem('collapsedSidebarSections');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
   const [settingsSearchQuery] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebarWidth');
@@ -330,6 +316,18 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   };
 
+  const toggleSectionCollapse = (sectionId: string) => {
+    setCollapsedSections(prev => {
+      const next = { ...prev, [sectionId]: !prev[sectionId] };
+      try {
+        localStorage.setItem('collapsedSidebarSections', JSON.stringify(next));
+      } catch (e) {
+        console.error("Failed to save collapsed sidebar sections", e);
+      }
+      return next;
+    });
+  };
+
   const isActive = (path: string) => {
     try {
       const targetUrl = new URL(path, window.location.origin);
@@ -379,7 +377,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     return (
       <button
         onClick={onClick}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-bold transition-all shadow-sm group shrink-0"
+        className="flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-semibold transition-all shadow-2xs group shrink-0 cursor-pointer"
       >
         <IconComponent size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
         <span>{label}</span>
@@ -713,7 +711,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-200 font-sans selection:bg-indigo-500/30 relative overflow-hidden">
       <TransitionBar />
-      <AuroraBackground />
       <AnimatePresence>
         {isSettingsMode && (
           <motion.div 
@@ -738,7 +735,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
       {/* Top Mounted Mega Menu */}
       {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
-        <div className="sticky top-16 z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
+        <div className="sticky top-16 z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
           <TopMegaMenu menuConfig={resolvedConfig} isDeveloper={isTenantAdmin} />
         </div>
       )}
@@ -754,7 +751,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             }}
             style={{ width: `${currentWidth}px` }}
             className={cn(
-              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-xl z-45 flex flex-col",
+              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-45 flex flex-col",
               (isModuleBuilder || isBuilderFullscreen || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
               !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300"
             )}
@@ -826,29 +823,55 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                             { label: 'Admin Settings', icon: LucideIcons.Settings2, to: '/admin/settings' },
                           ]
                         }
-                      ].map((group) => (
-                        <div key={group.category} className="space-y-1">
-                          {isSidebarReallyOpen ? (
-                            <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-3 pb-1">
-                              {group.category}
-                            </p>
-                          ) : (
-                            <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
-                          )}
-                          <nav className="space-y-0.5">
-                            {group.items.map((item, idx) => (
-                              <SidebarItem
-                                key={`${item.to}-${item.label}-${idx}`}
-                                icon={item.icon}
-                                label={item.label}
-                                to={item.to}
-                                active={isActive(item.to)}
-                                collapsed={collapsed}
-                              />
-                            ))}
-                          </nav>
-                        </div>
-                      ))}
+                      ].map((group) => {
+                        const isGroupCollapsed = !!collapsedSections[`admin_${group.category}`];
+                        return (
+                          <div key={group.category} className="space-y-1">
+                            {isSidebarReallyOpen ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleSectionCollapse(`admin_${group.category}`)}
+                                className="flex items-center justify-between w-full px-3 py-1 -my-0.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors group/header select-none text-left cursor-pointer"
+                              >
+                                <span className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-colors truncate">
+                                  {group.category}
+                                </span>
+                                <ChevronDown 
+                                  size={13} 
+                                  className={cn(
+                                    "text-zinc-400 dark:text-zinc-500 group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-transform duration-200 shrink-0",
+                                    isGroupCollapsed ? "-rotate-90" : "rotate-0"
+                                  )} 
+                                />
+                              </button>
+                            ) : (
+                              <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
+                            )}
+                            <AnimatePresence initial={false}>
+                              {(!isGroupCollapsed || !isSidebarReallyOpen) && (
+                                <motion.nav 
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                                  className="space-y-0.5 overflow-hidden"
+                                >
+                                  {group.items.map((item, idx) => (
+                                    <SidebarItem
+                                      key={`${item.to}-${item.label}-${idx}`}
+                                      icon={item.icon}
+                                      label={item.label}
+                                      to={item.to}
+                                      active={isActive(item.to)}
+                                      collapsed={collapsed}
+                                    />
+                                  ))}
+                                </motion.nav>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -863,6 +886,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                         isActive={isActive}
                         expandedItems={expandedItems}
                         onToggleExpand={toggleExpand}
+                        isSectionCollapsed={!!collapsedSections[section.id || section.title]}
+                        onToggleSectionCollapse={toggleSectionCollapse}
                       />
                     ))}
 
@@ -953,29 +978,55 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     )}
 
                     <div className="space-y-6 overflow-y-auto custom-scrollbar flex-1">
-                      {filteredSettingsGroups.map((group) => (
-                        <div key={group.category} className="space-y-1">
-                          {isSidebarReallyOpen ? (
-                            <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] px-3 pb-1">
-                              {group.category}
-                            </p>
-                          ) : (
-                            <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
-                          )}
-                          <nav className="space-y-0.5">
-                            {group.items.map((item, idx) => (
-                              <SidebarItem
-                                key={`${item.to}-${item.label}-${idx}`}
-                                icon={item.icon}
-                                label={item.label}
-                                to={item.to}
-                                active={isActive(item.to)}
-                                collapsed={collapsed}
-                              />
-                            ))}
-                          </nav>
-                        </div>
-                      ))}
+                      {filteredSettingsGroups.map((group) => {
+                        const isGroupCollapsed = !settingsSearchQuery && !!collapsedSections[`settings_${group.category}`];
+                        return (
+                          <div key={group.category} className="space-y-1">
+                            {isSidebarReallyOpen ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleSectionCollapse(`settings_${group.category}`)}
+                                className="flex items-center justify-between w-full px-3 py-1 -my-0.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors group/header select-none text-left cursor-pointer"
+                              >
+                                <span className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-colors truncate">
+                                  {group.category}
+                                </span>
+                                <ChevronDown 
+                                  size={13} 
+                                  className={cn(
+                                    "text-zinc-400 dark:text-zinc-500 group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-transform duration-200 shrink-0",
+                                    isGroupCollapsed ? "-rotate-90" : "rotate-0"
+                                  )} 
+                                />
+                              </button>
+                            ) : (
+                              <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
+                            )}
+                            <AnimatePresence initial={false}>
+                              {(!isGroupCollapsed || !isSidebarReallyOpen) && (
+                                <motion.nav 
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                                  className="space-y-0.5 overflow-hidden"
+                                >
+                                  {group.items.map((item, idx) => (
+                                    <SidebarItem
+                                      key={`${item.to}-${item.label}-${idx}`}
+                                      icon={item.icon}
+                                      label={item.label}
+                                      to={item.to}
+                                      active={isActive(item.to)}
+                                      collapsed={collapsed}
+                                    />
+                                  ))}
+                                </motion.nav>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -989,7 +1040,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
               }
               return (
                 <div className={cn(
-                  "shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md flex items-center w-full transition-all duration-300",
+                  "shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center w-full transition-all duration-300",
                   isSidebarReallyOpen ? "h-12" : "h-auto py-2 px-1.5 flex-col gap-1.5"
                 )}>
                   {isTenantAdmin && !isAdminPath && (
@@ -1023,7 +1074,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                   ) : (
                     <>
                       {isTenantAdmin && !isAdminPath && (
-                        <div className="w-6 h-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                        <div className="w-6 h-px bg-zinc-200 dark:border-zinc-800 shrink-0" />
                       )}
                       <button
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -1064,8 +1115,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             "mx-auto flex flex-col min-h-0 flex-1 h-full",
             (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
           )}>
-            {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
-              <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 lg:px-12 shrink-0">
+            {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && !shouldHideShellBreadcrumbs && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
+              <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">
                 <Breadcrumbs />
                 {getContextualAction()}
               </div>

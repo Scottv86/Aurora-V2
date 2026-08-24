@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, X, Check, Search, Calendar, User, 
-  Hash, Type, CheckSquare, Layers, SlidersHorizontal
+  Hash, Type, CheckSquare, Layers, SlidersHorizontal, Star
 } from 'lucide-react';
 import { cn } from './Primitives';
 import { getFieldValue } from '../../lib/utils';
@@ -134,7 +134,7 @@ const getFieldIcon = (type?: FilterFieldType) => {
     case 'currency':
       return <Hash size={12} className="text-blue-500" />;
     case 'boolean':
-      return <CheckSquare size={12} className="text-purple-500" />;
+      return <Star size={12} className="text-amber-500 fill-amber-500" />;
     case 'text':
     default:
       return <Type size={12} className="text-zinc-400" />;
@@ -149,6 +149,20 @@ export const evaluateTableFilterClause = (
   currentUserId?: string
 ): boolean => {
   const { fieldId, operator, value, valueSecondary } = clause;
+
+  // Starred field evaluation
+  if (fieldId === '_starred' || fieldId === 'is_starred' || fieldId === 'starred') {
+    const isStarred = (record._starredUserIds || []).includes(currentUserId) || record.is_starred || record._is_starred;
+    const isYes = value === true || value === 'true' || value === 'yes';
+    if (operator === 'equals' || operator === 'is') {
+      return Boolean(isStarred) === isYes;
+    }
+    if (operator === 'not_equals' || operator === 'is_not') {
+      return Boolean(isStarred) !== isYes;
+    }
+    return Boolean(isStarred);
+  }
+
   const rawVal = getFieldValue(record, fieldId);
 
   const isEmpty = (v: any) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
@@ -579,6 +593,34 @@ const ClausePopover: React.FC<ClausePopoverProps> = ({
               placeholder="Enter number..."
               className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-2.5 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
             />
+          ) : fieldType === 'boolean' ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onUpdate({ value: 'true' })}
+                className={cn(
+                  "py-1.5 px-3 rounded-xl border text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                  clause.value === 'true' || clause.value === true
+                    ? "bg-amber-500 border-amber-500 text-white shadow-xs"
+                    : "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                )}
+              >
+                <Star size={12} className={cn((clause.value === 'true' || clause.value === true) ? "fill-white" : "fill-amber-400 text-amber-400")} />
+                <span>Yes</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdate({ value: 'false' })}
+                className={cn(
+                  "py-1.5 px-3 rounded-xl border text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer",
+                  clause.value === 'false' || clause.value === false
+                    ? "bg-zinc-800 dark:bg-zinc-700 border-zinc-800 text-white shadow-xs"
+                    : "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                )}
+              >
+                <span>No</span>
+              </button>
+            </div>
           ) : (
             <input
               type="text"
@@ -915,7 +957,7 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
   const activeEditingFieldDef = activeEditingClause ? fieldMap.get(activeEditingClause.fieldId) : undefined;
 
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-2.5 py-2 px-3 sm:px-4 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-md border-b border-zinc-200/80 dark:border-zinc-800 min-h-[44px]", className)}>
+    <div className={cn("flex flex-wrap items-center justify-between gap-2 px-6 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 min-h-[40px] h-10 shrink-0", className)}>
       {/* Left side items: Title/LeftSlot + Saved Views + Filter + Pills */}
       <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
         {leftSlot}
@@ -975,9 +1017,14 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
               setAddMenuRect(addBtnRef.current.getBoundingClientRect());
             }
           }}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-500 dark:hover:border-indigo-500 bg-white/50 dark:bg-zinc-800/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-300 text-xs font-medium transition-all shadow-2xs cursor-pointer"
+          className={cn(
+            "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg border text-xs font-medium transition-all shadow-2xs cursor-pointer select-none",
+            filterState.clauses.length > 0
+              ? "bg-white dark:bg-zinc-800 border-indigo-300 dark:border-indigo-700/60 text-indigo-700 dark:text-indigo-300 font-semibold"
+              : "bg-white dark:bg-zinc-800/80 border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 hover:border-zinc-300 dark:hover:border-zinc-700"
+          )}
         >
-          <SlidersHorizontal size={12} className="text-zinc-400" />
+          <SlidersHorizontal size={13} className={filterState.clauses.length > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />
           <span>Filter</span>
           {filterState.clauses.length > 0 && (
             <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] flex items-center justify-center font-bold ml-0.5">

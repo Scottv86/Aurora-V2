@@ -340,10 +340,6 @@ export const ModuleCatalog = () => {
 
   return (
     <div className="flex flex-col w-full px-6 lg:px-12 py-10 space-y-8 relative">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -mr-64 -mt-64 pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-teal-500/5 rounded-full blur-[100px] -ml-48 -mb-48 pointer-events-none" />
-
       <div className="relative z-10 space-y-8 flex flex-col flex-1">
       <div className="relative z-10 space-y-6 flex flex-col flex-1 pb-10">
         <PageHeader 

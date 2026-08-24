@@ -107,7 +107,7 @@ export const Navbar = () => {
 
   return (
     <>
-      <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
+      <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 sticky top-0 z-50">
       <div className="flex items-center gap-4 flex-1">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-all"
@@ -146,7 +146,7 @@ export const Navbar = () => {
             <div className="relative" ref={envMenuRef}>
               <button 
                 onClick={() => setShowEnvMenu(!showEnvMenu)}
-                className="group relative flex items-center gap-2 bg-zinc-100/50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/30 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10 rounded-full pl-3 pr-2 py-1 transition-all duration-300 shadow-sm"
+                className="group relative flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/30 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10 rounded-full pl-3 pr-2 py-1 transition-all duration-300 shadow-sm"
               >
                 <div className="flex items-center gap-1.5 pointer-events-none">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
@@ -198,7 +198,7 @@ export const Navbar = () => {
       <div className="hidden md:flex flex-1 justify-center px-4">
         <button className="relative w-full max-w-md group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-hover:text-indigo-500 transition-colors" size={16} />
-          <div className="w-full bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400 text-left flex items-center justify-between group-hover:border-zinc-300 dark:group-hover:border-zinc-700 transition-all shadow-sm">
+          <div className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400 text-left flex items-center justify-between group-hover:border-zinc-300 dark:group-hover:border-zinc-700 transition-all shadow-sm">
             <span>Search or type a command...</span>
             <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
               <kbd className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-bold text-zinc-400">⌘</kbd>

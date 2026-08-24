@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, ArrowUpDown, ChevronUp, ChevronDown, 
   Check, Minus, Download, Trash2, UserCheck, Tag, X, Inbox, Search, Filter,
   BarChart3, Table as TableIcon, Edit3, MoreHorizontal,
-  Sparkles, Layers
+  Sparkles, Layers, FolderInput, Star
 } from 'lucide-react';
 import { Skeleton } from './Skeleton';
 import { motion, AnimatePresence } from 'motion/react';
@@ -44,6 +44,9 @@ export interface Column<T> {
   style?: React.CSSProperties;
   align?: 'left' | 'center' | 'right';
   width?: string | number;
+  minWidth?: string | number;
+  maxWidth?: string | number;
+  sticky?: 'left' | 'right';
   
   // Semantic Intelligence
   type?: 'text' | 'person' | 'status' | 'date' | 'currency' | 'number' | 'calculated';
@@ -91,6 +94,8 @@ export interface TableProps<T> {
   onSelectionChange?: (selectedIds: (string | number)[], selectedItems: T[]) => void;
   bulkActions?: React.ReactNode | ((selectedIds: (string | number)[], selectedItems: T[], clearSelection: () => void) => React.ReactNode);
   onBulkDelete?: (selectedIds: (string | number)[], selectedItems: T[], clearSelection: () => void) => void;
+  onBulkMove?: (selectedIds: (string | number)[], selectedItems: T[], clearSelection: () => void) => void;
+  onBulkStar?: (selectedIds: (string | number)[], selectedItems: T[], star: boolean, clearSelection: () => void) => void;
   onBulkAssign?: (selectedIds: (string | number)[], selectedItems: T[], assigneeId: string, clearSelection: () => void) => void;
   onBulkStatusChange?: (selectedIds: (string | number)[], selectedItems: T[], status: string, clearSelection: () => void) => void;
   onExportSelected?: (selectedIds: (string | number)[], selectedItems: T[]) => void;
@@ -206,6 +211,8 @@ export function Table<T extends { id: string | number }>({
   onSelectionChange,
   bulkActions,
   onBulkDelete,
+  onBulkMove,
+  onBulkStar,
   onBulkAssign,
   onBulkStatusChange,
   onExportSelected,
@@ -726,27 +733,27 @@ export function Table<T extends { id: string | number }>({
             )}
 
             {searchable && (
-              <div className="relative w-36 sm:w-48">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={12} />
+              <div className="relative w-36 sm:w-52 h-7.5 flex items-center">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={13} />
                 <input
                   type="text"
                   placeholder={searchPlaceholder}
                   value={activeSearch}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 rounded-lg pl-7 pr-2.5 py-1 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-all shadow-2xs"
+                  className="w-full h-7.5 bg-white dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-800 rounded-lg pl-8 pr-2.5 text-xs text-zinc-900 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-all shadow-2xs"
                 />
               </div>
             )}
 
             {/* Multi-modal View Switcher (Table | Chart) */}
             {enableChartToggle && (
-              <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/80 dark:border-zinc-700/80">
+              <div className="flex items-center h-7.5 bg-zinc-100/80 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setViewMode('table')}
                   className={cn(
-                    "p-1 rounded text-xs font-medium transition-all cursor-pointer",
-                    activeViewMode === 'table' ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                    "h-6.5 px-1.5 rounded-md text-xs font-medium transition-all cursor-pointer flex items-center justify-center",
+                    activeViewMode === 'table' ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                   )}
                   title="Table Grid View"
                 >
@@ -756,8 +763,8 @@ export function Table<T extends { id: string | number }>({
                   type="button"
                   onClick={() => setViewMode('chart')}
                   className={cn(
-                    "p-1 rounded text-xs font-medium transition-all cursor-pointer",
-                    activeViewMode === 'chart' ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                    "h-6.5 px-1.5 rounded-md text-xs font-medium transition-all cursor-pointer flex items-center justify-center",
+                    activeViewMode === 'chart' ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                   )}
                   title="Instant Chart Visualizer"
                 >
@@ -773,12 +780,12 @@ export function Table<T extends { id: string | number }>({
                 size="sm"
                 onClick={() => setEditMode(!isEditMode)}
                 className={cn(
-                  "h-7 text-xs font-semibold gap-1.5 transition-all px-2.5",
-                  isEditMode ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-sm shadow-amber-500/20" : "text-zinc-700 dark:text-zinc-300"
+                  "h-7.5 text-xs font-medium gap-1.5 transition-all px-2.5 rounded-lg shadow-2xs",
+                  isEditMode ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600" : "text-zinc-700 dark:text-zinc-300"
                 )}
                 title="Toggle Excel-style keyboard navigation and multi-cell edit mode"
               >
-                <Edit3 size={12} />
+                <Edit3 size={13} />
                 <span>{isEditMode ? 'Exit Edit' : 'Edit Mode'}</span>
               </Button>
             )}
@@ -813,10 +820,10 @@ export function Table<T extends { id: string | number }>({
         </div>
       ) : (
         /* VIEW MODE 3: STANDARD HIGH-SPEED READ & TRIAGE GRID (DEFAULT) */
-        <div className="overflow-auto custom-scrollbar flex-1 min-h-0 relative">
+        <div className="overflow-auto custom-scrollbar flex-1 min-h-0 relative bg-white dark:bg-[#101010]">
           <table className={cn("w-full text-left border-separate border-spacing-0", bodyTextSize)}>
             <thead className={cn(
-              "bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500",
+              "bg-zinc-100 dark:bg-zinc-900 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500",
               stickyHeader && "sticky top-0 z-20",
               headerTextSize
             )}>
@@ -847,6 +854,9 @@ export function Table<T extends { id: string | number }>({
                   const matchingFilterField = colFilterKey ? computedFilterFields.find(f => f.id === colFilterKey || f.label.toLowerCase() === col.header.toLowerCase()) : null;
                   const isFilterActiveOnCol = matchingFilterField ? activeFilterState.clauses.some(c => c.fieldId === matchingFilterField.id) : false;
 
+                  const isStickyRight = col.sticky === 'right';
+                  const isStickyLeft = col.sticky === 'left';
+
                   return (
                     <th 
                       key={idx} 
@@ -856,9 +866,16 @@ export function Table<T extends { id: string | number }>({
                         isLastCol && noContainer && !hasCustomPadding && "pr-6",
                         col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
                         'transition-colors text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 select-none group relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none',
-                        isSortable && 'cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-200'
+                        isSortable && 'cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-200',
+                        isStickyRight && "sticky right-0 bg-zinc-100 dark:bg-zinc-900 z-20 shadow-[-4px_0_8px_rgba(0,0,0,0.04)] dark:shadow-[-4px_0_8px_rgba(0,0,0,0.2)]",
+                        isStickyLeft && "sticky left-0 bg-zinc-100 dark:bg-zinc-900 z-20 shadow-[4px_0_8px_rgba(0,0,0,0.04)] dark:shadow-[4px_0_8px_rgba(0,0,0,0.2)]"
                       )}
-                      style={{ width: col.width, ...col.style }}
+                      style={{ 
+                        width: col.width, 
+                        minWidth: col.minWidth || col.width, 
+                        maxWidth: col.maxWidth,
+                        ...col.style 
+                      }}
                       onClick={() => isSortable && handleSort(col)}
                     >
                       <div className={cn(
@@ -897,17 +914,16 @@ export function Table<T extends { id: string | number }>({
 
                 {/* Contextual Row Action Column */}
                 {(rowActions || renderRowActions) && (
-                  <th className="w-12 text-center text-[10px] font-bold uppercase tracking-wider text-zinc-400 py-2 relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none">
+                  <th className={cn("w-12 text-center text-[10px] font-bold uppercase tracking-wider text-zinc-400 py-2 relative after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[1px] after:bg-zinc-200/50 dark:after:bg-zinc-800/50 after:pointer-events-none", noContainer ? "pr-6" : "px-3")}>
                     Actions
                   </th>
                 )}
               </tr>
             </thead>
-
-            <tbody>
+            <tbody className="bg-white dark:bg-[#101010]">
               {loading ? (
                 Array.from({ length: currentPageSize }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
+                  <tr key={i} className="animate-pulse bg-white dark:bg-[#101010]">
                     {enableSelection && (
                       <td className={cn("w-12 text-center border-b border-zinc-200/50 dark:border-zinc-800/50", checkboxPaddingClass, noContainer ? "pl-6 pr-2" : "px-3")}>
                         <Skeleton variant="rounded" className="w-4 h-4 rounded-md mx-auto" />
@@ -922,7 +938,7 @@ export function Table<T extends { id: string | number }>({
                   </tr>
                 ))
               ) : paginatedData.length === 0 ? (
-                <tr>
+                <tr className="bg-white dark:bg-[#101010]">
                   <td 
                     colSpan={columns.length + (enableSelection ? 1 : 0) + (rowActions || renderRowActions ? 1 : 0)} 
                     className="py-16 text-center"
@@ -971,8 +987,8 @@ export function Table<T extends { id: string | number }>({
                             key={String(rowId)} 
                             onClick={() => onRowClick?.(item)}
                             className={cn(
-                              'group transition-colors duration-100',
-                              isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-white/[0.02]',
+                              'group transition-colors duration-100 bg-white dark:bg-[#101010]',
+                              isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60',
                               onRowClick && 'cursor-pointer'
                             )}
                           >
@@ -990,24 +1006,35 @@ export function Table<T extends { id: string | number }>({
                               </td>
                             )}
 
-                            {columns.map((col, idx) => (
-                              <td 
-                                key={idx} 
-                                className={cn(
-                                  paddingClass,
-                                  col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                                  'text-zinc-700 dark:text-zinc-300 align-middle border-b border-zinc-200/50 dark:border-zinc-800/50', 
-                                  col.className
-                                )} 
-                                style={{ width: col.width, ...col.style }}
-                              >
-                                {renderCellContent(item, col)}
-                              </td>
-                            ))}
+                            {columns.map((col, idx) => {
+                              const isStickyRight = col.sticky === 'right';
+                              const isStickyLeft = col.sticky === 'left';
+                              return (
+                                <td 
+                                  key={idx} 
+                                  className={cn(
+                                    paddingClass,
+                                    col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
+                                    'text-zinc-700 dark:text-zinc-300 align-middle border-b border-zinc-200/50 dark:border-zinc-800/50', 
+                                    col.className,
+                                    isStickyRight && "sticky right-0 bg-white dark:bg-[#101010] z-10 group-hover:bg-zinc-50/90 dark:group-hover:bg-zinc-900/90 shadow-[-4px_0_8px_rgba(0,0,0,0.04)] dark:shadow-[-4px_0_8px_rgba(0,0,0,0.2)]",
+                                    isStickyLeft && "sticky left-0 bg-white dark:bg-[#101010] z-10 group-hover:bg-zinc-50/90 dark:group-hover:bg-zinc-900/90 shadow-[4px_0_8px_rgba(0,0,0,0.04)] dark:shadow-[4px_0_8px_rgba(0,0,0,0.2)]"
+                                  )} 
+                                  style={{ 
+                                    width: col.width, 
+                                    minWidth: col.minWidth || col.width, 
+                                    maxWidth: col.maxWidth,
+                                    ...col.style 
+                                  }}
+                                >
+                                  {renderCellContent(item, col)}
+                                </td>
+                              );
+                            })}
 
                             {(rowActions || renderRowActions) && (
                               <td 
-                                className="w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50"
+                                className={cn("w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50", noContainer ? "pr-6" : "px-3")}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {renderRowActions ? (
@@ -1033,15 +1060,10 @@ export function Table<T extends { id: string | number }>({
                                                 setActiveRowActionMenuId(null);
                                                 act.onClick(item);
                                               }}
-                                              className={cn(
-                                                "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors",
-                                                act.variant === 'danger' 
-                                                  ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40" 
-                                                  : "text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                              )}
+                                              className="w-full text-left px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg flex items-center gap-2 text-zinc-700 dark:text-zinc-300 disabled:opacity-50"
                                             >
                                               {act.icon}
-                                              <span className="truncate">{act.label}</span>
+                                              {act.label}
                                             </button>
                                           ))}
                                         </div>
@@ -1068,8 +1090,8 @@ export function Table<T extends { id: string | number }>({
                       key={String(rowId)} 
                       onClick={() => onRowClick?.(item)}
                       className={cn(
-                        'group transition-colors duration-100',
-                        isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-white/[0.02]',
+                        'group transition-colors duration-100 bg-white dark:bg-[#101010]',
+                        isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60',
                         onRowClick && 'cursor-pointer'
                       )}
                     >
@@ -1087,24 +1109,35 @@ export function Table<T extends { id: string | number }>({
                         </td>
                       )}
 
-                      {columns.map((col, idx) => (
-                        <td 
-                          key={idx} 
-                          className={cn(
-                            paddingClass,
-                            col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
-                            'text-zinc-700 dark:text-zinc-300 align-middle border-b border-zinc-200/50 dark:border-zinc-800/50', 
-                            col.className
-                          )} 
-                          style={{ width: col.width, ...col.style }}
-                        >
-                          {renderCellContent(item, col)}
-                        </td>
-                      ))}
+                      {columns.map((col, idx) => {
+                        const isStickyRight = col.sticky === 'right';
+                        const isStickyLeft = col.sticky === 'left';
+                        return (
+                          <td 
+                            key={idx} 
+                            className={cn(
+                              paddingClass,
+                              col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left',
+                              'text-zinc-700 dark:text-zinc-300 align-middle border-b border-zinc-200/50 dark:border-zinc-800/50', 
+                              col.className,
+                              isStickyRight && "sticky right-0 bg-white dark:bg-[#101010] z-10 group-hover:bg-zinc-50/90 dark:group-hover:bg-zinc-900/90 shadow-[-4px_0_8px_rgba(0,0,0,0.04)] dark:shadow-[-4px_0_8px_rgba(0,0,0,0.2)]",
+                              isStickyLeft && "sticky left-0 bg-white dark:bg-[#101010] z-10 group-hover:bg-zinc-50/90 dark:group-hover:bg-zinc-900/90 shadow-[4px_0_8px_rgba(0,0,0,0.04)] dark:shadow-[4px_0_8px_rgba(0,0,0,0.2)]"
+                            )} 
+                            style={{ 
+                              width: col.width, 
+                              minWidth: col.minWidth || col.width, 
+                              maxWidth: col.maxWidth,
+                              ...col.style 
+                            }}
+                          >
+                            {renderCellContent(item, col)}
+                          </td>
+                        );
+                      })}
 
                       {(rowActions || renderRowActions) && (
                         <td 
-                          className="w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50"
+                          className={cn("w-12 text-center align-middle border-b border-zinc-200/50 dark:border-zinc-800/50", noContainer ? "pr-6" : "px-3")}
                           onClick={(e) => e.stopPropagation()}
                         >
                           {renderRowActions ? (
@@ -1256,6 +1289,30 @@ export function Table<T extends { id: string | number }>({
                   </div>
                 )}
 
+                {onBulkMove && (
+                  <button
+                    type="button"
+                    onClick={() => onBulkMove(Array.from(selectedSet), selectedItems, clearSelection)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                    title="Move selected to another module"
+                  >
+                    <FolderInput size={13} className="text-zinc-400" />
+                    <span>Move</span>
+                  </button>
+                )}
+
+                {onBulkStar && (
+                  <button
+                    type="button"
+                    onClick={() => onBulkStar(Array.from(selectedSet), selectedItems, true, clearSelection)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
+                    title="Star selected records"
+                  >
+                    <Star size={13} className="fill-amber-400 text-amber-400" />
+                    <span className="hidden sm:inline">Star</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleDefaultExport}
@@ -1289,7 +1346,7 @@ export function Table<T extends { id: string | number }>({
       {/* Pagination & Footer Bar */}
       {pagination && activeViewMode === 'table' && (
         totalItems > 0 ? (
-          <div className="h-12 flex flex-col sm:flex-row items-center justify-between border-t border-zinc-200 dark:border-zinc-800 px-6 gap-3 bg-white/30 dark:bg-zinc-900/30 backdrop-blur-md shrink-0">
+          <div className="h-12 flex flex-col sm:flex-row items-center justify-between border-t border-zinc-200 dark:border-zinc-800 px-6 gap-3 bg-zinc-50 dark:bg-zinc-900 shrink-0">
             <div className="flex items-center gap-3">
               <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
                 Showing <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}</span> to <span className="text-zinc-900 dark:text-zinc-100">{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span> records
