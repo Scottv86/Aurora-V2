@@ -5229,7 +5229,7 @@ export const ModuleView = () => {
               className="flex items-center gap-1.5 h-7.5 pl-3 pr-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-l-lg font-semibold text-xs transition-all cursor-pointer select-none border-r border-indigo-700/60 active:scale-[0.98]"
             >
               <Plus size={13} />
-              <span>{createForm?.settings?.workspaceButtonLabel || 'Create'}</span>
+              <span>{createForm?.settings?.workspaceButtonLabel && createForm.settings.workspaceButtonLabel !== 'New Entry' ? createForm.settings.workspaceButtonLabel : 'Create'}</span>
             </button>
 
             {/* Dropdown Toggle Caret */}

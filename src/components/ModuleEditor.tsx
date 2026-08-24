@@ -1855,7 +1855,7 @@ export const ModuleEditor = () => {
         submitLabel: 'Create',
         successMessage: 'Record created successfully!',
         description: 'Default form for creating new records in this module.',
-        workspaceButtonLabel: 'New Entry'
+        workspaceButtonLabel: 'Create'
       } 
     }
   ]);
@@ -8610,7 +8610,7 @@ export const ModuleEditor = () => {
                           className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-all"
                         >
                           <Plus size={14} />
-                          {forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel || 'Create New'}
+                          {forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel && forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel !== 'New Entry' ? forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel : 'Create'}
                         </button>
                       </div>
 
@@ -9848,7 +9848,7 @@ export const ModuleEditor = () => {
                         settings: { 
                           requireLogin: true, 
                           submitLabel: 'Submit',
-                          workspaceButtonLabel: hasCreateForm ? undefined : 'New Entry'
+                          workspaceButtonLabel: hasCreateForm ? undefined : 'Create'
                         }
                       };
                       setForms([...forms, newForm]);
@@ -10590,7 +10590,7 @@ export const ModuleEditor = () => {
                                     <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Workspace Button Label</label>
                                     <input 
                                       type="text" 
-                                      placeholder="New Entry"
+                                      placeholder="Create"
                                       value={selectedForm.settings?.workspaceButtonLabel || ''}
                                       onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { 
                                         ...f, 
