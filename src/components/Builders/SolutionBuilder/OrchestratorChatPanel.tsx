@@ -114,7 +114,7 @@ export const OrchestratorChatPanel: React.FC<OrchestratorChatPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/60 dark:border-white/10 rounded-3xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-none p-5 relative">
+    <div className="flex flex-col h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-none p-5 relative">
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-zinc-200/60 dark:border-white/5">
         <div className="flex items-center gap-2">

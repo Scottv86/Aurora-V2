@@ -957,7 +957,7 @@ export const TableFilterBar: React.FC<TableFilterBarProps> = ({
   const activeEditingFieldDef = activeEditingClause ? fieldMap.get(activeEditingClause.fieldId) : undefined;
 
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-2 px-6 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 min-h-[40px] h-10 shrink-0", className)}>
+    <div className={cn("flex flex-wrap items-center justify-between gap-2 px-6 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 min-h-[40px] shrink-0 py-1 sm:py-0", className)}>
       {/* Left side items: Title/LeftSlot + Saved Views + Filter + Pills */}
       <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
         {leftSlot}

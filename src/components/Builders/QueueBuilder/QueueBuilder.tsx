@@ -1,14 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Layers, Settings, Filter, Table, Play, Save, X, Plus, Trash2,
-  Sparkles, Check, ChevronRight
+  Sparkles, Check, ChevronRight, Palette, Edit3, Sliders, AlertTriangle
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
-import { QueueEntity } from '../../../types/platform';
+import { QueueEntity, ConditionalFormattingRule } from '../../../types/platform';
 import { Button } from '../../UI/Primitives';
 import { DynamicIcon } from '../../UI/DynamicIcon';
 import { QueueRenderer } from './QueueRenderer';
-import { flattenFields, slugify, cn } from '../../../lib/utils';
+import { ConditionalFormattingModal } from '../../Builder/ConditionalFormattingModal';
+import { flattenFields, slugify, cn, PRESET_FORMATTING_MAP } from '../../../lib/utils';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
 import { toast } from 'sonner';
 
@@ -51,7 +52,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   }, [modules]);
 
   // Form state
-  const [activeTab, setActiveTab] = useState<'general' | 'filters' | 'columns' | 'preview'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'filters' | 'columns' | 'formatting' | 'preview'>('general');
   const [name, setName] = useState(initialQueue?.name || 'New Work Queue');
   const [description, setDescription] = useState(initialQueue?.description || '');
   const [iconName, setIconName] = useState(initialQueue?.iconName || 'ListOrdered');
@@ -79,6 +80,13 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   const [rules, setRules] = useState<any[]>(() => {
     return initialQueue?.queueConfig?.conditions?.rules || [];
   });
+
+  // Conditional Formatting Rules
+  const [formattingRules, setFormattingRules] = useState<ConditionalFormattingRule[]>(() => {
+    return initialQueue?.queueConfig?.formattingRules || [];
+  });
+  const [editingFormattingRule, setEditingFormattingRule] = useState<ConditionalFormattingRule | null>(null);
+  const [isFormattingModalOpen, setIsFormattingModalOpen] = useState(false);
 
   // Display Columns
   const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
@@ -204,7 +212,8 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
           rules: rules.filter(r => r.fieldId)
         },
         columns: selectedColumns.length > 0 ? selectedColumns : ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'],
-        defaultSort: { key: defaultSortKey, direction: defaultSortDir }
+        defaultSort: { key: defaultSortKey, direction: defaultSortDir },
+        formattingRules
       },
       version: (initialQueue?.version || 0) + 1,
       status: 'PUBLISHED',
@@ -232,15 +241,16 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
         rules: rules.filter(r => r.fieldId)
       },
       columns: selectedColumns,
-      defaultSort: { key: defaultSortKey, direction: defaultSortDir }
+      defaultSort: { key: defaultSortKey, direction: defaultSortDir },
+      formattingRules
     },
     status: 'PUBLISHED'
-  }), [initialQueue, tenant?.id, name, description, iconName, isUnifiedQueue, moduleId, currentTargetModuleIds, rules, selectedColumns, defaultSortKey, defaultSortDir]);
+  }), [initialQueue, tenant?.id, name, description, iconName, isUnifiedQueue, moduleId, currentTargetModuleIds, rules, selectedColumns, defaultSortKey, defaultSortDir, formattingRules]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white select-none">
       {/* Studio Header */}
-      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/40 shrink-0">
+      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 shrink-0">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
             <DynamicIcon name={iconName} size={20} />
@@ -275,12 +285,13 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shrink-0 text-xs font-bold">
+      <div className="flex items-center gap-2 px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 text-xs font-bold">
         {[
           { id: 'general', label: '1. General & Scope', icon: Settings },
           { id: 'filters', label: '2. Filter Rules & Sort', icon: Filter, count: rules.length },
           { id: 'columns', label: '3. Display Columns', icon: Table, count: selectedColumns.length },
-          { id: 'preview', label: '4. Live Preview', icon: Play }
+          { id: 'formatting', label: '4. Conditional Formatting', icon: Palette, count: formattingRules.length },
+          { id: 'preview', label: '5. Live Preview', icon: Play }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -304,7 +315,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
       </div>
 
       {/* Tab Canvas Body */}
-      <div className="flex-1 overflow-y-auto p-6 bg-zinc-50/40 dark:bg-zinc-900/10 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-6 bg-zinc-100 dark:bg-zinc-950 custom-scrollbar">
         
         {/* TAB 1: General & Scope */}
         {activeTab === 'general' && (
@@ -660,6 +671,154 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
               <Button onClick={() => setActiveTab('filters')} variant="ghost" size="sm" className="text-xs">
                 Back
               </Button>
+              <Button onClick={() => setActiveTab('formatting')} variant="secondary" size="sm" className="gap-1.5 text-xs font-bold">
+                Next: Conditional Formatting <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: Conditional Formatting */}
+        {activeTab === 'formatting' && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                    <Palette size={14} className="text-indigo-500" /> Dynamic Formatting Rules
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Highlight rows or decorate specific cells dynamically based on conditions (e.g. overdue SLAs, critical priority).
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setEditingFormattingRule(null);
+                    setIsFormattingModalOpen(true);
+                  }}
+                  className="gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 hover:border-indigo-300"
+                >
+                  <Plus size={14} /> Add Formatting Rule
+                </Button>
+              </div>
+
+              {formattingRules.length === 0 ? (
+                <div className="p-8 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3 bg-zinc-50/50 dark:bg-zinc-950/30">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto border border-indigo-500/20">
+                    <Palette size={20} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">No formatting rules configured</p>
+                    <p className="text-[11px] text-zinc-400 max-w-sm mx-auto">
+                      Add rules to automatically color-code high priority cases, overdue tickets, or status tags.
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setEditingFormattingRule(null);
+                      setIsFormattingModalOpen(true);
+                    }}
+                    className="text-xs gap-1.5"
+                  >
+                    <Plus size={13} /> Create First Rule
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {formattingRules.map((rule, idx) => {
+                    const presetCfg = PRESET_FORMATTING_MAP[rule.style?.preset || 'danger'] || PRESET_FORMATTING_MAP.danger;
+                    return (
+                      <div
+                        key={rule.id || idx}
+                        className={cn(
+                          "p-4 rounded-xl border transition-all flex items-center justify-between gap-4",
+                          rule.enabled ? "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800" : "bg-zinc-50 dark:bg-zinc-900/40 opacity-60 border-dashed border-zinc-200 dark:border-zinc-800"
+                        )}
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {/* Color Chip */}
+                          <div className={cn("w-8 h-8 rounded-xl border flex items-center justify-center shrink-0", presetCfg.cellBadgeClass)}>
+                            <div className={cn("w-3 h-3 rounded-full", presetCfg.accentBg)} />
+                          </div>
+
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                                {rule.name || `Formatting Rule #${idx + 1}`}
+                              </span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                {rule.targetType === 'row' ? 'Entire Row' : `Column: ${rule.targetId}`}
+                              </span>
+                              {rule.style?.badgeLabel && (
+                                <span className={cn("text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase", presetCfg.cellBadgeClass)}>
+                                  {rule.style.badgeLabel}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-zinc-400 font-mono truncate">
+                              When: {rule.condition?.type === 'group'
+                                ? `Group (${rule.condition.rules?.length || 0} conditions)`
+                                : `${rule.condition?.fieldId || 'field'} ${rule.condition?.operator || 'equals'} "${rule.condition?.value ?? ''}"`
+                              }
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Toggle Active */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormattingRules(formattingRules.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r));
+                            }}
+                            className={cn(
+                              "px-2 py-1 text-[10px] font-bold rounded-lg transition-colors cursor-pointer",
+                              rule.enabled ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
+                            )}
+                          >
+                            {rule.enabled ? 'Active' : 'Disabled'}
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingFormattingRule(rule);
+                              setIsFormattingModalOpen(true);
+                            }}
+                            className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                            title="Edit rule"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormattingRules(formattingRules.filter(r => r.id !== rule.id));
+                            }}
+                            className="p-1.5 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                            title="Delete rule"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between">
+              <Button onClick={() => setActiveTab('columns')} variant="ghost" size="sm" className="text-xs">
+                Back
+              </Button>
               <Button onClick={() => setActiveTab('preview')} variant="primary" size="sm" className="gap-1.5 text-xs font-bold">
                 Test Live Preview <Play size={14} />
               </Button>
@@ -667,7 +826,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
           </div>
         )}
 
-        {/* TAB 4: Live Preview */}
+        {/* TAB 5: Live Preview */}
         {activeTab === 'preview' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 text-xs">
@@ -675,7 +834,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
                 <Sparkles size={16} />
                 <span className="font-bold">Live Simulation Mode:</span>
                 <span className="text-zinc-600 dark:text-zinc-300">
-                  Showing live data matching {rules.length} condition rules across {currentTargetModuleIds.length} modules.
+                  Showing live data with {formattingRules.filter(r => r.enabled).length} active formatting rules matching {rules.length} query conditions.
                 </span>
               </div>
             </div>
@@ -691,6 +850,32 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
         )}
 
       </div>
+
+      {/* Formatting Modal */}
+      {isFormattingModalOpen && (
+        <ConditionalFormattingModal
+          isOpen={isFormattingModalOpen}
+          onClose={() => {
+            setIsFormattingModalOpen(false);
+            setEditingFormattingRule(null);
+          }}
+          onSave={(savedRule) => {
+            if (editingFormattingRule) {
+              setFormattingRules(formattingRules.map(r => r.id === savedRule.id ? savedRule : r));
+            } else {
+              setFormattingRules([...formattingRules, savedRule]);
+            }
+            setIsFormattingModalOpen(false);
+            setEditingFormattingRule(null);
+          }}
+          initialRule={editingFormattingRule}
+          availableFields={availableFields}
+          allowedTargetTypes={['row', 'column']}
+          availableColumns={availableColumnOptions}
+          title={editingFormattingRule ? "Edit Formatting Rule" : "Add Formatting Rule"}
+        />
+      )}
     </div>
   );
 };
+

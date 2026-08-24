@@ -150,7 +150,7 @@ export const ContextInputsPanel: React.FC<ContextInputsPanelProps> = ({
   );
 
   return (
-    <div className="flex flex-col h-full bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/60 dark:border-white/10 rounded-3xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-none p-5 space-y-4">
+    <div className="flex flex-col h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-none p-5 space-y-4">
       {/* Hidden file input */}
       <input
         type="file"

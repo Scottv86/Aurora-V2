@@ -1294,7 +1294,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/60 dark:border-white/10 rounded-3xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-none p-5 relative">
+    <div className="flex flex-col h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-none p-5 relative">
       {viewMode === 'grid' ? (
         /* NotebookLM Studio Tile Grid View */
         <div className="flex-1 flex flex-col min-h-0 space-y-4">

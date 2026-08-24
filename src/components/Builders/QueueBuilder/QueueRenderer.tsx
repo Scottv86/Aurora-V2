@@ -9,13 +9,14 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { DATA_API_URL, API_BASE_URL } from '../../../config';
 import { fetchRecords } from '../../../services/dataService';
-import { checkCondition, getFieldValue, cn, flattenFields, slugify } from '../../../lib/utils';
+import { checkCondition, getFieldValue, cn, flattenFields, slugify, evaluateFormattingRules } from '../../../lib/utils';
 import { UserAvatarWithPresence } from '../../Common/UserPresenceBadge';
 import { QueueEntity } from '../../../types/platform';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
 import { Table, Column } from '../../UI/Table';
 import { ShareRecordModal } from '../../Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../Platform/MoveRecordModal';
+import { BulkPasteRecordModal } from '../../Platform/BulkPasteRecordModal';
 
 const InlineAssigneeCell = ({
   record,
@@ -294,6 +295,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   const [recordToDelete, setRecordToDelete] = useState<any | null>(null);
   const [recordToShare, setRecordToShare] = useState<any | null>(null);
   const [recordsToMove, setRecordsToMove] = useState<any[] | null>(null);
+  const [showBulkPasteModal, setShowBulkPasteModal] = useState(false);
   const [pageSize, setPageSize] = useState<number>(customPageSize || 10);
 
   const hasInlineConfig = Boolean(overrideConfig || propModuleId || (propModuleIds && propModuleIds.length > 0));
@@ -467,6 +469,13 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     return [];
   }, [activeQueue, modules]);
 
+  const targetBulkModule = useMemo(() => {
+    if (!activeQueue) return null;
+    const targetModuleId = activeQueue.moduleId || (activeQueue.moduleIds && activeQueue.moduleIds[0]) || (targetModuleIds.length > 0 ? targetModuleIds[0] : null);
+    if (!targetModuleId) return null;
+    return modules?.find((m: any) => m.id === targetModuleId) || null;
+  }, [activeQueue, targetModuleIds, modules]);
+
   // Fetch records across all target modules
   const { data: rawRecords = [], isLoading: recordsQueryLoading } = useQuery<any[]>({
     queryKey: ['queue-renderer-records', tenant?.id, targetModuleIds.sort().join(','), session?.access_token],
@@ -558,6 +567,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+      queryClient.invalidateQueries({ queryKey: ['records'] });
       toast.success('Assignee updated');
     },
     onError: (err: any) => {
@@ -584,12 +594,79 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+      queryClient.invalidateQueries({ queryKey: ['records'] });
       toast.success('Updated selected records');
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to update selected records');
     }
   });
+
+  // Optimistic helper for starring records in cache
+  const updateCachedRecordsStarred = (targetIds: (string | number)[], star: boolean) => {
+    const targetIdSet = new Set(targetIds.map(String));
+    const effectiveUserId = (platformUser as any)?.memberId || (platformUser as any)?.cuid || (platformUser as any)?.id || (session?.user as any)?.id || 'anonymous';
+
+    // 1. Update queue-renderer-records queries
+    queryClient.setQueriesData({ queryKey: ['queue-renderer-records'] }, (old: any) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((r: any) => {
+        if (!targetIdSet.has(String(r.id))) return r;
+        const currentList = Array.isArray(r._starredUserIds) ? r._starredUserIds : [];
+        const updatedList = star
+          ? Array.from(new Set([...currentList, effectiveUserId]))
+          : currentList.filter((uid: string) => uid !== effectiveUserId);
+        return {
+          ...r,
+          _starredUserIds: updatedList,
+          is_starred: star,
+          _is_starred: star,
+          data: r.data ? { ...r.data, _starredUserIds: updatedList } : r.data
+        };
+      });
+    });
+
+    // 2. Update standard records queries
+    queryClient.setQueriesData({ queryKey: ['records'] }, (old: any) => {
+      if (!old) return old;
+      if (Array.isArray(old)) {
+        return old.map((r: any) => {
+          if (!targetIdSet.has(String(r.id))) return r;
+          const currentList = Array.isArray(r._starredUserIds) ? r._starredUserIds : [];
+          const updatedList = star
+            ? Array.from(new Set([...currentList, effectiveUserId]))
+            : currentList.filter((uid: string) => uid !== effectiveUserId);
+          return {
+            ...r,
+            _starredUserIds: updatedList,
+            is_starred: star,
+            _is_starred: star,
+            data: r.data ? { ...r.data, _starredUserIds: updatedList } : r.data
+          };
+        });
+      }
+      if (Array.isArray(old.records)) {
+        return {
+          ...old,
+          records: old.records.map((r: any) => {
+            if (!targetIdSet.has(String(r.id))) return r;
+            const currentList = Array.isArray(r._starredUserIds) ? r._starredUserIds : [];
+            const updatedList = star
+              ? Array.from(new Set([...currentList, effectiveUserId]))
+              : currentList.filter((uid: string) => uid !== effectiveUserId);
+            return {
+              ...r,
+              _starredUserIds: updatedList,
+              is_starred: star,
+              _is_starred: star,
+              data: r.data ? { ...r.data, _starredUserIds: updatedList } : r.data
+            };
+          })
+        };
+      }
+      return old;
+    });
+  };
 
   // Single delete mutation
   const singleDeleteMutation = useMutation({
@@ -686,31 +763,46 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       return <span className="text-zinc-400 dark:text-zinc-600">-</span>;
     }
 
+    let baseContent: React.ReactNode;
+
     switch (colId) {
       case 'id':
       case '_record_key':
-      case 'key':
-        return (
-          <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
-            {record._record_key || record.key || record.id || '-'}
+      case 'key': {
+        const rowFmt = evaluateFormattingRules(activeQueue?.queueConfig?.formattingRules, record, visibilityContext, { targetType: 'row' });
+        const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+        baseContent = (
+          <span className="inline-flex items-center gap-1.5 text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
+            {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+            <span>{record._record_key || record.key || record.id || '-'}</span>
+            {rowFmt.hasMatch && rowFmt.badgeLabel && (
+              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 ml-0.5">
+                {rowFmt.badgeLabel}
+              </span>
+            )}
           </span>
         );
+        break;
+      }
       case 'moduleId':
-        return (
+        baseContent = (
           <span className="text-xs text-zinc-700 dark:text-zinc-300 truncate">
             {getRecordModuleName(record)}
           </span>
         );
+        break;
       case 'title':
-        return <span className="text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1">{String(value)}</span>;
+        baseContent = <span className="text-xs text-zinc-800 dark:text-zinc-200 line-clamp-1">{String(value)}</span>;
+        break;
       case 'status':
-        return (
+        baseContent = (
           <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20 inline-block">
             {String(value)}
           </span>
         );
+        break;
       case 'priority':
-        return (
+        baseContent = (
           <span className={cn(
             "px-2 py-0.5 rounded-full text-[10px] font-bold border inline-block",
             String(value).toLowerCase().includes('high') || String(value).toLowerCase().includes('critical')
@@ -722,8 +814,9 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
             {String(value)}
           </span>
         );
+        break;
       case 'assigneeId': {
-        return (
+        baseContent = (
           <InlineAssigneeCell
             record={record}
             members={members}
@@ -731,22 +824,58 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
             updateMutation={updateMutation}
           />
         );
+        break;
       }
       case 'createdAt':
-        return (
+        baseContent = (
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
             {value ? new Date(value).toLocaleDateString() : 'Just now'}
           </span>
         );
+        break;
       case 'updatedAt':
-        return (
+        baseContent = (
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
             {value ? new Date(value).toLocaleDateString() : 'Just now'}
           </span>
         );
+        break;
       default:
-        return <span className="text-xs text-zinc-700 dark:text-zinc-300">{valOrDash(value)}</span>;
+        baseContent = <span className="text-xs text-zinc-700 dark:text-zinc-300">{valOrDash(value)}</span>;
+        break;
     }
+
+    // Evaluate column-level conditional formatting rules
+    const fmtResult = evaluateFormattingRules(
+      activeQueue?.queueConfig?.formattingRules,
+      record,
+      visibilityContext,
+      { targetType: 'column', targetId: colId }
+    );
+
+    if (fmtResult.hasMatch) {
+      const IconComp = fmtResult.iconName ? (LucideIcons as any)[fmtResult.iconName] : null;
+      return (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5",
+            fmtResult.textClassName,
+            fmtResult.cellBadgeClassName && cn("px-2 py-0.5 rounded-full text-[10px] font-bold border", fmtResult.cellBadgeClassName)
+          )}
+          style={fmtResult.customStyle}
+        >
+          {IconComp && <IconComp size={12} className={cn("shrink-0", fmtResult.iconColor)} />}
+          <span>{baseContent}</span>
+          {fmtResult.badgeLabel && (
+            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 ml-0.5">
+              {fmtResult.badgeLabel}
+            </span>
+          )}
+        </span>
+      );
+    }
+
+    return baseContent;
   };
 
   const valOrDash = (v: any) => {
@@ -892,6 +1021,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 onClick={async () => {
                   const nextStarred = !isStarred;
                   const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+                  updateCachedRecordsStarred([record.id], nextStarred);
                   try {
                     await fetch(`${DATA_API_URL}/records/${record.id}/star`, {
                       method: 'POST',
@@ -904,8 +1034,12 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                     });
                     toast.success(nextStarred ? `Starred ${record._record_key || 'record'}` : `Unstarred ${record._record_key || 'record'}`);
                     queryClient.invalidateQueries({ queryKey: ['records'] });
+                    queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
                   } catch (err: any) {
+                    updateCachedRecordsStarred([record.id], isStarred);
                     toast.error(err.message || 'Failed to update star');
+                    queryClient.invalidateQueries({ queryKey: ['records'] });
+                    queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
                   }
                 }}
                 className={cn(
@@ -954,6 +1088,24 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         className="h-full flex-1 w-full"
         data={filteredRecords}
         columns={tableColumns}
+        rowClassName={(record) => {
+          const res = evaluateFormattingRules(
+            activeQueue?.queueConfig?.formattingRules,
+            record,
+            visibilityContext,
+            { targetType: 'row' }
+          );
+          return res.hasMatch ? res.rowClassName : undefined;
+        }}
+        rowStyle={(record) => {
+          const res = evaluateFormattingRules(
+            activeQueue?.queueConfig?.formattingRules,
+            record,
+            visibilityContext,
+            { targetType: 'row' }
+          );
+          return res.hasMatch && Object.keys(res.customStyle).length > 0 ? res.customStyle : undefined;
+        }}
         loading={recordsQueryLoading || platformLoading}
         pageSize={pageSize}
         onPageSizeChange={setPageSize}
@@ -971,11 +1123,25 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         statusOptions={['Open', 'In Progress', 'Under Review', 'Completed', 'Closed']}
         title={showHeader ? activeQueue?.name : undefined}
         subtitle={showHeader ? activeQueue?.description : undefined}
+        headerActions={
+          !readOnly && targetBulkModule ? (
+            <button
+              type="button"
+              onClick={() => setShowBulkPasteModal(true)}
+              className="flex items-center gap-1.5 h-8 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl font-semibold text-xs transition-all shadow-xs cursor-pointer select-none border border-zinc-200 dark:border-zinc-700"
+              title="Import or paste from Excel / Google Sheets"
+            >
+              <LucideIcons.ClipboardPaste size={13} className="text-zinc-400 dark:text-zinc-400" />
+              <span>Paste/Upload</span>
+            </button>
+          ) : undefined
+        }
         searchable={searchable ?? true}
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search queue records..."
         noContainer={noContainer}
+
         onRowClick={(record) => {
           if (onRowClick) {
             onRowClick(record);
@@ -1006,6 +1172,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         }}
         onBulkStar={async (selectedIds, _selectedItems, star, clearSelection) => {
           const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+          updateCachedRecordsStarred(selectedIds, star);
+          clearSelection();
           try {
             await fetch(`${DATA_API_URL}/records/star-batch`, {
               method: 'POST',
@@ -1018,9 +1186,12 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
             });
             toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
             queryClient.invalidateQueries({ queryKey: ['records'] });
-            clearSelection();
+            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
           } catch (err: any) {
+            updateCachedRecordsStarred(selectedIds, !star);
             toast.error(err.message || 'Failed to update star for records');
+            queryClient.invalidateQueries({ queryKey: ['records'] });
+            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
           }
         }}
         onBulkDelete={(_selectedIds, selectedItems, clearSelection) => {
@@ -1116,7 +1287,26 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
           sourceModuleName={getRecordModuleName(recordsToMove[0])}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['records'] });
+            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
             setRecordsToMove(null);
+          }}
+        />
+      )}
+
+      {/* Bulk Paste from Excel / Sheets Modal */}
+      {showBulkPasteModal && targetBulkModule && (
+        <BulkPasteRecordModal
+          isOpen={showBulkPasteModal}
+          onClose={() => setShowBulkPasteModal(false)}
+          module={targetBulkModule}
+          tenantId={tenant?.id || ''}
+          token={(import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || ''}
+          defaultValues={{
+            status: 'Open'
+          }}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['records'] });
+            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
           }}
         />
       )}

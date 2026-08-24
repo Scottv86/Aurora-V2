@@ -215,7 +215,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
       ) : (
         <div className="flex-1 flex overflow-hidden">
           {/* Center 12-Column Grid Canvas */}
-          <div className="flex-1 p-6 overflow-y-auto bg-zinc-100/40 dark:bg-zinc-950/40 space-y-4">
+          <div className="flex-1 p-6 overflow-y-auto bg-zinc-100 dark:bg-zinc-950 space-y-4">
             {/* Toolbar Action Strip */}
             <div className="flex items-center justify-between bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
               <div className="flex items-center gap-2">

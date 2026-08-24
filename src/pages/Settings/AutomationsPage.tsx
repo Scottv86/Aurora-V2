@@ -1207,7 +1207,7 @@ export const AutomationsPage: React.FC = () => {
       
       {/* COLUMN 1: Rules Directory Sidebar (Hidden in settings mode since outer Catalog Grid already displays rules) */}
       {!isSettingsMode && (
-        <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">
+        <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-4">
           <div className="flex-shrink-0 flex items-center justify-between">
             <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Automations</h3>
           </div>
@@ -1333,7 +1333,7 @@ export const AutomationsPage: React.FC = () => {
       {selectedRuleId !== null ? (
         <>
           {/* COLUMN 2: Triggers & Actions Palette */}
-          <aside className="w-60 flex-shrink-0 bg-zinc-55/35 dark:bg-zinc-950/20 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+          <aside className="w-60 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
             
             {/* Trigger Palette Section */}
             <div className="space-y-3">
@@ -2199,7 +2199,7 @@ export const AutomationsPage: React.FC = () => {
           </main>
 
           {/* COLUMN 4: Properties Sidebar & Logs History */}
-          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
             
             {/* Header Settings vs Runs History Tabs */}
             <div className="flex bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">

@@ -5,7 +5,7 @@ import {
   ChevronDown, Search, ArrowRightLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
+import { cn, evaluateFormattingRules } from '../lib/utils';
 import { RichTextEditor } from './UI/RichTextEditor';
 import { SignaturePad } from './UI/SignaturePad';
 import { DynamicIcon } from './UI/DynamicIcon';
@@ -572,14 +572,23 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
     return options || [];
   }, [lookupSource, optionsSource, options, lookupResults, lookupLoading]);
 
+  const formattingResult = React.useMemo(() => {
+    if (!field.formattingRules || field.formattingRules.length === 0) return null;
+    const combinedData = { ...recordData, [field.id]: value };
+    const res = evaluateFormattingRules(field.formattingRules, combinedData);
+    return res.hasMatch ? res : null;
+  }, [field.formattingRules, recordData, value, field.id]);
+
   const inputClasses = cn(
     "w-full bg-zinc-50 dark:bg-zinc-950/50 border focus:outline-none transition-all text-zinc-900 dark:text-white",
     ds.input,
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
-      : !readonly 
-        ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-zinc-950 focus:border-indigo-500" 
-        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-indigo-500",
+      : formattingResult
+        ? cn(formattingResult.borderClassName, formattingResult.textClassName)
+        : !readonly 
+          ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-zinc-950 focus:border-indigo-500" 
+          : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-indigo-500",
     readonly && "cursor-pointer pointer-events-none"
   );
 

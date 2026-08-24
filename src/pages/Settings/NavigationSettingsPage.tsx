@@ -810,14 +810,14 @@ export const NavigationSettingsPage = () => {
 
   return (
     <div className={cn(
-      "flex flex-col w-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans select-none transition-all duration-300",
+      "flex flex-col w-full bg-zinc-50/50 dark:bg-zinc-950/50 text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans select-none transition-all duration-300",
       isBuilderFullscreen ? "h-screen" : "h-full"
     )}>
       
       {/* Top Header Bar (Unified Builder style) */}
       <div className={cn(
-        "px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-20 relative transition-all duration-300",
-        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+        "px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between z-20 relative transition-all duration-300",
+        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white dark:bg-zinc-900 shadow-sm"
       )}>
         
         {/* Left: Back, Icon, Title, Subtitle */}
@@ -870,18 +870,6 @@ export const NavigationSettingsPage = () => {
 
         {/* Right Header Controls & Save Button */}
         <div className="flex items-center gap-3">
-          <Button
-            onClick={toggleBuilderFullscreen}
-            variant={isBuilderFullscreen ? "primary" : "secondary"}
-            className={cn(
-              "gap-1.5 font-bold uppercase tracking-wider",
-              isBuilderFullscreen ? "bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 px-3 text-[11px]" : "text-xs"
-            )}
-            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
-          >
-            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
-            <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
-          </Button>
           
           {/* Scope Selector */}
           <div className="flex items-center gap-2 bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-1.5 text-xs font-medium">

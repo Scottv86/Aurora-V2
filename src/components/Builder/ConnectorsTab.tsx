@@ -832,7 +832,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
   return (
     <div className="flex h-full w-full overflow-hidden bg-transparent">
       {/* Left Panel: Connectors List */}
-      <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl flex flex-col h-full overflow-hidden">
+      <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col h-full overflow-hidden">
         {/* Search Header */}
         <div className="p-4 border-b border-zinc-200 dark:border-zinc-900 space-y-3">
           <div className="flex items-center justify-between">
@@ -987,7 +987,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       ) : (
         <>
           {/* Column 2: Module Triggers (side panel) */}
-          <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 bg-white dark:bg-zinc-950 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar flex-shrink-0">
+          <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar flex-shrink-0">
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Module Triggers</h3>
@@ -1761,7 +1761,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
               </div>
 
             {/* Column 4: Sandbox, AI Builder & Schema */}
-            <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-950 p-4 flex flex-col gap-6 border-l border-zinc-100 dark:border-zinc-900 overflow-y-auto custom-scrollbar">
+            <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 p-4 flex flex-col gap-6 border-l border-zinc-200 dark:border-zinc-800 overflow-y-auto custom-scrollbar">
           {/* Tab Selector */}
           <div className="flex gap-1 border-b border-zinc-100 dark:border-zinc-900 pb-2 bg-transparent shrink-0">
             {[

@@ -16,7 +16,8 @@ import {
   Palette,
   Compass,
   ArrowRightLeft,
-  Sparkles
+  Sparkles,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -223,37 +224,19 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const isSolutionBuilder = (location.pathname.includes('/solutions') || location.pathname.includes('/solution')) &&
                            (searchParams.get('mode') === 'studio' || searchParams.get('mode') === 'builder' || searchParams.has('id') || searchParams.has('solutionId'));
 
-  const isModuleBuilder = location.pathname.includes('/workspace/settings/builder') || 
-                          location.pathname.includes('/workspace/settings/ai-builder') ||
-                          location.pathname.includes('/workspace/settings/navigation/builder') ||
-                          location.pathname.includes('/workspace/settings/agent-builder') ||
+  const isModuleBuilder = location.pathname.includes('/builder') || 
+                          location.pathname.includes('/ai-builder') ||
+                          location.pathname.includes('/agent-builder') ||
+                          location.pathname.includes('/workspace/apps/doc-editor') ||
                           isReportBuilder ||
-                          isSolutionBuilder;
-
-  // Sync fullscreen state based on whether route is a builder
-  useEffect(() => {
-    if (isModuleBuilder) {
-      setIsBuilderFullscreen(true);
-    } else {
-      setIsBuilderFullscreen(false);
-    }
-  }, [location.pathname, location.search, isModuleBuilder, setIsBuilderFullscreen]);
-
-  // Escape key to exit fullscreen mode
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isBuilderFullscreen) {
-        setIsBuilderFullscreen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isBuilderFullscreen, setIsBuilderFullscreen]);
+                          isSolutionBuilder ||
+                          isBuilderFullscreen;
   const pathnames = location.pathname.split('/').filter(x => x);
   const isModuleMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2] && pathnames[3] !== 'records') ||
     (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[3] === 'modules' && pathnames[4] && pathnames[5] !== 'records');
   const isQueueMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2] && pathnames[3] !== 'records');
-  const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView;
+  const isPageMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2] && pathnames[3] !== 'modules');
+  const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView || isPageMainView;
   const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -377,10 +360,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     return (
       <button
         onClick={onClick}
-        className="flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-semibold transition-all shadow-2xs group shrink-0 cursor-pointer"
+        className="flex items-center justify-center w-7.5 h-7.5 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none"
+        title={label}
       >
-        <IconComponent size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-        <span>{label}</span>
+        <IconComponent size={14} className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
       </button>
     );
   };
@@ -447,7 +430,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       return renderConfigureButton(
         'Configure Queue', 
         () => navigateWithReturn('/workspace/settings/navigation/builder'),
-        'Compass'
+        'SlidersHorizontal'
       );
     }
 
@@ -891,28 +874,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       />
                     ))}
 
-                    {resolvedConfig.sections.length > 0 && isTenantAdmin && (
-                      <div className="pt-3 mt-2 border-t border-zinc-200/60 dark:border-zinc-800/60">
-                        {collapsed ? (
-                          <button
-                            onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
-                            className="w-10 h-10 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 flex items-center justify-center transition-all shadow-sm group mx-auto"
-                            title="Configure Menu"
-                          >
-                            <Compass size={18} className="group-hover:rotate-45 transition-transform duration-300" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 transition-all shadow-sm group"
-                          >
-                            <Compass size={15} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-                            <span className="truncate">Configure Menu</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
-
                     {resolvedConfig.sections.length === 0 && (
                       <div className={cn("text-center", collapsed ? "px-1 py-4" : "px-4 py-6 space-y-4")}>
                         {isTenantAdmin ? (
@@ -1060,16 +1021,36 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     </div>
                   )}
 
+                  {isTenantAdmin && !isAdminPath && !isSettingsMode && (
+                    isSidebarReallyOpen ? (
+                      <button
+                        onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
+                        className="h-full px-2.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50 transition-colors shrink-0 flex items-center justify-center border-l border-zinc-200 dark:border-zinc-800 cursor-pointer"
+                        title="Configure Navigation Menu"
+                      >
+                        <SlidersHorizontal size={15} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
+                        className="w-full flex items-center justify-center py-2 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors shrink-0 cursor-pointer"
+                        title="Configure Navigation Menu"
+                      >
+                        <SlidersHorizontal size={16} />
+                      </button>
+                    )
+                  )}
+
                   {isSidebarReallyOpen ? (
                     <button
                       onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                       className={cn(
-                        "h-full px-3 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50 transition-colors shrink-0 flex items-center justify-center",
+                        "h-full px-2.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50 transition-colors shrink-0 flex items-center justify-center cursor-pointer",
                         isTenantAdmin && !isAdminPath ? "border-l border-zinc-200 dark:border-zinc-800" : "ml-auto"
                       )}
                       title="Collapse Sidebar"
                     >
-                      <ChevronLeft size={18} />
+                      <ChevronLeft size={16} />
                     </button>
                   ) : (
                     <>
@@ -1078,10 +1059,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       )}
                       <button
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className="w-full flex items-center justify-center py-2 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors shrink-0"
+                        className="w-full flex items-center justify-center py-2 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors shrink-0 cursor-pointer"
                         title="Expand Sidebar"
                       >
-                        <ChevronRight size={18} />
+                        <ChevronRight size={16} />
                       </button>
                     </>
                   )}

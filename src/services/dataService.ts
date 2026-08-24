@@ -35,3 +35,33 @@ export const fetchRecords = async (moduleId: string, tenantId: string, token: st
   if (!res.ok) throw new Error('Failed to fetch records');
   return res.json();
 };
+
+export const bulkCreateRecords = async (
+  moduleId: string,
+  records: Record<string, any>[],
+  tenantId: string,
+  token: string,
+  options?: { associations?: any[]; path?: string }
+) => {
+  const res = await fetch(`${DATA_API_URL}/records/bulk`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId
+    },
+    body: JSON.stringify({
+      moduleId,
+      records,
+      associations: options?.associations,
+      path: options?.path
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to bulk create records');
+  }
+  return data;
+};
+

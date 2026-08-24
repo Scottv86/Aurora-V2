@@ -386,3 +386,180 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
   
   return 2;
 };
+
+// --- Conditional Formatting Utilities ---
+
+export const PRESET_FORMATTING_MAP: Record<string, {
+  name: string;
+  rowClass: string;
+  cellBadgeClass: string;
+  borderClass: string;
+  textClass: string;
+  accentBg: string;
+  iconColor: string;
+}> = {
+  danger: {
+    name: 'Critical / Danger',
+    rowClass: 'bg-rose-500/5 hover:bg-rose-500/10 border-l-4 border-l-rose-500 dark:bg-rose-950/20 dark:hover:bg-rose-950/30',
+    cellBadgeClass: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shadow-sm',
+    borderClass: 'border-rose-500 ring-2 ring-rose-500/20',
+    textClass: 'text-rose-600 dark:text-rose-400 font-semibold',
+    accentBg: 'bg-rose-500/10',
+    iconColor: 'text-rose-500'
+  },
+  warning: {
+    name: 'Warning / Attention',
+    rowClass: 'bg-amber-500/5 hover:bg-amber-500/10 border-l-4 border-l-amber-500 dark:bg-amber-950/20 dark:hover:bg-amber-950/30',
+    cellBadgeClass: 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 shadow-sm',
+    borderClass: 'border-amber-500 ring-2 ring-amber-500/20',
+    textClass: 'text-amber-700 dark:text-amber-400 font-semibold',
+    accentBg: 'bg-amber-500/10',
+    iconColor: 'text-amber-500'
+  },
+  success: {
+    name: 'Success / Completed',
+    rowClass: 'bg-emerald-500/5 hover:bg-emerald-500/10 border-l-4 border-l-emerald-500 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30',
+    cellBadgeClass: 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 shadow-sm',
+    borderClass: 'border-emerald-500 ring-2 ring-emerald-500/20',
+    textClass: 'text-emerald-700 dark:text-emerald-400 font-semibold',
+    accentBg: 'bg-emerald-500/10',
+    iconColor: 'text-emerald-500'
+  },
+  info: {
+    name: 'Info / Primary',
+    rowClass: 'bg-indigo-500/5 hover:bg-indigo-500/10 border-l-4 border-l-indigo-500 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/30',
+    cellBadgeClass: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 shadow-sm',
+    borderClass: 'border-indigo-500 ring-2 ring-indigo-500/20',
+    textClass: 'text-indigo-600 dark:text-indigo-400 font-semibold',
+    accentBg: 'bg-indigo-500/10',
+    iconColor: 'text-indigo-500'
+  },
+  purple: {
+    name: 'Special / Violet',
+    rowClass: 'bg-purple-500/5 hover:bg-purple-500/10 border-l-4 border-l-purple-500 dark:bg-purple-950/20 dark:hover:bg-purple-950/30',
+    cellBadgeClass: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/30 shadow-sm',
+    borderClass: 'border-purple-500 ring-2 ring-purple-500/20',
+    textClass: 'text-purple-600 dark:text-purple-400 font-semibold',
+    accentBg: 'bg-purple-500/10',
+    iconColor: 'text-purple-500'
+  },
+  slate: {
+    name: 'Neutral / Slate',
+    rowClass: 'bg-zinc-500/5 hover:bg-zinc-500/10 border-l-4 border-l-zinc-400 dark:bg-zinc-800/30 dark:hover:bg-zinc-800/50',
+    cellBadgeClass: 'bg-zinc-200/60 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 shadow-sm',
+    borderClass: 'border-zinc-400 dark:border-zinc-600 ring-2 ring-zinc-400/20',
+    textClass: 'text-zinc-600 dark:text-zinc-400 font-medium',
+    accentBg: 'bg-zinc-500/10',
+    iconColor: 'text-zinc-500'
+  }
+};
+
+export interface FormattedResult {
+  hasMatch: boolean;
+  matchedRules: any[];
+  rowClassName: string;
+  cellBadgeClassName: string;
+  borderClassName: string;
+  textClassName: string;
+  customStyle: React.CSSProperties;
+  badgeLabel?: string;
+  iconName?: string;
+  iconColor?: string;
+}
+
+export const evaluateFormattingRules = (
+  rules: any[] | undefined,
+  data: any,
+  context?: any,
+  filterTarget?: { targetType?: 'row' | 'column' | 'field'; targetId?: string }
+): FormattedResult => {
+  const defaultResult: FormattedResult = {
+    hasMatch: false,
+    matchedRules: [],
+    rowClassName: '',
+    cellBadgeClassName: '',
+    borderClassName: '',
+    textClassName: '',
+    customStyle: {},
+    badgeLabel: undefined,
+    iconName: undefined,
+    iconColor: undefined
+  };
+
+  if (!Array.isArray(rules) || rules.length === 0 || !data) {
+    return defaultResult;
+  }
+
+  const activeRules = rules.filter(r => {
+    if (r.enabled === false) return false;
+    if (filterTarget?.targetType && r.targetType && r.targetType !== filterTarget.targetType) {
+      return false;
+    }
+    if (filterTarget?.targetId && r.targetId && r.targetId !== filterTarget.targetId) {
+      return false;
+    }
+    return true;
+  });
+
+  if (activeRules.length === 0) return defaultResult;
+
+  const matchedRules: any[] = [];
+
+  for (const rule of activeRules) {
+    const isMet = checkCondition(rule.condition, data, context);
+    if (isMet) {
+      matchedRules.push(rule);
+    }
+  }
+
+  if (matchedRules.length === 0) return defaultResult;
+
+  // Aggregate styles from matched rules (last rule takes precedence for specific overrides)
+  let rowClasses: string[] = [];
+  let cellBadgeClasses: string[] = [];
+  let borderClasses: string[] = [];
+  let textClasses: string[] = [];
+  let customStyle: React.CSSProperties = {};
+  let badgeLabel: string | undefined = undefined;
+  let iconName: string | undefined = undefined;
+  let iconColor: string | undefined = undefined;
+
+  for (const rule of matchedRules) {
+    const style = rule.style || {};
+    const presetKey = style.preset || 'danger';
+    const preset = PRESET_FORMATTING_MAP[presetKey];
+
+    if (preset) {
+      if (preset.rowClass) rowClasses.push(preset.rowClass);
+      if (preset.cellBadgeClass) cellBadgeClasses.push(preset.cellBadgeClass);
+      if (preset.borderClass) borderClasses.push(preset.borderClass);
+      if (preset.textClass) textClasses.push(preset.textClass);
+      iconColor = preset.iconColor;
+    }
+
+    if (style.isBold) textClasses.push('font-bold');
+    if (style.isItalic) textClasses.push('italic');
+    if (style.isStrikethrough) textClasses.push('line-through opacity-70');
+
+    if (style.badgeLabel) badgeLabel = style.badgeLabel;
+    if (style.iconName) iconName = style.iconName;
+
+    if (style.textColor) customStyle.color = style.textColor;
+    if (style.backgroundColor) customStyle.backgroundColor = style.backgroundColor;
+    if (style.borderColor) customStyle.borderColor = style.borderColor;
+  }
+
+  return {
+    hasMatch: true,
+    matchedRules,
+    rowClassName: cn(...rowClasses),
+    cellBadgeClassName: cn(...cellBadgeClasses),
+    borderClassName: cn(...borderClasses),
+    textClassName: cn(...textClasses),
+    customStyle,
+    badgeLabel,
+    iconName,
+    iconColor
+  };
+};
+

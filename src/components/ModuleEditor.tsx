@@ -154,6 +154,9 @@ import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
 import { ConnectorsTab } from './Builder/ConnectorsTab';
 import { AutomationBuilder } from './Builders';
+import { ConditionalFormattingModal } from './Builder/ConditionalFormattingModal';
+import { ConditionalFormattingRule } from '../types/platform';
+import { PRESET_FORMATTING_MAP } from '../lib/utils';
 
 
 
@@ -651,6 +654,7 @@ export interface Field {
   // For nested fields (fieldGroup, repeatableGroup)
   fields?: Field[];
   visibilityRule?: VisibilityRule;
+  formattingRules?: ConditionalFormattingRule[];
   colSpan?: number;
   startCol?: number;
   rowIndex?: number;
@@ -1300,6 +1304,85 @@ const VisibilityRuleEditor = ({
   );
 };
 
+const FieldFormattingRulesEditor = ({
+  rules = [],
+  onAddRule,
+  onEditRule,
+  onRemoveRule
+}: {
+  rules?: ConditionalFormattingRule[];
+  onAddRule: () => void;
+  onEditRule: (rule: ConditionalFormattingRule) => void;
+  onRemoveRule: (ruleId: string) => void;
+}) => {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Conditional Formatting</label>
+        <button
+          type="button"
+          onClick={onAddRule}
+          className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-1 cursor-pointer"
+        >
+          <Plus size={11} /> Add Rule
+        </button>
+      </div>
+
+      {rules.length === 0 ? (
+        <div className="p-3 bg-zinc-50/50 dark:bg-zinc-900/30 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center">
+          <p className="text-[10px] text-zinc-400">No dynamic formatting rules active</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {rules.map((r, idx) => {
+            const presetCfg = PRESET_FORMATTING_MAP[r.style?.preset || 'danger'] || PRESET_FORMATTING_MAP.danger;
+            return (
+              <div
+                key={r.id || idx}
+                className={cn(
+                  "p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all",
+                  r.enabled ? "bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-800" : "opacity-50 border-dashed border-zinc-200 dark:border-zinc-800"
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={cn("w-4 h-4 rounded-full border flex items-center justify-center shrink-0", presetCfg.cellBadgeClass)}>
+                    <div className={cn("w-1.5 h-1.5 rounded-full", presetCfg.accentBg)} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200 block truncate">
+                      {r.name || `Rule #${idx + 1}`}
+                    </span>
+                    <span className="text-[9px] text-zinc-500 font-mono block truncate">
+                      {r.condition?.operator || 'equals'} "{r.condition?.value ?? ''}"
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onEditRule(r)}
+                    className="text-[9px] font-bold text-indigo-400 hover:text-indigo-300 uppercase cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveRule(r.id)}
+                    className="text-[9px] font-bold text-rose-400 hover:text-rose-300 uppercase cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 
 // --- Components ---
@@ -1627,7 +1710,7 @@ export const ModuleEditor = () => {
   const [currentTabId, setCurrentTabId] = useState<string>('default-tab');
   const [interfaceSettings, setInterfaceSettings] = useState({
     master: {
-      layoutType: 'table' as 'table' | 'kanban' | 'calendar' | 'map' | 'cards' | 'portfolio' | 'timeline' | 'gantt' | 'analytics' | 'pipeline',
+      layoutType: 'table' as 'table' | 'split' | 'kanban' | 'calendar' | 'map' | 'cards' | 'portfolio' | 'timeline' | 'gantt' | 'analytics' | 'pipeline',
       columns: [] as { fieldId: string, visible: boolean, inlineEdit: boolean, width?: number, label?: string }[],
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       pagination: {
@@ -1635,6 +1718,7 @@ export const ModuleEditor = () => {
         pageSize: 25,
         showSizeChanger: true
       },
+      formattingRules: [] as ConditionalFormattingRule[],
       timelineDateFieldId: 'createdAt',
       ganttStartDateFieldId: 'createdAt',
       ganttEndDateFieldId: 'createdAt',
@@ -1814,6 +1898,14 @@ export const ModuleEditor = () => {
     targetType: 'field' | 'tab' | 'formField' | 'step';
     rule?: VisibilityRule;
   } | null>(null);
+
+  const [editingFieldFormatting, setEditingFieldFormatting] = useState<{
+    fieldId: string;
+    rule?: ConditionalFormattingRule | null;
+  } | null>(null);
+
+  const [editingTableFormatting, setEditingTableFormatting] = useState<ConditionalFormattingRule | null>(null);
+  const [isTableFormattingModalOpen, setIsTableFormattingModalOpen] = useState(false);
 
   const [editingCalculation, setEditingCalculation] = useState<{
     targetId: string;
@@ -2260,7 +2352,8 @@ export const ModuleEditor = () => {
               calendarDateFieldId: data.interfaceSettings.master?.calendarDateFieldId || 'createdAt',
               titleFieldId: data.interfaceSettings.master?.titleFieldId || '',
               subtitleFieldIds: data.interfaceSettings.master?.subtitleFieldIds || [],
-              cardFields: data.interfaceSettings.master?.cardFields || []
+              cardFields: data.interfaceSettings.master?.cardFields || [],
+              formattingRules: data.interfaceSettings.master?.formattingRules || data.formattingRules || data.config?.formattingRules || []
             },
             detail: {
               ...data.interfaceSettings.detail,
@@ -4359,8 +4452,137 @@ export const ModuleEditor = () => {
     );
   };
 
+  const renderMasterSplitPreview = () => {
+    const mockList = [
+      { id: '1', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-101`, title: 'Design user dashboard & navigation', status: 'In Progress', assignee: 'Alex Rivera', time: '10m ago' },
+      { id: '2', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-102`, title: 'Refactor database indexing & cache', status: 'In Review', assignee: 'Sarah Chen', time: '1h ago' },
+      { id: '3', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-103`, title: 'Add real-time websocket presence sync', status: 'Done', assignee: 'Marcus Vance', time: '3h ago' },
+      { id: '4', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-104`, title: 'Implement automated regression test suite', status: 'Todo', assignee: 'Emily Watson', time: '1d ago' },
+    ];
+
+    return (
+      <div className="space-y-4 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Split View Preview</span>
+            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">List & Detail Split Layout</h3>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedId('__table_settings');
+            }}
+            className={cn(
+              "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
+              selectedId === '__table_settings'
+                ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
+                : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            )}
+          >
+            <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
+            Split View Settings
+          </button>
+        </div>
+
+        {/* Dual Pane Container */}
+        <div className="h-[560px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden flex shadow-sm">
+          {/* Left List Rail */}
+          <div className="w-80 border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/50">
+            {/* Search Header */}
+            <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">4 Records</span>
+                <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md">Live Sync</span>
+              </div>
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <div className="w-full pl-7 pr-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-[11px] text-zinc-400">
+                  Search records...
+                </div>
+              </div>
+            </div>
+
+            {/* List Items */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+              {mockList.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className={cn(
+                    "p-3 rounded-xl border transition-all cursor-pointer space-y-1.5",
+                    idx === 0
+                      ? "bg-white dark:bg-zinc-800/90 border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600"
+                      : "bg-white/60 dark:bg-zinc-900/40 border-zinc-200/70 dark:border-zinc-800/70 hover:bg-white dark:hover:bg-zinc-800"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">{item.key}</span>
+                    <span className={cn(
+                      "text-[9px] font-bold px-1.5 py-0.5 rounded",
+                      item.status === 'Done' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
+                      item.status === 'In Progress' ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" :
+                      item.status === 'In Review' ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" :
+                      "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                    )}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <h4 className="text-xs font-semibold text-zinc-900 dark:text-white line-clamp-2 leading-tight">
+                    {item.title}
+                  </h4>
+                  <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-0.5">
+                    <span className="truncate">{item.assignee}</span>
+                    <span>{item.time}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Detail Pane */}
+          <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden">
+            {/* Record Header */}
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                    {moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-101
+                  </span>
+                  <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md">
+                    In Progress
+                  </span>
+                </div>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">Design user dashboard & navigation</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
+                  Alex Rivera
+                </div>
+              </div>
+            </div>
+
+            {/* Content Preview */}
+            <div className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/30">
+              <div className="grid grid-cols-2 gap-4">
+                {displayFields.slice(0, 6).map((field) => (
+                  <div key={field.id} className="p-3 bg-white dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl space-y-1">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{field.name}</label>
+                    <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                      {field.defaultValue || '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderMasterViewPreview = () => {
     switch (interfaceSettings.master.layoutType) {
+      case 'split':
+        return renderMasterSplitPreview();
       case 'kanban':
         return renderMasterKanbanPreview();
       case 'calendar':
@@ -4689,8 +4911,8 @@ export const ModuleEditor = () => {
     <div className="h-full flex flex-col bg-transparent text-zinc-900 dark:text-zinc-100 overflow-hidden">
       {/* Top Page Title Header (Unified Builder style) */}
       <div className={cn(
-        "px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-30 relative transition-all duration-300",
-        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+        "px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between z-30 relative transition-all duration-300",
+        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white dark:bg-zinc-900 shadow-sm"
       )}>
         <div className="flex items-center gap-3">
           <button 
@@ -4735,25 +4957,8 @@ export const ModuleEditor = () => {
 
         <div className="flex items-center gap-2">
           <button 
-            onClick={toggleBuilderFullscreen}
-            className={cn(
-              "rounded-xl border transition-all flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs",
-              isBuilderFullscreen 
-                ? "bg-indigo-600 border-indigo-500 text-white px-3 py-1.5 shadow-md shadow-indigo-500/20" 
-                : "border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-white/50 dark:bg-white/[0.01] p-2.5"
-            )}
-            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
-          >
-            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
-            {isBuilderFullscreen && <span className="hidden sm:inline text-[10px]">Exit Fullscreen</span>}
-          </button>
-
-          <button 
             onClick={() => setIsCommandPaletteOpen(true)}
-            className={cn(
-              "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
-              isBuilderFullscreen ? "p-1.5" : "p-2.5"
-            )}
+            className="rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01] p-1.5"
             title="Open Command Palette (Ctrl+K)"
           >
             <Command size={16} />
@@ -4802,7 +5007,7 @@ export const ModuleEditor = () => {
       </div>
 
       {/* Sub-Header / Toolbar */}
-      <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/60 backdrop-blur-xl flex items-center justify-between px-6 z-30">
+      <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 z-30">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 bg-zinc-100/80 dark:bg-zinc-900/60 p-1 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 backdrop-blur-md">
             {(['details', 'builder', 'forms', 'workflow', 'validations', 'connectors', 'automation', 'security', 'deployment'] as const).map((tab) => (
@@ -4885,6 +5090,7 @@ export const ModuleEditor = () => {
                   {activeViewMode === 'master' ? (
                     <>
                       <option value="table">Table View</option>
+                      <option value="split">Split View</option>
                       <option value="kanban">Kanban Board</option>
                       <option value="calendar">Calendar View</option>
                       <option value="map">Map View</option>
@@ -4961,7 +5167,7 @@ export const ModuleEditor = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Discovery Panel */}
         {activeTab === 'builder' && (
-          <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl flex flex-col overflow-hidden">
+          <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
             <div className="h-[52px] px-4 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent flex items-center">
               <div className="relative w-full">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -8806,7 +9012,7 @@ export const ModuleEditor = () => {
               </div>
           ) : activeTab === 'details' ? (
             <div className="flex h-full w-full overflow-hidden">
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2 flex flex-col">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Configuration</h3>
                 </div>
@@ -8968,7 +9174,7 @@ export const ModuleEditor = () => {
                   <div className="h-full w-full">
 <div className="flex h-full w-full">
               {/* Schema Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Data Model</h3>
                 </div>
@@ -9302,7 +9508,7 @@ export const ModuleEditor = () => {
           ) : activeTab === 'deployment' ? (
             <div className="flex h-full w-full overflow-hidden">
               {/* Deployment Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Release Management</h3>
                 </div>
@@ -9449,7 +9655,7 @@ export const ModuleEditor = () => {
           ) : activeTab === 'security' ? (
             <div className="flex h-full w-full bg-transparent">
               {/* Roles Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2 flex flex-col">
+              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Access Roles</h3>
                 </div>
@@ -9576,7 +9782,7 @@ export const ModuleEditor = () => {
           ) : activeTab === 'forms' ? (
             <div className="flex h-full w-full bg-transparent overflow-hidden">
                {/* Form Management Sidebar (Left) */}
-               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 space-y-2 flex flex-col">
+               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2 flex items-center justify-between">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Module Forms</h3>
                   <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
@@ -9663,7 +9869,7 @@ export const ModuleEditor = () => {
                  
                  return (
                    <>
-                      <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
+                      <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
                         <div className="space-y-4">
                            <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-2">Module Fields</h3>
                            <div className="space-y-2">
@@ -9944,7 +10150,7 @@ export const ModuleEditor = () => {
                      </div>
 
                      {/* Inspector Sidebar (Right) */}
-                     <aside className="w-80 border-l border-zinc-200 dark:border-zinc-800/80 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-4 overflow-y-auto custom-scrollbar">
+                     <aside className="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 overflow-y-auto custom-scrollbar">
                         {selectedFieldInFormId ? (() => {
                             // Check if it's a Step selection
                             const selectedStep = selectedForm.isMultistep ? selectedForm.steps.find((s: any) => s.id === selectedFieldInFormId) : null;
@@ -10551,7 +10757,7 @@ export const ModuleEditor = () => {
         </main>
         {/* Right Sidebar - Dual Mode */}
         {activeTab === 'builder' && (
-          <aside className="w-85 flex-shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
+          <aside className="w-85 flex-shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
             {/* Mode Switcher */}
             <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 flex items-center p-1 bg-zinc-50/50 dark:bg-transparent">
               <div className="flex-1 grid grid-cols-2 gap-1 h-full">
@@ -11042,7 +11248,8 @@ export const ModuleEditor = () => {
                         <div className="flex items-center gap-2">
                           <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
                           <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
-                            {interfaceSettings.master.layoutType === 'kanban' ? 'Kanban Settings' :
+                            {interfaceSettings.master.layoutType === 'split' ? 'Split View Settings' :
+                             interfaceSettings.master.layoutType === 'kanban' ? 'Kanban Settings' :
                              interfaceSettings.master.layoutType === 'calendar' ? 'Calendar Settings' :
                              interfaceSettings.master.layoutType === 'map' ? 'Map Settings' :
                              interfaceSettings.master.layoutType === 'cards' ? 'Cards Settings' :
@@ -11090,6 +11297,30 @@ export const ModuleEditor = () => {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Table / Row Conditional Formatting Section */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <FieldFormattingRulesEditor
+                          rules={interfaceSettings.master.formattingRules || []}
+                          onAddRule={() => {
+                            setEditingTableFormatting(null);
+                            setIsTableFormattingModalOpen(true);
+                          }}
+                          onEditRule={(rule) => {
+                            setEditingTableFormatting(rule);
+                            setIsTableFormattingModalOpen(true);
+                          }}
+                          onRemoveRule={(ruleId) => {
+                            setInterfaceSettings(prev => ({
+                              ...prev,
+                              master: {
+                                ...prev.master,
+                                formattingRules: (prev.master.formattingRules || []).filter(r => r.id !== ruleId)
+                              }
+                            }));
+                          }}
+                        />
                       </div>
 
                       {/* Detail View Mode */}
@@ -14398,6 +14629,18 @@ export const ModuleEditor = () => {
                         />
                       </div>
 
+                      <div className="pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <FieldFormattingRulesEditor
+                          rules={selectedField.formattingRules || []}
+                          onAddRule={() => setEditingFieldFormatting({ fieldId: selectedField.id, rule: null })}
+                          onEditRule={(rule) => setEditingFieldFormatting({ fieldId: selectedField.id, rule })}
+                          onRemoveRule={(ruleId) => {
+                            const updated = (selectedField.formattingRules || []).filter(r => r.id !== ruleId);
+                            updateField(selectedField.id, { formattingRules: updated });
+                          }}
+                        />
+                      </div>
+
 
                       {selectedField.type === 'connector' && (
                         <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
@@ -14887,6 +15130,68 @@ export const ModuleEditor = () => {
             />
           );
         })()}
+
+        {/* Field Conditional Formatting Modal */}
+        {editingFieldFormatting && (
+          <ConditionalFormattingModal
+            isOpen={!!editingFieldFormatting}
+            onClose={() => setEditingFieldFormatting(null)}
+            onSave={(savedRule) => {
+              const targetField = layout.find(f => f.id === editingFieldFormatting.fieldId);
+              if (targetField) {
+                const existingRules = targetField.formattingRules || [];
+                const updatedRules = editingFieldFormatting.rule
+                  ? existingRules.map(r => r.id === savedRule.id ? savedRule : r)
+                  : [...existingRules, savedRule];
+                updateField(editingFieldFormatting.fieldId, { formattingRules: updatedRules });
+              }
+              setEditingFieldFormatting(null);
+            }}
+            initialRule={editingFieldFormatting.rule}
+            availableFields={layout.filter(f => !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))}
+            tabs={tabs}
+            allowedTargetTypes={['field']}
+            title={`Conditional Formatting: ${layout.find(f => f.id === editingFieldFormatting.fieldId)?.label || 'Field'}`}
+          />
+        )}
+
+        {/* Master Table Conditional Formatting Modal (Row & Column Rules) */}
+        {isTableFormattingModalOpen && (
+          <ConditionalFormattingModal
+            isOpen={isTableFormattingModalOpen}
+            onClose={() => {
+              setIsTableFormattingModalOpen(false);
+              setEditingTableFormatting(null);
+            }}
+            onSave={(savedRule) => {
+              const existingRules = interfaceSettings.master.formattingRules || [];
+              const updatedRules = editingTableFormatting
+                ? existingRules.map(r => r.id === savedRule.id ? savedRule : r)
+                : [...existingRules, savedRule];
+              setInterfaceSettings(prev => ({
+                ...prev,
+                master: {
+                  ...prev.master,
+                  formattingRules: updatedRules
+                }
+              }));
+              setIsTableFormattingModalOpen(false);
+              setEditingTableFormatting(null);
+            }}
+            initialRule={editingTableFormatting}
+            availableFields={layout.filter(f => !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type))}
+            availableColumns={[
+              { id: '_record_key', label: 'Record Key' },
+              ...layout.filter(f => !['group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'divider', 'spacer', 'heading'].includes(f.type)).map(f => ({ id: f.id, label: f.label || f.name || f.id })),
+              { id: 'status', label: 'Status' },
+              { id: 'createdAt', label: 'Created At' },
+              { id: 'updatedAt', label: 'Updated At' }
+            ]}
+            tabs={tabs}
+            allowedTargetTypes={['row', 'column']}
+            title={`Record Table Formatting (${moduleSettings.name || 'Module'})`}
+          />
+        )}
 
         {/* Command Palette */}
         <CommandPalette 

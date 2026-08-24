@@ -1741,19 +1741,6 @@ setView('LIST');
               </div>
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant={isBuilderFullscreen ? "primary" : "secondary"}
-                  size="sm"
-                  onClick={toggleBuilderFullscreen}
-                  className={cn(
-                    "gap-1.5 font-bold uppercase tracking-wider print-hide",
-                    isBuilderFullscreen ? "bg-indigo-600 text-white text-[11px] py-1 px-2.5" : "text-xs"
-                  )}
-                  title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
-                >
-                  {isBuilderFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                  <span>{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
-                </Button>
 
                 <Button
                   variant="secondary"

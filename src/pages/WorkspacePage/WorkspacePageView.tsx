@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { 
   Layout, Database, Cpu, ShieldCheck, Globe, Workflow, 
-  ChevronRight, Loader2
+  ChevronRight, Loader2, SlidersHorizontal
 } from 'lucide-react';
 import ReactGridLayout from 'react-grid-layout';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/UI/Primitives';
 import { PageWrapper } from '../../components/Common/PageWrapper';
+import { Breadcrumbs } from '../../components/Navigation/Breadcrumbs';
 import { WorkQueue } from '../../components/WorkQueue';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
-import { cn, slugify } from '../../lib/utils';
+import { cn, slugify, getFieldValue } from '../../lib/utils';
 import { toast } from 'sonner';
 import { builderCache } from '../../utils/builderCache';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,23 +46,31 @@ const useMyContainerWidth = () => {
   const [mounted] = useState(true);
 
   useEffect(() => {
-    const node = containerRef.current;
-    if (node && node.offsetWidth) {
-      setWidth(node.offsetWidth);
-    }
+    const updateWidth = () => {
+      const node = containerRef.current;
+      if (node) {
+        const clientWidth = node.clientWidth;
+        if (clientWidth > 0) {
+          setWidth(clientWidth);
+        }
+      }
+    };
 
+    updateWidth();
+
+    const node = containerRef.current;
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined' && node) {
-      observer = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (entry && entry.contentRect.width) {
-          setWidth(entry.contentRect.width);
-        }
+      observer = new ResizeObserver(() => {
+        updateWidth();
       });
       observer.observe(node);
     }
 
+    window.addEventListener('resize', updateWidth);
+
     return () => {
+      window.removeEventListener('resize', updateWidth);
       if (observer) {
         observer.disconnect();
       }
@@ -78,8 +87,16 @@ export const VisualSkeleton: React.FC<{ type: string }> = () => {
 export const WorkspacePageView = () => {
   const { pageId } = useParams();
   const navigate = useNavigate();
-  const { tenant, modules, setBreadcrumbOverride, isLoading: platformLoading } = usePlatform();
+  const location = useLocation();
+  const { tenant, modules, setBreadcrumbOverride, isLoading: platformLoading, user: platformUser, isDeveloper } = usePlatform();
   const { session } = useAuth();
+
+  const isTenantAdmin = isDeveloper || 
+    platformUser?.role === 'TENANT_ADMIN' || 
+    platformUser?.role?.toLowerCase() === 'tenant admin' || 
+    platformUser?.role?.toLowerCase() === 'admin' || 
+    platformUser?.isSuperAdmin === true || 
+    platformUser?.licenceType === 'Developer';
 
   const pageCacheKey = `workspace_page_${tenant?.id || 't1'}_${pageId}`;
   const [freshPageData, setFreshPageData] = useState<any>(null);
@@ -183,71 +200,80 @@ export const WorkspacePageView = () => {
     );
   }
 
-  const PageIcon = (Icons as any)[activePage.iconName] || (Icons as any)[activePage.icon] || Layout;
-
   return (
-    <PageWrapper className="flex flex-col w-full h-[calc(100vh-4rem)] bg-transparent overflow-hidden relative">
-      {/* Page Header */}
-      <div className="px-6 py-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shrink-0 flex items-center justify-between gap-4 z-20">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-            <PageIcon size={24} />
+    <PageWrapper className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden relative">
+      {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
+      <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">
+        <Breadcrumbs />
+
+        {/* Right: Configure Page Context Action */}
+        {isTenantAdmin && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                const currentPath = location.pathname + location.search;
+                const targetId = activePage?.id || matchedPage?.id || pageId;
+                const targetUrl = `/workspace/settings/builder/page/${targetId}`;
+                navigate(`${targetUrl}?returnUrl=${encodeURIComponent(currentPath)}`, { state: { returnUrl: currentPath } });
+              }}
+              className="flex items-center justify-center w-7.5 h-7.5 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none"
+              title="Configure Page in Builder"
+            >
+              <SlidersHorizontal size={14} className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
+            </button>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">{activePage.name}</h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">Workspace Page</p>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Widgets Grid / Viewport */}
-      <div className="flex-1 p-6 overflow-hidden min-h-0 flex flex-col relative z-10">
-        <div ref={containerRef} className="w-full h-full flex-1 flex flex-col min-h-0 relative">
+      <div 
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar relative z-10"
+      >
         {widgets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 bg-white/40 dark:bg-white/[0.03] border border-dashed border-zinc-300 dark:border-zinc-800 rounded-3xl text-center space-y-3">
-            <Layout size={32} className="text-zinc-400" />
-            <div>
-              <p className="text-sm font-bold text-zinc-650 dark:text-zinc-300">This page has no widgets</p>
-              <p className="text-xs text-zinc-400">Click &quot;Configure Page&quot; on the top right to start adding components.</p>
+          <div className="p-6">
+            <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl text-center space-y-3 shadow-2xs">
+              <Layout size={32} className="text-zinc-400" />
+              <div>
+                <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">This page has no widgets</p>
+                <p className="text-xs text-zinc-400">Click &quot;Configure Page&quot; on the top right to start adding components.</p>
+              </div>
             </div>
           </div>
         ) : widgets.length === 1 ? (
-          <div className="w-full h-full flex-1 min-h-0 flex flex-col">
+          <div className="w-full h-full p-6 flex-1 min-h-0 flex flex-col">
             <WidgetRenderer widget={widgets[0]} tenant={tenant} session={session} />
           </div>
         ) : (
           mounted && (
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-              <ReactGridLayout
-                className="layout read-only-layout"
-                layout={layout}
-                width={width}
-                gridConfig={{
-                  cols: 12,
-                  rowHeight: 50,
-                  margin: [24, 24],
-                  containerPadding: [0, 0]
-                }}
-                dragConfig={{
-                  enabled: false
-                }}
-                resizeConfig={{
-                  enabled: false
-                }}
-              >
-                {widgets.map((widget: any) => (
-                  <div 
-                    key={widget.id} 
-                    className="w-full h-full [&>div]:h-full"
-                  >
-                    <WidgetRenderer widget={widget} tenant={tenant} session={session} />
-                  </div>
-                ))}
-              </ReactGridLayout>
-            </div>
+            <ReactGridLayout
+              className="layout read-only-layout"
+              layout={layout}
+              width={width}
+              gridConfig={{
+                cols: 12,
+                rowHeight: 50,
+                margin: [24, 24],
+                containerPadding: [24, 24]
+              }}
+              dragConfig={{
+                enabled: false
+              }}
+              resizeConfig={{
+                enabled: false
+              }}
+            >
+              {widgets.map((widget: any) => (
+                <div 
+                  key={widget.id} 
+                  className="w-full h-full [&>div]:h-full"
+                >
+                  <WidgetRenderer widget={widget} tenant={tenant} session={session} />
+                </div>
+              ))}
+            </ReactGridLayout>
           )
         )}
-      </div>
       </div>
     </PageWrapper>
   );
@@ -304,7 +330,7 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, delay: i * 0.02, ease: 'easeOut' }}
-              className="p-5 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl group shadow-sm flex flex-col justify-between"
+              className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl group shadow-2xs flex flex-col justify-between"
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">{stat.label}</span>
@@ -321,8 +347,8 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
 
     case 'active-workflows':
       return (
-        <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
+        <div className="h-full flex flex-col p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-3 shrink-0">
             <Workflow size={18} className="text-indigo-500" />
             <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Active Workflows'}</h3>
           </div>
@@ -332,7 +358,7 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
               { name: 'Invoice Approval', status: 'Running', health: 'Healthy', items: 128 },
               { name: 'Support Triage', status: 'Paused', health: 'Warning', items: 15 },
             ].map((wf, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-100 dark:border-zinc-800 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-900/50 transition-colors">
+              <div key={i} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-100 dark:border-zinc-800/80 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center">
                     <Workflow size={16} className="text-zinc-400 dark:text-zinc-500" />
@@ -388,9 +414,9 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
 
     case 'rich-text':
       return (
-        <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
+        <div className="h-full flex flex-col p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
           {widget.title && (
-            <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider mb-3 border-b border-zinc-150 dark:border-zinc-800 pb-2 shrink-0">
+            <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider mb-3 border-b border-zinc-200 dark:border-zinc-800 pb-2 shrink-0">
               {widget.title}
             </h3>
           )}
@@ -409,7 +435,7 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
 
     case 'standalone-form':
       return (
-        <div className="bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm p-6 overflow-hidden">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs p-6 overflow-hidden">
           <FormRenderer
             title={widget.title}
             subtitle={widget.properties?.subtitle}
@@ -419,7 +445,6 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
               { id: 'comments', label: 'Comments / Notes', type: 'textarea', required: false, colSpan: 12 }
             ]}
             onSubmit={() => { toast.success('Form response submitted!'); }}
-
           />
         </div>
       );
@@ -495,19 +520,30 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
       header: 'Record ID',
       accessor: (record: any) => (
         <span className="font-mono text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-          {String(record.id).slice(-6)}
+          {String(record.id || '').slice(-6)}
         </span>
       ),
       sortable: true,
       sortKey: 'id',
       filterKey: 'id',
-      width: '100px'
+      width: '85px'
     },
     {
       header: 'Summary',
       accessor: (record: any) => {
-        const keys = Object.keys(record.data || {});
-        const summaryVal = record.title || record.data?.title || (keys.length > 0 ? record.data[keys[0]] : '-') || '-';
+        const dataObj = record.data || record;
+        const targetField = targetModule?.fields?.[0]?.id || targetModule?.fields?.[0]?.name;
+        let summaryVal = record.title || record.name;
+        if (!summaryVal && targetField) {
+          summaryVal = getFieldValue(dataObj, targetField);
+        }
+        if (!summaryVal && record.data) {
+          const keys = Object.keys(record.data).filter(k => !k.startsWith('_') && record.data[k]);
+          if (keys.length > 0) summaryVal = record.data[keys[0]];
+        }
+        if (!summaryVal) {
+          summaryVal = record._record_key || `Record ${String(record.id || '').slice(-6)}`;
+        }
         return <span className="font-medium text-xs text-zinc-900 dark:text-zinc-100 line-clamp-1">{String(summaryVal)}</span>;
       },
       sortable: true,
@@ -516,14 +552,14 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
     {
       header: 'Created At',
       accessor: (record: any) => (
-        <span className="text-[11px] text-zinc-400">
+        <span className="text-[11px] text-zinc-400 whitespace-nowrap">
           {new Date(record.createdAt || Date.now()).toLocaleDateString()}
         </span>
       ),
       sortable: true,
       sortKey: 'createdAt',
       filterKey: 'createdAt',
-      width: '110px'
+      width: '95px'
     },
     {
       header: 'Actions',
@@ -538,9 +574,9 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
           View
         </Link>
       ),
-      width: '70px'
+      width: '55px'
     }
-  ], [moduleId, pageId]);
+  ], [moduleId, pageId, targetModule]);
 
   if (!moduleId) {
     return (
@@ -555,7 +591,12 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
       <Table
         key={`module_table_widget_${moduleId || widget.id}`}
         filterScopeId={moduleId || widget.id}
-        enableSavedViews={true}
+        enableSavedViews={false}
+        enableGrouping={false}
+        enableAskAurora={false}
+        enableChartToggle={false}
+        enableSelection={false}
+        enableSpreadsheetMode={false}
         scopeType="MODULE"
         scopeId={moduleId}
         tenantId={tenant?.id}
@@ -567,7 +608,7 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
         searchable={true}
         searchValue={search}
         onSearchChange={setSearch}
-        enableFilters={true}
+        enableFilters={false}
         filterFields={filterFields}
         onRowClick={(record) => {
           if (pageId) {
@@ -665,8 +706,8 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
   };
 
   return (
-    <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
-      <div className="border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
+    <div className="h-full flex flex-col p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-3 shrink-0">
         <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Submit New Item'}</h3>
       </div>
 
@@ -691,7 +732,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
                         type="checkbox"
                         checked={!!val}
                         onChange={(e) => handleFieldChange(field.name, e.target.checked)}
-                        className="w-4 h-4 rounded border-zinc-200 text-indigo-600 focus:ring-indigo-500"
+                        className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 bg-white dark:bg-zinc-800"
                       />
                       <span className="text-zinc-500 text-xs">Yes / Enabled</span>
                     </div>
@@ -700,7 +741,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
                       required={field.required}
                       value={val}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none text-zinc-900 dark:text-zinc-100"
                     >
                       <option value="">Select option...</option>
                       {(field.options || []).map((o: string) => (
@@ -713,7 +754,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
                       placeholder={field.placeholder || `Enter ${field.label}...`}
                       value={val}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none resize-none h-20"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none resize-none h-20 text-zinc-900 dark:text-zinc-100"
                     />
                   ) : field.type === 'date' ? (
                     <input
@@ -721,7 +762,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
                       required={field.required}
                       value={val}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none text-zinc-900 dark:text-zinc-100"
                     />
                   ) : (
                     <input
@@ -730,7 +771,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
                       placeholder={field.placeholder || `Enter ${field.label}...`}
                       value={val}
                       onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-lg px-2.5 py-1.5 focus:border-indigo-500/50 outline-none text-zinc-900 dark:text-zinc-100"
                     />
                   )}
 
@@ -740,7 +781,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
             })}
           </div>
 
-          <div className="flex items-center justify-end border-t border-zinc-100 dark:border-zinc-800 pt-3">
+          <div className="flex items-center justify-end border-t border-zinc-200 dark:border-zinc-800 pt-3">
             <Button type="submit" loading={submitting} size="sm" className="w-full md:w-auto">
               Submit Form
             </Button>
@@ -792,8 +833,8 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
   }, [moduleId, tenant?.id, session?.access_token, chartCacheKey]);
 
   return (
-    <div className="h-full flex flex-col p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl shadow-sm overflow-hidden">
-      <div className="border-b border-zinc-150 dark:border-zinc-800 pb-3 mb-3 shrink-0">
+    <div className="h-full flex flex-col p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="border-b border-zinc-200 dark:border-zinc-800 pb-3 mb-3 shrink-0">
         <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">{widget.title || 'Volume Chart'}</h3>
       </div>
 
@@ -810,18 +851,18 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
             {chartType === 'line' ? (
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                <XAxis dataKey="date" stroke="#888888" tickLine={false} />
-                <YAxis stroke="#888888" tickLine={false} />
-                <Tooltip contentStyle={{ background: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
+                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '11px' }} />
                 <Line type="monotone" dataKey="volume" stroke="#6366f1" strokeWidth={2.5} activeDot={{ r: 6 }} animationDuration={300} />
               </LineChart>
             ) : (
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                <XAxis dataKey="date" stroke="#888888" tickLine={false} />
-                <YAxis stroke="#888888" tickLine={false} />
-                <Tooltip contentStyle={{ background: '#1c1917', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
+                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '11px' }} />
                 <Bar dataKey="volume" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={300} />
               </BarChart>
             )}
@@ -1238,11 +1279,11 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
               <div 
                 key={w.id} 
                 className={cn(
-                  "p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800 h-80 flex flex-col justify-between bg-white/50 dark:bg-white/[0.02]", 
+                  "p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 h-80 flex flex-col justify-between bg-white dark:bg-zinc-900 shadow-2xs", 
                   widthClass
                 )}
               >
-                <div className="border-b border-zinc-100 dark:border-zinc-800 pb-2 flex items-center justify-between">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 pb-2 flex items-center justify-between">
                   <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{w.title}</span>
                 </div>
 
@@ -1260,15 +1301,15 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                     <div className="w-full h-full overflow-y-auto text-[10px]">
                       <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-450 uppercase font-black">
+                          <tr className="border-b border-zinc-200 dark:border-zinc-800 text-zinc-400 uppercase font-bold">
                             <th className="py-1 pl-1">Dimension</th>
                             <th className="py-1 text-right pr-1">Aggregated Value</th>
                           </tr>
                         </thead>
                         <tbody>
                           {aggData.map(d => (
-                            <tr key={d.name} className="border-b border-zinc-100/50 dark:border-zinc-800/50 text-zinc-700 dark:text-zinc-300">
-                              <td className="py-2 pl-1 font-bold">{d.name}</td>
+                            <tr key={d.name} className="border-b border-zinc-100 dark:border-zinc-800/60 text-zinc-700 dark:text-zinc-300">
+                              <td className="py-2 pl-1 font-medium">{d.name}</td>
                               <td className="py-2 text-right pr-1 font-mono">{d.value.toLocaleString()}</td>
                             </tr>
                           ))}
@@ -1288,10 +1329,10 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                               }
                             }}
                           >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
-                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                            <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
                             {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Bar dataKey="value" fill={w.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} animationDuration={300} />
                           </BarChart>
@@ -1305,10 +1346,10 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                               }
                             }}
                           >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
-                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                            <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
                             {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Line type="monotone" dataKey="value" stroke={w.properties.color || '#6366f1'} strokeWidth={2} animationDuration={300} />
                           </LineChart>
@@ -1322,10 +1363,10 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                               }
                             }}
                           >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />
-                            <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
-                            <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                            <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
+                            <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
                             {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Area type="monotone" dataKey="value" fill={w.properties.color || '#6366f1'} stroke={w.properties.color || '#6366f1'} fillOpacity={0.15} animationDuration={300} />
                           </AreaChart>

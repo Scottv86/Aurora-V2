@@ -3,12 +3,50 @@ import { supabase } from '../lib/supabase';
 import { usePlatform } from './usePlatform';
 import { toast } from 'sonner';
 
+export type ListColumnType = 
+  | 'text' 
+  | 'number' 
+  | 'date' 
+  | 'boolean' 
+  | 'choice' 
+  | 'multi_choice'
+  | 'status_pill'
+  | 'calculation' 
+  | 'uuid' 
+  | 'autonumber' 
+  | 'currency' 
+  | 'percentage' 
+  | 'email' 
+  | 'phone' 
+  | 'url' 
+  | 'user';
+
+export interface StatusPillOption {
+  id: string;
+  label: string;
+  color: 'emerald' | 'amber' | 'rose' | 'blue' | 'indigo' | 'purple' | 'zinc' | 'cyan';
+}
+
 export interface ListColumn {
   id: string;
   name: string;
-  type: 'text' | 'number' | 'date' | 'boolean' | 'choice';
+  type: ListColumnType;
   options?: string[];
   required?: boolean;
+  // Calculation metadata
+  calculation_formula?: string;
+  calculation_triggers?: string[];
+  calculation_show_as_currency?: boolean;
+  calculation_currency_symbol?: string;
+  // Identifiers metadata
+  uuid_prefix?: string;
+  autonumber_prefix?: string;
+  autonumber_padding?: number;
+  autonumber_start?: number;
+  // Financial metadata
+  currency_symbol?: string;
+  // Status pill metadata
+  status_options?: StatusPillOption[];
 }
 
 export interface GlobalListItem {
@@ -320,6 +358,33 @@ export const useGlobalList = (listId: string | null, options: UseGlobalListOptio
     error,
     refetch: fetchItems,
     addItem,
+    bulkAddItems: async (itemsData: Record<string, any>[]) => {
+      if (!listId || !tenant?.id || itemsData.length === 0) return;
+      try {
+        const startingSortOrder = items.length;
+        const rowsToInsert = itemsData.map((row, index) => ({
+          list_id: listId,
+          tenant_id: tenant.id,
+          data: row,
+          sort_order: startingSortOrder + index,
+          is_active: true,
+          valid_from: new Date().toISOString()
+        }));
+
+        for (let i = 0; i < rowsToInsert.length; i += 200) {
+          const batch = rowsToInsert.slice(i, i + 200);
+          const { error: insertError } = await supabase.from('global_list_items').insert(batch);
+          if (insertError) throw insertError;
+        }
+
+        toast.success(`Imported ${itemsData.length} records successfully`);
+        await fetchItems(true);
+        return true;
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to import records');
+        throw err;
+      }
+    },
     editItem,
     retireItem,
     reorderItems,
@@ -361,10 +426,10 @@ export const useGlobalLists = () => {
     fetchLists();
   }, [fetchLists]);
 
-  const createList = async (name: string, description?: string) => {
+  const createList = async (name: string, description?: string, customColumns?: ListColumn[]) => {
     if (!tenant?.id) return;
     try {
-      const defaultColumns: ListColumn[] = [
+      const defaultColumns: ListColumn[] = customColumns || [
         { id: 'col_' + Math.random().toString(36).substr(2, 9), name: 'Title', type: 'text', required: true }
       ];
 
@@ -383,6 +448,84 @@ export const useGlobalLists = () => {
     }
   };
 
+  const createListWithItems = async (name: string, description: string | undefined, columns: ListColumn[], itemsData: Record<string, any>[]) => {
+    if (!tenant?.id) return;
+    try {
+      const { data: newList, error: listError } = await supabase
+        .from('global_lists')
+        .insert([{ tenant_id: tenant.id, name, description, columns }])
+        .select()
+        .single();
+      if (listError) throw listError;
+
+      if (itemsData.length > 0) {
+        const rowsToInsert = itemsData.map((row, index) => ({
+          list_id: newList.id,
+          tenant_id: tenant.id,
+          data: row,
+          sort_order: index,
+          is_active: true,
+          valid_from: new Date().toISOString()
+        }));
+
+        for (let i = 0; i < rowsToInsert.length; i += 200) {
+          const batch = rowsToInsert.slice(i, i + 200);
+          const { error: insertError } = await supabase.from('global_list_items').insert(batch);
+          if (insertError) throw insertError;
+        }
+      }
+
+      toast.success(`List "${name}" created with ${itemsData.length} records`);
+      await fetchLists();
+      return newList;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create list');
+      throw err;
+    }
+  };
+
+  const saveFullList = async (listId: string, metadata: { name: string, description?: string, columns: ListColumn[] }, itemsData: any[]) => {
+    if (!tenant?.id) return;
+    try {
+      const { error: listError } = await supabase
+        .from('global_lists')
+        .update({
+          name: metadata.name,
+          description: metadata.description,
+          columns: metadata.columns
+        })
+        .eq('id', listId);
+      if (listError) throw listError;
+
+      // Sync items: replace existing items for consistency
+      await supabase.from('global_list_items').delete().eq('list_id', listId);
+      if (itemsData.length > 0) {
+        const rowsToInsert = itemsData.map((item, index) => ({
+          list_id: listId,
+          tenant_id: tenant.id,
+          data: item.data !== undefined ? item.data : item,
+          sort_order: index,
+          is_active: item.is_active !== false,
+          valid_from: new Date().toISOString()
+        }));
+
+        for (let i = 0; i < rowsToInsert.length; i += 200) {
+          const batch = rowsToInsert.slice(i, i + 200);
+          const { error: insertError } = await supabase.from('global_list_items').insert(batch);
+          if (insertError) throw insertError;
+        }
+      }
+
+      globalListDetailCache.delete(listId);
+      globalListItemsCache.delete(listId);
+      await fetchLists();
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save list');
+      throw err;
+    }
+  };
+
   const deleteList = async (id: string) => {
     try {
       const { error } = await supabase.from('global_lists').delete().eq('id', id);
@@ -397,5 +540,5 @@ export const useGlobalLists = () => {
     }
   };
 
-  return { lists, loading, refetch: fetchLists, createList, deleteList };
+  return { lists, loading, refetch: fetchLists, createList, createListWithItems, saveFullList, deleteList };
 };

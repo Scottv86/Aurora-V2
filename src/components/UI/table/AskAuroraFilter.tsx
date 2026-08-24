@@ -504,15 +504,16 @@ If the user asks an analytical or data query, inspect the records and answer acc
             setIsOpen(true);
           }
         }}
+        title="Ask Aurora"
+        aria-label="Ask Aurora"
         className={cn(
-          "inline-flex items-center gap-1.5 h-7.5 px-2.5 text-xs font-medium rounded-lg transition-all shadow-2xs cursor-pointer select-none border",
+          "inline-flex items-center justify-center h-7.5 w-7.5 rounded-lg transition-all shadow-2xs cursor-pointer select-none border",
           isOpen
-            ? "bg-indigo-600 text-white shadow-xs border-indigo-600 font-semibold"
+            ? "bg-indigo-600 text-white shadow-xs border-indigo-600"
             : "bg-indigo-50/50 dark:bg-indigo-500/10 hover:bg-indigo-100/70 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-200/60 dark:border-indigo-500/20"
         )}
       >
-        <Sparkles size={13} className="text-indigo-500 animate-pulse shrink-0" />
-        <span>Ask Aurora</span>
+        <Sparkles size={13} className={cn("shrink-0", isOpen ? "text-white" : "text-indigo-500 animate-pulse")} />
       </button>
 
       {/* Floating AI Assistant Portal Modal */}

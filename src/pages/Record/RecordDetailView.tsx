@@ -69,11 +69,13 @@ export const RecordDetailView = ({
   moduleIdProp,
   recordIdProp,
   isModal = false,
+  isEmbedded = false,
   onClose
 }: {
   moduleIdProp?: string;
   recordIdProp?: string;
   isModal?: boolean;
+  isEmbedded?: boolean;
   onClose?: () => void;
 } = {}) => {
   const { pageId, queueId, moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
@@ -2378,7 +2380,7 @@ export const RecordDetailView = ({
 
 
   if (!moduleData || !record) {
-    if (isModal) {
+    if (isModal || isEmbedded) {
       return (
         <div className="flex flex-col items-center justify-center p-12 space-y-4 w-full h-[60vh]">
           <Loader2 className="animate-spin text-indigo-500" size={24} />
@@ -2405,7 +2407,8 @@ export const RecordDetailView = ({
       {/* Standardized Full-Width Sticky PageHeader */}
       <div className={cn(
         "w-full px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-30",
-        !isModal && "sticky top-0"
+        !isModal && !isEmbedded && "sticky top-0",
+        isEmbedded && "h-[72px] py-0 px-6 box-border flex-row items-center"
       )}>
         {/* Left: Back + Icon + Title + Metadata */}
         <div className="flex items-center gap-3.5 min-w-0">
@@ -2417,6 +2420,14 @@ export const RecordDetailView = ({
             >
               <ArrowLeft size={15} />
             </button>
+          ) : isEmbedded ? (
+            <Link
+              to={`/workspace/modules/${routeModuleId || moduleId}/records/${recordId}`}
+              className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
+              title="Open Full Page View"
+            >
+              <LucideIcons.ExternalLink size={14} />
+            </Link>
           ) : (
             <Link 
               to={getBackUrl()}
@@ -2640,7 +2651,7 @@ export const RecordDetailView = ({
                       status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
                       size="xs"
                     />
-                    <span className="max-w-[80px] truncate">{currentAssignee.name.split(' ')[0]}</span>
+                    <span className="max-w-[140px] truncate">{currentAssignee.name}</span>
                   </>
                 ) : (
                   <>
@@ -3086,7 +3097,10 @@ export const RecordDetailView = ({
         /* Edge-to-Edge Tabbed View */
         <div className="flex-1 w-full min-h-0 relative z-10 flex flex-col overflow-hidden">
           {moduleData?.tabs && moduleData.tabs.length > 0 && (
-            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className={cn(
+              "shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
+              isEmbedded && "h-[52px] box-border"
+            )}>
               <AnimatePresence>
                 {showLeftScroll && (
                   <motion.div 
@@ -3110,7 +3124,10 @@ export const RecordDetailView = ({
               <div 
                 ref={tabContainerRef}
                 onScroll={checkScroll}
-                className="flex gap-2 px-6 py-3 overflow-x-auto no-scrollbar scroll-smooth"
+                className={cn(
+                  "flex gap-2 overflow-x-auto no-scrollbar scroll-smooth",
+                  isEmbedded ? "px-6 py-0 h-full items-center" : "px-6 py-3"
+                )}
               >
                 {[...sortedVisibleTabs.filter((t: any) => !t.parentId), { id: 'activity', name: 'activity', label: 'Activity Feed', iconName: 'MessageSquare' }].map((tab: any) => {
                   const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
@@ -3256,7 +3273,7 @@ export const RecordDetailView = ({
 
   return (
     <>
-      {isModal ? (
+      {isModal || isEmbedded ? (
         <div className="w-full h-full flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {mainContent}
         </div>

@@ -24,7 +24,7 @@ export const PageHeader = ({
 }: PageHeaderProps) => {
   return (
     <div className={cn(
-      "w-full px-6 lg:px-12 py-5 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-white/50 dark:bg-zinc-900/30 backdrop-blur-md shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20",
+      "w-full px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20",
       className
     )}>
       {title && (

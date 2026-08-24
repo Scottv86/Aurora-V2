@@ -464,7 +464,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
     <div className="flex h-full w-full bg-transparent overflow-hidden divide-x divide-zinc-200 dark:divide-zinc-800">
       
       {/* 1. Rules Sidebar (Left) */}
-      <aside className="w-72 flex-shrink-0 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl p-6 flex flex-col gap-4">
+      <aside className="w-72 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Rules</h3>
           <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-[9px] font-bold text-zinc-500">
@@ -562,7 +562,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
 
       {/* 2. Reference Sidebar (Left-Center) */}
       {selectedRuleId !== null || name ? (
-        <aside className="w-64 flex-shrink-0 bg-zinc-50/20 dark:bg-zinc-950/20 p-6 flex flex-col gap-4">
+        <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-6 flex flex-col gap-4">
           <div className="flex gap-1 border-b border-zinc-100 dark:border-zinc-900 pb-2 bg-transparent">
             <button 
               onClick={() => { setRefTab('fields'); setRefSearchQuery(''); }}
@@ -900,7 +900,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
 
       {/* 4. Right Sidebar (Sandbox & AI Assist) */}
       {selectedRuleId !== null || name ? (
-        <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-950 p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+        <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
           {/* Tab Selector */}
           <div className="flex gap-1 border-b border-zinc-100 dark:border-zinc-900 pb-2 bg-transparent shrink-0">
             <button 

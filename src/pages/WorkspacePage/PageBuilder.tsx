@@ -339,8 +339,8 @@ export const PageBuilder = () => {
     )}>
       {/* Top Header */}
       <div className={cn(
-        "px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-white/5 bg-white/50 dark:bg-white/[0.02] backdrop-blur-xl shrink-0 flex items-center justify-between z-10 relative transition-all duration-300",
-        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white/80 dark:bg-zinc-950/80 shadow-sm"
+        "px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between z-10 relative transition-all duration-300",
+        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white dark:bg-zinc-900 shadow-sm"
       )}>
         <div className="flex items-center gap-3">
           <button 
@@ -381,18 +381,6 @@ export const PageBuilder = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button 
-            onClick={toggleBuilderFullscreen}
-            variant={isBuilderFullscreen ? "primary" : "secondary"}
-            className={cn(
-              "gap-1.5 font-bold uppercase tracking-wider",
-              isBuilderFullscreen ? "bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 px-3 text-[11px]" : "text-xs"
-            )}
-            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
-          >
-            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={16} />}
-            <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
-          </Button>
 
           <Button 
             onClick={() => setShowAIModal(true)}
@@ -429,7 +417,7 @@ export const PageBuilder = () => {
       {/* Main Split Screen Workspace */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Left Sidebar (Widget Toolbox) */}
-        <div className="w-64 border-r border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50 dark:bg-zinc-950 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
+        <div className="w-64 border-r border-zinc-200 dark:border-zinc-800 p-4 bg-white dark:bg-zinc-900 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
           <div>
             <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-250 uppercase tracking-widest">Widget Toolbox</h3>
             <p className="text-[10px] text-zinc-500 mt-0.5">Click a widget to place it on the layout canvas.</p>
@@ -452,14 +440,14 @@ export const PageBuilder = () => {
                 <button
                   key={item.type}
                   onClick={() => handleAddWidget(item.type)}
-                  className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group"
+                  className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-indigo-500/40 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-all text-left group shadow-2xs"
                 >
-                  <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                  <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
                     {React.createElement(item.icon, { size: 16 })}
                   </div>
                   <div>
                     <h4 className="font-bold text-zinc-850 dark:text-white">{item.label}</h4>
-                    <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">{item.desc}</p>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-normal mt-0.5">{item.desc}</p>
                   </div>
                 </button>
               );
@@ -470,11 +458,11 @@ export const PageBuilder = () => {
         {/* Center Canvas */}
         <div 
           ref={containerRef} 
-          className="flex-1 p-6 overflow-y-auto bg-zinc-50/10 dark:bg-white/[0.005] relative custom-scrollbar select-none z-10"
+          className="flex-1 p-6 overflow-y-auto bg-zinc-50/50 dark:bg-zinc-950 relative custom-scrollbar select-none z-10"
           onClick={() => setSelectedWidgetId(null)}
         >
           {widgets.length === 0 ? (
-            <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-white/10 rounded-3xl text-center space-y-3 p-6 bg-white/20 dark:bg-white/[0.005] mt-10">
+            <div className="h-64 flex flex-col items-center justify-center border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl text-center space-y-3 p-6 bg-white dark:bg-zinc-900 mt-10 shadow-2xs">
               <Layout size={40} className="text-zinc-300 dark:text-zinc-700" />
               <div>
                 <h4 className="text-sm font-bold text-zinc-650 dark:text-zinc-350">Canvas is empty</h4>
@@ -513,8 +501,8 @@ export const PageBuilder = () => {
                         setSelectedWidgetId(widget.id);
                       }}
                       className={cn(
-                        "p-4 bg-white/40 dark:bg-white/[0.01] border rounded-2xl flex flex-col justify-between transition-all relative group shadow-sm overflow-hidden",
-                        isSelected ? "border-indigo-500 bg-indigo-500/[0.01] ring-2 ring-indigo-500/10" : "border-zinc-200/50 dark:border-white/5 hover:border-zinc-300/80 dark:hover:border-white/10"
+                        "p-4 bg-white dark:bg-zinc-900 border rounded-2xl flex flex-col justify-between transition-all relative group shadow-2xs overflow-hidden",
+                        isSelected ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
                       )}
                     >
                       {/* Widget Actions Top Panel */}
@@ -523,7 +511,7 @@ export const PageBuilder = () => {
                           <div className="drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-550 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0">
                             <GripVertical size={12} />
                           </div>
-                          <span className="text-[9px] font-black uppercase tracking-wider bg-zinc-150 dark:bg-white/5 px-2 py-0.5 rounded text-zinc-500 dark:text-zinc-400">
+                          <span className="text-[9px] font-bold uppercase tracking-wider bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-zinc-500 dark:text-zinc-400">
                             {widget.type}
                           </span>
                           <input
@@ -552,26 +540,26 @@ export const PageBuilder = () => {
                       <div className="w-full flex-1 min-h-0 relative">
                         {widget.type === 'report' ? (
                           widget.properties?.reportId ? (
-                            <div className="w-full h-full pointer-events-none scale-[0.95] origin-top bg-zinc-50/50 dark:bg-white/[0.01] rounded-2xl p-4 border border-zinc-200/30 dark:border-white/5 overflow-hidden">
+                            <div className="w-full h-full pointer-events-none scale-[0.95] origin-top bg-zinc-50 dark:bg-zinc-950/40 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                               <ReportWidgetEmbed widget={widget} tenant={tenant} session={session} />
                             </div>
                           ) : (
-                            <div className="h-full flex items-center justify-center border border-dashed border-zinc-200/50 dark:border-white/5 rounded-xl bg-white/30 dark:bg-white/[0.01] text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">
+                            <div className="h-full flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/40 text-[10px] text-zinc-400 font-medium">
                               Configure Embedded BI Report...
                             </div>
                           )
                         ) : (widget.type === 'queue' || widget.type === 'work-queue') && widget.properties?.queueId ? (
-                          <div className="w-full h-full pointer-events-none scale-[0.90] origin-top bg-zinc-50/50 dark:bg-white/[0.01] rounded-2xl p-2 border border-zinc-200/30 dark:border-white/5 overflow-hidden">
+                          <div className="w-full h-full pointer-events-none scale-[0.90] origin-top bg-zinc-50 dark:bg-zinc-950/40 rounded-2xl p-2 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                             <QueueRenderer queueId={widget.properties.queueId} queueConfig={widget.properties.queueConfig} showHeader={false} readOnly={true} />
                           </div>
                         ) : (widget.type === 'queue' || widget.type === 'work-queue') ? (
-                          <div className="h-full flex flex-col items-center justify-center border border-dashed border-indigo-500/30 rounded-xl bg-indigo-500/[0.02] p-4 text-center">
+                          <div className="h-full flex flex-col items-center justify-center border border-dashed border-indigo-500/30 rounded-xl bg-indigo-500/10 p-4 text-center">
                             <Icons.ListOrdered size={22} className="text-indigo-500 mb-1" />
                             <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{widget.title || 'Work Queue'}</p>
                             <p className="text-[10px] text-zinc-400 mt-0.5">Select a queue in the right panel to bind live records.</p>
                           </div>
                         ) : (
-                          <div className="h-full flex items-center justify-center border border-dashed border-zinc-200/50 dark:border-white/5 rounded-xl bg-white/30 dark:bg-white/[0.01] text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">
+                          <div className="h-full flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/40 text-[10px] text-zinc-400 font-medium">
                             Widget Preview ({widget.w}x{widget.h})
                           </div>
                         )}
@@ -585,7 +573,7 @@ export const PageBuilder = () => {
         </div>
 
         {/* Right Sidebar (Properties Panel) */}
-        <div className="w-80 border-l border-zinc-200/50 dark:border-white/10 p-5 bg-white/20 dark:bg-zinc-900/10 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
+        <div className="w-80 border-l border-zinc-200 dark:border-zinc-800 p-5 bg-white dark:bg-zinc-900 flex flex-col gap-4 overflow-y-auto shrink-0 z-20">
           {selectedWidget ? (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">

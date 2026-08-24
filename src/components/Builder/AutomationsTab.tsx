@@ -1072,7 +1072,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
     <div className="flex h-full w-full bg-transparent overflow-hidden">
       
       {/* COLUMN 1: Rules Directory Sidebar */}
-      <aside className="w-72 flex-shrink-0 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl border-r border-zinc-200 dark:border-zinc-800/80 p-6 flex flex-col gap-4">
+      <aside className="w-72 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-6 flex flex-col gap-4">
         <div className="flex-shrink-0">
           <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Automations</h3>
         </div>
@@ -1175,7 +1175,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       {selectedRuleId !== null ? (
         <>
           {/* COLUMN 2: Triggers & Actions Palette */}
-          <aside className="w-60 flex-shrink-0 bg-white/30 dark:bg-zinc-950/30 backdrop-blur-xl border-r border-zinc-200 dark:border-zinc-800/80 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+          <aside className="w-60 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
             
             {/* Trigger Palette section */}
             <div className="space-y-3">
@@ -2059,7 +2059,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
           </main>
 
           {/* COLUMN 4: Properties Sidebar & Logs History */}
-          <aside className="w-80 flex-shrink-0 bg-white/40 dark:bg-zinc-950/40 backdrop-blur-xl border-l border-zinc-200 dark:border-zinc-800/80 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
             
             {/* Header Settings vs Runs History Tabs */}
             <div className="flex bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">

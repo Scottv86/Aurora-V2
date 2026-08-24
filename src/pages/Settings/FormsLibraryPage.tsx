@@ -187,7 +187,7 @@ export const FormsLibraryPage: React.FC = () => {
       if (Array.isArray(configForms) && configForms.length > 0) {
         configForms.forEach((cf: any, i: number) => {
           items.push({
-            id: cf.id || `mod_subform_${mod.id}_${i}`,
+            id: `mod_${mod.id}_${cf.id || i}`,
             tenantId: tenant?.id || 't1',
             name: cf.name || `${mod.name} Custom Form #${i + 1}`,
             description: cf.description || `Form created within ${mod.name} module.`,

@@ -105,19 +105,12 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   };
 
   return (
-    <div className={cn(
-      "flex flex-col bg-zinc-950 text-zinc-200 transition-all duration-300",
-      isBuilderFullscreen ? "h-screen" : "h-full"
-    )}>
+    <div className="flex flex-col bg-zinc-950 text-zinc-200 h-screen overflow-hidden">
       {/* Header */}
-      <div className={cn(
-        "flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-xl transition-all duration-300",
-        isBuilderFullscreen && "py-2 px-4 bg-zinc-950/90 shadow-sm"
-      )}>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-950/90 shadow-sm shrink-0">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => {
-              setIsBuilderFullscreen(false);
               onCancel?.();
             }}
             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
@@ -130,34 +123,12 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Template Name"
-              className={cn(
-                "font-bold text-white bg-transparent border-none focus:ring-0 p-0 placeholder-zinc-600 transition-all",
-                isBuilderFullscreen ? "text-base font-semibold" : "text-xl"
-              )}
+              className="font-bold text-white bg-transparent border-none focus:ring-0 p-0 placeholder-zinc-600 text-base font-semibold transition-all"
             />
-            {!isBuilderFullscreen && (
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">
-                {template ? `Version ${template.version}` : 'New Template'} • {status}
-              </p>
-            )}
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={toggleBuilderFullscreen}
-            className={cn(
-              "rounded-lg border transition-all flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs px-3 py-1.5",
-              isBuilderFullscreen 
-                ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20" 
-                : "border-zinc-800 text-zinc-400 hover:text-white bg-zinc-900"
-            )}
-            title={isBuilderFullscreen ? "Exit Full Screen (Press Esc)" : "Full Screen Mode"}
-          >
-            {isBuilderFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            <span className="hidden sm:inline text-[10px]">{isBuilderFullscreen ? 'Exit Fullscreen' : 'Full Screen'}</span>
-          </button>
-
           <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
             <button
               onClick={() => setActiveTab('editor')}

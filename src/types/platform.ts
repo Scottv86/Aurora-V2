@@ -85,6 +85,30 @@ export interface VisibilityRule {
   name?: string;
 }
 
+export type FormattingPreset = 'danger' | 'warning' | 'success' | 'info' | 'purple' | 'slate' | 'custom';
+
+export interface FormattingStyle {
+  preset?: FormattingPreset;
+  textColor?: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  isBold?: boolean;
+  isItalic?: boolean;
+  isStrikethrough?: boolean;
+  badgeLabel?: string;
+  iconName?: string;
+}
+
+export interface ConditionalFormattingRule {
+  id: string;
+  name?: string;
+  enabled: boolean;
+  targetType: 'row' | 'column' | 'field';
+  targetId?: string; // column key or field ID (empty or omitted for row-level)
+  condition: VisibilityRule;
+  style: FormattingStyle;
+}
+
 export interface ModuleField {
   id: string;
   name?: string;
@@ -119,6 +143,7 @@ export interface ModuleField {
   rowSpan?: number;
   tabId?: string;
   visibilityRule?: VisibilityRule;
+  formattingRules?: ConditionalFormattingRule[];
   hidden?: boolean;
   collapsible?: boolean;
   defaultCollapsed?: boolean;
@@ -508,6 +533,7 @@ export interface QueueEntity {
     defaultSort?: { key: string; direction: 'asc' | 'desc' };
     slaMinutes?: number;
     actions?: any[];
+    formattingRules?: ConditionalFormattingRule[];
   };
   version?: number;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';

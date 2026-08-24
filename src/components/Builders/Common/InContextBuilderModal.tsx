@@ -29,7 +29,7 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex flex-col w-screen h-screen bg-white dark:bg-zinc-950 overflow-hidden animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[9999] flex flex-col w-screen h-screen bg-white dark:bg-zinc-950 overflow-hidden">
       {/* Top Navigation Bar */}
       <div className="flex items-center justify-between px-6 py-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">

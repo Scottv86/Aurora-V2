@@ -663,6 +663,177 @@ router.post('/records', async (req: TenantRequest, res) => {
   }
 });
 
+// CREATE BATCH RECORDS (ALL OR NOTHING ATOMIC TRANSACTION)
+router.post('/records/bulk', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { moduleId, records, associations, path } = req.body;
+
+    if (!moduleId) {
+      return res.status(400).json({ error: 'moduleId is required' });
+    }
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: 'records must be a non-empty array' });
+    }
+    if (records.length > 10000) {
+      return res.status(400).json({ error: 'Batch size exceeds maximum limit of 10,000 records' });
+    }
+
+    const module = await db.module.findUnique({ where: { id: moduleId } });
+    if (!module) return res.status(404).json({ error: 'Module not found' });
+
+    const config = (module.config as any) || {};
+    const flattenFields = (fields: any[]): any[] => {
+      const result: any[] = [];
+      fields.forEach(f => {
+        result.push(f);
+        if (f.fields && f.type !== 'repeatableGroup' && f.type !== 'sub_module') {
+          result.push(...flattenFields(f.fields));
+        }
+      });
+      return result;
+    };
+    const allFields = flattenFields(config.layout || []);
+    const requiredFields = allFields.filter((f: any) => f.required);
+    const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
+
+    // Pre-validate all records before starting the transaction
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i];
+      const missingFields = requiredFields.filter((f: any) => {
+        let actualVal = row[f.id];
+        if (actualVal === undefined || actualVal === null) {
+          const group = (config.layout || []).find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
+          if (group) {
+            actualVal = row[group.id]?.[f.id];
+          }
+        }
+        return actualVal === null || actualVal === undefined || (typeof actualVal === 'string' && actualVal.trim() === '');
+      });
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          error: `Validation failed at row ${i + 1}: Required fields missing: ${missingFields.map((f: any) => f.label || f.id).join(', ')}`,
+          rowIndex: i,
+          missingFields: missingFields.map((f: any) => f.id)
+        });
+      }
+
+      if (config.validationRules && Array.isArray(config.validationRules)) {
+        const validationErrors = validateRecordRules(row, config.validationRules, allFields);
+        const hardErrors = validationErrors.filter(e => e.severity === 'error');
+        if (hardErrors.length > 0) {
+          return res.status(400).json({
+            error: `Validation failed at row ${i + 1}: ${hardErrors.map(e => e.message).join(' | ')}`,
+            rowIndex: i,
+            validationErrors: hardErrors
+          });
+        }
+      }
+    }
+
+    // Workflow and SLA preparation
+    let workflowState: any = null;
+    const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+    if (workflow && workflow.nodes && workflow.nodes.length > 0) {
+      const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
+      workflowState = {
+        currentNodeId: startNode.id,
+        activeNodeIds: [startNode.id],
+        history: [{
+          nodeId: startNode.id,
+          timestamp: new Date().toISOString(),
+          action: 'Initialized',
+          triggeredBy: (req as any).user?.name || (req as any).user?.email || 'Bulk Import'
+        }]
+      };
+    }
+
+    let slaDeadline: Date | undefined = undefined;
+    if (config?.slaConfig && config.slaConfig.breachHours) {
+      slaDeadline = new Date(Date.now() + parseFloat(config.slaConfig.breachHours) * 60 * 60 * 1000);
+    }
+
+    const createdByMemberId = (req as any).user?.memberId || null;
+
+    // Atomic execution inside database transaction
+    const createdRecords = await db.$transaction(async (tx: any) => {
+      let updatedConfig = { ...config };
+      let configChanged = false;
+      let currentKeyNumber = config.nextKeyNumber || 1;
+
+      const preparedRows = records.map((recordData: any) => {
+        let rowData = { ...recordData };
+
+        // 1. Handle legacy _record_key generation
+        if (config.recordKeyPrefix) {
+          const prefix = config.recordKeyPrefix || '';
+          const suffix = config.recordKeySuffix || '';
+          rowData._record_key = `${prefix}-${currentKeyNumber}${suffix}`;
+          currentKeyNumber++;
+          configChanged = true;
+        }
+
+        // 2. Handle autonumber fields
+        const autonumbersChanged = processAutonumbers(rowData, config.layout || [], updatedConfig);
+        if (autonumbersChanged) {
+          configChanged = true;
+        }
+
+        if (!rowData.participantIds && createdByMemberId) {
+          rowData.participantIds = [createdByMemberId];
+        }
+
+        return {
+          tenantId,
+          moduleId,
+          data: rowData,
+          associations: associations || [],
+          path: path || null,
+          status: rowData.status || (workflowState ? getStatusFromState(workflowState, workflow, 'New') : 'New'),
+          createdByMemberId,
+          workflowState: workflowState ? { ...workflowState } : null,
+          slaDeadline
+        };
+      });
+
+      if (configChanged) {
+        updatedConfig.nextKeyNumber = currentKeyNumber;
+        await tx.module.update({
+          where: { id: moduleId },
+          data: { config: updatedConfig }
+        });
+      }
+
+      await tx.record.createMany({
+        data: preparedRows
+      });
+
+      return { count: preparedRows.length };
+    });
+
+    emitTenantUpdate(tenantId, 'records_bulk_added', {
+      moduleId,
+      count: createdRecords.count
+    });
+
+    triggerWebhooks(tenantId, 'records.bulk_created', {
+      moduleId,
+      count: createdRecords.count
+    });
+
+    res.json({
+      success: true,
+      count: createdRecords.count,
+      message: `Successfully created ${createdRecords.count} records.`
+    });
+  } catch (err: any) {
+    console.error('[Bulk Record Creation Error]:', err);
+    res.status(500).json({ error: err.message || 'Failed to bulk create records. Transaction rolled back.' });
+  }
+});
+
 // MOVE / ROUTE BATCH RECORDS ACROSS MODULES
 router.post('/records/move-batch', async (req: TenantRequest, res) => {
   try {

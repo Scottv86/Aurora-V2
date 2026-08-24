@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
-import { ChevronDown, Box, Compass, LayoutDashboard, Settings } from 'lucide-react';
+import { ChevronDown, Box, SlidersHorizontal, LayoutDashboard, Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { MenuConfig, MenuItem } from '../../types/menu';
 
@@ -98,7 +98,7 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
               {hasDropdown && isOpen && (
                 <div className="absolute left-0 top-full pt-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
                   <div className="w-[300px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-3 space-y-1.5">
-                    <div className="px-2 py-1 border-b border-zinc-100 dark:border-zinc-850 flex items-center justify-between mb-1">
+                    <div className="px-2 py-1 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between mb-1">
                       <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{section.title}</span>
                       <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-600">{visibleItems.length} items</span>
                     </div>
@@ -121,9 +121,10 @@ export const TopMegaMenu = ({ menuConfig, isDeveloper }: TopMegaMenuProps) => {
       {isDeveloper && (
         <NavLink
           to="/workspace/settings/navigation/builder"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs transition-all shadow-sm shrink-0 border border-indigo-200/50 dark:border-indigo-500/20 group"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-xs font-medium transition-all shadow-2xs shrink-0 group select-none"
+          title="Configure Navigation Menu"
         >
-          <Compass size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
+          <SlidersHorizontal size={13} className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
           <span>Configure Menu</span>
         </NavLink>
       )}

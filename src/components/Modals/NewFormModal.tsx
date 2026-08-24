@@ -181,8 +181,8 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
 
   const availableModules = (modules || []).filter((m: any) => {
     if (!m || !m.name) return false;
-    if (m.type === 'PAGE' || m.category === 'Workspace Pages') return false;
-    if (m.isGlobal || m.isIntakeTriage || m.config?.isIntakeTriage || m.name === 'Work Distribution' || m.category === 'Intake & Requests') return false;
+    if (m.type === 'PAGE' || m.type === 'SYSTEM' || m.category === 'Workspace Pages') return false;
+    if (m.isGlobal || m.isIntakeTriage || m.config?.isIntakeTriage) return false;
     if (m.enabled === false) return false;
     return true;
   });

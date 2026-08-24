@@ -151,6 +151,10 @@ export interface TableProps<T> {
   // NEW: Data Lineage & Calculation Explanation
   enableLineage?: boolean;
   onExplainLineage?: (lineage: LineageInfo, item: T, col: Column<T>) => void;
+
+  // NEW: Conditional Formatting & Row Styles
+  rowClassName?: (item: T) => string | undefined;
+  rowStyle?: (item: T) => React.CSSProperties | undefined;
 }
 
 // Custom Glass Checkbox
@@ -260,7 +264,9 @@ export function Table<T extends { id: string | number }>({
   rowActions,
   renderRowActions,
   enableLineage = true,
-  onExplainLineage
+  onExplainLineage,
+  rowClassName,
+  rowStyle
 }: TableProps<T>) {
   const [internalPage, setInternalPage] = useState(1);
   const [internalPageSize, setInternalPageSize] = useState(initialPageSize);
@@ -676,6 +682,7 @@ export function Table<T extends { id: string | number }>({
       
       {/* Unified Single-Row Workbench Toolbar & Filter Bar */}
       <TableFilterBar
+        className={density === 'compact' ? "px-3" : "px-6"}
         fields={computedFilterFields}
         filterState={activeFilterState}
         onChange={handleFilterChange}
@@ -989,8 +996,10 @@ export function Table<T extends { id: string | number }>({
                             className={cn(
                               'group transition-colors duration-100 bg-white dark:bg-[#101010]',
                               isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60',
-                              onRowClick && 'cursor-pointer'
+                              onRowClick && 'cursor-pointer',
+                              rowClassName?.(item)
                             )}
+                            style={rowStyle?.(item)}
                           >
                             {enableSelection && (
                               <td 
@@ -1092,8 +1101,10 @@ export function Table<T extends { id: string | number }>({
                       className={cn(
                         'group transition-colors duration-100 bg-white dark:bg-[#101010]',
                         isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60',
-                        onRowClick && 'cursor-pointer'
+                        onRowClick && 'cursor-pointer',
+                        rowClassName?.(item)
                       )}
+                      style={rowStyle?.(item)}
                     >
                       {enableSelection && (
                         <td 
@@ -1346,19 +1357,30 @@ export function Table<T extends { id: string | number }>({
       {/* Pagination & Footer Bar */}
       {pagination && activeViewMode === 'table' && (
         totalItems > 0 ? (
-          <div className="h-12 flex flex-col sm:flex-row items-center justify-between border-t border-zinc-200 dark:border-zinc-800 px-6 gap-3 bg-zinc-50 dark:bg-zinc-900 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                Showing <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}</span> to <span className="text-zinc-900 dark:text-zinc-100">{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span> records
+          <div className={cn(
+            "flex flex-row items-center justify-between border-t border-zinc-200 dark:border-zinc-800 gap-2 bg-zinc-50 dark:bg-zinc-900 shrink-0 select-none",
+            density === 'compact' ? "h-9 px-3 text-[10px]" : "h-12 px-6"
+          )}>
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider truncate">
+                {density === 'compact' ? (
+                  <>
+                    <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}–{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span>
+                  </>
+                ) : (
+                  <>
+                    Showing <span className="text-zinc-900 dark:text-zinc-100">{startIndex + 1}</span> to <span className="text-zinc-900 dark:text-zinc-100">{endIndex}</span> of <span className="text-zinc-900 dark:text-zinc-100">{totalItems}</span> records
+                  </>
+                )}
               </div>
 
               {normalizedPageSizeOptions.length > 1 && (
-                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                  <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">Per page:</span>
+                <div className="flex items-center gap-1 text-xs text-zinc-400 shrink-0">
+                  <span className="text-[9px] font-bold uppercase tracking-wider hidden sm:inline">Per page:</span>
                   <select
                     value={currentPageSize}
                     onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                    className="bg-white/80 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg px-2 py-0.5 text-xs text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
+                    className="bg-white/80 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-md px-1.5 py-0.5 text-[11px] text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
                   >
                     {normalizedPageSizeOptions.map((opt) => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -1368,24 +1390,24 @@ export function Table<T extends { id: string | number }>({
               )}
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <Button 
                 variant="secondary" 
                 size="sm" 
-                className="h-7 w-7 p-0 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100"
+                className={cn("p-0 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100", density === 'compact' ? "h-6 w-6" : "h-7 w-7")}
                 disabled={currentPage === 1}
                 onClick={(e) => {
                   e.stopPropagation();
                   setCurrentPage(prev => Math.max(1, prev - 1));
                 }}
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={13} />
               </Button>
               
-              <div className="flex items-center gap-1 mx-1.5">
+              <div className="flex items-center gap-0.5 mx-0.5 sm:mx-1">
                 {pageNumbers.map((p, idx) => {
                   if (typeof p === 'string') {
-                    return <span key={`ellipsis-${idx}`} className="text-zinc-400 px-1 text-xs select-none">...</span>;
+                    return <span key={`ellipsis-${idx}`} className="text-zinc-400 px-0.5 text-xs select-none">...</span>;
                   }
                   const pageNum = p as number;
                   return (
@@ -1396,9 +1418,10 @@ export function Table<T extends { id: string | number }>({
                         setCurrentPage(pageNum);
                       }}
                       className={cn(
-                        'h-7 min-w-[28px] px-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer',
+                        'px-1.5 rounded-md font-bold transition-all cursor-pointer select-none',
+                        density === 'compact' ? 'h-6 min-w-[24px] text-[10px]' : 'h-7 min-w-[28px] text-xs',
                         currentPage === pageNum 
-                          ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30' 
+                          ? 'bg-indigo-600 text-white shadow-xs' 
                           : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/5'
                       )}
                     >
@@ -1411,14 +1434,14 @@ export function Table<T extends { id: string | number }>({
               <Button 
                 variant="secondary" 
                 size="sm" 
-                className="h-7 w-7 p-0 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100"
+                className={cn("p-0 rounded-lg bg-white dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100", density === 'compact' ? "h-6 w-6" : "h-7 w-7")}
                 disabled={currentPage === totalPages}
                 onClick={(e) => {
                   e.stopPropagation();
                   setCurrentPage(prev => Math.min(totalPages, prev + 1));
                 }}
               >
-                <ChevronRight size={14} />
+                <ChevronRight size={13} />
               </Button>
             </div>
           </div>

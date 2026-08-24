@@ -104,7 +104,7 @@ export const AgentArchitectPanel: React.FC<AgentArchitectPanelProps> = ({
   return (
     <div className="h-full flex flex-col bg-white dark:bg-zinc-950">
       {/* Header & Mode Switcher */}
-      <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-950">
+      <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-900">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
             <Sparkles size={16} />

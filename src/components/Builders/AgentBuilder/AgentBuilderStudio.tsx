@@ -156,7 +156,7 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
       />
 
       {/* Top Navigation Bar */}
-      <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/90 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-10">
+      <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 flex items-center justify-between shrink-0 z-10">
         {/* Left Side: Back, Breadcrumbs, Agent Name */}
         <div className="flex items-center gap-3">
           <button
@@ -232,14 +232,6 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
             title="Export Blueprint JSON"
           >
             <Download size={15} />
-          </button>
-
-          <button
-            onClick={toggleBuilderFullscreen}
-            className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
-            title="Toggle Fullscreen"
-          >
-            {isBuilderFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
 
           <button

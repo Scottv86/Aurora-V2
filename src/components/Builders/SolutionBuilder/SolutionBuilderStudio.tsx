@@ -145,18 +145,6 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
     };
   }, [setIsBuilderFullscreen]);
 
-
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isBuilderFullscreen) {
-        setIsBuilderFullscreen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isBuilderFullscreen, setIsBuilderFullscreen]);
-
   const handleAddSource = (newSource: ContextSource) => {
     setContextSources(prev => [newSource, ...prev]);
   };
@@ -588,15 +576,6 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
             <span className="hidden sm:inline">Export</span>
           </button>
 
-          {/* Fullscreen Toggle (Icon Only) */}
-          <button
-            onClick={toggleBuilderFullscreen}
-            className="p-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors flex items-center justify-center"
-            title={isBuilderFullscreen ? "Exit Full Screen (Esc)" : "Full Screen Mode"}
-          >
-            {isBuilderFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-          </button>
-
           {/* Save */}
           <button
             onClick={handleSaveBlueprint}
@@ -634,7 +613,7 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
 
           {isLeftPaneCollapsed ? (
             /* Collapsed Left Sidebar (NotebookLM Style) */
-            <div className="w-[52px] h-full bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/60 dark:border-white/10 rounded-3xl p-2 flex flex-col items-center justify-between shadow-xl">
+            <div className="w-[52px] h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-2 flex flex-col items-center justify-between shadow-xl">
               <div className="flex flex-col items-center gap-3 w-full">
                 <button
                   onClick={() => setIsLeftPaneCollapsed(false)}
@@ -699,7 +678,7 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
 
           {isRightPaneCollapsed ? (
             /* Collapsed Right Sidebar (NotebookLM Style) */
-            <div className="w-[52px] h-full bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/60 dark:border-white/10 rounded-3xl p-2 flex flex-col items-center justify-between shadow-xl">
+            <div className="w-[52px] h-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-2 flex flex-col items-center justify-between shadow-xl">
               <div className="flex flex-col items-center gap-3 w-full">
                 <button
                   onClick={() => setIsRightPaneCollapsed(false)}

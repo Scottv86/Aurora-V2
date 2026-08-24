@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { RecordDetailView } from '../Record/RecordDetailView';
 import { createPortal } from 'react-dom';
 import { Table } from '../../components/UI/Table';
@@ -17,7 +17,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Share2,
-  SlidersHorizontal
+  SlidersHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  User,
+  Layout,
+  FileSpreadsheet,
+  ClipboardPaste,
+  ChevronDown
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, 
@@ -34,7 +41,7 @@ import { FieldInput } from '../../components/FieldInput';
 import { builderCache, workspaceMotion } from '../../utils/builderCache';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
-import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify } from '../../lib/utils';
+import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify, evaluateFormattingRules } from '../../lib/utils';
 import { validateRecordRules } from '../../lib/validationEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
@@ -45,6 +52,7 @@ import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadg
 import { useModalStack } from '../../context/ModalStackContext';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
+import { BulkPasteRecordModal } from '../../components/Platform/BulkPasteRecordModal';
 
 const InlineAssigneeCell = ({
   record,
@@ -530,7 +538,7 @@ const InlineParticipantCell = ({
 
 interface RecordActionsCellProps {
   record: any;
-  onView: () => void;
+  onView?: () => void;
   onShare: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -617,18 +625,20 @@ const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
 
   return (
     <div className="flex items-center justify-center gap-1 select-none" onClick={(e) => e.stopPropagation()}>
-      {/* 1. Quick View / Edit details */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onView();
-        }}
-        className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
-        title="View details"
-      >
-        <LucideIcons.Eye size={13} />
-      </button>
+      {/* 1. Quick View / Edit details (if provided) */}
+      {onView && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onView();
+          }}
+          className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+          title="View details"
+        >
+          <LucideIcons.Eye size={13} />
+        </button>
+      )}
 
       {/* 2. Quick Copy Key */}
       <button
@@ -842,8 +852,13 @@ export const ModuleView = () => {
   const { moduleId: moduleIdRaw } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queueIdRaw = searchParams.get('queueId');
+  const [selectedSplitRecordId, setSelectedSplitRecordId] = useState<string | null>(() => searchParams.get('recordId') || null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [splitStatusFilter, setSplitStatusFilter] = useState<string>('all');
+  const [splitAssigneeFilter, setSplitAssigneeFilter] = useState<string>('all');
+  const [splitSortBy, setSplitSortBy] = useState<'updated' | 'created' | 'title' | 'key'>('updated');
   const { session, user } = useAuth();
   const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig, isDeveloper } = usePlatform();
 
@@ -887,6 +902,25 @@ export const ModuleView = () => {
     return activeQueue ? activeQueue.id : queueIdRaw;
   }, [activeQueue, queueIdRaw]);
 
+  const activeTenantMember = useMemo(() => {
+    return (members || []).find((m: any) => {
+      const authId = (platformUser as any)?.id || (session?.user as any)?.id;
+      const authEmail = (platformUser as any)?.email || (session?.user as any)?.email;
+      return (
+        (authId && (m.id === authId || m.userId === authId || m.cuid === authId || m.memberId === authId)) ||
+        (authEmail && m.email?.toLowerCase() === authEmail?.toLowerCase())
+      );
+    });
+  }, [members, platformUser, session]);
+
+  const resolvedCurrentUserId = useMemo(() => {
+    return activeTenantMember?.id || (platformUser as any)?.id || (session?.user as any)?.id;
+  }, [activeTenantMember, platformUser, session]);
+
+  const resolvedCurrentUserName = useMemo(() => {
+    return activeTenantMember?.name || (platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email;
+  }, [activeTenantMember, platformUser, session]);
+
   useModalStack();
   const matchedModuleInitial = useMemo(() => {
     if (!moduleId || !modules) return null;
@@ -899,6 +933,20 @@ export const ModuleView = () => {
   const [moduleData, setModuleData] = useState<Module | null>(() => matchedModuleInitial);
   const [records, setRecords] = useState<Record<string, any>[]>(() => builderCache.get(recordsCacheKey) || []);
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
+  const [showBulkPasteModal, setShowBulkPasteModal] = useState(false);
+  const [showCreateDropdown, setShowCreateDropdown] = useState(false);
+  const createDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showCreateDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (createDropdownRef.current && !createDropdownRef.current.contains(e.target as Node)) {
+        setShowCreateDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showCreateDropdown]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [newEntryData, setNewEntryData] = useState<Record<string, any>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1624,6 +1672,15 @@ export const ModuleView = () => {
   }, [moduleData, allFields, displayFields]);
 
   const handleRecordClick = (recordId: string) => {
+    if (interfaceSettings.master.layoutType === 'split') {
+      setSelectedSplitRecordId(recordId);
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('recordId', recordId);
+        return next;
+      }, { replace: true });
+      return;
+    }
     const detailViewMode = interfaceSettings.master.detailViewMode || 'page';
     if (detailViewMode === 'modal') {
       setActiveDetailRecordId(recordId);
@@ -1769,13 +1826,38 @@ export const ModuleView = () => {
 
       toast.success(nextStarred ? `Starred ${record._record_key || 'record'}` : `Unstarred ${record._record_key || 'record'}`);
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
     } catch (err: any) {
+      // Rollback
+      setRecords(prev => prev.map(r => {
+        if (r.id !== record.id) return r;
+        const list = Array.isArray(r._starredUserIds) ? [...r._starredUserIds] : [];
+        const updatedList = currentStarred 
+          ? Array.from(new Set([...list, resolvedCurrentUserId]))
+          : list.filter(uid => uid !== resolvedCurrentUserId);
+        return { ...r, _starredUserIds: updatedList, is_starred: currentStarred };
+      }));
       toast.error(err.message || 'Failed to update star');
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
     }
   };
 
   const handleBulkStar = async (selectedIds: (string | number)[], _selectedItems: any[], star: boolean, clearSelection: () => void) => {
+    const targetIdSet = new Set(selectedIds.map(String));
+
+    // Optimistic UI state update
+    setRecords(prev => prev.map(r => {
+      if (!targetIdSet.has(String(r.id))) return r;
+      const list = Array.isArray(r._starredUserIds) ? [...r._starredUserIds] : [];
+      const updatedList = star 
+        ? Array.from(new Set([...list, resolvedCurrentUserId]))
+        : list.filter(uid => uid !== resolvedCurrentUserId);
+      return { ...r, _starredUserIds: updatedList, is_starred: star };
+    }));
+
+    clearSelection();
+
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       await fetch(`${DATA_API_URL}/records/star-batch`, {
@@ -1789,9 +1871,11 @@ export const ModuleView = () => {
       });
       toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-      clearSelection();
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
     } catch (err: any) {
       toast.error(err.message || 'Failed to update star for records');
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
     }
   };
 
@@ -2208,6 +2292,469 @@ export const ModuleView = () => {
     "January", "February", "March", "April", "May", "June", 
     "July", "August", "September", "October", "November", "December"
   ];
+
+  const splitStatusOptions = useMemo(() => {
+    const statusField = allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status');
+    return statusField?.options || ['Todo', 'In Progress', 'Done', 'Archived'];
+  }, [allFields]);
+
+  const splitRecords = useMemo(() => {
+    let result = [...filteredRecords];
+    if (splitStatusFilter !== 'all') {
+      result = result.filter(r => {
+        const s = r.status || (r.data && r.data.status) || (r.workflowState?.currentNodeId);
+        return String(s || '').toLowerCase() === splitStatusFilter.toLowerCase();
+      });
+    }
+    if (splitAssigneeFilter !== 'all') {
+      if (splitAssigneeFilter === 'unassigned') {
+        result = result.filter(r => !r.assigneeId);
+      } else {
+        result = result.filter(r => r.assigneeId === splitAssigneeFilter);
+      }
+    }
+    result.sort((a, b) => {
+      if (splitSortBy === 'created') {
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      }
+      if (splitSortBy === 'title') {
+        return (getRecordTitle(a) || '').localeCompare(getRecordTitle(b) || '');
+      }
+      if (splitSortBy === 'key') {
+        return (a._record_key || a.id || '').localeCompare(b._record_key || b.id || '');
+      }
+      // default 'updated'
+      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+    });
+    return result;
+  }, [filteredRecords, splitStatusFilter, splitAssigneeFilter, splitSortBy, getRecordTitle]);
+
+  const effectiveSelectedSplitRecordId = useMemo(() => {
+    if (selectedSplitRecordId && splitRecords.some(r => r.id === selectedSplitRecordId)) {
+      return selectedSplitRecordId;
+    }
+    const urlRecordId = searchParams.get('recordId');
+    if (urlRecordId && splitRecords.some(r => r.id === urlRecordId)) {
+      return urlRecordId;
+    }
+    return splitRecords[0]?.id || null;
+  }, [selectedSplitRecordId, splitRecords, searchParams]);
+
+  // Keep selectedSplitRecordId synced if not set
+  useEffect(() => {
+    if (effectiveSelectedSplitRecordId && selectedSplitRecordId !== effectiveSelectedSplitRecordId) {
+      setSelectedSplitRecordId(effectiveSelectedSplitRecordId);
+    }
+  }, [effectiveSelectedSplitRecordId, selectedSplitRecordId]);
+
+  // Keyboard navigation up / down
+  const handleSplitKeyDown = useCallback((e: KeyboardEvent) => {
+    if (interfaceSettings.master.layoutType !== 'split') return;
+    if (!splitRecords || splitRecords.length === 0) return;
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || (activeEl as HTMLElement).isContentEditable)) {
+      return;
+    }
+    const currentIndex = splitRecords.findIndex(r => r.id === effectiveSelectedSplitRecordId);
+    if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault();
+      const nextIndex = currentIndex < splitRecords.length - 1 ? currentIndex + 1 : 0;
+      const nextRecord = splitRecords[nextIndex];
+      if (nextRecord) {
+        setSelectedSplitRecordId(nextRecord.id);
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev);
+          next.set('recordId', nextRecord.id);
+          return next;
+        }, { replace: true });
+      }
+    } else if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : splitRecords.length - 1;
+      const prevRecord = splitRecords[prevIndex];
+      if (prevRecord) {
+        setSelectedSplitRecordId(prevRecord.id);
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev);
+          next.set('recordId', prevRecord.id);
+          return next;
+        }, { replace: true });
+      }
+    }
+  }, [splitRecords, effectiveSelectedSplitRecordId, interfaceSettings.master.layoutType, setSearchParams]);
+
+  useEffect(() => {
+    if (interfaceSettings.master.layoutType === 'split') {
+      window.addEventListener('keydown', handleSplitKeyDown);
+      return () => window.removeEventListener('keydown', handleSplitKeyDown);
+    }
+  }, [interfaceSettings.master.layoutType, handleSplitKeyDown]);
+
+  const getSplitStatusStyle = (statusStr: string) => {
+    const s = (statusStr || '').toLowerCase();
+    if (['done', 'completed', 'resolved', 'closed', 'approved'].some(k => s.includes(k))) {
+      return {
+        badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-500/20',
+        dot: 'bg-emerald-500'
+      };
+    }
+    if (['in progress', 'active', 'progress', 'doing', 'working', 'in review', 'review'].some(k => s.includes(k))) {
+      return {
+        badge: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 border-indigo-200/60 dark:border-indigo-500/20',
+        dot: 'bg-indigo-500'
+      };
+    }
+    if (['pending', 'blocked', 'hold', 'on hold', 'waiting', 'paused'].some(k => s.includes(k))) {
+      return {
+        badge: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200/60 dark:border-amber-500/20',
+        dot: 'bg-amber-500'
+      };
+    }
+    if (['cancelled', 'rejected', 'failed', 'declined', 'closed lost'].some(k => s.includes(k))) {
+      return {
+        badge: 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 border-rose-200/60 dark:border-rose-500/20',
+        dot: 'bg-rose-500'
+      };
+    }
+    return {
+      badge: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700',
+      dot: 'bg-zinc-400'
+    };
+  };
+
+  const formatSplitTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const renderSplitView = () => {
+    return (
+      <div className="flex-1 w-full h-full min-h-0 flex relative overflow-hidden bg-zinc-100/50 dark:bg-zinc-950">
+        {/* Left Sidebar: Record Navigator */}
+        <div
+          className={cn(
+            "h-full flex flex-col shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all duration-300 relative z-20",
+            isSidebarCollapsed ? "w-0 overflow-hidden border-r-0" : "w-80 lg:w-96"
+          )}
+        >
+          {/* Rail Header */}
+          <div className="h-[124px] px-3.5 py-3 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col justify-between shrink-0 box-border w-full min-w-0 overflow-hidden">
+            {/* Top row: Counter, quick actions, collapse */}
+            <div className="flex items-center justify-between w-full min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                  Records
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                  {splitRecords.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setIsSidebarCollapsed(true)}
+                  className="p-1.5 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                  title="Collapse sidebar"
+                >
+                  <PanelLeftClose size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
+              <input
+                type="text"
+                placeholder="Search in records..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Bar */}
+            <div className="grid grid-cols-3 gap-1.5 w-full min-w-0">
+              {/* Status Filter Dropdown */}
+              <select
+                value={splitStatusFilter}
+                onChange={(e) => setSplitStatusFilter(e.target.value)}
+                className="w-full min-w-0 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
+              >
+                <option value="all">All Status</option>
+                {splitStatusOptions.map((opt: any) => {
+                  const optVal = typeof opt === 'string' ? opt : opt.value || opt.label;
+                  const optLabel = typeof opt === 'string' ? opt : opt.label;
+                  return (
+                    <option key={optVal} value={optVal}>{optLabel}</option>
+                  );
+                })}
+              </select>
+
+              {/* Assignee Filter Dropdown */}
+              <select
+                value={splitAssigneeFilter}
+                onChange={(e) => setSplitAssigneeFilter(e.target.value)}
+                className="w-full min-w-0 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
+              >
+                <option value="all">All Users</option>
+                <option value="unassigned">Unassigned</option>
+                {(members || []).map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.name || m.email}</option>
+                ))}
+              </select>
+
+              {/* Sort Dropdown */}
+              <select
+                value={splitSortBy}
+                onChange={(e) => setSplitSortBy(e.target.value as any)}
+                className="w-full min-w-0 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
+                title="Sort records"
+              >
+                <option value="updated">Updated</option>
+                <option value="created">Created</option>
+                <option value="title">Title</option>
+                <option value="key">Key</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Record Items List */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+            {splitRecords.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400">
+                  <Search size={18} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">No records found</p>
+                  <p className="text-[11px] text-zinc-500">Try adjusting your filters or search terms.</p>
+                </div>
+                {(searchQuery || splitStatusFilter !== 'all' || splitAssigneeFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSplitStatusFilter('all');
+                      setSplitAssigneeFilter('all');
+                    }}
+                    className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              splitRecords.map((rec: any) => {
+                const isSelected = rec.id === effectiveSelectedSplitRecordId;
+                const recTitle = getRecordTitle(rec);
+                const recKey = rec._record_key || rec.id.slice(0, 8);
+                const rawStatus = rec.status || (rec.data && rec.data.status) || (rec.workflowState?.currentNodeId) || 'Todo';
+                const statusStyle = getSplitStatusStyle(rawStatus);
+                const assignedMember = (members || []).find((m: any) => m.id === rec.assigneeId);
+                const timeAgo = formatSplitTime(rec.updatedAt || rec.createdAt);
+                const isStarred = (rec._starredUserIds || []).includes(resolvedCurrentUserId) || rec.is_starred || rec._is_starred || false;
+
+                const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
+                const rowFmt = evaluateFormattingRules(rules, rec, visibilityContext, { targetType: 'row' });
+                const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+
+                const statusFmt = evaluateFormattingRules(rules, rec, visibilityContext, { targetType: 'column', targetId: 'status' });
+                const StatusIcon = statusFmt.hasMatch && statusFmt.iconName ? (LucideIcons as any)[statusFmt.iconName] : null;
+
+                return (
+                  <div
+                    key={rec.id}
+                    onClick={() => handleRecordClick(rec.id)}
+                    className={cn(
+                      "group p-3 rounded-2xl border transition-all cursor-pointer space-y-1.5 select-none relative",
+                      isSelected
+                        ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
+                        : rowFmt.hasMatch
+                          ? cn("border-l-4", rowFmt.rowClassName)
+                          : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
+                    )}
+                    style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
+                  >
+                    {/* Top Row: Key + Status + Time */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+                        <span className={cn(
+                          "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-colors",
+                          isSelected
+                            ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-extrabold"
+                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                        )}>
+                          {recKey}
+                        </span>
+                        {rowFmt.hasMatch && rowFmt.badgeLabel && (
+                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
+                            {rowFmt.badgeLabel}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn(
+                          "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                          statusFmt.hasMatch && statusFmt.cellBadgeClassName
+                            ? statusFmt.cellBadgeClassName
+                            : statusStyle.badge
+                        )}>
+                          {StatusIcon ? (
+                            <StatusIcon size={10} className={cn("shrink-0", statusFmt.iconColor)} />
+                          ) : (
+                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusStyle.dot)} />
+                          )}
+                          <span className="truncate max-w-[80px]">{rawStatus}</span>
+                        </span>
+                        {timeAgo && (
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium shrink-0">
+                            {timeAgo}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Middle Row: Title */}
+                    <h4 className={cn(
+                      "text-xs font-semibold leading-snug line-clamp-2 transition-colors",
+                      isSelected ? "text-indigo-950 dark:text-white font-bold" : "text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white"
+                    )}>
+                      {recTitle}
+                    </h4>
+
+                    {/* Bottom Row: Assignee & Actions */}
+                    <div className="flex items-center justify-between pt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 gap-1.5">
+                      {assignedMember ? (
+                        <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
+                          <UserAvatarWithPresence
+                            avatarUrl={assignedMember.avatarUrl}
+                            name={assignedMember.name}
+                            status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
+                            size="xs"
+                          />
+                          <span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
+                            {assignedMember.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-zinc-400 italic min-w-0 pr-1 truncate">
+                          <User size={11} />
+                          <span>Unassigned</span>
+                        </div>
+                      )}
+
+                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <RecordActionsCell
+                          record={rec}
+                          onShare={() => setRecordToShare(rec)}
+                          onDelete={() => setRecordToDelete(rec.id)}
+                          onDuplicate={() => handleDuplicateRecord(rec)}
+                          onMove={() => setRecordsToMove([rec])}
+                          onToggleStar={() => handleToggleStar(rec)}
+                          isStarred={isStarred}
+                          onCopyKey={() => handleCopyRecordKey(rec)}
+                          onCopyLink={() => handleCopyRecordLink(rec)}
+                          onQuickStatus={(status) => handleQuickUpdateStatus(rec, status)}
+                          onQuickAssign={(assigneeId) => handleQuickUpdateAssignee(rec, assigneeId)}
+                          statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+                          members={members}
+                          currentUserId={resolvedCurrentUserId}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right Main Panel: Inline Record Detail */}
+        <div className="flex-1 h-full min-w-0 flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
+          {/* Floating Expand Sidebar Button when collapsed */}
+          {isSidebarCollapsed && (
+            <button
+              onClick={() => setIsSidebarCollapsed(false)}
+              className="absolute left-4 top-4 z-40 p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 shadow-md hover:scale-105 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+              title="Expand record navigator"
+            >
+              <PanelLeftOpen size={16} />
+              <span>Show Records</span>
+            </button>
+          )}
+
+          {effectiveSelectedSplitRecordId ? (
+            <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
+              <RecordDetailView
+                key={`split_detail_${effectiveSelectedSplitRecordId}`}
+                moduleIdProp={moduleId}
+                recordIdProp={effectiveSelectedSplitRecordId}
+                isEmbedded={true}
+                onClose={() => {
+                  setSelectedSplitRecordId(null);
+                  queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+                }}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-4">
+              <div className="w-16 h-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl flex items-center justify-center text-zinc-400 shadow-xs">
+                <Layout size={28} className="text-zinc-400" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                  No record selected
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  Select a record from the left sidebar to view its fields, workflow, and history, or create a new entry.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const initialDefaults: any = {};
+                  allFields.forEach((f: any) => {
+                    const defVal = calculateDefaultValue(f, initialDefaults);
+                    if (defVal !== undefined && defVal !== null && defVal !== '') {
+                      initialDefaults[f.id] = defVal;
+                    }
+                  });
+                  setNewEntryData(initialDefaults);
+                  evaluateAllDataPopulationRules(initialDefaults);
+                  setEditingRecord(null);
+                  setShowNewEntryModal(true);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Create Entry</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderKanbanView = () => {
     const { stages, grouped } = kanbanConfig;
@@ -4162,16 +4709,40 @@ export const ModuleView = () => {
           return <span className="text-zinc-400 italic text-[11px]">Complex Data</span>;
         }
 
-        // Render Status fields using the premium badge styling
+        let baseContent: React.ReactNode = val || '-';
         if (field.id === 'status' || field.name?.toLowerCase() === 'status') {
-          return (
+          baseContent = (
             <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
               {val || record.status || '-'}
             </span>
           );
         }
 
-        return val || '-';
+        const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
+        const fmtResult = evaluateFormattingRules(rules, record, visibilityContext, { targetType: 'column', targetId: field.id || field.name });
+        if (fmtResult.hasMatch) {
+          const IconComp = fmtResult.iconName ? (LucideIcons as any)[fmtResult.iconName] : null;
+          return (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5",
+                fmtResult.textClassName,
+                fmtResult.cellBadgeClassName && cn("px-2 py-0.5 rounded-full text-[10px] font-bold border", fmtResult.cellBadgeClassName)
+              )}
+              style={fmtResult.customStyle}
+            >
+              {IconComp && <IconComp size={12} className={cn("shrink-0", fmtResult.iconColor)} />}
+              <span>{baseContent}</span>
+              {fmtResult.badgeLabel && (
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 ml-0.5">
+                  {fmtResult.badgeLabel}
+                </span>
+              )}
+            </span>
+          );
+        }
+
+        return baseContent;
       }
     });
 
@@ -4339,11 +4910,23 @@ export const ModuleView = () => {
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width 
           ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === '_record_key').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === '_record_key').width}px` } 
           : undefined,
-        accessor: (record: any) => (
-          <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
-            {record._record_key || '-'}
-          </span>
-        )
+        accessor: (record: any) => {
+          const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
+          const rowFmt = evaluateFormattingRules(rules, record, visibilityContext, { targetType: 'row' });
+          const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+
+          return (
+            <span className="inline-flex items-center gap-1.5 text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
+              {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+              <span>{record._record_key || '-'}</span>
+              {rowFmt.hasMatch && rowFmt.badgeLabel && (
+                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 ml-0.5">
+                  {rowFmt.badgeLabel}
+                </span>
+              )}
+            </span>
+          );
+        }
       },
       ...builtColumns,
       {
@@ -4401,18 +4984,6 @@ export const ModuleView = () => {
       return Array.from(map.values());
     })();
 
-    const activeTenantMember = (members || []).find((m: any) => {
-      const authId = (platformUser as any)?.id || (session?.user as any)?.id;
-      const authEmail = (platformUser as any)?.email || (session?.user as any)?.email;
-      return (
-        (authId && (m.id === authId || m.userId === authId || m.cuid === authId || m.memberId === authId)) ||
-        (authEmail && m.email?.toLowerCase() === authEmail?.toLowerCase())
-      );
-    });
-
-    const resolvedCurrentUserId = activeTenantMember?.id || (platformUser as any)?.id || (session?.user as any)?.id;
-    const resolvedCurrentUserName = activeTenantMember?.name || (platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email;
-
     return (
       <div className="flex-1 h-full min-h-0 flex flex-col w-full overflow-hidden">
         <Table 
@@ -4425,6 +4996,16 @@ export const ModuleView = () => {
           token={(session as any)?.access_token}
           data={filteredRecords as any}
           onRowClick={(record) => handleRecordClick(String(record.id))}
+          rowClassName={(record) => {
+            const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
+            const res = evaluateFormattingRules(rules, record, visibilityContext, { targetType: 'row' });
+            return res.hasMatch ? res.rowClassName : undefined;
+          }}
+          rowStyle={(record) => {
+            const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
+            const res = evaluateFormattingRules(rules, record, visibilityContext, { targetType: 'row' });
+            return res.hasMatch && Object.keys(res.customStyle).length > 0 ? res.customStyle : undefined;
+          }}
           className="h-full flex-1 w-full"
           columns={tableColumns}
           loading={recordsQueryLoading || recordsQueryFetching}
@@ -4567,11 +5148,10 @@ export const ModuleView = () => {
                 const targetUrl = `/workspace/settings/builder/${moduleData?.id || moduleId}`;
                 navigate(`${targetUrl}?returnUrl=${encodeURIComponent(currentPath)}`, { state: { returnUrl: currentPath } });
               }}
-              className="flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg bg-indigo-50/70 hover:bg-indigo-100/80 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 text-xs font-semibold transition-all shadow-2xs group shrink-0 cursor-pointer"
+              className="flex items-center justify-center w-7.5 h-7.5 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none"
               title="Configure Module in Builder"
             >
-              <SlidersHorizontal size={13} className="text-indigo-500 group-hover:rotate-45 transition-transform duration-300 shrink-0" />
-              <span>Configure Module</span>
+              <SlidersHorizontal size={14} className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
             </button>
           )}
 
@@ -4614,46 +5194,140 @@ export const ModuleView = () => {
             );
           })}
           
-          {/* New Entry Primary Button */}
-          <button 
-            onClick={() => {
-              const initialDefaults: any = {};
-              allFields.forEach((f: any) => {
-                const defVal = calculateDefaultValue(f, initialDefaults);
-                if (defVal !== undefined && defVal !== null && defVal !== '') {
-                  initialDefaults[f.id] = defVal;
+          {/* Linear / Notion Style Split Button for Create & Bulk Import */}
+          <div className="relative flex items-center shadow-xs" ref={createDropdownRef}>
+            {/* Primary Action Button */}
+            <button 
+              type="button"
+              onClick={() => {
+                const initialDefaults: any = {};
+                allFields.forEach((f: any) => {
+                  const defVal = calculateDefaultValue(f, initialDefaults);
+                  if (defVal !== undefined && defVal !== null && defVal !== '') {
+                    initialDefaults[f.id] = defVal;
+                  }
+                });
+                setNewEntryData(initialDefaults);
+                evaluateAllDataPopulationRules(initialDefaults);
+                setEditingRecord(null);
+                if (moduleData?.tabs && moduleData.tabs.length > 0) {
+                  setActiveTabId(moduleData.tabs[0].id);
+                } else {
+                  setActiveTabId(null);
                 }
-              });
-              setNewEntryData(initialDefaults);
-              evaluateAllDataPopulationRules(initialDefaults);
-              setEditingRecord(null);
-              if (moduleData?.tabs && moduleData.tabs.length > 0) {
-                setActiveTabId(moduleData.tabs[0].id);
-              } else {
-                setActiveTabId(null);
-              }
-              
-              if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
-                const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
-                setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
-              } else {
-                setActiveStepId(null);
-              }
-              
-              setShowNewEntryModal(true);
-            }}
-            className="flex items-center gap-1.5 h-7.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold text-xs transition-all shadow-xs cursor-pointer select-none"
-          >
-            <Plus size={13} />
-            <span>{createForm?.settings?.workspaceButtonLabel || 'New Entry'}</span>
-          </button>
+                
+                if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
+                  const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
+                  setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
+                } else {
+                  setActiveStepId(null);
+                }
+                
+                setShowNewEntryModal(true);
+                setShowCreateDropdown(false);
+              }}
+              className="flex items-center gap-1.5 h-7.5 pl-3 pr-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-l-lg font-semibold text-xs transition-all cursor-pointer select-none border-r border-indigo-700/60 active:scale-[0.98]"
+            >
+              <Plus size={13} />
+              <span>{createForm?.settings?.workspaceButtonLabel || 'Create'}</span>
+            </button>
+
+            {/* Dropdown Toggle Caret */}
+            <button
+              type="button"
+              onClick={() => setShowCreateDropdown(!showCreateDropdown)}
+              className="flex items-center justify-center w-6 h-7.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-r-lg text-xs transition-all cursor-pointer select-none active:scale-[0.98]"
+              title="More creation options"
+            >
+              <ChevronDown size={12} className={cn("transition-transform duration-150", showCreateDropdown && "rotate-180")} />
+            </button>
+
+            {/* Linear / Notion Dropdown Popover */}
+            <AnimatePresence>
+              {showCreateDropdown && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute right-0 top-full mt-1.5 w-64 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-1.5 z-50 overflow-hidden font-sans"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const initialDefaults: any = {};
+                      allFields.forEach((f: any) => {
+                        const defVal = calculateDefaultValue(f, initialDefaults);
+                        if (defVal !== undefined && defVal !== null && defVal !== '') {
+                          initialDefaults[f.id] = defVal;
+                        }
+                      });
+                      setNewEntryData(initialDefaults);
+                      evaluateAllDataPopulationRules(initialDefaults);
+                      setEditingRecord(null);
+                      if (moduleData?.tabs && moduleData.tabs.length > 0) {
+                        setActiveTabId(moduleData.tabs[0].id);
+                      } else {
+                        setActiveTabId(null);
+                      }
+                      if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
+                        const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
+                        setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
+                      } else {
+                        setActiveStepId(null);
+                      }
+                      setShowNewEntryModal(true);
+                      setShowCreateDropdown(false);
+                    }}
+                    className="w-full flex items-start gap-2.5 p-2 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors group cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <Plus size={14} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-zinc-900 dark:text-white">
+                        New Record
+                      </div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                        Open single record creation form
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBulkPasteModal(true);
+                      setShowCreateDropdown(false);
+                    }}
+                    className="w-full flex items-start gap-2.5 p-2 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors group cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                      <ClipboardPaste size={14} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-xs font-semibold text-zinc-900 dark:text-white flex items-center justify-between">
+                        <span>Paste/Upload</span>
+                        <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">Ctrl+V</span>
+                      </div>
+                      <div className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                        Paste from Excel, Sheets, or CSV
+                      </div>
+                    </div>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 w-full min-h-0 flex flex-col relative z-10 overflow-hidden">
         {recordsLoading || records.length > 0 ? (
-          interfaceSettings.master.layoutType === 'pipeline' ? (
+          interfaceSettings.master.layoutType === 'split' ? (
+            renderSplitView()
+          ) : interfaceSettings.master.layoutType === 'pipeline' ? (
             <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderPipelineView()}</div>
           ) : interfaceSettings.master.layoutType === 'kanban' ? (
             <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">{renderKanbanView()}</div>
@@ -4684,36 +5358,46 @@ export const ModuleView = () => {
                 <h3 className="text-lg font-bold text-zinc-900 dark:text-white">No data found in {moduleData?.name || 'Module'}</h3>
                 <p className="text-zinc-500 text-xs mt-1">Start by creating your first entry or importing data.</p>
               </div>
-              <button 
-                onClick={() => {
-                  const initialDefaults = {};
-                  allFields.forEach((f: any) => {
-                    if (f.defaultValue !== undefined && f.defaultValue !== '') {
-                      (initialDefaults as any)[f.id] = f.defaultValue;
+              <div className="flex items-center justify-center gap-3">
+                <button 
+                  onClick={() => {
+                    const initialDefaults = {};
+                    allFields.forEach((f: any) => {
+                      if (f.defaultValue !== undefined && f.defaultValue !== '') {
+                        (initialDefaults as any)[f.id] = f.defaultValue;
+                      }
+                    });
+                    setNewEntryData(initialDefaults);
+                    evaluateAllDataPopulationRules(initialDefaults);
+                    setEditingRecord(null);
+                    if (moduleData?.tabs && moduleData.tabs.length > 0) {
+                      setActiveTabId(moduleData.tabs[0].id);
+                    } else {
+                      setActiveTabId(null);
                     }
-                  });
-                  setNewEntryData(initialDefaults);
-                  evaluateAllDataPopulationRules(initialDefaults);
-                  setEditingRecord(null);
-                  if (moduleData?.tabs && moduleData.tabs.length > 0) {
-                    setActiveTabId(moduleData.tabs[0].id);
-                  } else {
-                    setActiveTabId(null);
-                  }
 
-                  if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
-                    const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
-                    setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
-                  } else {
-                    setActiveStepId(null);
-                  }
+                    if (createForm && createForm.isMultistep && createForm.steps?.length > 0) {
+                      const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, initialDefaults, visibilityContext));
+                      setActiveStepId(visibleSteps[0]?.id || createForm.steps[0].id);
+                    } else {
+                      setActiveStepId(null);
+                    }
 
-                  setShowNewEntryModal(true);
-                }}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all shadow-xs"
-              >
-                Create First Entry
-              </button>
+                    setShowNewEntryModal(true);
+                  }}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                >
+                  Create
+                </button>
+
+                <button 
+                  onClick={() => setShowBulkPasteModal(true)}
+                  className="px-5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl text-xs font-semibold transition-all shadow-xs border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ClipboardPaste size={13} className="text-zinc-400 dark:text-zinc-400" />
+                  <span>Paste/Upload</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -5461,6 +6145,21 @@ export const ModuleView = () => {
             queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
             queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, targetModuleId] });
             setRecordsToMove(null);
+          }}
+        />
+      )}
+
+      {/* Bulk Paste from Excel / Sheets Modal */}
+      {showBulkPasteModal && moduleData && (
+        <BulkPasteRecordModal
+          isOpen={showBulkPasteModal}
+          onClose={() => setShowBulkPasteModal(false)}
+          module={moduleData}
+          tenantId={tenant?.id || ''}
+          token={(import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || ''}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+            queryClient.invalidateQueries({ queryKey: ['records'] });
           }}
         />
       )}
