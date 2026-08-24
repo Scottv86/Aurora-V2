@@ -47,19 +47,19 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
 
   const getIcon = () => {
     if (field.iconName) {
-      return <DynamicIcon name={field.iconName} size={18} />;
+      return <DynamicIcon name={field.iconName} size={14} />;
     }
     
     switch (field.type) {
-      case 'card': return <Box size={18} />;
-      case 'accordion': return <LayoutGrid size={18} />;
-      case 'tabs_nested': return <FolderTree size={18} />;
-      case 'stepper': return <ListOrdered size={18} />;
-      case 'timeline': return <GitCommit size={18} />;
-      case 'repeatableGroup': return <ListPlus size={18} />;
-      case 'group': return <Layers size={18} />;
-      case 'fieldGroup': return <Folder size={18} />;
-      default: return <Layers size={18} />;
+      case 'card': return <Box size={14} />;
+      case 'accordion': return <LayoutGrid size={14} />;
+      case 'tabs_nested': return <FolderTree size={14} />;
+      case 'stepper': return <ListOrdered size={14} />;
+      case 'timeline': return <GitCommit size={14} />;
+      case 'repeatableGroup': return <ListPlus size={14} />;
+      case 'group': return <Layers size={14} />;
+      case 'fieldGroup': return <Folder size={14} />;
+      default: return <Layers size={14} />;
     }
   };
 
@@ -68,63 +68,58 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
 
   return (
     <div className={cn(
-      "overflow-hidden transition-all duration-300",
-      isCard ? "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-xl shadow-black/5" :
-      "bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem]",
-      isCollapsed ? "shadow-sm" : "shadow-lg shadow-black/5",
+      "overflow-hidden transition-all duration-300 rounded-2xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80",
+      isCollapsed ? "shadow-xs" : "shadow-sm",
       className
     )}>
       {/* Header */}
       <div 
         className={cn(
-          "px-6 py-5 flex items-center justify-between select-none",
-          isCollapsible ? "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900/50" : ""
+          "px-4.5 py-3.5 flex items-center justify-between select-none",
+          isCollapsible ? "cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-colors" : ""
         )}
         onClick={toggleCollapse}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {showIcon && (
             <div className={cn(
-              "w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500",
+              "w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-300",
               isCollapsed 
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500" 
-                : isCard ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20" :
-                  isAccordion ? "bg-amber-500 text-white shadow-xl shadow-amber-500/20" :
-                  isTabs ? "bg-emerald-500 text-white shadow-xl shadow-emerald-500/20" :
-                  "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20"
+                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" 
+                : "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20"
             )}>
               {getIcon()}
             </div>
           )}
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h5 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+              <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">
                 {field.label}
               </h5>
               {count !== undefined && (
-                <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-[9px] font-bold text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md text-[9px] font-semibold text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
                   {count}
                 </span>
               )}
             </div>
             {field.helperText && (
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5 opacity-70">
+              <p className="text-[10px] text-zinc-400 font-medium tracking-normal mt-0.5">
                 {field.helperText}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {actions}
           {isCollapsible && (
             <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300",
-              isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500"
+              "w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200",
+              isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-300"
             )}>
               <ChevronDown 
-                size={16} 
-                className={cn("transition-transform duration-500 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
+                size={14} 
+                className={cn("transition-transform duration-300 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
               />
             </div>
           )}
@@ -139,12 +134,12 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ 
-              height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] },
-              opacity: { duration: 0.2, delay: 0.1 }
+              height: { duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] },
+              opacity: { duration: 0.15 }
             }}
           >
-            <div className="h-px bg-zinc-200 dark:bg-zinc-800 opacity-50" />
-            <div className="px-6 pb-6 pt-6">
+            <div className="h-px bg-zinc-200/60 dark:bg-zinc-800/60" />
+            <div className="p-4.5">
               {children}
             </div>
           </motion.div>

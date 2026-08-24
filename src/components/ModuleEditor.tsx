@@ -2634,31 +2634,22 @@ export const ModuleEditor = () => {
       { id: 'participantIds', label: 'Participants', type: 'multi-user' }
     ];
 
-    const activeCustom = displayFields.filter(f => f.showInTable !== false);
     const configured = interfaceSettings.master.columns || [];
 
-    // Combine custom fields and system fields that are marked visible/enabled
-    const allAvailable = [
-      ...activeCustom,
-      ...systemFieldsDef.filter(sf => 
-        configured.some(c => c.fieldId === sf.id && c.visible !== false) &&
-        !activeCustom.some(df => df.id === sf.id)
-      )
-    ];
-
     if (configured.length > 0) {
-      const sorted = [...allAvailable].sort((a, b) => {
-        const indexA = configured.findIndex(c => c.fieldId === a.id);
-        const indexB = configured.findIndex(c => c.fieldId === b.id);
-        if (indexA === -1 && indexB === -1) return 0;
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        return indexA - indexB;
-      });
-      return sorted;
+      return configured
+        .filter(c => c.visible !== false)
+        .map(c => {
+          const custom = displayFields.find(df => df.id === c.fieldId);
+          if (custom) return { ...custom, ...c };
+          const sys = systemFieldsDef.find(sf => sf.id === c.fieldId);
+          if (sys) return { ...sys, ...c };
+          return null;
+        })
+        .filter(Boolean) as any[];
     }
     
-    return allAvailable;
+    return displayFields.filter(f => f.showInTable === true);
   }, [displayFields, interfaceSettings.master.columns]);
 
 
@@ -2824,6 +2815,7 @@ export const ModuleEditor = () => {
       startCol: 1,
       rowIndex: layout.length,
       tabId: currentTabId,
+      showInTable: false,
       fields: isContainerField(type) ? [] : undefined
     };
   };
@@ -5067,7 +5059,9 @@ export const ModuleEditor = () => {
                                       ? ((interfaceSettings.master.cardFields || []).length > 0
                                           ? interfaceSettings.master.cardFields.some(cf => cf.fieldId === field.id && cf.visible !== false)
                                           : displayFields.slice(1, 4).some(df => df.id === field.id))
-                                      : field.showInTable !== false;
+                                      : (interfaceSettings.master.columns && interfaceSettings.master.columns.length > 0)
+                                        ? interfaceSettings.master.columns.some(c => c.fieldId === field.id && c.visible !== false)
+                                        : field.showInTable === true;
                                     const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
                                     const Icon = fieldDef?.icon || TableProperties;
                                     
@@ -7919,32 +7913,32 @@ export const ModuleEditor = () => {
                                       );
                                     })()
                                     : block.type === 'duallist' ? (
-                                      <div className="flex gap-6 items-center">
-                                        <div className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
-                                          <div className="h-10 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-900 flex items-center px-4">
-                                            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Available Options</span>
+                                      <div className="flex gap-4 items-center">
+                                        <div className="flex-1 bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl overflow-hidden shadow-xs">
+                                          <div className="h-9 bg-zinc-50/80 dark:bg-zinc-800/40 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center px-3.5">
+                                            <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">Available Options</span>
                                           </div>
                                           <div className="p-2 space-y-1">
                                             {[1, 2, 3].map(i => (
-                                              <div key={i} className="h-8 flex items-center px-3 gap-3 bg-zinc-50/50 dark:bg-zinc-900/30 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-zinc-300" />
-                                                <div className="h-1.5 w-16 bg-zinc-200 rounded-full" />
+                                              <div key={i} className="h-7 flex items-center px-3 gap-2.5 bg-zinc-50/50 dark:bg-zinc-800/30 rounded-lg border border-zinc-100 dark:border-zinc-800/60">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-600" />
+                                                <div className="h-1.5 w-16 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
                                               </div>
                                             ))}
                                           </div>
                                         </div>
-                                        <div className="flex flex-col gap-3">
-                                          <button className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><ChevronRight size={14} /></button>
-                                          <button className="w-8 h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400"><ChevronLeft size={14} /></button>
+                                        <div className="flex flex-col gap-2">
+                                          <div className="w-7 h-7 bg-indigo-500/10 text-indigo-500 rounded-lg flex items-center justify-center border border-indigo-500/20"><ChevronRight size={12} /></div>
+                                          <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-400"><ChevronLeft size={12} /></div>
                                         </div>
-                                        <div className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
-                                          <div className="h-10 bg-indigo-500/5 border-b border-indigo-500/10 flex items-center px-4">
-                                            <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Selected Options</span>
+                                        <div className="flex-1 bg-white dark:bg-zinc-900/50 border border-indigo-500/30 dark:border-indigo-500/30 rounded-xl overflow-hidden shadow-xs">
+                                          <div className="h-9 bg-indigo-500/5 dark:bg-indigo-500/10 border-b border-indigo-500/20 flex items-center px-3.5">
+                                            <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-wider">Selected Options</span>
                                           </div>
                                           <div className="p-2 space-y-1">
-                                            <div className="h-8 flex items-center px-3 gap-3 bg-indigo-500/5 rounded-xl border border-indigo-500/20">
+                                            <div className="h-7 flex items-center px-3 gap-2.5 bg-indigo-50/80 dark:bg-indigo-500/15 rounded-lg border border-indigo-500/20">
                                               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                              <div className="h-1.5 w-20 bg-indigo-500/20 rounded-full" />
+                                              <div className="h-1.5 w-20 bg-indigo-500/30 rounded-full" />
                                             </div>
                                           </div>
                                         </div>
@@ -8009,11 +8003,10 @@ export const ModuleEditor = () => {
                                         <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Enter ${block.label?.toLowerCase() || 'value'}...`}</span>
                                       </div>
                                     )}
+                                    {block.helperText && !(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
+                                     <p className="text-[9px] text-zinc-500 italic mt-0.5 px-1 absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{block.helperText}</p>
+                                   )}
                                   </div>
-
-                                  {block.helperText && !(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
-                                    <p className="text-[9px] text-zinc-500 italic mt-1 px-1">{block.helperText}</p>
-                                  )}
 
                                   {/* Fluid Resize Handles for Standard Fields */}
                                   {viewportSize !== 'mobile' && selectedId === block.id && (
@@ -8365,9 +8358,9 @@ export const ModuleEditor = () => {
                               {block.tooltip && (
                                 <div className="relative cursor-help">
                                   <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                     {block.tooltip}
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                   </div>
                                 </div>
                               )}
@@ -8378,7 +8371,7 @@ export const ModuleEditor = () => {
                               onChange={(val) => setModuleState(prev => ({ ...prev, [block.id]: val }))}
                             />
                             {block.helperText && (
-                              <p className="text-[10px] text-zinc-500 mt-1 font-medium px-1 italic">{block.helperText}</p>
+                              <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-1 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{block.helperText}</p>
                             )}
                           </div>
                         ))}
@@ -8432,7 +8425,7 @@ export const ModuleEditor = () => {
                                   interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
                                   interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
                                 )}>#</th>
-                                {displayFields.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
+                                {activeColumns.slice(0, 5).map(f => (
                                   <th 
                                     key={f.id} 
                                     style={{ minWidth: f.columnWidth || 150 }} 
@@ -8473,7 +8466,7 @@ export const ModuleEditor = () => {
                                     interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[10px]' : 
                                     interfaceSettings.master.density === 'spacious' ? 'px-8 py-5 text-xs' : 'px-6 py-4 text-[10px]'
                                   )}>{idx + 1}</td>
-                                  {displayFields.filter(f => f.showInTable !== false).slice(0, 5).map(f => (
+                                  {activeColumns.slice(0, 5).map(f => (
                                     <td 
                                       key={f.id} 
                                       className={cn(
@@ -8658,9 +8651,9 @@ export const ModuleEditor = () => {
                                                    {field?.tooltip && (
                                                      <div className="relative cursor-help">
                                                        <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                                       <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                                          {field.tooltip}
-                                                         <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                                        </div>
                                                      </div>
                                                    )}
@@ -8687,7 +8680,7 @@ export const ModuleEditor = () => {
                                                    </p>
                                                  )}
                                                  {field?.helperText && !formErrors[field.id] && (
-                                                   <p className="text-[10px] text-zinc-500 mt-1 font-medium px-1 italic">{field.helperText}</p>
+                                                   <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-1 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                                                  )}
                                                </>
                                              )}
@@ -11967,28 +11960,47 @@ export const ModuleEditor = () => {
                           </div>
                           <button 
                             onClick={() => {
-                              const newShow = selectedField.showInTable === false;
+                              const isCurrentlyActive = (interfaceSettings.master.columns && interfaceSettings.master.columns.length > 0)
+                                ? interfaceSettings.master.columns.some(c => c.fieldId === selectedField.id && c.visible !== false)
+                                : selectedField.showInTable === true;
+                              const newShow = !isCurrentlyActive;
                               updateField(selectedField.id, { showInTable: newShow });
                               setInterfaceSettings(prev => {
                                 const cols = prev.master.columns || [];
-                                return {
-                                  ...prev,
-                                  master: {
-                                    ...prev.master,
-                                    columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, visible: newShow } : c)
-                                  }
-                                };
+                                if (cols.some(c => c.fieldId === selectedField.id)) {
+                                  return {
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, visible: newShow } : c)
+                                    }
+                                  };
+                                }
+                                if (newShow) {
+                                  return {
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      columns: [...cols, { fieldId: selectedField.id, visible: true, inlineEdit: false, width: selectedField.columnWidth || 200 }]
+                                    }
+                                  };
+                                }
+                                return prev;
                               });
-                              if (!newShow) setSelectedId(null);
+                              if (!newShow && activeViewMode === 'master') setSelectedId(null);
                             }}
                             className={cn(
                               "w-10 h-6 rounded-full relative transition-all",
-                              selectedField.showInTable !== false ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
+                              ((interfaceSettings.master.columns && interfaceSettings.master.columns.length > 0)
+                                ? interfaceSettings.master.columns.some(c => c.fieldId === selectedField.id && c.visible !== false)
+                                : selectedField.showInTable === true) ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
                             )}
                           >
                             <div className={cn(
                               "absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow-sm",
-                              selectedField.showInTable !== false ? "right-1" : "left-1"
+                              ((interfaceSettings.master.columns && interfaceSettings.master.columns.length > 0)
+                                ? interfaceSettings.master.columns.some(c => c.fieldId === selectedField.id && c.visible !== false)
+                                : selectedField.showInTable === true) ? "right-1" : "left-1"
                             )} />
                           </button>
                         </div>
@@ -14947,7 +14959,8 @@ export const ModuleEditor = () => {
                 colSpan: 6,
                 startCol: isLeft ? 1 : 7,
                 rowIndex: nextRow,
-                tabId: targetTabId
+                tabId: targetTabId,
+                showInTable: false
               };
 
               currentLayout.push(newField);
@@ -15125,7 +15138,8 @@ export const ModuleEditor = () => {
                 colSpan: 6,
                 startCol: isLeft ? 1 : 7,
                 rowIndex: nextRow,
-                tabId: targetTabId
+                tabId: targetTabId,
+                showInTable: false
               };
 
               currentLayout.push(newField);
@@ -15245,7 +15259,8 @@ export const ModuleEditor = () => {
                 colSpan: 6,
                 startCol: isLeft ? 1 : 7,
                 rowIndex: nextRow,
-                tabId: targetTabId
+                tabId: targetTabId,
+                showInTable: false
               };
 
               currentLayout.push(newField);
@@ -15393,6 +15408,7 @@ export const ModuleEditor = () => {
                         startCol: 1,
                         rowIndex: layout.length > 0 ? Math.max(...layout.map((f: any) => f.rowIndex || 0)) + 1 : 0,
                         tabId: currentTabId || (tabs && tabs[0]?.id) || 'default-tab',
+                        showInTable: false,
                         lookupOutputMappings: [] as any[]
                       } as Field;
                       

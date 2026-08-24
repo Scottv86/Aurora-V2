@@ -226,18 +226,33 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
 
           // Auto-detect image
           let images: string[] = [];
+          const isValidImageUrl = (url: any): boolean => {
+            if (typeof url !== 'string') return false;
+            const trimmed = url.trim();
+            return (
+              trimmed.startsWith('http://') ||
+              trimmed.startsWith('https://') ||
+              trimmed.startsWith('data:image/') ||
+              trimmed.startsWith('blob:') ||
+              trimmed.startsWith('/uploads/') ||
+              trimmed.includes('unsplash.com') ||
+              trimmed.includes('cloudinary.com') ||
+              /\.(jpg|jpeg|png|webp|avif|gif|svg)(\?.*)?$/i.test(trimmed)
+            );
+          };
+
           const fileFields = subFields.filter((f: any) => f.type === 'file' || f.type === 'url');
           fileFields.forEach((f: any) => {
             const val = row[f.id];
             if (val) {
               if (typeof val === 'string') {
                 if (val.includes(',')) {
-                  images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
-                } else {
-                  images.push(val);
+                  images.push(...val.split(',').map((s: string) => s.trim()).filter(isValidImageUrl));
+                } else if (isValidImageUrl(val)) {
+                  images.push(val.trim());
                 }
               } else if (Array.isArray(val)) {
-                images.push(...val.filter(v => typeof v === 'string'));
+                images.push(...val.filter(isValidImageUrl));
               }
             }
           });
@@ -278,10 +293,10 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
             <div
               key={idx}
               onClick={() => handleDrillDown(idx)}
-              className="group relative flex flex-col bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/55 hover:shadow-2xl hover:shadow-indigo-500/[0.04] hover:-translate-y-1 cursor-pointer transition-all duration-300 overflow-hidden min-h-[320px]"
+              className="group relative flex flex-col bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl hover:border-indigo-500/55 hover:shadow-xl hover:shadow-indigo-500/[0.04] hover:-translate-y-0.5 cursor-pointer transition-all duration-300 overflow-hidden min-h-[280px]"
             >
               {/* Card Slider Header */}
-              <div className="h-40 w-full overflow-hidden relative border-b border-zinc-100 dark:border-zinc-800/80 group/gallery">
+              <div className="h-32 w-full overflow-hidden relative border-b border-zinc-100 dark:border-zinc-800/80 group/gallery">
                 <img 
                   src={images[activeImgIdx]} 
                   alt={recordTitle}
@@ -303,13 +318,13 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
                     </button>
                   </>
                 )}
-                <div className="absolute top-4 left-4 px-2.5 py-1 bg-black/45 backdrop-blur-md border border-white/10 rounded-xl text-white text-[9px] font-black uppercase tracking-widest">
+                <div className="absolute top-3 left-3 px-2.5 py-0.5 bg-black/45 backdrop-blur-md border border-white/10 rounded-lg text-white text-[9px] font-black uppercase tracking-widest">
                   Item #{idx + 1}
                 </div>
               </div>
               
               {/* Details Content */}
-              <div className="p-6 flex-1 flex flex-col justify-between">
+              <div className="p-4.5 flex-1 flex flex-col justify-between">
                 <div className="space-y-2">
                   <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug group-hover:text-indigo-500 transition-colors line-clamp-2">
                     {recordTitle}
@@ -394,43 +409,43 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
             <button
               key={idx}
               onClick={() => handleDrillDown(idx)}
-              className="group relative flex flex-col p-6 bg-white dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all text-left shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 overflow-hidden"
+              className="group relative flex flex-col p-4.5 bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl hover:border-indigo-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all text-left shadow-xs hover:shadow-lg hover:shadow-indigo-500/5 overflow-hidden"
             >
-              <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                <ChevronRight size={18} className="text-indigo-500 transform group-hover:translate-x-1 transition-transform" />
+              <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ChevronRight size={16} className="text-indigo-500 transform group-hover:translate-x-1 transition-transform" />
               </div>
               
-              <div className="flex items-start gap-4 mb-6">
-                <div className="w-14 h-14 rounded-[1.25rem] bg-indigo-500/5 flex items-center justify-center text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white transition-all duration-500 shadow-inner">
-                   <Layers size={24} />
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 group-hover:bg-indigo-500 group-hover:text-white transition-all duration-300">
+                   <Layers size={18} />
                 </div>
-                <div className="flex-1 min-w-0 pt-1">
-                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider mb-1 opacity-70 group-hover:opacity-100 transition-opacity">
                     Item #{idx + 1}
                   </p>
-                  <p className="text-lg font-bold text-zinc-900 dark:text-white truncate leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white truncate leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                     {row[field.fields[0]?.id] || 'Untitled Record'}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-4 gap-x-6 pt-5 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
+              <div className="grid grid-cols-2 gap-y-3 gap-x-4 pt-3.5 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
                 {field.fields.slice(1, 5).map((f: any) => (
                   <div key={f.id} className="min-w-0">
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest truncate">{f.label}</p>
-                    <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate mt-1">
+                    <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider truncate">{f.label}</p>
+                    <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate mt-0.5">
                       {row[f.id] ? String(row[f.id]) : <span className="text-zinc-300 dark:text-zinc-800 font-normal">—</span>}
                     </p>
                   </div>
                 ))}
                 {field.fields.length > 5 && (
-                  <div className="col-span-2 pt-1">
-                    <p className="text-[10px] text-zinc-400 font-medium italic">+{field.fields.length - 5} more properties</p>
+                  <div className="col-span-2 pt-0.5">
+                    <p className="text-[9px] text-zinc-400 font-medium italic">+{field.fields.length - 5} more properties</p>
                   </div>
                 )}
               </div>
               
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           ))}
 
@@ -438,22 +453,22 @@ export const RepeatableGroupBlock: React.FC<RepeatableGroupBlockProps> = ({
             <button 
               onClick={handleAdd}
               className={cn(
-                "flex flex-col items-center justify-center p-8 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] group hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-center",
-                value.length === 0 ? "col-span-full py-16" : ""
+                "flex flex-col items-center justify-center p-6 border-2 border-dashed border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl group hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-center",
+                value.length === 0 ? "col-span-full py-12" : ""
               )}
             >
-              <div className="w-14 h-14 bg-zinc-50 dark:bg-zinc-900 rounded-[1.25rem] flex items-center justify-center mx-auto mb-4 group-hover:bg-indigo-500 group-hover:text-white transition-all shadow-inner">
-                <Plus size={24} className="text-zinc-400 group-hover:text-white" />
+              <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-900 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-indigo-500 group-hover:text-white transition-all">
+                <Plus size={18} className="text-zinc-400 group-hover:text-white" />
               </div>
-              <p className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-[0.2em] group-hover:text-indigo-500 transition-colors">
+              <p className="text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider group-hover:text-indigo-500 transition-colors">
                 {value.length === 0 ? `Initialize ${field.label}` : 'Add New'}
               </p>
-              <p className="text-[10px] text-zinc-400 mt-2 font-medium">Click to expand this collection.</p>
+              <p className="text-[10px] text-zinc-400 mt-1 font-medium">Click to expand this collection.</p>
             </button>
           )}
         </div>
       ) : (
-        <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner">
+        <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl overflow-hidden shadow-xs">
           <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4">
             <div className="flex-1 max-w-xs relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />

@@ -76,13 +76,13 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   const isAccordion = block.type === 'accordion';
   const isTabs = block.type === 'tabs_nested';
   
-  const cardPadding = density === 'compact' ? 'p-2 rounded-xl' : density === 'spacious' ? 'p-5 rounded-[28px]' : 'p-4 rounded-[24px]';
+  const cardPadding = density === 'compact' ? 'p-2 rounded-lg' : density === 'spacious' ? 'p-5 rounded-2xl' : 'p-4 rounded-xl';
   const headerMargin = density === 'compact' ? 'mb-1' : density === 'spacious' ? 'mb-3' : 'mb-2';
-  const iconBoxSize = density === 'compact' ? 'w-7 h-7 rounded-lg' : density === 'spacious' ? 'w-12 h-12 rounded-[20px]' : 'w-10 h-10 rounded-2xl';
-  const iconSize = density === 'compact' ? 12 : density === 'spacious' ? 20 : 16;
-  const titleTextSize = density === 'compact' ? 'text-xs' : density === 'spacious' ? 'text-base' : 'text-sm';
-  const subtitleTextSize = density === 'compact' ? 'text-[8px]' : density === 'spacious' ? 'text-[11px]' : 'text-[10px]';
-  const nestedPadding = density === 'compact' ? 'p-1.5 mt-2 rounded-lg' : density === 'spacious' ? 'p-4 mt-6 rounded-[22px]' : 'p-3 mt-4 rounded-[18px]';
+  const iconBoxSize = density === 'compact' ? 'w-6 h-6 rounded-md' : density === 'spacious' ? 'w-8 h-8 rounded-lg' : 'w-7 h-7 rounded-lg';
+  const iconSize = density === 'compact' ? 12 : density === 'spacious' ? 16 : 14;
+  const titleTextSize = density === 'compact' ? 'text-xs' : density === 'spacious' ? 'text-sm font-bold' : 'text-xs font-bold';
+  const subtitleTextSize = density === 'compact' ? 'text-[8px]' : density === 'spacious' ? 'text-[10px]' : 'text-[9px]';
+  const nestedPadding = density === 'compact' ? 'p-1.5 mt-2 rounded-md' : density === 'spacious' ? 'p-3 mt-4 rounded-xl' : 'p-2.5 mt-3 rounded-lg';
 
   const getIcon = (size: number = 16) => {
     if (block.iconName) {
@@ -199,7 +199,7 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
           Selected
         </div>
       )}
-      <div className={cn("absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent pointer-events-none", density === 'compact' ? 'rounded-xl' : density === 'spacious' ? 'rounded-[26px]' : 'rounded-[22px]')} />
+      <div className={cn("absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent pointer-events-none", density === 'compact' ? 'rounded-lg' : density === 'spacious' ? 'rounded-2xl' : 'rounded-xl')} />
 
       <div className={cn("flex items-center justify-between", headerMargin)}>
         <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
@@ -337,11 +337,11 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
                         className={cn(
                           "bg-white dark:bg-zinc-950 border-2 transition-all overflow-hidden",
                           selectedIds.includes(section.id)
-                            ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl z-10 scale-[1.02]" 
-                            : cn("border-zinc-200 dark:border-zinc-800 shadow-sm", density === 'compact' ? 'rounded-lg' : 'rounded-[2rem]'),
-                          dragOverInfo?.parentId === section.id && "border-indigo-500 ring-4 ring-indigo-500/10 shadow-2xl"
+                            ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg z-10 scale-[1.01]" 
+                            : cn("border-zinc-200 dark:border-zinc-800 shadow-xs", density === 'compact' ? 'rounded-lg' : 'rounded-xl'),
+                          dragOverInfo?.parentId === section.id && "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg"
                         )}
-                        style={{ borderRadius: density === 'compact' ? '8px' : (selectedIds.includes(section.id) ? '2.2rem' : '2rem') }}
+                        style={{ borderRadius: density === 'compact' ? '8px' : '12px' }}
                       >
                         {/* Section Header in Builder */}
                         <div 

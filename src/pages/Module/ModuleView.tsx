@@ -3024,16 +3024,31 @@ export const ModuleView = () => {
             const assignee = members?.find((m: any) => m.id === record.assigneeId);
             
             // Extract images from gallery image field or auto-detect
+            const isValidImageUrl = (url: any): boolean => {
+              if (typeof url !== 'string') return false;
+              const trimmed = url.trim();
+              return (
+                trimmed.startsWith('http://') ||
+                trimmed.startsWith('https://') ||
+                trimmed.startsWith('data:image/') ||
+                trimmed.startsWith('blob:') ||
+                trimmed.startsWith('/uploads/') ||
+                trimmed.includes('unsplash.com') ||
+                trimmed.includes('cloudinary.com') ||
+                /\.(jpg|jpeg|png|webp|avif|gif|svg)(\?.*)?$/i.test(trimmed)
+              );
+            };
+
             const images: string[] = [];
             if (galleryFieldId && record[galleryFieldId]) {
               const val = record[galleryFieldId];
               if (Array.isArray(val)) {
-                images.push(...val.filter(v => typeof v === 'string'));
+                images.push(...val.filter(isValidImageUrl));
               } else if (typeof val === 'string') {
                 if (val.includes(',')) {
-                  images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
-                } else {
-                  images.push(val);
+                  images.push(...val.split(',').map((s: string) => s.trim()).filter(isValidImageUrl));
+                } else if (isValidImageUrl(val)) {
+                  images.push(val.trim());
                 }
               }
             } else {
@@ -3041,14 +3056,14 @@ export const ModuleView = () => {
               allFields.forEach((field: any) => {
                 const val = record[field.id];
                 if (val && (field.type === 'file' || field.type === 'url')) {
-                  if (typeof val === 'string' && (val.startsWith('http') || val.includes('/uploads/') || val.includes('unsplash.com'))) {
+                  if (typeof val === 'string') {
                     if (val.includes(',')) {
-                      images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
-                    } else {
-                      images.push(val);
+                      images.push(...val.split(',').map((s: string) => s.trim()).filter(isValidImageUrl));
+                    } else if (isValidImageUrl(val)) {
+                      images.push(val.trim());
                     }
                   } else if (Array.isArray(val)) {
-                    images.push(...val.filter(v => typeof v === 'string' && (v.startsWith('http') || v.includes('/uploads/'))));
+                    images.push(...val.filter(isValidImageUrl));
                   }
                 }
               });
@@ -3798,7 +3813,6 @@ export const ModuleView = () => {
     };
 
     // Sort displayColumns based on configured order in interfaceSettings
-    const activeCustomFields = displayFields.filter((field: any) => field.showInTable !== false);
     const configured = interfaceSettings.master.columns || [];
 
     const builtColumns: any[] = [];
@@ -3807,7 +3821,7 @@ export const ModuleView = () => {
         if (c.visible === false) return;
         
         // Is it a custom field?
-        const customField = activeCustomFields.find(f => f.id === c.fieldId);
+        const customField = displayFields.find((f: any) => f.id === c.fieldId);
         if (customField) {
           builtColumns.push(mapCustomFieldToColumn(customField));
         } else if (systemColumnsMap[c.fieldId]) {
@@ -3815,19 +3829,13 @@ export const ModuleView = () => {
           builtColumns.push(systemColumnsMap[c.fieldId]);
         }
       });
-
-      // Append any custom fields that are marked showInTable but weren't in configured
-      activeCustomFields.forEach((field: any) => {
-        if (!configured.some((c: any) => c.fieldId === field.id)) {
-          builtColumns.push(mapCustomFieldToColumn(field));
-        }
-      });
     } else {
-      // Fallback: Default ordering (Custom fields first, then default status & createdAt)
-      activeCustomFields.forEach((field: any) => {
+      // Fallback: Default ordering (Custom fields with showInTable === true first, then default status & createdAt)
+      const fallbackCustom = displayFields.filter((field: any) => field.showInTable === true);
+      fallbackCustom.forEach((field: any) => {
         builtColumns.push(mapCustomFieldToColumn(field));
       });
-      if (!activeCustomFields.some(f => f.id === 'status' || f.name?.toLowerCase() === 'status')) {
+      if (!fallbackCustom.some((f: any) => f.id === 'status' || f.name?.toLowerCase() === 'status')) {
         builtColumns.push(systemColumnsMap.status);
       }
       builtColumns.push(systemColumnsMap.createdAt);
@@ -4352,9 +4360,9 @@ export const ModuleView = () => {
                                     {field?.tooltip && (
                                       <div className="relative cursor-help">
                                         <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                           {field.tooltip}
-                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                         </div>
                                       </div>
                                     )}
@@ -4367,7 +4375,7 @@ export const ModuleView = () => {
                                     readonly={isReadOnly}
                                   />
                                   {field?.helperText && (
-                                    <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                                   )}
                                 </>
                               )}
@@ -4458,7 +4466,7 @@ export const ModuleView = () => {
                                   </div>
                                 ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(field.type) ? (
                                   <CollapsibleFieldGroup field={field}>
-                                    <div className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                       {(field.fields || []).map((nestedField: any) => {
                                         if (!isFieldVisible(nestedField, newEntryData[field.id] || {}, visibilityContext)) return null;
                                         return (
@@ -4468,9 +4476,9 @@ export const ModuleView = () => {
                                             {nestedField.tooltip && (
                                               <div className="relative cursor-help">
                                                 <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                                   {nestedField.tooltip}
-                                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                                 </div>
                                               </div>
                                             )}
@@ -4506,9 +4514,9 @@ export const ModuleView = () => {
                                       {field.tooltip && (
                                         <div className="relative cursor-help">
                                           <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                             {field.tooltip}
-                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                           </div>
                                         </div>
                                       )}
@@ -4523,9 +4531,9 @@ export const ModuleView = () => {
                                         onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                                         recordData={newEntryData}
                                       />
-                                    {field.helperText && (
-                                      <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
-                                    )}
+                                    {field?.helperText && (
+                                     <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
+                                   )}
                                   </>
                                 )}
                               </div>
@@ -4736,9 +4744,9 @@ export const ModuleView = () => {
                                     {field?.tooltip && (
                                       <div className="relative cursor-help">
                                         <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                           {field.tooltip}
-                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                         </div>
                                       </div>
                                     )}
@@ -4764,7 +4772,7 @@ export const ModuleView = () => {
                                     <p className="text-[10px] text-rose-500 mt-1 font-semibold">{error}</p>
                                   )}
                                   {field?.helperText && !error && (
-                                    <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                                   )}
                                 </>
                               )}

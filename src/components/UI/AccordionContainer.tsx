@@ -23,34 +23,31 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
   return (
     <div className={cn(
       "overflow-hidden transition-all duration-300",
-      !isLast && "border-b border-zinc-100 dark:border-zinc-800/50"
+      !isLast && "border-b border-zinc-100/80 dark:border-zinc-800/50"
     )}>
       {/* Header */}
       <div 
         onClick={onToggle}
-        className={cn(
-          "px-8 py-5 flex items-center justify-between cursor-pointer select-none group/header transition-colors",
-          isOpen ? "bg-zinc-50/50 dark:bg-zinc-900/30" : "hover:bg-zinc-50/30 dark:hover:bg-zinc-900/20"
-        )}
+        className="px-4.5 py-3.5 flex items-center justify-between cursor-pointer select-none group/header transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30"
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5">
           <div className={cn(
-            "w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-500",
+            "w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-300",
             isOpen 
-              ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
-              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 group-hover/header:scale-110"
+              ? "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20" 
+              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
           )}>
             <DynamicIcon name={section.iconName || 'Folder'} size={14} />
           </div>
           <div>
             <h5 className={cn(
-              "text-[11px] font-bold uppercase tracking-tight transition-colors",
+              "text-xs font-bold uppercase tracking-wider transition-colors",
               isOpen ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-900 dark:text-white"
             )}>
               {section.label}
             </h5>
             {section.helperText && (
-              <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5 opacity-70">
+              <p className="text-[10px] text-zinc-400 font-medium tracking-normal mt-0.5">
                 {section.helperText}
               </p>
             )}
@@ -58,8 +55,8 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
         </div>
 
         <div className={cn(
-          "w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-300",
-          isOpen ? "bg-indigo-500/10 text-indigo-500 rotate-180" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+          "w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200",
+          isOpen ? "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-300 rotate-180" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
         )}>
           <ChevronDown size={14} />
         </div>
@@ -73,11 +70,11 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ 
-              height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] },
-              opacity: { duration: 0.2 }
+              height: { duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] },
+              opacity: { duration: 0.15 }
             }}
           >
-            <div className="p-8 bg-white/30 dark:bg-zinc-950/20">
+            <div className="p-5 border-t border-zinc-200/60 dark:border-zinc-800/60">
               {children}
             </div>
           </motion.div>
@@ -109,20 +106,20 @@ export const AccordionContainer: React.FC<AccordionContainerProps> = ({
 
   return (
     <div className={cn(
-      "w-full bg-white/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-sm",
+      "w-full bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl overflow-hidden shadow-xs",
       className
     )}>
       {/* Main Accordion Header */}
-      <div className="px-8 py-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-4 bg-zinc-50/50 dark:bg-zinc-900/30">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-xl shadow-indigo-500/20">
-          <DynamicIcon name={field.iconName || 'ListOrdered'} size={24} />
+      <div className="px-4.5 py-3.5 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center">
+          <DynamicIcon name={field.iconName || 'ListOrdered'} size={16} />
         </div>
         <div>
-          <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+          <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
             {field.label}
           </h4>
           {field.helperText && (
-            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1 opacity-70">
+            <p className="text-[10px] text-zinc-400 font-medium tracking-normal mt-0.5">
               {field.helperText}
             </p>
           )}
@@ -144,7 +141,7 @@ export const AccordionContainer: React.FC<AccordionContainerProps> = ({
         ))}
 
         {sections.length === 0 && (
-          <div className="p-12 text-center opacity-30">
+          <div className="p-8 text-center opacity-30">
             <p className="text-[10px] font-bold uppercase tracking-widest">No subsections defined</p>
           </div>
         )}

@@ -439,7 +439,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
 
   const renderCardsView = () => {
     return (
-      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="p-4.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {searchedRecords.map((rec: any) => {
           const titleField = moduleData?.layout?.[0];
           const recordTitle = rec[titleField?.id] || rec.name || rec.title || rec.id;
@@ -453,7 +453,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
             <div
               key={rec.id}
               onClick={() => handleRecordOpen(rec)}
-              className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-[2rem] p-6 hover:shadow-2xl hover:shadow-indigo-500/[0.03] hover:-translate-y-1 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[190px]"
+              className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 hover:border-indigo-500/50 rounded-xl p-4.5 hover:shadow-lg hover:shadow-indigo-500/[0.03] hover:-translate-y-0.5 cursor-pointer transition-all duration-200 flex flex-col justify-between min-h-[170px]"
             >
               <div>
                 <div className="flex items-center justify-end">
@@ -515,7 +515,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
 
   const renderListView = () => {
     return (
-      <div className="p-6 space-y-3">
+      <div className="p-4.5 space-y-2">
         {searchedRecords.map((rec: any) => {
           const titleField = moduleData?.layout?.[0];
           const recordTitle = rec[titleField?.id] || rec.name || rec.title || rec.id;
@@ -525,7 +525,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
             <div
               key={rec.id}
               onClick={() => handleRecordOpen(rec)}
-              className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 rounded-2xl p-4 hover:shadow-xl hover:shadow-indigo-500/[0.02] cursor-pointer transition-all duration-200 flex items-center justify-between gap-4"
+              className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 hover:border-indigo-500/50 rounded-xl p-3.5 hover:shadow-md hover:shadow-indigo-500/[0.02] cursor-pointer transition-all duration-200 flex items-center justify-between gap-4"
             >
               <div className="flex items-center gap-4 min-w-0 flex-1">
                 <span className="text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono shrink-0">
@@ -588,18 +588,33 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
 
           // Auto-detect image
           let images: string[] = [];
+          const isValidImageUrl = (url: any): boolean => {
+            if (typeof url !== 'string') return false;
+            const trimmed = url.trim();
+            return (
+              trimmed.startsWith('http://') ||
+              trimmed.startsWith('https://') ||
+              trimmed.startsWith('data:image/') ||
+              trimmed.startsWith('blob:') ||
+              trimmed.startsWith('/uploads/') ||
+              trimmed.includes('unsplash.com') ||
+              trimmed.includes('cloudinary.com') ||
+              /\.(jpg|jpeg|png|webp|avif|gif|svg)(\?.*)?$/i.test(trimmed)
+            );
+          };
+
           const fileFields = (moduleData?.layout || []).filter((f: any) => f.type === 'file' || f.type === 'url');
           fileFields.forEach((f: any) => {
             const val = rec[f.id];
             if (val) {
               if (typeof val === 'string') {
                 if (val.includes(',')) {
-                  images.push(...val.split(',').map(s => s.trim()).filter(Boolean));
-                } else {
-                  images.push(val);
+                  images.push(...val.split(',').map((s: string) => s.trim()).filter(isValidImageUrl));
+                } else if (isValidImageUrl(val)) {
+                  images.push(val.trim());
                 }
               } else if (Array.isArray(val)) {
-                images.push(...val.filter(v => typeof v === 'string'));
+                images.push(...val.filter(isValidImageUrl));
               }
             }
           });
@@ -746,7 +761,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
   return (
     <div className="w-full">
          {loading || moduleLoading ? (
-          <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner p-6 space-y-6">
+          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl overflow-hidden p-4.5 space-y-4">
             {/* Toolbar Skeleton */}
             <div className="flex items-center justify-between gap-4">
               <Skeleton variant="rounded" className="h-8 w-48" />
@@ -777,7 +792,7 @@ export const RecursiveCollectionBlock: React.FC<RecursiveCollectionBlockProps> =
             </div>
           </div>
         ) : (
-          <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner">
+          <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl overflow-hidden shadow-xs">
             {/* Inner Toolbar */}
             <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4">
               <div className="flex-1 max-w-xs relative">

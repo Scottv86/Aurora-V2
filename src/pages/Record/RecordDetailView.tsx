@@ -1577,8 +1577,8 @@ export const RecordDetailView = ({
     switch (d) {
       case 'compact':
         return {
-          gapX: '12px',
-          gapY: '12px',
+          gapX: '16px',
+          gapY: '16px',
           padding: 'p-2',
           rounded: 'rounded-xl',
           cardPaddingAndRounding: 'p-2.5 -m-2.5 rounded-xl',
@@ -1588,8 +1588,8 @@ export const RecordDetailView = ({
         };
       case 'spacious':
         return {
-          gapX: '24px',
-          gapY: '24px',
+          gapX: '32px',
+          gapY: '32px',
           padding: 'p-6',
           rounded: 'rounded-[32px]',
           cardPaddingAndRounding: 'p-6 -m-6 rounded-3xl',
@@ -1600,7 +1600,7 @@ export const RecordDetailView = ({
       case 'standard':
       default:
         return {
-          gapX: '16px',
+          gapX: '24px',
           gapY: '24px',
           padding: 'p-4',
           rounded: 'rounded-2xl',
@@ -1622,16 +1622,7 @@ export const RecordDetailView = ({
       <div 
         key={nestedField.id} 
         className={cn(
-          "transition-all relative border-2 group/nestedField",
-          ds.padding,
-          ds.rounded,
-          isErrorField
-            ? (validationErrorField?.severity === 'warning'
-                ? "bg-amber-500/5 border-amber-500 shadow-lg shadow-amber-500/10 animate-shake-field z-10"
-                : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
-            : activeFieldId === nestedField.id 
-              ? "bg-indigo-500/5 border-indigo-500 shadow-xl shadow-indigo-500/10 z-10" 
-              : "border-transparent",
+          "transition-all relative group/nestedField min-w-0",
           !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
         )}
         data-field-id={nestedField.id}
@@ -1643,68 +1634,72 @@ export const RecordDetailView = ({
           }
         }}
       >
-        {activeFieldId === nestedField.id && savingFieldId === nestedField.id && (
-          <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
-            <Loader2 size={10} className="animate-spin" />
-            Saving
-          </div>
-        )}
-
-        <label className={cn(ds.labelSize, "font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label")}>
-          {nestedField.label}
-          {nestedField.required && <span className="text-rose-500">*</span>}
-          {nestedField.tooltip && (
-            <div className="relative cursor-help">
-              <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                {nestedField.tooltip}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
-              </div>
+        <div className="w-full relative">
+          {activeFieldId === nestedField.id && savingFieldId === nestedField.id && (
+            <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
+              <Loader2 size={10} className="animate-spin" />
+              Saving
             </div>
           )}
-          {!activeFieldId && (
-            ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
-              <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
-            ) : (
-              !['datatable'].includes(nestedField.type) && (
-                <Edit2 size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-indigo-500" />
-              )
-            )
-          )}
-        </label>
-        <FieldInput 
-          field={nestedField}
-          value={(() => {
-            const edited = getFieldValue(editData, nestedField.id, nestedField.name);
-            if (edited !== undefined) return edited;
-            const original = getFieldValue(record, nestedField.id, nestedField.name);
-            if (original !== undefined) return original;
-            return calculateDefaultValue(nestedField, editData);
-          })()}
-          onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
-          onBlur={() => handleUpdateEntry(undefined, nestedField.id)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
-            if (e.key === 'Escape') setActiveFieldId(null);
-          }}
-          readonly={activeFieldId !== nestedField.id}
-          disabled={savingFieldId === nestedField.id}
-          recordData={editData}
-          allFields={allFields}
-          density={density}
-        />
-        {isErrorField && (
-          <div className={cn(
-            "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
-            validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
-          )}>
-            {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
-            <span>{validationErrorField.message}</span>
+
+          <div className="space-y-1 relative">
+            <label className={cn(ds.labelSize, "font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label")}>
+              {nestedField.label}
+              {nestedField.required && <span className="text-rose-500">*</span>}
+              {nestedField.tooltip && (
+                <div className="relative cursor-help">
+                  <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                    {nestedField.tooltip}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                  </div>
+                </div>
+              )}
+              {!activeFieldId && (
+                ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
+                  <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
+                ) : (
+                  !['datatable'].includes(nestedField.type) && (
+                    <Edit2 size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-indigo-500" />
+                  )
+                )
+              )}
+            </label>
+            <FieldInput 
+              field={nestedField}
+              value={(() => {
+                const edited = getFieldValue(editData, nestedField.id, nestedField.name);
+                if (edited !== undefined) return edited;
+                const original = getFieldValue(record, nestedField.id, nestedField.name);
+                if (original !== undefined) return original;
+                return calculateDefaultValue(nestedField, editData);
+              })()}
+              onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+              onBlur={() => handleUpdateEntry(undefined, nestedField.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
+                if (e.key === 'Escape') setActiveFieldId(null);
+              }}
+              readonly={activeFieldId !== nestedField.id}
+              disabled={savingFieldId === nestedField.id}
+              recordData={editData}
+              allFields={allFields}
+              density={density}
+            />
+            {isErrorField && (
+              <div className={cn(
+                "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
+                validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
+              )}>
+                {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
+                <span>{validationErrorField.message}</span>
+              </div>
+            )}
+            {nestedField.helperText && !isErrorField && (
+              <p className={cn(ds.fontSize, "text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full")}>{nestedField.helperText}</p>
+            )}
           </div>
-        )}
-        {nestedField.helperText && !isErrorField && (
-          <p className={cn(ds.fontSize, "text-zinc-500 mt-1.5 font-medium px-0.5 italic")}>{nestedField.helperText}</p>
-        )}
+        </div>
       </div>
     );
   };
@@ -1773,17 +1768,7 @@ export const RecordDetailView = ({
                     }
                   }}
                 >
-                  <div className={cn(
-                    "w-full transition-all duration-200 border-2 relative",
-                    ds.cardPaddingAndRounding,
-                    isErrorField
-                      ? (validationErrorField?.severity === 'warning'
-                          ? "bg-amber-500/5 border-amber-500 shadow-lg shadow-amber-500/10 animate-shake-field z-10"
-                          : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
-                      : activeFieldId === field?.id 
-                        ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                        : "border-transparent"
-                  )}>
+                  <div className="w-full relative">
                     {activeFieldId === field?.id && savingFieldId === field?.id && (
                       <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
                         <Loader2 size={10} className="animate-spin" />
@@ -1809,16 +1794,16 @@ export const RecordDetailView = ({
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-1">
+                      <div className="space-y-1 relative">
                         <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
                           {labelOverride}
                           {isRequired && <span className="text-rose-500">*</span>}
                           {field!.tooltip && (
                             <div className="relative cursor-help">
                               <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                 {field!.tooltip}
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                               </div>
                             </div>
                           )}
@@ -1862,7 +1847,7 @@ export const RecordDetailView = ({
                           </div>
                         )}
                         {field!.helperText && !isErrorField && (
-                          <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field!.helperText}</p>
+                          <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field!.helperText}</p>
                         )}
                       </div>
                     )}
@@ -1944,6 +1929,8 @@ export const RecordDetailView = ({
         <AnimatePresence mode="popLayout">
           {visibleFields.map((field: ModuleField) => {
             const isErrorField = validationErrorField?.fieldId === field.id;
+            const isContainerOrStructural = ['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type);
+
             return (
               <motion.div 
                 key={field.id} 
@@ -1961,29 +1948,19 @@ export const RecordDetailView = ({
                 data-active-field={activeFieldId === field.id ? field.id : undefined}
                 className={cn(
                   "group/field transition-all relative min-w-0",
-                  !activeFieldId && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type) && "cursor-pointer"
+                  !activeFieldId && !isContainerOrStructural && "cursor-pointer"
                 )}
                 style={{
                   gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                   gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                 }}
                 onClick={() => {
-                  if (activeFieldId !== field.id && !['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type)) {
+                  if (activeFieldId !== field.id && !isContainerOrStructural) {
                     setActiveFieldId(field.id);
                   }
                 }}
               >
-              <div className={cn(
-                "w-full transition-all duration-200 border-2 relative",
-                ds.cardPaddingAndRounding,
-                isErrorField
-                  ? (validationErrorField?.severity === 'warning'
-                      ? "bg-amber-500/5 border-amber-500 shadow-lg shadow-amber-500/10 animate-shake-field z-10"
-                      : "bg-rose-500/5 border-rose-500 shadow-lg shadow-rose-500/10 animate-shake-field z-10")
-                  : activeFieldId === field.id 
-                    ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-10"
-                    : "border-transparent"
-              )}>
+              <div className="w-full relative">
               {activeFieldId === field.id && savingFieldId === field.id && (
                 <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
                   <Loader2 size={10} className="animate-spin" />
@@ -2016,7 +1993,7 @@ export const RecordDetailView = ({
               <AccordionContainer 
                 field={field}
                 renderContent={(section) => (
-                  <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: ds.gapX }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: `${ds.gapY} ${ds.gapX}` }}>
                     {(section.fields || []).map(renderNestedField)}
                   </div>
                 )}
@@ -2027,7 +2004,7 @@ export const RecordDetailView = ({
                 isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
                 onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: ds.gapX }}>
+                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: `${ds.gapY} ${ds.gapX}` }}>
                   {(field.fields || []).map(renderNestedField)}
                 </div>
               </CollapsibleFieldGroup>
@@ -2047,15 +2024,15 @@ export const RecordDetailView = ({
                  hideHeader={true}
               />
             ) : field.type === 'connector' ? (
-              <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-3xl space-y-4 shadow-inner relative overflow-hidden group/connector">
+              <div className="p-4.5 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl space-y-3 relative overflow-hidden group/connector">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
                 <div className="flex items-center justify-between relative z-10">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white dark:bg-zinc-900 rounded-2xl flex items-center justify-center text-indigo-500 shadow-xl shadow-indigo-500/10 border border-indigo-500/20">
-                      <Zap size={24} />
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-white dark:bg-zinc-900 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm border border-indigo-500/20">
+                      <Zap size={18} />
                     </div>
                     <div>
-                      <h5 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight">{field.label}</h5>
+                      <h5 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">{field.label}</h5>
                       <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Nexus Connector Active</p>
                     </div>
                   </div>
@@ -2065,32 +2042,32 @@ export const RecordDetailView = ({
                       handleSyncConnector(field);
                     }}
                     disabled={syncingConnectors[field.id]}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                    className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-sm shadow-indigo-500/20 disabled:opacity-50"
                   >
                     {syncingConnectors[field.id] ? (
-                      <RefreshCw size={14} className="animate-spin" />
+                      <RefreshCw size={12} className="animate-spin" />
                     ) : (
-                      <RefreshCw size={14} />
+                      <RefreshCw size={12} />
                     )}
                     {syncingConnectors[field.id] ? 'Syncing...' : 'Sync Data'}
                   </button>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/50 dark:bg-black/20 rounded-lg border border-zinc-100 dark:border-white/5 w-fit">
+                <div className="flex items-center gap-2 px-2.5 py-1 bg-white/50 dark:bg-black/20 rounded-lg border border-zinc-100 dark:border-white/5 w-fit">
                   <CheckCircle2 size={12} className="text-emerald-500" />
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Reshaping Engine Engaged</span>
                 </div>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1 relative">
                 <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
                   {field.label}
                   {field.required && <span className="text-rose-500">*</span>}
                   {field.tooltip && (
                     <div className="relative cursor-help">
                       <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                         {field.tooltip}
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                       </div>
                     </div>
                   )}
@@ -2134,7 +2111,7 @@ export const RecordDetailView = ({
                   </div>
                 )}
                 {field.helperText && !isErrorField && (
-                  <p className="text-[10px] text-zinc-500 mt-1.5 font-medium px-0.5 italic">{field.helperText}</p>
+                  <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                 )}
               </div>
             )}
@@ -3081,7 +3058,7 @@ export const RecordDetailView = ({
           </div>
 
           {/* Right Field Cards Container */}
-          <div className="flex-1 min-h-0 h-full p-6 lg:p-8 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 min-h-0 h-full p-6 overflow-y-auto custom-scrollbar">
             {activeTabId ? renderFieldsGrid(activeTabId) : (
               <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
             )}
@@ -3263,7 +3240,7 @@ export const RecordDetailView = ({
             </div>
           )}
 
-          <div className="p-6 lg:p-8 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <div className="p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             {activeTabId === 'activity' ? (
               <RecordActivityFeed recordId={record.id} />
             ) : activeTabId ? (
@@ -3627,9 +3604,9 @@ export const RecordDetailView = ({
                                     {field?.tooltip && (
                                       <div className="relative cursor-help">
                                         <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                           {field.tooltip}
-                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                         </div>
                                       </div>
                                     )}
@@ -3655,7 +3632,7 @@ export const RecordDetailView = ({
                                     <p className="text-[10px] text-rose-500 mt-1 font-semibold">{error}</p>
                                   )}
                                   {field?.helperText && !error && (
-                                    <p className="text-[10px] text-zinc-500 mt-1.5 font-medium">{field.helperText}</p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                                   )}
                                 </>
                               )}

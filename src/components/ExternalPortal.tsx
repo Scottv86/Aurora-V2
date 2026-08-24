@@ -361,9 +361,9 @@ export const ExternalPortal = () => {
                                       {field?.tooltip && (
                                         <div className="relative cursor-help">
                                           <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                             {field.tooltip}
-                                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
                                           </div>
                                         </div>
                                       )}
@@ -390,7 +390,7 @@ export const ExternalPortal = () => {
                                       </p>
                                     )}
                                     {field?.helperText && !formErrors[field.id] && (
-                                      <p className="text-[10px] text-zinc-500 mt-1 font-medium px-1 italic">{field.helperText}</p>
+                                      <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-1 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                                     )}
                                   </>
                                 )}

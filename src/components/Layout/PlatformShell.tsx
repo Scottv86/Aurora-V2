@@ -399,6 +399,16 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     
     // 1. Check if viewing a custom workspace page: /workspace/pages/:pageId
     if (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2]) {
+      if (pathnames[3] === 'modules' && pathnames[4]) {
+        const moduleId = pathnames[4];
+        const matchedMod = modules?.find((m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name.toLowerCase() === moduleId.toLowerCase()));
+        const targetId = matchedMod ? matchedMod.id : moduleId;
+        return renderConfigureButton(
+          'Configure Module', 
+          () => navigateWithReturn(`/workspace/settings/builder/${targetId}`),
+          'SlidersHorizontal'
+        );
+      }
       const pageId = pathnames[2];
       const matchedPage = modules?.find((m: any) => m.type === 'PAGE' && (m.id === pageId || slugify(m.name) === pageId || m.name.toLowerCase() === pageId.toLowerCase()));
       const targetId = matchedPage ? matchedPage.id : pageId;
@@ -409,9 +419,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       );
     }
     
-    // 2. Check if viewing a custom module page: /workspace/modules/:moduleId
-    if (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2] && pathnames[3] !== 'records') {
-      const moduleId = pathnames[2];
+    // 2. Check if viewing a custom module page or record detail view: /workspace/modules/:moduleId
+    if (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2]) {
+      let moduleId = pathnames[2];
+      if (pathnames[3] === 'records' && pathnames[5] === 'sub' && pathnames[6]) {
+        moduleId = pathnames[6];
+      }
       const matchedMod = modules?.find((m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name.toLowerCase() === moduleId.toLowerCase()));
       const targetId = matchedMod ? matchedMod.id : moduleId;
       return renderConfigureButton(
@@ -423,6 +436,16 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
     // 3. Check if viewing a queue page: /workspace/queues/:queueId
     if (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2]) {
+      if (pathnames[3] === 'modules' && pathnames[4]) {
+        const moduleId = pathnames[4];
+        const matchedMod = modules?.find((m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name.toLowerCase() === moduleId.toLowerCase()));
+        const targetId = matchedMod ? matchedMod.id : moduleId;
+        return renderConfigureButton(
+          'Configure Module', 
+          () => navigateWithReturn(`/workspace/settings/builder/${targetId}`),
+          'SlidersHorizontal'
+        );
+      }
       return renderConfigureButton(
         'Configure Queue', 
         () => navigateWithReturn('/workspace/settings/navigation/builder'),

@@ -686,7 +686,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
             {fields.map((field) => {
               const val = formData[field.name] || '';
               return (
-                <div key={field.id} className={cn("space-y-1.5", field.colSpan === 12 ? "col-span-2" : "col-span-1")}>
+                <div key={field.id} className={cn("space-y-1.5 relative", field.colSpan === 12 ? "col-span-2" : "col-span-1")}>
                   <label className="font-bold text-zinc-500 uppercase tracking-wider">{field.label} {field.required && <span className="text-red-500">*</span>}</label>
                   
                   {field.type === 'checkbox' ? (
@@ -738,7 +738,7 @@ const ModuleCreatorWidget: React.FC<{ widget: any, tenant: any, session: any }> 
                     />
                   )}
 
-                  {field.helperText && <p className="text-[10px] text-zinc-400 leading-normal">{field.helperText}</p>}
+                  {field.helperText && <p className="text-[10px] text-zinc-400 leading-normal absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>}
                 </div>
               );
             })}

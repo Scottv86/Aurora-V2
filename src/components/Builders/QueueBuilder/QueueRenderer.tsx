@@ -933,7 +933,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 }}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
               >
-                Claim All
+                Assign to me
               </button>
             </div>
           );

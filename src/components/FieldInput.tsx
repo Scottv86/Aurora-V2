@@ -577,7 +577,9 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
     ds.input,
     error 
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
-      : "border-zinc-200 dark:border-zinc-800 focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-950",
+      : !readonly 
+        ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-zinc-950 focus:border-indigo-500" 
+        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-indigo-500",
     readonly && "cursor-pointer pointer-events-none"
   );
 
@@ -1081,16 +1083,16 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
     const currentValues = Array.isArray(localValue) ? localValue : [];
     return (
       <div 
-        className={cn("flex gap-4 h-64 outline-none", readonly && "pointer-events-none")} 
+        className={cn("flex gap-3.5 h-64 outline-none", readonly && "pointer-events-none")} 
         tabIndex={0} 
         onFocus={() => setIsFocused(true)}
         onBlur={handleBlur}
       >
         {/* Available Source */}
-        <div className="flex-1 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-950 overflow-hidden">
-          <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Available</span>
-            <span className="text-[9px] font-bold text-zinc-500">{(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).length}</span>
+        <div className="flex-1 flex flex-col border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl bg-white dark:bg-zinc-900/50 overflow-hidden shadow-xs">
+          <div className="px-3.5 py-2.5 bg-zinc-50/80 dark:bg-zinc-800/40 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Available</span>
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">{(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).length}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
             {(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).map((opt: string, i: number) => (
@@ -1099,24 +1101,31 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
                 type="button"
                 disabled={readonly}
                 onClick={() => triggerImmediateChange([...currentValues, opt])}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 flex items-center justify-between group transition-all"
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center justify-between group transition-all"
               >
-                {opt}
-                <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                <span>{opt}</span>
+                <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 -translate-x-1.5 group-hover:translate-x-0 transition-all text-indigo-500" />
               </button>
             ))}
+            {(resolvedOptions as string[]).filter((opt: string) => !currentValues.includes(opt)).length === 0 && (
+              <div className="h-full flex items-center justify-center p-6 text-center">
+                <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 italic">All items selected</p>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col justify-center items-center gap-2">
-          <ArrowRightLeft size={16} className="text-zinc-300" />
+          <div className="w-7 h-7 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 flex items-center justify-center">
+            <ArrowRightLeft size={14} />
+          </div>
         </div>
 
         {/* Selected Target */}
-        <div className="flex-1 flex flex-col border border-indigo-500/20 rounded-2xl bg-indigo-500/[0.02] overflow-hidden">
-          <div className="px-4 py-2 bg-indigo-500/5 border-b border-indigo-500/10 flex items-center justify-between">
-            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Selected</span>
-            <span className="text-[9px] font-bold text-indigo-500">{currentValues.length}</span>
+        <div className="flex-1 flex flex-col border border-indigo-500/30 dark:border-indigo-500/30 rounded-xl bg-white dark:bg-zinc-900/50 overflow-hidden shadow-xs">
+          <div className="px-3.5 py-2.5 bg-indigo-500/5 dark:bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Selected</span>
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">{currentValues.length}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
             {currentValues.map((v, i) => (
@@ -1125,15 +1134,15 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
                 type="button"
                 disabled={readonly}
                 onClick={() => triggerImmediateChange(currentValues.filter(val => val !== v))}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center justify-between group animate-in slide-in-from-right-2 duration-200"
+                className="w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-50/80 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 hover:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/15 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-between group transition-all animate-in slide-in-from-right-1 duration-150"
               >
-                {v}
-                <Trash2 size={12} className="opacity-60 group-hover:opacity-100 transition-all" />
+                <span>{v}</span>
+                <Trash2 size={12} className="opacity-50 group-hover:opacity-100 transition-all text-rose-500" />
               </button>
             ))}
             {currentValues.length === 0 && (
-              <div className="h-full flex items-center justify-center p-8 text-center">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest italic leading-relaxed opacity-50">Choose items from the left to add them here</p>
+              <div className="h-full flex items-center justify-center p-6 text-center">
+                <p className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 italic leading-relaxed">Choose items from the left to add them here</p>
               </div>
             )}
           </div>
