@@ -364,12 +364,6 @@ export const Navbar = () => {
         <div className="self-stretch w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
 
         <div className="flex items-center gap-3 relative shrink-0" ref={menuRef}>
-          <div className="text-right hidden sm:block shrink-0">
-            <p className="text-xs font-bold text-zinc-900 dark:text-white leading-none whitespace-nowrap">{displayName}</p>
-            <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mt-1 uppercase tracking-tighter whitespace-nowrap">
-              {platformUser?.position || platformUser?.role?.replace(/_/g, ' ') || 'User'}
-            </p>
-          </div>
           <button 
             onClick={() => setShowUserMenu(!showUserMenu)}
             className={cn(
@@ -401,7 +395,12 @@ export const Navbar = () => {
           {showUserMenu && (
             <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden py-1 z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{displayName}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{displayName}</p>
+                  <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded uppercase tracking-tight shrink-0">
+                    {platformUser?.position || platformUser?.role?.replace(/_/g, ' ') || 'User'}
+                  </span>
+                </div>
                 <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">{user?.email}</p>
               </div>
               

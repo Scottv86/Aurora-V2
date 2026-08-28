@@ -84,11 +84,10 @@ export const useGridEngine = (cols: number = 12) => {
   }, [isOverlapping]);
 
   const snapToGrid = useCallback((posX: number, posY: number, containerWidth: number, rowHeight: number, gap: number = 0, padding: number = 0): { x: number, y: number } => {
-    const usableWidth = containerWidth - (padding * 2);
-    const colWidth = (usableWidth + gap) / cols;
-    // Ensure x is within 0 to cols-1
-    const x = Math.max(0, Math.min(cols - 1, Math.round((posX - padding) / colWidth)));
-    // Ensure y is at least 0
+    const usableWidth = Math.max(1, containerWidth - (padding * 2));
+    const colWidth = usableWidth / cols;
+    const rawX = (posX - padding) / colWidth;
+    const x = Math.max(0, Math.min(cols - 1, Math.floor(rawX)));
     const y = Math.max(0, Math.floor((posY - padding) / (rowHeight + gap)));
     return { x, y };
   }, [cols]);

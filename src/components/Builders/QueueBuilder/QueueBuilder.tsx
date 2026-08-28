@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Layers, Settings, Filter, Table, Play, Save, X, Plus, Trash2,
-  Sparkles, Check, ChevronRight, Palette, Edit3, Sliders, AlertTriangle
+  Layers, Settings, Filter, Table as TableIcon, Play, Save, X, Plus, Trash2,
+  Sparkles, Check, ChevronRight, Palette, Edit3, Sliders, AlertTriangle,
+  Layout, Columns, Kanban, CreditCard, Maximize2, PanelRight, SlidersHorizontal,
+  FolderKanban, Grid, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { QueueEntity, ConditionalFormattingRule } from '../../../types/platform';
@@ -22,7 +24,7 @@ export interface QueueBuilderProps {
 
 const POPULAR_ICONS = [
   'ListOrdered', 'Inbox', 'ClipboardList', 'Layers', 'CheckSquare',
-  'AlertCircle', 'Clock', 'Flame', 'Zap', 'ShieldAlert', 'Filter'
+  'AlertCircle', 'Clock', 'Flame', 'Zap', 'ShieldAlert', 'Filter', 'Kanban', 'Columns'
 ];
 
 export const QueueBuilder: React.FC<QueueBuilderProps> = ({
@@ -52,7 +54,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   }, [modules]);
 
   // Form state
-  const [activeTab, setActiveTab] = useState<'general' | 'filters' | 'columns' | 'formatting' | 'preview'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'filters' | 'columns' | 'layouts' | 'formatting' | 'preview'>('general');
   const [name, setName] = useState(initialQueue?.name || 'New Work Queue');
   const [description, setDescription] = useState(initialQueue?.description || '');
   const [iconName, setIconName] = useState(initialQueue?.iconName || 'ListOrdered');
@@ -64,6 +66,26 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   );
   const [moduleIds, setModuleIds] = useState<string[]>(
     initialQueue?.moduleIds || (initialQueue?.moduleId ? [initialQueue.moduleId] : (activeCustomModules[0]?.id ? [activeCustomModules[0].id] : []))
+  );
+
+  // Layout & Detail Options State
+  const [listLayout, setListLayout] = useState<'table' | 'split' | 'kanban' | 'cards'>(
+    initialQueue?.queueConfig?.listLayout || 'table'
+  );
+  const [kanbanGroupBy, setKanbanGroupBy] = useState<string>(
+    initialQueue?.queueConfig?.listSettings?.kanbanGroupBy || 'status'
+  );
+  const [cardFields, setCardFields] = useState<string[]>(
+    initialQueue?.queueConfig?.listSettings?.cardFields || ['id', 'status', 'priority', 'assigneeId', 'createdAt']
+  );
+  const [tableDensity, setTableDensity] = useState<'compact' | 'standard' | 'spacious'>(
+    initialQueue?.queueConfig?.listSettings?.density || 'standard'
+  );
+  const [detailViewMode, setDetailViewMode] = useState<'page' | 'modal' | 'split'>(
+    initialQueue?.queueConfig?.detailViewMode || (listLayout === 'split' ? 'split' : 'page')
+  );
+  const [detailLayoutType, setDetailLayoutType] = useState<'tabs' | 'split' | 'sidebar' | 'process' | 'accordion'>(
+    initialQueue?.queueConfig?.detailLayoutType || 'tabs'
   );
 
   // Auto-sync initial moduleId when custom modules finish loading
@@ -213,7 +235,15 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
         },
         columns: selectedColumns.length > 0 ? selectedColumns : ['id', 'moduleId', 'title', 'status', 'priority', 'assigneeId', 'createdAt'],
         defaultSort: { key: defaultSortKey, direction: defaultSortDir },
-        formattingRules
+        formattingRules,
+        listLayout,
+        listSettings: {
+          kanbanGroupBy,
+          cardFields,
+          density: tableDensity
+        },
+        detailViewMode,
+        detailLayoutType
       },
       version: (initialQueue?.version || 0) + 1,
       status: 'PUBLISHED',
@@ -242,10 +272,18 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
       },
       columns: selectedColumns,
       defaultSort: { key: defaultSortKey, direction: defaultSortDir },
-      formattingRules
+      formattingRules,
+      listLayout,
+      listSettings: {
+        kanbanGroupBy,
+        cardFields,
+        density: tableDensity
+      },
+      detailViewMode,
+      detailLayoutType
     },
     status: 'PUBLISHED'
-  }), [initialQueue, tenant?.id, name, description, iconName, isUnifiedQueue, moduleId, currentTargetModuleIds, rules, selectedColumns, defaultSortKey, defaultSortDir, formattingRules]);
+  }), [initialQueue, tenant?.id, name, description, iconName, isUnifiedQueue, moduleId, currentTargetModuleIds, rules, selectedColumns, defaultSortKey, defaultSortDir, formattingRules, listLayout, kanbanGroupBy, cardFields, tableDensity, detailViewMode, detailLayoutType]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white select-none">
@@ -285,19 +323,20 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 text-xs font-bold">
+      <div className="flex items-center gap-2 px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 text-xs font-bold overflow-x-auto custom-scrollbar">
         {[
           { id: 'general', label: '1. General & Scope', icon: Settings },
           { id: 'filters', label: '2. Filter Rules & Sort', icon: Filter, count: rules.length },
-          { id: 'columns', label: '3. Display Columns', icon: Table, count: selectedColumns.length },
-          { id: 'formatting', label: '4. Conditional Formatting', icon: Palette, count: formattingRules.length },
-          { id: 'preview', label: '5. Live Preview', icon: Play }
+          { id: 'columns', label: '3. Display Columns', icon: TableIcon, count: selectedColumns.length },
+          { id: 'layouts', label: '4. Layouts & Views', icon: Layout, badge: listLayout.toUpperCase() },
+          { id: 'formatting', label: '5. Conditional Formatting', icon: Palette, count: formattingRules.length },
+          { id: 'preview', label: '6. Live Preview', icon: Play }
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={cn(
-              "flex items-center gap-2 py-3 px-3 border-b-2 transition-all cursor-pointer",
+              "flex items-center gap-2 py-3 px-3 border-b-2 transition-all cursor-pointer whitespace-nowrap",
               activeTab === tab.id
                 ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
                 : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -308,6 +347,11 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
             {tab.count !== undefined && tab.count > 0 && (
               <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
                 {tab.count}
+              </span>
+            )}
+            {tab.badge && (
+              <span className="text-[8px] font-black uppercase px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                {tab.badge}
               </span>
             )}
           </button>
@@ -627,7 +671,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-                  <Table size={14} /> Visible Table Columns
+                  <TableIcon size={14} /> Visible Table Columns
                 </h3>
                 <p className="text-[11px] text-zinc-400 mt-0.5">Select which columns appear in the work queue table view.</p>
               </div>
@@ -671,6 +715,270 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
               <Button onClick={() => setActiveTab('filters')} variant="ghost" size="sm" className="text-xs">
                 Back
               </Button>
+              <Button onClick={() => setActiveTab('layouts')} variant="secondary" size="sm" className="gap-1.5 text-xs font-bold">
+                Next: Layouts & Views <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: Layouts & Views (List Layout & Detail Layout) */}
+        {activeTab === 'layouts' && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            
+            {/* Section 1: List Layout */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                    <Layout size={14} className="text-indigo-500" /> 1. List View Layout
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Select how items in this queue are organized and presented to operators.
+                  </p>
+                </div>
+              </div>
+
+              {/* List Layout Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  {
+                    id: 'table',
+                    label: 'Table View',
+                    desc: 'High-density tabular grid with column sorting, pagination, and inline assignee claiming.',
+                    icon: TableIcon
+                  },
+                  {
+                    id: 'split',
+                    label: 'Split View',
+                    desc: 'Two-pane master-detail view with left navigator rail and inline right detail preview.',
+                    icon: Columns
+                  },
+                  {
+                    id: 'kanban',
+                    label: 'Kanban Board',
+                    desc: 'Visual triage board with grouped stage columns and quick cards.',
+                    icon: Kanban
+                  },
+                  {
+                    id: 'cards',
+                    label: 'Cards Grid',
+                    desc: 'Modern card grid highlighting summary tags, status pills, and quick action buttons.',
+                    icon: CreditCard
+                  }
+                ].map((item) => {
+                  const isSelected = listLayout === item.id;
+                  const ItemIcon = item.icon;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setListLayout(item.id as any);
+                        if (item.id === 'split' && detailViewMode !== 'split') {
+                          setDetailViewMode('split');
+                        } else if (item.id !== 'split' && detailViewMode === 'split') {
+                          setDetailViewMode('page');
+                        }
+                      }}
+                      className={cn(
+                        "p-4 rounded-xl border transition-all cursor-pointer space-y-2 relative",
+                        isSelected
+                          ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/20"
+                          : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "p-2 rounded-lg",
+                            isSelected ? "bg-indigo-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                          )}>
+                            <ItemIcon size={16} />
+                          </div>
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white">{item.label}</span>
+                        </div>
+                        {isSelected && <Check size={16} className="text-indigo-500" />}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        {item.desc}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Layout-specific settings */}
+              {listLayout === 'kanban' && (
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+                  <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                    <FolderKanban size={14} className="text-indigo-500" /> Kanban Grouping Attribute
+                  </label>
+                  <select
+                    value={kanbanGroupBy}
+                    onChange={(e) => setKanbanGroupBy(e.target.value)}
+                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs outline-none focus:border-indigo-500"
+                  >
+                    <option value="status">Status (Workflow State)</option>
+                    <option value="priority">Priority (High / Medium / Low)</option>
+                    <option value="assigneeId">Assignee (Team Members)</option>
+                    {availableFields.filter(f => f.type === 'select' || f.group.includes('Fields')).map(f => (
+                      <option key={f.id} value={f.id}>{f.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-zinc-400">
+                    Queue records will be dynamically organized into board columns based on this property.
+                  </p>
+                </div>
+              )}
+
+              {listLayout === 'table' && (
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+                  <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                    <SlidersHorizontal size={14} className="text-indigo-500" /> Table Row Density
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'compact', label: 'Compact', desc: 'Dense, max rows per screen' },
+                      { id: 'standard', label: 'Standard', desc: 'Balanced padding' },
+                      { id: 'spacious', label: 'Spacious', desc: 'Comfortable touch padding' }
+                    ].map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setTableDensity(d.id as any)}
+                        className={cn(
+                          "p-2.5 rounded-lg border text-left transition-all cursor-pointer",
+                          tableDensity === d.id
+                            ? "bg-indigo-500/10 border-indigo-500 text-indigo-600 dark:text-indigo-400 font-bold"
+                            : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400"
+                        )}
+                      >
+                        <span className="text-xs font-bold block">{d.label}</span>
+                        <span className="text-[9px] text-zinc-400 leading-tight block mt-0.5">{d.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Detail View Mode */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                    <PanelRight size={14} className="text-indigo-500" /> 2. Record Detail Presentation Mode
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Define how record details are opened when an operator clicks an item in this queue.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    id: 'page',
+                    label: 'Full Page Route',
+                    desc: 'Navigates to dedicated URL page for the record.',
+                    icon: Maximize2
+                  },
+                  {
+                    id: 'modal',
+                    label: 'Slide-over / Modal',
+                    desc: 'Opens record detail in a popup without losing queue state.',
+                    icon: PanelRight
+                  },
+                  {
+                    id: 'split',
+                    label: 'Inline Split Pane',
+                    desc: 'Keeps list on the left and renders detail directly beside it.',
+                    icon: Columns
+                  }
+                ].map((item) => {
+                  const isSelected = detailViewMode === item.id;
+                  const ItemIcon = item.icon;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setDetailViewMode(item.id as any)}
+                      className={cn(
+                        "p-4 rounded-xl border transition-all cursor-pointer space-y-2 relative",
+                        isSelected
+                          ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/20"
+                          : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "p-2 rounded-lg",
+                            isSelected ? "bg-indigo-500 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                          )}>
+                            <ItemIcon size={14} />
+                          </div>
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white">{item.label}</span>
+                        </div>
+                        {isSelected && <Check size={14} className="text-indigo-500" />}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        {item.desc}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Section 3: Detail Layout Structure */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                    <Sliders size={14} className="text-indigo-500" /> 3. Detail Layout Structure
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Structure of tabs and sections inside the record detail view.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {[
+                  { id: 'tabs', label: 'Tabbed Layout', desc: 'Horizontal top tabs' },
+                  { id: 'split', label: 'Vertical Split', desc: 'Left tab rail + right pane' },
+                  { id: 'sidebar', label: 'Single Page', desc: 'Unified scroll stream' },
+                  { id: 'accordion', label: 'Accordion', desc: 'Collapsible sections' },
+                  { id: 'process', label: 'Wizard Stepper', desc: 'Guided step-by-step' }
+                ].map((l) => {
+                  const isSelected = detailLayoutType === l.id;
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => setDetailLayoutType(l.id as any)}
+                      className={cn(
+                        "p-3 rounded-xl border text-left transition-all cursor-pointer space-y-1",
+                        isSelected
+                          ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+                          : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold">{l.label}</span>
+                        {isSelected && <Check size={12} className="text-indigo-500" />}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 block">{l.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex justify-between">
+              <Button onClick={() => setActiveTab('columns')} variant="ghost" size="sm" className="text-xs">
+                Back
+              </Button>
               <Button onClick={() => setActiveTab('formatting')} variant="secondary" size="sm" className="gap-1.5 text-xs font-bold">
                 Next: Conditional Formatting <ChevronRight size={14} />
               </Button>
@@ -678,7 +986,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
           </div>
         )}
 
-        {/* TAB 4: Conditional Formatting */}
+        {/* TAB 5: Conditional Formatting */}
         {activeTab === 'formatting' && (
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-5">
@@ -816,7 +1124,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
             </div>
 
             <div className="flex justify-between">
-              <Button onClick={() => setActiveTab('columns')} variant="ghost" size="sm" className="text-xs">
+              <Button onClick={() => setActiveTab('layouts')} variant="ghost" size="sm" className="text-xs">
                 Back
               </Button>
               <Button onClick={() => setActiveTab('preview')} variant="primary" size="sm" className="gap-1.5 text-xs font-bold">
@@ -826,7 +1134,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
           </div>
         )}
 
-        {/* TAB 5: Live Preview */}
+        {/* TAB 6: Live Preview */}
         {activeTab === 'preview' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 text-xs">

@@ -534,6 +534,14 @@ export interface QueueEntity {
     slaMinutes?: number;
     actions?: any[];
     formattingRules?: ConditionalFormattingRule[];
+    listLayout?: 'table' | 'split' | 'kanban' | 'cards';
+    listSettings?: {
+      kanbanGroupBy?: 'status' | 'priority' | 'assigneeId' | string;
+      cardFields?: string[];
+      density?: 'compact' | 'standard' | 'spacious';
+    };
+    detailViewMode?: 'page' | 'modal' | 'split';
+    detailLayoutType?: 'tabs' | 'split' | 'sidebar' | 'process' | 'accordion';
   };
   version?: number;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';

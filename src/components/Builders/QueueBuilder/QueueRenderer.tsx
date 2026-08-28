@@ -17,6 +17,7 @@ import { Table, Column } from '../../UI/Table';
 import { ShareRecordModal } from '../../Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../Platform/MoveRecordModal';
 import { BulkPasteRecordModal } from '../../Platform/BulkPasteRecordModal';
+import { RecordDetailView } from '../../../pages/Record/RecordDetailView';
 
 const InlineAssigneeCell = ({
   record,
@@ -1075,56 +1076,836 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     return cols;
   }, [columnsToRender, members, platformUser, readOnly, densityClass]);
 
-  return (
-    <div className={cn("w-full h-full flex flex-col min-h-0", className)}>
-      <Table
-        key={`queue_table_${activeQueue?.id || queueId || 'queue'}`}
-        filterScopeId={activeQueue?.id || queueId || 'queue'}
-        enableSavedViews={true}
-        scopeType="QUEUE"
-        scopeId={activeQueue?.id || queueId || 'queue'}
-        tenantId={tenant?.id}
-        token={(session as any)?.access_token}
-        className="h-full flex-1 w-full"
-        data={filteredRecords}
-        columns={tableColumns}
-        rowClassName={(record) => {
-          const res = evaluateFormattingRules(
-            activeQueue?.queueConfig?.formattingRules,
-            record,
-            visibilityContext,
-            { targetType: 'row' }
-          );
-          return res.hasMatch ? res.rowClassName : undefined;
-        }}
-        rowStyle={(record) => {
-          const res = evaluateFormattingRules(
-            activeQueue?.queueConfig?.formattingRules,
-            record,
-            visibilityContext,
-            { targetType: 'row' }
-          );
-          return res.hasMatch && Object.keys(res.customStyle).length > 0 ? res.customStyle : undefined;
-        }}
-        loading={recordsQueryLoading || platformLoading}
-        pageSize={pageSize}
-        onPageSizeChange={setPageSize}
-        pageSizeOptions={[10, 25, 50, 100]}
-        density={density}
-        enableSelection={!readOnly}
-        enableFilters={true}
-        filterFields={queueFilterFields}
-        enableGrouping={true}
-        enableAskAurora={true}
-        enableChartToggle={true}
-        currentUserId={(platformUser as any)?.memberId || (platformUser as any)?.cuid || (platformUser as any)?.id || (session?.user as any)?.id}
-        currentUserName={(platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email}
-        assigneeOptions={members}
-        statusOptions={['Open', 'In Progress', 'Under Review', 'Completed', 'Closed']}
-        title={showHeader ? activeQueue?.name : undefined}
-        subtitle={showHeader ? activeQueue?.description : undefined}
-        headerActions={
-          !readOnly && targetBulkModule ? (
+  // Layout & Detail Presentation State
+  const configuredListLayout = activeQueue?.queueConfig?.listLayout || 'table';
+  const [activeLayoutOverride, setActiveLayoutOverride] = useState<'table' | 'split' | 'kanban' | 'cards' | null>(null);
+  const currentListLayout = activeLayoutOverride || configuredListLayout;
+  const detailViewMode = activeQueue?.queueConfig?.detailViewMode || (currentListLayout === 'split' ? 'split' : 'page');
+  const kanbanGroupBy = activeQueue?.queueConfig?.listSettings?.kanbanGroupBy || 'status';
+
+  // Split View & Modal Detail State
+  const [selectedSplitRecordId, setSelectedSplitRecordId] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [splitStatusFilter, setSplitStatusFilter] = useState('all');
+  const [splitAssigneeFilter, setSplitAssigneeFilter] = useState('all');
+  const [splitSortBy, setSplitSortBy] = useState<'updated' | 'created' | 'title' | 'key'>('updated');
+  const [modalRecord, setModalRecord] = useState<any | null>(null);
+
+  // Split view filtered & sorted records
+  const splitRecords = useMemo(() => {
+    let list = [...filteredRecords];
+
+    if (splitStatusFilter !== 'all') {
+      list = list.filter(r => (r.status || r.data?.status) === splitStatusFilter);
+    }
+    if (splitAssigneeFilter !== 'all') {
+      if (splitAssigneeFilter === 'unassigned') {
+        list = list.filter(r => !r.assigneeId);
+      } else {
+        list = list.filter(r => r.assigneeId === splitAssigneeFilter);
+      }
+    }
+
+    list.sort((a, b) => {
+      if (splitSortBy === 'title') {
+        const tA = (a.title || a.name || a.id || '').toLowerCase();
+        const tB = (b.title || b.name || b.id || '').toLowerCase();
+        return tA.localeCompare(tB);
+      }
+      if (splitSortBy === 'key') {
+        const kA = (a._record_key || a.id || '').toLowerCase();
+        const kB = (b._record_key || b.id || '').toLowerCase();
+        return kA.localeCompare(kB);
+      }
+      if (splitSortBy === 'created') {
+        const cA = new Date(a.createdAt || 0).getTime();
+        const cB = new Date(b.createdAt || 0).getTime();
+        return cB - cA;
+      }
+      const uA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const uB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return uB - uA;
+    });
+
+    return list;
+  }, [filteredRecords, splitStatusFilter, splitAssigneeFilter, splitSortBy]);
+
+  // Active split record ID resolution
+  const effectiveSplitRecordId = useMemo(() => {
+    if (selectedSplitRecordId && splitRecords.some(r => r.id === selectedSplitRecordId)) {
+      return selectedSplitRecordId;
+    }
+    return splitRecords[0]?.id || null;
+  }, [selectedSplitRecordId, splitRecords]);
+
+  const effectiveSplitRecord = useMemo(() => {
+    return splitRecords.find(r => r.id === effectiveSplitRecordId) || null;
+  }, [effectiveSplitRecordId, splitRecords]);
+
+  // Record open handler
+  const handleOpenRecord = (record: any) => {
+    if (onRowClick) {
+      onRowClick(record);
+      return;
+    }
+    if (detailViewMode === 'modal') {
+      setModalRecord(record);
+      return;
+    }
+    if (currentListLayout === 'split' || detailViewMode === 'split') {
+      setSelectedSplitRecordId(record.id);
+      return;
+    }
+    const effectivePageId = routePageId || (location.pathname.startsWith('/workspace/pages/') ? location.pathname.split('/')[3] : null);
+    const effectiveQueueId = routeQueueId || queueId || (location.pathname.startsWith('/workspace/queues/') ? location.pathname.split('/')[3] : null);
+    
+    if (effectivePageId) {
+      navigate(`/workspace/pages/${effectivePageId}/modules/${record.moduleId}/records/${record.id}`);
+    } else if (effectiveQueueId) {
+      navigate(`/workspace/queues/${effectiveQueueId}/modules/${record.moduleId}/records/${record.id}`);
+    } else {
+      navigate(`/workspace/modules/${record.moduleId}/records/${record.id}`);
+    }
+  };
+
+  // Target module objects
+  const targetModulesList = useMemo(() => {
+    return targetModuleIds.map(mId => getRecordModule(mId)).filter(Boolean);
+  }, [targetModuleIds, modules]);
+
+  // Move card between Kanban stages
+  const handleMoveKanbanCard = (recordId: string, newStage: string) => {
+    const record = filteredRecords.find(r => r.id === recordId);
+    if (!record) return;
+
+    if (kanbanGroupBy === 'priority') {
+      bulkUpdateMutation.mutate({ records: [record], patchData: { priority: newStage } });
+    } else if (kanbanGroupBy === 'assigneeId') {
+      const assigneeId = newStage === 'unassigned' ? null : newStage;
+      bulkUpdateMutation.mutate({ records: [record], patchData: { assigneeId } });
+    } else {
+      bulkUpdateMutation.mutate({ records: [record], patchData: { status: newStage } });
+    }
+  };
+
+  // Kanban column grouping using configured workflow states and module status options
+  const kanbanColumns = useMemo(() => {
+    let groupKeys: string[] = [];
+
+    if (kanbanGroupBy === 'priority') {
+      groupKeys = ['Critical', 'High', 'Medium', 'Low'];
+    } else if (kanbanGroupBy === 'assigneeId') {
+      const assignedIds = Array.from(new Set(filteredRecords.map(r => r.assigneeId).filter(Boolean)));
+      groupKeys = [...assignedIds, 'unassigned'];
+    } else {
+      // Default: status (Extract configured module workflow states / status field options)
+      const configuredWorkflowStages: string[] = [];
+
+      targetModulesList.forEach((mod: any) => {
+        // 1. Workflow nodes (Status, Start, End, or custom nodes)
+        const wf = mod?.workflow || (mod?.workflows && mod?.workflows[0]);
+        if (wf?.nodes && Array.isArray(wf.nodes)) {
+          wf.nodes.forEach((n: any) => {
+            const label = n.name || n.label || n.id;
+            if (label && !configuredWorkflowStages.includes(label)) {
+              configuredWorkflowStages.push(label);
+            }
+          });
+        }
+
+        // 2. Status / Select options from module layout/fields
+        const fields = flattenFields(mod?.layout || mod?.fields || []);
+        const statusField = fields.find((f: any) => 
+          f.id === 'status' || 
+          f.name?.toLowerCase() === 'status' || 
+          f.type === 'status' || 
+          (f.type === 'select' && f.name?.toLowerCase().includes('status'))
+        );
+        if (statusField?.options && Array.isArray(statusField.options)) {
+          statusField.options.forEach((opt: string) => {
+            if (opt && !configuredWorkflowStages.includes(opt)) {
+              configuredWorkflowStages.push(opt);
+            }
+          });
+        }
+      });
+
+      // 3. Statuses actually present in loaded records
+      const presentRecordStatuses: string[] = [];
+      filteredRecords.forEach(r => {
+        const st = r.status || r.data?.status || r.workflowState?.currentNodeName || r.workflowState?.currentNodeId;
+        if (st && !configuredWorkflowStages.includes(st) && !presentRecordStatuses.includes(st)) {
+          presentRecordStatuses.push(st);
+        }
+      });
+
+      if (configuredWorkflowStages.length > 0) {
+        groupKeys = [...configuredWorkflowStages, ...presentRecordStatuses];
+      } else if (presentRecordStatuses.length > 0) {
+        groupKeys = presentRecordStatuses;
+      } else {
+        groupKeys = ['Open', 'In Progress', 'Completed'];
+      }
+    }
+
+    return groupKeys.map(key => {
+      const colRecords = filteredRecords.filter(r => {
+        if (kanbanGroupBy === 'priority') {
+          return (r.priority || r.data?.priority || 'Medium').toLowerCase() === key.toLowerCase();
+        }
+        if (kanbanGroupBy === 'assigneeId') {
+          return key === 'unassigned' ? !r.assigneeId : r.assigneeId === key;
+        }
+        const recStatus = r.status || r.data?.status;
+        const recWfName = r.workflowState?.currentNodeName;
+        const recWfId = r.workflowState?.currentNodeId;
+
+        return (
+          (recStatus && recStatus.toLowerCase() === key.toLowerCase()) ||
+          (recWfName && recWfName.toLowerCase() === key.toLowerCase()) ||
+          (recWfId && recWfId.toLowerCase() === key.toLowerCase())
+        );
+      });
+
+      let label = key;
+      if (kanbanGroupBy === 'assigneeId') {
+        if (key === 'unassigned') {
+          label = 'Unassigned';
+        } else {
+          const m = members.find((u: any) => u.id === key);
+          label = m?.name || 'Member';
+        }
+      }
+
+      return { key, label, records: colRecords };
+    });
+  }, [filteredRecords, kanbanGroupBy, members, targetModulesList]);
+
+  // Layout View Switcher Dropdown Component
+  const LayoutSwitcherDropdown: React.FC<{
+    currentLayout: 'table' | 'split' | 'kanban' | 'cards';
+    onSelectLayout: (layout: 'table' | 'split' | 'kanban' | 'cards') => void;
+    compact?: boolean;
+  }> = ({ currentLayout, onSelectLayout, compact = false }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          setIsOpen(false);
+        }
+      };
+      if (isOpen) {
+        document.addEventListener('mousedown', handleClickOutside);
+      }
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, [isOpen]);
+
+    const layouts = [
+      { id: 'table' as const, label: 'Table', desc: 'Tabular spreadsheet view', icon: LucideIcons.Table },
+      { id: 'split' as const, label: 'Split View', desc: 'Master list with inline detail', icon: LucideIcons.Columns },
+      { id: 'kanban' as const, label: 'Kanban Board', desc: 'Visual stage & status columns', icon: LucideIcons.Kanban },
+      { id: 'cards' as const, label: 'Cards Grid', desc: 'Responsive card tiles grid', icon: LucideIcons.CreditCard },
+    ];
+
+    const currentObj = layouts.find(l => l.id === currentLayout) || layouts[0];
+    const CurrentIcon = currentObj.icon;
+
+    return (
+      <div className="relative inline-block text-left shrink-0" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-semibold select-none cursor-pointer shadow-2xs",
+            isOpen
+              ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400"
+              : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+          )}
+          title="Switch queue layout view"
+        >
+          <CurrentIcon size={14} className="text-indigo-500 shrink-0" />
+          <span className={cn("truncate", compact ? "hidden sm:inline" : "")}>{currentObj.label}</span>
+          <LucideIcons.ChevronDown size={12} className={cn("text-zinc-400 transition-transform duration-200 shrink-0", isOpen && "rotate-180")} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 mt-1.5 w-56 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-0.5">
+            <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase text-zinc-400">
+              View Layout
+            </div>
+            {layouts.map(layout => {
+              const Icon = layout.icon;
+              const isSelected = currentLayout === layout.id;
+              return (
+                <button
+                  key={layout.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectLayout(layout.id);
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all cursor-pointer select-none",
+                    isSelected
+                      ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold"
+                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800/70 text-zinc-700 dark:text-zinc-300"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={cn(
+                      "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border",
+                      isSelected
+                        ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-500"
+                        : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500"
+                    )}>
+                      <Icon size={14} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold truncate leading-none">{layout.label}</div>
+                      <div className="text-[10px] text-zinc-400 truncate mt-0.5">{layout.desc}</div>
+                    </div>
+                  </div>
+                  {isSelected && (
+                    <LucideIcons.Check size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0 ml-1.5" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render Split View
+  const renderSplitView = () => (
+    <div className="flex-1 w-full h-full min-h-0 flex relative overflow-hidden bg-zinc-100/50 dark:bg-zinc-950">
+      {/* Left Navigator Rail */}
+      <div
+        className={cn(
+          "h-full flex flex-col shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all duration-300 relative z-20",
+          isSidebarCollapsed ? "w-0 overflow-hidden border-r-0" : "w-80 lg:w-96"
+        )}
+      >
+        {/* Rail Header */}
+        <div className="p-3 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col gap-2 shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider truncate">
+                {activeQueue?.name || 'Queue Records'}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono shrink-0">
+                {splitRecords.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <LayoutSwitcherDropdown
+                currentLayout={currentListLayout}
+                onSelectLayout={(layout) => setActiveLayoutOverride(layout)}
+                compact={true}
+              />
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                title="Collapse sidebar"
+              >
+                <LucideIcons.PanelLeftClose size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative w-full">
+            <LucideIcons.Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
+            <input
+              type="text"
+              placeholder="Search queue records..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <LucideIcons.X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Filters Bar */}
+          <div className="grid grid-cols-3 gap-1.5 w-full">
+            <select
+              value={splitStatusFilter}
+              onChange={(e) => setSplitStatusFilter(e.target.value)}
+              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
+            >
+              <option value="all">All Status</option>
+              {['Open', 'In Progress', 'Under Review', 'Completed', 'Closed'].map(st => (
+                <option key={st} value={st}>{st}</option>
+              ))}
+            </select>
+
+            <select
+              value={splitAssigneeFilter}
+              onChange={(e) => setSplitAssigneeFilter(e.target.value)}
+              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
+            >
+              <option value="all">All Users</option>
+              <option value="unassigned">Unassigned</option>
+              {members.map(m => (
+                <option key={m.id} value={m.id}>{m.name || m.email}</option>
+              ))}
+            </select>
+
+            <select
+              value={splitSortBy}
+              onChange={(e) => setSplitSortBy(e.target.value as any)}
+              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
+            >
+              <option value="updated">Updated</option>
+              <option value="created">Created</option>
+              <option value="title">Title</option>
+              <option value="key">Key</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Record Cards Stream */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+          {splitRecords.length === 0 ? (
+            <div className="p-8 text-center space-y-3">
+              <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto text-zinc-400">
+                <LucideIcons.Search size={18} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">No records found</p>
+                <p className="text-[11px] text-zinc-500">Try adjusting your filters or search terms.</p>
+              </div>
+            </div>
+          ) : (
+            splitRecords.map((rec) => {
+              const isSelected = rec.id === effectiveSplitRecordId;
+              const recKey = rec._record_key || rec.id.slice(0, 8);
+              const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
+              const rawStatus = rec.status || rec.data?.status || 'Open';
+              const rawPriority = rec.priority || rec.data?.priority || 'Medium';
+              const assignedMember = members.find(m => m.id === rec.assigneeId);
+
+              const rowFmt = evaluateFormattingRules(activeQueue?.queueConfig?.formattingRules, rec, visibilityContext, { targetType: 'row' });
+              const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+
+              return (
+                <div
+                  key={rec.id}
+                  onClick={() => setSelectedSplitRecordId(rec.id)}
+                  className={cn(
+                    "p-3 rounded-2xl border transition-all cursor-pointer space-y-1.5 select-none relative",
+                    isSelected
+                      ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
+                      : rowFmt.hasMatch
+                        ? cn("border-l-4", rowFmt.rowClassName)
+                        : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
+                  )}
+                  style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+                      <span className={cn(
+                        "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md",
+                        isSelected
+                          ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-extrabold"
+                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                      )}>
+                        {recKey}
+                      </span>
+                      {rowFmt.hasMatch && rowFmt.badgeLabel && (
+                        <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
+                          {rowFmt.badgeLabel}
+                        </span>
+                      )}
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[9px] font-bold border border-indigo-500/20">
+                      {rawStatus}
+                    </span>
+                  </div>
+
+                  <h4 className={cn(
+                    "text-xs font-semibold leading-snug line-clamp-2 transition-colors",
+                    isSelected ? "text-indigo-950 dark:text-white font-bold" : "text-zinc-800 dark:text-zinc-200"
+                  )}>
+                    {recTitle}
+                  </h4>
+
+                  <div className="flex items-center justify-between pt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 gap-1.5">
+                    {assignedMember ? (
+                      <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
+                        <UserAvatarWithPresence
+                          avatarUrl={assignedMember.avatarUrl}
+                          name={assignedMember.name}
+                          status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
+                          size="xs"
+                        />
+                        <span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
+                          {assignedMember.name}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-zinc-400 italic">Unassigned</span>
+                    )}
+
+                    <span className={cn(
+                      "px-1.5 py-0.2 rounded text-[9px] font-bold border",
+                      String(rawPriority).toLowerCase().includes('high') || String(rawPriority).toLowerCase().includes('critical')
+                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700"
+                    )}>
+                      {rawPriority}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Right Detail Pane */}
+      <div className="flex-1 h-full min-w-0 flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
+        {isSidebarCollapsed && (
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(false)}
+            className="absolute left-4 top-4 z-40 p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 shadow-md hover:scale-105 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+            title="Expand record navigator"
+          >
+            <LucideIcons.PanelLeftOpen size={16} />
+            <span>Show Records</span>
+          </button>
+        )}
+
+        {effectiveSplitRecord ? (
+          <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
+            <RecordDetailView
+              key={`split_detail_${effectiveSplitRecord.id}`}
+              moduleIdProp={effectiveSplitRecord.moduleId}
+              recordIdProp={effectiveSplitRecord.id}
+              isEmbedded={true}
+            />
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-8 text-center">
+            <div className="p-8 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-2 max-w-sm">
+              <LucideIcons.Layers size={28} className="text-zinc-400 mx-auto" />
+              <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">No Record Selected</p>
+              <p className="text-xs text-zinc-400">Select an entry from the list rail to preview details.</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Render Kanban Board View
+  const renderKanbanView = () => (
+    <div className="flex-1 w-full h-full min-h-0 flex flex-col p-6 space-y-4 overflow-x-auto custom-scrollbar bg-zinc-50/50 dark:bg-zinc-950">
+      {/* Top bar with layout switcher */}
+      <div className="flex items-center justify-between gap-4 shrink-0">
+        <div>
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <span>{activeQueue?.name || 'Queue Board'}</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 font-bold border border-indigo-500/20">
+              Grouped by: {kanbanGroupBy}
+            </span>
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">{filteredRecords.length} records across {kanbanColumns.length} stages</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <LayoutSwitcherDropdown
+            currentLayout={currentListLayout}
+            onSelectLayout={(layout) => setActiveLayoutOverride(layout)}
+          />
+        </div>
+      </div>
+
+      {/* Columns Container */}
+      <div className="flex-1 flex gap-4 min-h-0 overflow-x-auto pb-4 custom-scrollbar">
+        {kanbanColumns.map(col => (
+          <div
+            key={col.key}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              const rId = e.dataTransfer.getData('text/plain');
+              if (rId) handleMoveKanbanCard(rId, col.key);
+            }}
+            className="w-80 shrink-0 bg-zinc-100/70 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl flex flex-col max-h-full overflow-hidden"
+          >
+            {/* Column Header */}
+            <div className="p-3.5 border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between bg-white/60 dark:bg-zinc-900/60 backdrop-blur-sm shrink-0">
+              <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">{col.label}</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                {col.records.length}
+              </span>
+            </div>
+
+            {/* Column Cards Stream */}
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
+              {col.records.length === 0 ? (
+                <div className="py-8 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+                  <p className="text-[11px] text-zinc-400 font-medium">No records in this stage</p>
+                </div>
+              ) : (
+                col.records.map(rec => {
+                  const recKey = rec._record_key || rec.id.slice(0, 8);
+                  const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
+                  const assignedMember = members.find(m => m.id === rec.assigneeId);
+                  const rawPriority = rec.priority || rec.data?.priority || 'Medium';
+
+                  const rowFmt = evaluateFormattingRules(activeQueue?.queueConfig?.formattingRules, rec, visibilityContext, { targetType: 'row' });
+                  const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+
+                  return (
+                    <div
+                      key={rec.id}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('text/plain', rec.id)}
+                      onClick={() => handleOpenRecord(rec)}
+                      className={cn(
+                        "p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl shadow-xs hover:shadow-md hover:border-indigo-500/40 transition-all cursor-pointer space-y-2 select-none group active:cursor-grabbing",
+                        rowFmt.hasMatch && cn("border-l-4", rowFmt.rowClassName)
+                      )}
+                      style={rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {RowIcon && <RowIcon size={12} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+                          <span className="text-[10px] font-mono font-bold text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {recKey}
+                          </span>
+                        </div>
+                        <span className={cn(
+                          "px-1.5 py-0.2 rounded text-[9px] font-bold border",
+                          String(rawPriority).toLowerCase().includes('high') || String(rawPriority).toLowerCase().includes('critical')
+                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        )}>
+                          {rawPriority}
+                        </span>
+                      </div>
+
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white line-clamp-2 leading-snug">
+                        {recTitle}
+                      </h4>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/60 text-[10px] text-zinc-400">
+                        {assignedMember ? (
+                          <div className="flex items-center gap-1.5">
+                            <UserAvatarWithPresence
+                              avatarUrl={assignedMember.avatarUrl}
+                              name={assignedMember.name}
+                              status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
+                              size="xs"
+                            />
+                            <span className="truncate max-w-[100px] text-zinc-700 dark:text-zinc-300 font-medium">
+                              {assignedMember.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="italic text-zinc-400">Unassigned</span>
+                        )}
+
+                        <span className="text-zinc-400 font-mono text-[9px]">
+                          {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : 'Recent'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Render Cards Grid View
+  const renderCardsView = () => (
+    <div className="flex-1 w-full h-full min-h-0 flex flex-col p-6 space-y-5 overflow-y-auto custom-scrollbar bg-zinc-50/50 dark:bg-zinc-950">
+      {/* Top Bar with Layout Switcher */}
+      <div className="flex items-center justify-between gap-4 shrink-0">
+        <div>
+          <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+            {activeQueue?.name || 'Queue Cards'}
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">Showing {filteredRecords.length} records</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <LayoutSwitcherDropdown
+            currentLayout={currentListLayout}
+            onSelectLayout={(layout) => setActiveLayoutOverride(layout)}
+          />
+        </div>
+      </div>
+
+      {/* Cards Grid */}
+      {filteredRecords.length === 0 ? (
+        <div className="p-12 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl space-y-2 max-w-md mx-auto">
+          <LucideIcons.CreditCard size={32} className="text-zinc-400 mx-auto" />
+          <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">No records found</p>
+          <p className="text-xs text-zinc-400">No items match the queue filter conditions or search query.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredRecords.map(rec => {
+            const recKey = rec._record_key || rec.id.slice(0, 8);
+            const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
+            const rawStatus = rec.status || rec.data?.status || 'Open';
+            const rawPriority = rec.priority || rec.data?.priority || 'Medium';
+            const assignedMember = members.find(m => m.id === rec.assigneeId);
+
+            const rowFmt = evaluateFormattingRules(activeQueue?.queueConfig?.formattingRules, rec, visibilityContext, { targetType: 'row' });
+            const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+
+            return (
+              <div
+                key={rec.id}
+                onClick={() => handleOpenRecord(rec)}
+                className={cn(
+                  "p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/40 rounded-2xl shadow-xs hover:shadow-lg transition-all cursor-pointer space-y-3.5 select-none group flex flex-col justify-between",
+                  rowFmt.hasMatch && cn("border-l-4", rowFmt.rowClassName)
+                )}
+                style={rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {RowIcon && <RowIcon size={14} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {recKey}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold border border-indigo-500/20">
+                        {rawStatus}
+                      </span>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                        String(rawPriority).toLowerCase().includes('high') || String(rawPriority).toLowerCase().includes('critical')
+                          ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                          : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                      )}>
+                        {rawPriority}
+                      </span>
+                    </div>
+                  </div>
+
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {recTitle}
+                  </h4>
+
+                  {rec.moduleName && (
+                    <span className="inline-block text-[10px] font-medium text-zinc-400 bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 rounded-md">
+                      {rec.moduleName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                  {assignedMember ? (
+                    <div className="flex items-center gap-2">
+                      <UserAvatarWithPresence
+                        avatarUrl={assignedMember.avatarUrl}
+                        name={assignedMember.name}
+                        status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
+                        size="xs"
+                      />
+                      <span className="truncate max-w-[120px] text-zinc-700 dark:text-zinc-300 font-medium text-[11px]">
+                        {assignedMember.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="italic text-[11px] text-zinc-400">Unassigned</span>
+                  )}
+
+                  <span className="text-[10px] text-zinc-400 font-mono">
+                    {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : 'Just now'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // Render Table View (Default)
+  const renderTableView = () => (
+    <Table
+      key={`queue_table_${activeQueue?.id || queueId || 'queue'}`}
+      filterScopeId={activeQueue?.id || queueId || 'queue'}
+      enableSavedViews={true}
+      scopeType="QUEUE"
+      scopeId={activeQueue?.id || queueId || 'queue'}
+      tenantId={tenant?.id}
+      token={(session as any)?.access_token}
+      className="h-full flex-1 w-full"
+      data={filteredRecords}
+      columns={tableColumns}
+      rowClassName={(record) => {
+        const res = evaluateFormattingRules(
+          activeQueue?.queueConfig?.formattingRules,
+          record,
+          visibilityContext,
+          { targetType: 'row' }
+        );
+        return res.hasMatch ? res.rowClassName : undefined;
+      }}
+      rowStyle={(record) => {
+        const res = evaluateFormattingRules(
+          activeQueue?.queueConfig?.formattingRules,
+          record,
+          visibilityContext,
+          { targetType: 'row' }
+        );
+        return res.hasMatch && Object.keys(res.customStyle).length > 0 ? res.customStyle : undefined;
+      }}
+      loading={recordsQueryLoading || platformLoading}
+      pageSize={pageSize}
+      onPageSizeChange={setPageSize}
+      pageSizeOptions={[10, 25, 50, 100]}
+      density={density}
+      enableSelection={!readOnly}
+      enableFilters={true}
+      filterFields={queueFilterFields}
+      enableGrouping={true}
+      enableAskAurora={true}
+      enableChartToggle={true}
+      currentUserId={(platformUser as any)?.memberId || (platformUser as any)?.cuid || (platformUser as any)?.id || (session?.user as any)?.id}
+      currentUserName={(platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email}
+      assigneeOptions={members}
+      statusOptions={['Open', 'In Progress', 'Under Review', 'Completed', 'Closed']}
+      title={showHeader ? activeQueue?.name : undefined}
+      subtitle={showHeader ? activeQueue?.description : undefined}
+      headerActions={
+        <div className="flex items-center gap-2">
+          <LayoutSwitcherDropdown
+            currentLayout={currentListLayout}
+            onSelectLayout={(layout) => setActiveLayoutOverride(layout)}
+          />
+          {!readOnly && targetBulkModule && (
             <button
               type="button"
               onClick={() => setShowBulkPasteModal(true)}
@@ -1134,89 +1915,132 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               <LucideIcons.ClipboardPaste size={13} className="text-zinc-400 dark:text-zinc-400" />
               <span>Paste/Upload</span>
             </button>
-          ) : undefined
+          )}
+        </div>
+      }
+      searchable={searchable ?? true}
+      searchValue={searchQuery}
+      onSearchChange={setSearchQuery}
+      searchPlaceholder="Search queue records..."
+      noContainer={noContainer}
+      onRowClick={handleOpenRecord}
+      onBulkAssign={(_selectedIds, selectedItems, assigneeId, clearSelection) => {
+        bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId } });
+        clearSelection();
+      }}
+      onBulkStatusChange={(_selectedIds, selectedItems, status, clearSelection) => {
+        bulkUpdateMutation.mutate({ records: selectedItems, patchData: { status } });
+        clearSelection();
+      }}
+      onBulkMove={(_selectedIds, selectedItems, clearSelection) => {
+        setRecordsToMove(selectedItems);
+        clearSelection();
+      }}
+      onBulkStar={async (selectedIds, _selectedItems, star, clearSelection) => {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+        updateCachedRecordsStarred(selectedIds, star);
+        clearSelection();
+        try {
+          await fetch(`${DATA_API_URL}/records/star-batch`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'x-tenant-id': tenant?.id || ''
+            },
+            body: JSON.stringify({ recordIds: selectedIds, star })
+          });
+          toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
+          queryClient.invalidateQueries({ queryKey: ['records'] });
+          queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+        } catch (err: any) {
+          updateCachedRecordsStarred(selectedIds, !star);
+          toast.error(err.message || 'Failed to update star for records');
+          queryClient.invalidateQueries({ queryKey: ['records'] });
+          queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
         }
-        searchable={searchable ?? true}
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Search queue records..."
-        noContainer={noContainer}
+      }}
+      onBulkDelete={(_selectedIds, selectedItems, clearSelection) => {
+        bulkDeleteMutation.mutate({ records: selectedItems });
+        clearSelection();
+      }}
+      bulkActions={(_selectedIds, selectedItems, clearSelection) => {
+        const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
+        if (!me) return null;
+        return (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId: me } });
+                clearSelection();
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+            >
+              Assign to me
+            </button>
+          </div>
+        );
+      }}
+    />
+  );
 
-        onRowClick={(record) => {
-          if (onRowClick) {
-            onRowClick(record);
-          } else if (!readOnly) {
-            const effectivePageId = routePageId || (location.pathname.startsWith('/workspace/pages/') ? location.pathname.split('/')[3] : null);
-            const effectiveQueueId = routeQueueId || queueId || (location.pathname.startsWith('/workspace/queues/') ? location.pathname.split('/')[3] : null);
-            
-            if (effectivePageId) {
-              navigate(`/workspace/pages/${effectivePageId}/modules/${record.moduleId}/records/${record.id}`);
-            } else if (effectiveQueueId) {
-              navigate(`/workspace/queues/${effectiveQueueId}/modules/${record.moduleId}/records/${record.id}`);
-            } else {
-              navigate(`/workspace/modules/${record.moduleId}/records/${record.id}`);
-            }
-          }
-        }}
-        onBulkAssign={(_selectedIds, selectedItems, assigneeId, clearSelection) => {
-          bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId } });
-          clearSelection();
-        }}
-        onBulkStatusChange={(_selectedIds, selectedItems, status, clearSelection) => {
-          bulkUpdateMutation.mutate({ records: selectedItems, patchData: { status } });
-          clearSelection();
-        }}
-        onBulkMove={(_selectedIds, selectedItems, clearSelection) => {
-          setRecordsToMove(selectedItems);
-          clearSelection();
-        }}
-        onBulkStar={async (selectedIds, _selectedItems, star, clearSelection) => {
-          const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-          updateCachedRecordsStarred(selectedIds, star);
-          clearSelection();
-          try {
-            await fetch(`${DATA_API_URL}/records/star-batch`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'x-tenant-id': tenant?.id || ''
-              },
-              body: JSON.stringify({ recordIds: selectedIds, star })
-            });
-            toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
-            queryClient.invalidateQueries({ queryKey: ['records'] });
-            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
-          } catch (err: any) {
-            updateCachedRecordsStarred(selectedIds, !star);
-            toast.error(err.message || 'Failed to update star for records');
-            queryClient.invalidateQueries({ queryKey: ['records'] });
-            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
-          }
-        }}
-        onBulkDelete={(_selectedIds, selectedItems, clearSelection) => {
-          bulkDeleteMutation.mutate({ records: selectedItems });
-          clearSelection();
-        }}
-        bulkActions={(_selectedIds, selectedItems, clearSelection) => {
-          const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
-          if (!me) return null;
-          return (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId: me } });
-                  clearSelection();
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+  return (
+    <div className={cn("w-full h-full flex flex-col min-h-0 relative", className)}>
+      {currentListLayout === 'split' ? (
+        renderSplitView()
+      ) : currentListLayout === 'kanban' ? (
+        renderKanbanView()
+      ) : currentListLayout === 'cards' ? (
+        renderCardsView()
+      ) : (
+        renderTableView()
+      )}
+
+      {/* Slide-over / Modal Detail View */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {modalRecord && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setModalRecord(null)}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                className="relative w-full max-w-5xl h-[92vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10"
+                onClick={(e) => e.stopPropagation()}
               >
-                Assign to me
-              </button>
+                <div className="absolute right-4 top-4 z-50">
+                  <button
+                    type="button"
+                    onClick={() => setModalRecord(null)}
+                    className="p-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                    title="Close detail"
+                  >
+                    <LucideIcons.X size={16} />
+                  </button>
+                </div>
+                <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
+                  <RecordDetailView
+                    key={`modal_detail_${modalRecord.id}`}
+                    isModal={true}
+                    recordIdProp={modalRecord.id}
+                    moduleIdProp={modalRecord.moduleId}
+                    onClose={() => setModalRecord(null)}
+                  />
+                </div>
+              </motion.div>
             </div>
-          );
-        }}
-      />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
