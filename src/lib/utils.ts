@@ -338,32 +338,61 @@ export const isContainerField = (type: string): boolean => {
 export const calculateHeight = (field: any, placeholder?: { index: number, span?: number, rowSpan?: number } | null): number => {
   if (!field) return 2;
   
-  // Use rowSpan if explicitly set (e.g. for placeholders)
-  if (field.rowSpan) return field.rowSpan;
-  
   const type = field.type;
   
-  if (type === 'sub_module') return 4;
+  if (type === 'placeholder') return field.rowSpan || 2;
+  if (type === 'sub_module') return Math.max(4, field.rowSpan || 4);
+  if (type === 'textarea' || type === 'rich_text') return Math.max(2, field.rowSpan || 3);
   
   if (isContainerField(type)) {
-    // If collapsed, return 2 units to match standard field height (120px)
+    // If collapsed, return 2 units to match standard field height
     if (field.isCollapsed) return 2;
     
     const fields = field.fields || [];
-    if (fields.length === 0 && !placeholder) return 4;
+    if (fields.length === 0 && !placeholder) return 3;
     
+    const rowHeight = 50;
+    const gap = 20;
+    const gridToPx = (units: number) => units * rowHeight + Math.max(0, units - 1) * gap;
+    const pxToGrid = (px: number) => Math.max(2, Math.ceil((px + gap) / (rowHeight + gap)));
+
     if (type === 'accordion') {
-      // Accordion sections are stacked vertically in the builder, so we sum their heights
-      let totalHeight = 0;
-      fields.forEach((f: any) => {
-        // Just sum the base calculateHeight for each section
-        totalHeight += calculateHeight(f); 
+      if (fields.length === 0 && !placeholder) return 3;
+      
+      // Outer accordion header (64px) + card padding (32px) + top margin (12px) = 108px
+      let neededPx = 108;
+      
+      fields.forEach((section: any, idx: number) => {
+        if (idx > 0) neededPx += 16; // gap-4 between sections
+        
+        if (section.isCollapsed) {
+          neededPx += 60; // collapsed section header
+        } else {
+          const sFields = section.fields || [];
+          if (sFields.length === 0) {
+            neededPx += 75 + 24 + 70; // section header (75px) + padding (24px) + empty drop zone (70px) = 169px
+          } else {
+            const childBottoms = sFields.map((f: any) => {
+              const h = calculateHeight(f);
+              const r = typeof f.rowIndex === 'number' ? f.rowIndex : 0;
+              return r + h;
+            });
+            const maxBottom = Math.max(1, ...childBottoms);
+            const innerGridPx = gridToPx(maxBottom);
+            neededPx += 75 + 24 + innerGridPx; // header + padding + inner fields grid
+          }
+        }
       });
-      if (placeholder) {
-        totalHeight += (placeholder.rowSpan || 2);
+
+      if (fields.length > 0) {
+        neededPx += 48; // Add Subsection button (32px) + gap (16px)
       }
-      // Add +1 unit per section for its header/gap, plus +1 for the accordion container
-      return Math.max(6, totalHeight + (fields.length || 0) + 1);
+
+      if (placeholder) {
+        neededPx += gridToPx(placeholder.rowSpan || 2) + 16;
+      }
+
+      return pxToGrid(neededPx);
     }
 
     const childHeights = fields.map((f: any) => {
@@ -373,15 +402,15 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
     });
 
     if (placeholder) {
-      // Use the rowSpan of the placeholder if provided, otherwise default to 2
       const pHeight = placeholder.rowSpan || 2;
       childHeights.push(placeholder.index + pHeight);
     }
     
     const maxChildBottom = Math.max(0, ...childHeights);
+    const innerGridPx = gridToPx(maxChildBottom);
+    const totalGroupPx = 120 + innerGridPx;
     
-    // Ensure container is at least 4 units high and has some padding at the bottom
-    return Math.max(4, maxChildBottom + 2);
+    return pxToGrid(totalGroupPx);
   }
   
   return 2;

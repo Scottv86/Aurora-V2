@@ -223,6 +223,119 @@ export const GRID_CONFIG = {
   cols: 12
 };
 
+interface NestedRglContainerProps {
+  parentId: string;
+  fields: Field[];
+  viewportSize: 'desktop' | 'tablet' | 'mobile';
+  dragOverInfo?: { active: boolean; parentId?: string; col: number; span: number; index: number; rowSpan?: number } | null;
+  resolveCollisionsInArray?: (triggerField: Field, fields: Field[]) => Field[];
+  onLayoutChange: (parentId: string, newLayout: any[]) => void;
+  children: React.ReactNode;
+}
+
+const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
+  parentId,
+  fields,
+  viewportSize,
+  dragOverInfo,
+  resolveCollisionsInArray,
+  onLayoutChange,
+  children
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number>(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setWidth(entry.contentRect.width);
+          setMounted(true);
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    if (containerRef.current.clientWidth > 0) {
+      setWidth(containerRef.current.clientWidth);
+      setMounted(true);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  const rglLayout = useMemo(() => {
+    let activeFields = fields;
+    if (dragOverInfo?.active && dragOverInfo?.parentId === parentId) {
+      const placeholderField: Field = {
+        id: '__cross_drop_placeholder__',
+        name: '__cross_drop_placeholder__',
+        type: 'text',
+        label: 'Drop Zone',
+        startCol: dragOverInfo.col || 1,
+        rowIndex: typeof dragOverInfo.index === 'number' ? dragOverInfo.index : 0,
+        colSpan: dragOverInfo.span || 6
+      };
+      if (resolveCollisionsInArray) {
+        activeFields = resolveCollisionsInArray(placeholderField, [...fields, placeholderField]);
+      } else {
+        activeFields = [...fields, placeholderField];
+      }
+    }
+    return activeFields.map(f => ({
+      i: f.id,
+      x: Math.max(0, (f.startCol || 1) - 1),
+      y: typeof f.rowIndex === 'number' ? f.rowIndex : 0,
+      w: f.colSpan || 12,
+      h: calculateHeight(f),
+      minW: 2,
+      minH: 1
+    }));
+  }, [fields, dragOverInfo, parentId, resolveCollisionsInArray]);
+
+  const isDraggingOutside = dragOverInfo?.active && dragOverInfo?.parentId !== parentId;
+
+  return (
+    <div ref={containerRef} className="w-full col-span-12 relative min-h-[60px]">
+      {mounted && width > 0 ? (
+        <ReactGridLayout
+          key={`nested-grid-${parentId}-${fields.map(f => `${f.id}_h${calculateHeight(f)}_c${f.fields?.length || 0}`).join('_')}`}
+          className={cn("layout", isDraggingOutside && "is-dragging-cross-container")}
+          layout={rglLayout}
+          width={width}
+          onLayoutChange={(newLayout: any[]) => onLayoutChange(parentId, newLayout)}
+          gridConfig={{
+            cols: viewportSize === 'mobile' ? 1 : 12,
+            rowHeight: GRID_CONFIG.rowHeight,
+            margin: [16, 16],
+            containerPadding: [0, 0]
+          }}
+          dragConfig={{
+            enabled: true,
+            handle: ".nested-drag-handle"
+          }}
+          resizeConfig={{
+            enabled: true
+          }}
+        >
+          {children}
+          {dragOverInfo?.active && dragOverInfo?.parentId === parentId && (
+            <div
+              key="__cross_drop_placeholder__"
+              className="react-grid-placeholder"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+        </ReactGridLayout>
+      ) : (
+        <div className="w-full">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // --- Mock Sub-module Renderer ---
 const renderSubmoduleMock = (block: any) => {
   const variant = block.variant || 'table';
@@ -2831,9 +2944,12 @@ export const ModuleEditor = () => {
   const normalizeLayout = (currentLayout: Field[]): Field[] => {
     if (!currentLayout || currentLayout.length === 0) return [];
     
+    // Filter out temporary placeholder indicators from persisted layout
+    const cleanFields = currentLayout.filter(f => f.id !== 'placeholder' && f.id !== '__drop_zone_indicator__' && f.type !== 'placeholder');
+
     // Group fields by tabId and parentId to normalize each context independently
     const groups: Record<string, Field[]> = {};
-    currentLayout.forEach(f => {
+    cleanFields.forEach(f => {
       const key = `${f.tabId || 'default'}-${f.parentId || 'root'}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(f);
@@ -3288,6 +3404,209 @@ export const ModuleEditor = () => {
     }
   }, [layout, currentTabId, tabs]);
 
+  // Nested ReactGridLayout layout change handler
+  const handleNestedRglLayoutChange = useCallback((parentId: string, newLayout: any[]) => {
+    let hasChanged = false;
+    setLayout(prevLayout => {
+      const updateRecursive = (fields: Field[]): Field[] => {
+        return fields.map(f => {
+          if (f.id === parentId) {
+            const updatedChildFields = (f.fields || []).map(child => {
+              const match = newLayout.find(l => l.i === child.id);
+              if (match) {
+                const newCol = match.x + 1;
+                const newRow = match.y;
+                const newSpan = match.w;
+                if (child.startCol !== newCol || child.rowIndex !== newRow || child.colSpan !== newSpan) {
+                  hasChanged = true;
+                  return { ...child, startCol: newCol, rowIndex: newRow, colSpan: newSpan };
+                }
+              }
+              return child;
+            });
+            return { ...f, fields: updatedChildFields };
+          }
+          if (f.fields) {
+            return { ...f, fields: updateRecursive(f.fields) };
+          }
+          return f;
+        });
+      };
+      const updated = updateRecursive(prevLayout);
+      return hasChanged ? updated : prevLayout;
+    });
+  }, []);
+
+  // Unified pointer drag handler for instant cross-container moves (group-to-group, group-to-canvas, canvas-to-group, group nesting)
+  const handleUnifiedPointerDrag = useCallback((fieldId: string, parentId?: string) => (e: React.PointerEvent) => {
+    if (activeTab !== 'builder') return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let hasMoved = false;
+
+    const fieldToMove = findFieldRecursive(layoutRef.current, fieldId);
+    if (!fieldToMove) return;
+
+    const handlePointerMove = (moveEvt: PointerEvent) => {
+      const dist = Math.hypot(moveEvt.clientX - startX, moveEvt.clientY - startY);
+      if (dist < 6) return;
+      if (!hasMoved) {
+        hasMoved = true;
+        setActiveDragItem({ type: 'existing_field', fieldId, fieldType: fieldToMove.type });
+      }
+
+      const elements = document.elementsFromPoint(moveEvt.clientX, moveEvt.clientY);
+      const groupEl = elements.find(el => (el.hasAttribute('data-group-id') || el.hasAttribute('data-container-id')) && el.getAttribute('data-group-id') !== fieldId);
+      const targetGroupId = groupEl?.getAttribute('data-group-id') || groupEl?.getAttribute('data-container-id') || undefined;
+      const isOverMainCanvas = elements.some(el => el.id === 'main-grid-container');
+
+      if (targetGroupId) {
+        if (targetGroupId !== parentId) {
+          const rect = groupEl?.getBoundingClientRect() || { left: moveEvt.clientX, top: moveEvt.clientY, width: 800 };
+          const { x, y } = snapToGrid(
+            moveEvt.clientX - rect.left,
+            moveEvt.clientY - rect.top,
+            rect.width,
+            GRID_CONFIG.rowHeight,
+            GRID_CONFIG.gap,
+            GRID_CONFIG.nestedPadding
+          );
+          setDragOverInfo({
+            active: true,
+            parentId: targetGroupId,
+            col: x + 1,
+            span: Math.min(fieldToMove.colSpan || 6, 12 - x),
+            index: y,
+            rowSpan: calculateHeight(fieldToMove)
+          });
+        } else {
+          // Re-entered or remaining inside originating group: clear cross-container info so group's native placeholder takes over cleanly
+          setDragOverInfo(null);
+        }
+      } else if (isOverMainCanvas) {
+        if (parentId) {
+          const canvasEl = document.getElementById('main-grid-container');
+          const rect = canvasEl?.getBoundingClientRect() || { left: 0, top: 0, width: 1100 };
+          const { x, y } = snapToGrid(
+            moveEvt.clientX - rect.left,
+            moveEvt.clientY - rect.top,
+            rect.width,
+            GRID_CONFIG.rowHeight,
+            GRID_CONFIG.gap,
+            GRID_CONFIG.padding
+          );
+          setDragOverInfo({
+            active: true,
+            parentId: undefined,
+            col: x + 1,
+            span: Math.min(fieldToMove.colSpan || 6, 12 - x),
+            index: y,
+            rowSpan: calculateHeight(fieldToMove)
+          });
+        } else {
+          setDragOverInfo(null);
+        }
+      } else {
+        setDragOverInfo(null);
+      }
+    };
+
+    const handlePointerUp = (upEvt: PointerEvent) => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      setActiveDragItem(null);
+      setDragOverInfo(null);
+      setPreviewLayout(null);
+
+      if (!hasMoved) return;
+
+      const elements = document.elementsFromPoint(upEvt.clientX, upEvt.clientY);
+      const groupEl = elements.find(el => (el.hasAttribute('data-group-id') || el.hasAttribute('data-container-id')) && el.getAttribute('data-group-id') !== fieldId);
+      const targetGroupId = groupEl?.getAttribute('data-group-id') || groupEl?.getAttribute('data-container-id') || undefined;
+      const isOverMainCanvas = elements.some(el => el.id === 'main-grid-container');
+
+      const isDescendant = (parentField: Field, searchId: string): boolean => {
+        if (parentField.id === searchId) return true;
+        return (parentField.fields || []).some(f => isDescendant(f, searchId));
+      };
+
+      if (targetGroupId && targetGroupId !== parentId) {
+        // Guard against circular nesting for container fields
+        if (isContainerField(fieldToMove.type) && isDescendant(fieldToMove, targetGroupId)) {
+          return;
+        }
+
+        const rect = groupEl?.getBoundingClientRect() || { left: upEvt.clientX, top: upEvt.clientY, width: 800 };
+        const { x, y } = snapToGrid(
+          upEvt.clientX - rect.left,
+          upEvt.clientY - rect.top,
+          rect.width,
+          GRID_CONFIG.rowHeight,
+          GRID_CONFIG.gap,
+          GRID_CONFIG.nestedPadding
+        );
+
+        const updatedField: Field = {
+          ...fieldToMove,
+          parentId: targetGroupId,
+          tabId: undefined,
+          startCol: x + 1,
+          rowIndex: y
+        };
+
+        setLayout(prevLayout => {
+          const cleaned = removeFieldRecursive(prevLayout, fieldId);
+          const insertIntoGroup = (fields: Field[]): Field[] => {
+            return fields.map(f => {
+              if (f.id === targetGroupId) {
+                const children = [...(f.fields || []), updatedField];
+                return { ...f, fields: normalizeLayout(children) };
+              }
+              if (f.fields) {
+                return { ...f, fields: insertIntoGroup(f.fields) };
+              }
+              return f;
+            });
+          };
+          return insertIntoGroup(cleaned);
+        });
+        setSelectedId(fieldId);
+      } else if (!targetGroupId && isOverMainCanvas && parentId) {
+        // Dragging out of group to standalone root canvas
+        const canvasEl = document.getElementById('main-grid-container');
+        const rect = canvasEl?.getBoundingClientRect() || { left: 0, top: 0, width: 1100 };
+        const { x, y } = snapToGrid(
+          upEvt.clientX - rect.left,
+          upEvt.clientY - rect.top,
+          rect.width,
+          GRID_CONFIG.rowHeight,
+          GRID_CONFIG.gap,
+          GRID_CONFIG.padding
+        );
+
+        const updatedField: Field = {
+          ...fieldToMove,
+          parentId: undefined,
+          tabId: currentTabId,
+          startCol: x + 1,
+          rowIndex: y
+        };
+
+        setLayout(prevLayout => {
+          const cleaned = removeFieldRecursive(prevLayout, fieldId);
+          const sameTab = cleaned.filter(f => !f.parentId && (f.tabId === currentTabId || (!f.tabId && currentTabId === tabs[0]?.id)));
+          const others = cleaned.filter(f => f.parentId || (f.tabId !== currentTabId && (f.tabId || currentTabId !== tabs[0]?.id)));
+          const resolved = resolveCollisionsInArray(updatedField, [...sameTab, updatedField]);
+          return [...others, ...normalizeLayout(resolved)];
+        });
+        setSelectedId(fieldId);
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  }, [activeTab, currentTabId, tabs]);
+
   // DnD Handlers updated for flat grid system
 
 
@@ -3376,6 +3695,7 @@ export const ModuleEditor = () => {
   const handleDropOnCanvas = (e: React.DragEvent, parentId?: string, targetTabId?: string) => {
     e.preventDefault();
     e.stopPropagation();
+    setActiveDragItem(null);
     setDragOverInfo(null);
     setPreviewLayout(null);
     
@@ -3414,12 +3734,24 @@ export const ModuleEditor = () => {
 
       if (!fieldToInsert) return;
 
+      // Prevent dropping container into itself or its own descendants
+      if (fieldId && isContainerField(fieldToInsert.type) && parentId) {
+        const isDescendant = (parentField: Field, searchId: string): boolean => {
+          if (parentField.id === searchId) return true;
+          return (parentField.fields || []).some(f => isDescendant(f, searchId));
+        };
+        if (isDescendant(fieldToInsert, parentId)) {
+          return;
+        }
+      }
+
       const resolvedTabId = targetTabId || currentTabId;
 
-      const updatedField = { 
+      const updatedField: Field = { 
         ...fieldToInsert, 
         startCol: dropCol, 
         rowIndex: dropRow, 
+        parentId: parentId || undefined,
         tabId: parentId ? undefined : resolvedTabId 
       };
 
@@ -3438,6 +3770,25 @@ export const ModuleEditor = () => {
         let insertedField: Field | undefined;
         const nextFields = fields.map(f => {
           if (f.id === targetId) {
+            if (f.type === 'accordion' && updatedField.type !== 'group' && updatedField.type !== 'fieldGroup') {
+              if (!f.fields || f.fields.length === 0) {
+                const newSection: Field = {
+                  id: `section-${Date.now()}`,
+                  type: 'group' as FieldType,
+                  label: 'New Section 1',
+                  name: `section_${Date.now()}`,
+                  fields: [updatedField]
+                };
+                insertedField = updatedField;
+                return { ...f, fields: [newSection] };
+              }
+              const firstSection = f.fields[0];
+              const sectionFields = [...(firstSection.fields || []), updatedField];
+              const resolved = resolveCollisionsInArray(updatedField, sectionFields);
+              insertedField = updatedField;
+              const updatedSections = f.fields.map((s, idx) => idx === 0 ? { ...s, fields: normalizeLayout(resolved) } : s);
+              return { ...f, fields: updatedSections };
+            }
             const nestedFields = [...(f.fields || []), updatedField];
             const resolved = resolveCollisionsInArray(updatedField, nestedFields);
             insertedField = updatedField;
@@ -3458,6 +3809,7 @@ export const ModuleEditor = () => {
       let nextLayout = fieldId ? removeFieldRecursive(layout, fieldId) : [...layout];
       const result = performInsert(nextLayout, parentId);
       setLayout(normalizeLayout(result.fields));
+      setSelectedId(fieldToInsert.id);
     } catch (err) {
       console.error('Drop error:', err);
     }
@@ -3476,7 +3828,7 @@ export const ModuleEditor = () => {
 
   const removeFieldRecursive = (fields: Field[], id: string): Field[] => {
     return fields
-      .filter(f => f.id !== id)
+      .filter(f => f.id !== id && f.id !== 'placeholder' && f.id !== '__drop_zone_indicator__' && f.type !== 'placeholder')
       .map(f => f.fields ? { ...f, fields: removeFieldRecursive(f.fields, id) } : f);
   };
 
@@ -3660,7 +4012,7 @@ export const ModuleEditor = () => {
   const renderMasterKanbanPreview = () => {
     const statuses = ['To Do', 'In Progress', 'Done'];
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Kanban Board Preview</span>
@@ -3728,7 +4080,7 @@ export const ModuleEditor = () => {
   const renderMasterCalendarPreview = () => {
     const days = Array.from({ length: 35 }, (_, i) => i - 3);
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="flex items-center gap-4">
             <button className="p-2 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400"><ChevronLeft size={14} /></button>
@@ -3792,7 +4144,7 @@ export const ModuleEditor = () => {
 
   const renderMasterMapPreview = () => {
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Interactive Map Preview</span>
@@ -3891,7 +4243,7 @@ export const ModuleEditor = () => {
       : displayFields.slice(1, 4);
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Cards View Preview</span>
@@ -3994,7 +4346,7 @@ export const ModuleEditor = () => {
     ];
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Portfolio Grid Preview</span>
@@ -4078,7 +4430,7 @@ export const ModuleEditor = () => {
 
   const renderMasterTimelinePreview = () => {
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Timeline View Preview</span>
@@ -4139,7 +4491,7 @@ export const ModuleEditor = () => {
 
   const renderMasterGanttPreview = () => {
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Gantt Chart Preview</span>
@@ -4213,7 +4565,7 @@ export const ModuleEditor = () => {
 
   const renderMasterAnalyticsPreview = () => {
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex items-center justify-between">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Analytics Dashboard Preview</span>
@@ -4328,7 +4680,7 @@ export const ModuleEditor = () => {
     };
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-6">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest block">Sales Pipeline Preview</span>
@@ -4419,7 +4771,7 @@ export const ModuleEditor = () => {
     ];
 
     return (
-      <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="space-y-4">
         <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
           <div className="space-y-0.5">
             <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Split View Preview</span>
@@ -4617,23 +4969,8 @@ export const ModuleEditor = () => {
         );
       }
 
-      if (block.id === 'placeholder') {
-        return (
-          <div 
-            key="placeholder"
-            className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse flex items-center justify-center relative overflow-hidden h-full"
-            style={{ 
-              gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-              gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
-            <div className="relative flex flex-col items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
-              <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Drop Zone</span>
-            </div>
-          </div>
-        );
+      if (block.id === 'placeholder' || block.id === '__drop_zone_indicator__') {
+        return null;
       }
 
       return (
@@ -5409,6 +5746,7 @@ export const ModuleEditor = () => {
                 {/* Master / Detail Switch */}
                 <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/60 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 backdrop-blur-md">
                   <button
+                    type="button"
                     onClick={() => {
                       setActiveViewMode('master');
                       if (selectedId === 'page-header') {
@@ -5416,22 +5754,23 @@ export const ModuleEditor = () => {
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors uppercase tracking-wider focus:outline-none focus:ring-0 border",
                       activeViewMode === 'master'
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border border-zinc-200/50 dark:border-zinc-700/50"
-                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border-zinc-200/50 dark:border-zinc-700/50"
+                        : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                     )}
                   >
                     <TableProperties size={13} className={activeViewMode === 'master' ? "text-indigo-600 dark:text-indigo-400" : ""} />
                     <span>List</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => setActiveViewMode('detail')}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors uppercase tracking-wider focus:outline-none focus:ring-0 border",
                       activeViewMode === 'detail'
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border border-zinc-200/50 dark:border-zinc-700/50"
-                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border-zinc-200/50 dark:border-zinc-700/50"
+                        : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
                     )}
                   >
                     <Layout size={13} className={activeViewMode === 'detail' ? "text-indigo-600 dark:text-indigo-400" : ""} />
@@ -5504,7 +5843,7 @@ export const ModuleEditor = () => {
                       }
                     }}
                     className={cn(
-                      "px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 border shadow-xs cursor-pointer",
+                      "px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 border shadow-xs cursor-pointer focus:outline-none focus:ring-0",
                       (activeViewMode === 'master' ? selectedId === '__table_settings' : selectedId === '__detail_settings')
                         ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border-zinc-200/50 dark:border-zinc-700/50"
                         : "bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 border-zinc-200 dark:border-zinc-800"
@@ -5514,7 +5853,7 @@ export const ModuleEditor = () => {
                     <Settings 
                       size={12} 
                       className={cn(
-                        "transition-all duration-300", 
+                        "transition-transform duration-300", 
                         (activeViewMode === 'master' ? selectedId === '__table_settings' : selectedId === '__detail_settings')
                           ? "text-indigo-600 dark:text-indigo-400 rotate-90"
                           : "text-zinc-400 dark:text-zinc-500"
@@ -5554,12 +5893,13 @@ export const ModuleEditor = () => {
                   ] as const).map((v) => (
                     <button
                       key={v.id}
+                      type="button"
                       onClick={() => setViewportSize(v.id)}
                       className={cn(
-                        "p-1.5 rounded-lg transition-all",
+                        "p-1.5 rounded-lg transition-colors focus:outline-none focus:ring-0 border",
                         viewportSize === v.id 
-                          ? "bg-white dark:bg-zinc-800 text-indigo-600 shadow-xs" 
-                          : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
+                          ? "bg-white dark:bg-zinc-800 text-indigo-600 shadow-xs border-zinc-200/50 dark:border-zinc-700/50" 
+                          : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
                       )}
                       title={v.label}
                     >
@@ -5591,7 +5931,7 @@ export const ModuleEditor = () => {
           {activeTab === 'builder' ? (
             activeViewMode === 'master' ? (
               <div className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-[#0c0c0e] p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full">
-                <div className="max-w-6xl mx-auto w-full space-y-6 animate-in fade-in duration-300">
+                <div className="max-w-6xl mx-auto w-full space-y-6">
                   
                   {/* Master View In-Canvas Title Header matching ModuleView.tsx */}
                   <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 z-20 relative select-none rounded-2xl shadow-xs">
@@ -5632,23 +5972,16 @@ export const ModuleEditor = () => {
                   </div>
 
                   {(!interfaceSettings.master.layoutType || interfaceSettings.master.layoutType === 'table') ? (
-                    <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="space-y-6">
                       <div className="space-y-6" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
                       <div 
                         className={cn(
-                          "rounded-2xl relative transition-all duration-300 overflow-hidden bg-white dark:bg-zinc-900 border",
-                          tableDropIndicator ? "border-indigo-500 ring-4 ring-indigo-500/30 shadow-lg shadow-indigo-500/5" : "border-zinc-200 dark:border-zinc-800 shadow-xs"
+                          "rounded-2xl relative overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs",
+                          tableDropIndicator && "!border-indigo-500 ring-4 ring-indigo-500/30 shadow-lg shadow-indigo-500/5"
                         )}
                       >
-                        <div className="px-6 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <span className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Active Table Columns</span>
-                            <p className="text-[10px] text-zinc-400 font-medium">Drag headers to reorder • Click header to edit properties • Drop fields from left to add columns</p>
-                          </div>
-                        </div>
-
                           {activeColumns.length === 0 ? (
-                            <div className="py-24 text-center space-y-4 px-6 animate-in fade-in duration-300">
+                            <div className="py-24 text-center space-y-4 px-6">
                               <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-100 dark:border-zinc-800">
                                 <TableProperties size={28} />
                               </div>
@@ -5674,7 +6007,7 @@ export const ModuleEditor = () => {
                                       onDragLeave={handleColumnDragLeave}
                                       style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
                                       className={cn(
-                                        "text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all select-none border-r border-zinc-100 dark:border-zinc-800/50 relative",
+                                        "text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors select-none border-r border-zinc-100 dark:border-zinc-800/50 relative",
                                         interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
                                         interfaceSettings.master.density === 'spacious' ? 'px-6 py-4' : 'px-5 py-3',
                                         selectedId === '_record_key' 
@@ -5710,7 +6043,7 @@ export const ModuleEditor = () => {
                                             setSelectedId(col.id);
                                           }}
                                           className={cn(
-                                            "text-[10px] font-bold uppercase tracking-wider cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-all group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
+                                            "text-[10px] font-bold uppercase tracking-wider cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
                                             interfaceSettings.master.density === 'compact' ? 'px-3 py-2' : 
                                             interfaceSettings.master.density === 'spacious' ? 'px-6 py-4' : 'px-4 py-3',
                                             isSelected 
@@ -5850,7 +6183,7 @@ export const ModuleEditor = () => {
                 <div 
                   ref={canvasContainerRef}
                   className={cn(
-                    "rounded-2xl shadow-xs overflow-hidden relative flex flex-col transition-all duration-300 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
+                    "rounded-2xl shadow-xs overflow-hidden relative flex flex-col transition-[max-width,width] duration-300 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
                     viewportSize === 'desktop' ? "w-full max-w-6xl" :
                     viewportSize === 'tablet' ? "w-[768px]" :
                     "w-[390px]"
@@ -6619,8 +6952,8 @@ export const ModuleEditor = () => {
                                     onDelete={(id) => deleteBlocks([id])}
                                     onDrop={(e) => handleDropOnCanvas(e, block.id, tabId)}
                                     onDragOver={(e) => handleDragOver(e, block.id, tabId)}
-                                    onDragStart={handleDragStart}
-                                    renderNested={(fields, pId) => renderFieldBlocks(fields as any, pId, tabId)}
+                                    onDragStart={(e: any) => handleUnifiedPointerDrag(block.id, parentId)(e)}
+                                    renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId, tabId)}
                                     viewportSize={viewportSize}
                                     onClone={cloneField}
                                     isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
@@ -6631,29 +6964,13 @@ export const ModuleEditor = () => {
                                 );
                               }
 
-                              if (block.id === 'placeholder') {
-                                return (
-                                  <div 
-                                    key="placeholder"
-                                    className="border-2 border-dashed border-indigo-500/50 bg-indigo-500/5 rounded-[24px] animate-pulse flex items-center justify-center relative overflow-hidden h-full"
-                                    style={{ 
-                                      gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-                                      gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
-                                    }}
-                                  >
-                                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
-                                    <div className="relative flex flex-col items-center gap-1">
-                                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" />
-                                      <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Drop Zone</span>
-                                    </div>
-                                  </div>
-                                );
-                              }                              return (
+                              if (block.id === 'placeholder' || block.id === '__drop_zone_indicator__') {
+                                return null;
+                              }
+                              return (
                                 <div
                                   key={block.id}
-                                  draggable={activeTab === 'builder'}
-                                  onDragStart={(e: any) => handleDragStart(e, { type: 'move', fieldId: block.id })}
-                                  onDragEnd={handleDragEnd}
+                                  id={`canvas-field-${block.id}`}
                                   style={{ 
                                     gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
                                     gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
@@ -6667,7 +6984,6 @@ export const ModuleEditor = () => {
                                       setSelectedIds([block.id]);
                                     }
                                   }}
-                                  id={`canvas-field-${block.id}`}
                                   className={cn(
                                     "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
                                     block.isDraggingPlaceholder
@@ -6950,26 +7266,9 @@ export const ModuleEditor = () => {
                                return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
                              });
                             
-                            let items = [...filtered];
+                            const items = (activeTab as string) === 'preview' ? compactLayout(filtered) : filtered;
 
-                            if (!rglMounted && dragOverInfo?.active && (parentId ? dragOverInfo.parentId === parentId : !dragOverInfo.parentId)) {
-                              items.push({
-                                id: '__drop_zone_indicator__',
-                                type: 'placeholder',
-                                name: 'placeholder',
-                                label: 'Drop Zone',
-                                startCol: dragOverInfo.col,
-                                colSpan: dragOverInfo.span,
-                                rowIndex: dragOverInfo.index,
-                                rowSpan: dragOverInfo.rowSpan || 2
-                              });
-                            }
-
-                            if ((activeTab as string) === 'preview') {
-                              items = compactLayout(items);
-                            }
-
-                            return items.map((item) => {
+                            const renderedCards = items.map((item) => {
                               if (React.isValidElement(item)) return item;
                               const block = item as Field;
                               const isGroup = isContainerField(block.type);
@@ -6991,8 +7290,8 @@ export const ModuleEditor = () => {
                                     onDelete={(id) => deleteBlocks([id])}
                                     onDrop={handleDropOnCanvas}
                                     onDragOver={handleDragOver}
-                                    onDragStart={handleDragStart}
-                                    renderNested={renderFieldBlocks}
+                                    onDragStart={(e: any) => handleUnifiedPointerDrag(block.id, parentId)(e)}
+                                    renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId)}
                                     viewportSize={viewportSize}
                                     onClone={cloneField}
                                     isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
@@ -7003,26 +7302,16 @@ export const ModuleEditor = () => {
                                 );
                               }
                               if (block.id === 'placeholder' || block.id === '__drop_zone_indicator__') {
-                                return (
-                                  <div 
-                                    key="__drop_zone_indicator__"
-                                    className="border-2 border-dashed border-indigo-500 bg-indigo-500/10 rounded-2xl animate-pulse flex items-center justify-center relative overflow-hidden h-full min-h-[70px] z-30"
-                                    style={{ 
-                                      gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-                                      gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
-                                    }}
-                                  >
-                                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent" />
-                                    <div className="relative flex flex-col items-center gap-1.5">
-                                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-ping" />
-                                      <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Drop Zone</span>
-                                    </div>
-                                  </div>
-                                );
+                                return null;
                               }
                               return (
                                 <div
                                   key={block.id}
+                                  style={isNested ? { 
+                                    gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
+                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
+                                    minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
+                                  } : undefined}
                                   onClick={(e) => {
                                     if (block.isDraggingPlaceholder) return;
                                     e.stopPropagation();
@@ -7069,7 +7358,17 @@ export const ModuleEditor = () => {
                                       <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
                                         <div className="flex items-center justify-between">
                                           <div className="flex items-center gap-1.5 min-w-0">
-                                            <div className="drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0" title="Drag to move">
+                                            <div 
+                                              className={cn(
+                                                "drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0",
+                                                parentId ? "nested-drag-handle" : "root-drag-handle"
+                                              )}
+                                              title="Drag to reorder"
+                                              onPointerDown={(e: any) => {
+                                                e.stopPropagation();
+                                                handleUnifiedPointerDrag(block.id, parentId)(e);
+                                              }}
+                                            >
                                               <GripVertical size={12} />
                                             </div>
                                             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
@@ -7908,70 +8207,8 @@ export const ModuleEditor = () => {
                                      <p className="text-[9px] text-zinc-500 italic mt-0.5 px-1 absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{block.helperText}</p>
                                    )}
                                   </div>
+                                 </div>
 
-                                  {/* Fluid Resize Handles for Standard Fields */}
-                                  {viewportSize !== 'mobile' && selectedId === block.id && (
-                                    <>
-                                      <div 
-                                        onPointerDown={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const startX = e.clientX;
-                                          const startSpan = block.colSpan || 12;
-                                          const startCol = block.startCol || 1;
-                                          const handleMove = (me: PointerEvent) => {
-                                            const canvas = document.querySelector('.grid-canvas-container');
-                                            if (!canvas) return;
-                                            const rect = canvas.getBoundingClientRect();
-                                            const colWidth = (rect.width - 64) / 12;
-                                            const deltaCols = Math.round((me.clientX - startX) / colWidth);
-                                            const maxStartCol = startCol + startSpan - 1;
-                                            const newStartCol = Math.max(1, Math.min(maxStartCol, startCol + deltaCols));
-                                            const newSpan = startSpan - (newStartCol - startCol);
-                                            updateField(block.id, { startCol: newStartCol, colSpan: newSpan });
-                                          };
-                                          const handleUp = () => {
-                                            window.removeEventListener('pointermove', handleMove);
-                                            window.removeEventListener('pointerup', handleUp);
-                                          };
-                                          window.addEventListener('pointermove', handleMove);
-                                          window.addEventListener('pointerup', handleUp);
-                                        }}
-                                        className="absolute top-0 left-0 w-2 h-full cursor-ew-resize group-hover/field:opacity-100 opacity-0 transition-opacity z-30 flex items-center"
-                                      >
-                                        <div className="w-1 h-8 bg-indigo-500/50 rounded-full ml-0.5" />
-                                      </div>
-                                      <div 
-                                        onPointerDown={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          const startX = e.clientX;
-                                          const startSpan = block.colSpan || 12;
-                                          const startCol = block.startCol || 1;
-                                          const handleMove = (me: PointerEvent) => {
-                                            const canvas = document.querySelector('.grid-canvas-container');
-                                            if (!canvas) return;
-                                            const rect = canvas.getBoundingClientRect();
-                                            const colWidth = (rect.width - 64) / 12;
-                                            const deltaCols = Math.round((me.clientX - startX) / colWidth);
-                                            const newSpan = Math.max(1, Math.min(12, startSpan + deltaCols));
-                                            const finalSpan = Math.min(newSpan, 13 - startCol);
-                                            updateField(block.id, { colSpan: finalSpan });
-                                          };
-                                          const handleUp = () => {
-                                            window.removeEventListener('pointermove', handleMove);
-                                            window.removeEventListener('pointerup', handleUp);
-                                          };
-                                          window.addEventListener('pointermove', handleMove);
-                                          window.addEventListener('pointerup', handleUp);
-                                        }}
-                                        className="absolute top-0 right-0 w-2 h-full cursor-ew-resize group-hover/field:opacity-100 opacity-0 transition-opacity z-30 flex items-center justify-end"
-                                      >
-                                        <div className="w-1 h-8 bg-indigo-500/50 rounded-full mr-0.5" />
-                                      </div>
-                                    </>
-                                  )}
-                                  </div>
                                   {/* Quick Action Buttons (Overlapping Border) */}
                                   <button 
                                     onClick={(e) => {
@@ -8013,6 +8250,24 @@ export const ModuleEditor = () => {
                                 </div>
                               );
                             });
+
+                            if (isNested && (activeTab as string) !== 'preview') {
+                              return (
+                                <NestedRglContainer
+                                  key={`${parentId}-${filtered.map(f => f.id).join('_')}`}
+                                  parentId={parentId!}
+                                  fields={filtered}
+                                  viewportSize={viewportSize}
+                                  dragOverInfo={dragOverInfo}
+                                  resolveCollisionsInArray={resolveCollisionsInArray}
+                                  onLayoutChange={handleNestedRglLayoutChange}
+                                >
+                                  {renderedCards}
+                                </NestedRglContainer>
+                              );
+                            }
+
+                            return renderedCards;
                           };
 
                           const activeTabFields = displayLayout.filter(block => {
@@ -8023,21 +8278,37 @@ export const ModuleEditor = () => {
                             return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
                           });
 
-                          const currentRglLayout = activeTabFields.map((f) => ({
-                            i: f.id,
-                            x: Math.max(0, Math.min(11, (f.startCol ? f.startCol - 1 : 0))),
-                            y: f.rowIndex || 0,
-                            w: Math.max(1, Math.min(12, f.colSpan || 6)),
-                            h: calculateHeight(f),
-                            minW: isContainerField(f.type) ? 4 : 2,
-                            minH: 1
-                          }));
+                          const currentRglLayout = (() => {
+                            let activeFields = activeTabFields;
+                            if (dragOverInfo?.active && !dragOverInfo.parentId) {
+                              const placeholderField: Field = {
+                                id: '__cross_drop_placeholder__',
+                                name: '__cross_drop_placeholder__',
+                                type: 'text',
+                                label: 'Drop Zone',
+                                startCol: dragOverInfo.col || 1,
+                                rowIndex: typeof dragOverInfo.index === 'number' ? dragOverInfo.index : 0,
+                                colSpan: dragOverInfo.span || 6
+                              };
+                              activeFields = resolveCollisionsInArray(placeholderField, [...activeTabFields, placeholderField]);
+                            }
+                            return activeFields.map((f) => ({
+                              i: f.id,
+                              x: Math.max(0, Math.min(11, (f.startCol ? f.startCol - 1 : 0))),
+                              y: f.rowIndex || 0,
+                              w: Math.max(1, Math.min(12, f.colSpan || 6)),
+                              h: calculateHeight(f),
+                              minW: isContainerField(f.type) ? 4 : 2,
+                              minH: 1
+                            }));
+                          })();
 
                           if (rglMounted && (activeTab as string) !== 'preview') {
                             return (
                               <div className="w-full col-span-12">
                                 <ReactGridLayout
-                                  className="layout"
+                                  key={`root-grid-${activeTabFields.map(f => `${f.id}_h${calculateHeight(f)}_c${f.fields?.length || 0}_sub${f.fields?.map((sf: any) => `${sf.id}_h${calculateHeight(sf)}_c${sf.fields?.length || 0}`).join('-') || ''}`).join('_')}`}
+                                  className={cn("layout", dragOverInfo?.active && dragOverInfo?.parentId && "is-dragging-cross-container")}
                                   layout={currentRglLayout}
                                   width={rglContainerWidth || 1100}
                                   onLayoutChange={handleRglLayoutChange}
@@ -8048,13 +8319,20 @@ export const ModuleEditor = () => {
                                   }}
                                   dragConfig={{
                                     enabled: true,
-                                    handle: ".drag-handle"
+                                    handle: ".root-drag-handle"
                                   }}
                                   resizeConfig={{
                                     enabled: true
                                   }}
                                 >
                                   {renderFieldBlocks(activeTabFields)}
+                                  {dragOverInfo?.active && !dragOverInfo.parentId && (
+                                    <div
+                                      key="__cross_drop_placeholder__"
+                                      className="react-grid-placeholder"
+                                      style={{ pointerEvents: 'none' }}
+                                    />
+                                  )}
                                 </ReactGridLayout>
                               </div>
                             );
@@ -12259,6 +12537,88 @@ export const ModuleEditor = () => {
                                 className="w-full accent-indigo-600 cursor-pointer h-1.5"
                               />
                             </div>
+                          </div>
+
+                          {/* Parent Container (Group / Canvas) */}
+                          <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                            <div className="flex items-center justify-between px-1">
+                              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Parent Container</label>
+                              {selectedField.parentId && (
+                                <span className="text-[9px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">Nested</span>
+                              )}
+                            </div>
+                            <select
+                              value={selectedField.parentId || ''}
+                              onChange={(e) => {
+                                const newParentId = e.target.value || undefined;
+                                if (newParentId === selectedField.parentId) return;
+                                
+                                setLayout(prev => {
+                                  const targetField = findFieldRecursive(prev, selectedField.id);
+                                  if (!targetField) return prev;
+                                  
+                                  const cleaned = removeFieldRecursive(prev, selectedField.id);
+                                  const updatedField = {
+                                    ...targetField,
+                                    parentId: newParentId,
+                                    tabId: newParentId ? undefined : (targetField.tabId || currentTabId),
+                                    startCol: 1,
+                                    rowIndex: 999
+                                  };
+                                  
+                                  if (!newParentId) {
+                                    return normalizeLayout([...cleaned, updatedField]);
+                                  }
+                                  
+                                  const insertIntoParent = (fields: Field[]): Field[] => {
+                                    return fields.map(f => {
+                                      if (f.id === newParentId) {
+                                        return { ...f, fields: normalizeLayout([...(f.fields || []), updatedField]) };
+                                      }
+                                      if (f.fields) {
+                                        return { ...f, fields: insertIntoParent(f.fields) };
+                                      }
+                                      return f;
+                                    });
+                                  };
+                                  
+                                  return insertIntoParent(cleaned);
+                                });
+                              }}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
+                            >
+                              <option value="">None (Root Canvas)</option>
+                              {layout
+                                .flatMap(f => isContainerField(f.type) ? [f, ...(f.fields || []).filter(sub => isContainerField(sub.type))] : [])
+                                .filter(g => g.id !== selectedField.id)
+                                .map(g => (
+                                  <option key={g.id} value={g.id}>{g.label || g.name || g.id}</option>
+                                ))
+                              }
+                            </select>
+                          </div>
+
+                          {/* Tab Location */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between px-1">
+                              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Tab Location</label>
+                            </div>
+                            <select
+                              value={selectedField.tabId || tabs[0]?.id || ''}
+                              disabled={!!selectedField.parentId}
+                              onChange={(e) => {
+                                const newTabId = e.target.value;
+                                updateField(selectedField.id, { tabId: newTabId });
+                              }}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all disabled:opacity-50 appearance-none"
+                            >
+                              {tabs.map(t => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
+                              ))}
+                            </select>
+                            {selectedField.parentId && (
+                              <p className="text-[8px] text-zinc-500 px-1 italic">Tab is controlled by parent container.</p>
+                            )}
                           </div>
                         </div>
                       </div>

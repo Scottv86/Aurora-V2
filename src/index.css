@@ -42,6 +42,10 @@
   user-select: none;
 }
 
+.is-dragging-cross-container .react-grid-placeholder {
+  display: none !important;
+}
+
 .react-resizable-handle {
   position: absolute;
   width: 20px;

@@ -49,9 +49,11 @@ interface FieldGroupProps {
   gridConfig?: typeof GRID_CONFIG;
   isDragging?: boolean;
   density?: 'compact' | 'standard' | 'spacious';
+  style?: React.CSSProperties;
+  className?: string;
 }
 
-export const FieldGroup: React.FC<FieldGroupProps> = ({
+export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect' | 'onDragStart'>>(({
   block,
   selectedIds,
   onSelect,
@@ -68,8 +70,11 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   dragOverInfo,
   gridConfig,
   isDragging,
-  density = 'standard'
-}) => {
+  density = 'standard',
+  style,
+  className,
+  ...rest
+}, ref) => {
   const isSelected = selectedIds.includes(block.id);
   const isRepeatable = block.type === 'repeatableGroup';
   const isCard = block.type === 'card';
@@ -168,30 +173,35 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
   };
 
   return (
-    <motion.div
-      ref={containerRef}
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
+    <div
+      ref={ref || containerRef}
+      id={`canvas-field-${block.id}`}
+      data-group-id={block.id}
+      data-container-id={block.id}
+      {...rest}
       style={{
-        gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-        gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${currentHeight}`
+        ...(isNested ? {
+          gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
+          gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${currentHeight}`
+        } : {}),
+        ...style
       }}
       onClick={(e) => {
         e.stopPropagation();
         onSelect(block.id, e);
+        rest.onClick?.(e);
       }}
       className={cn(
-        "group/group relative cursor-pointer transition-all duration-300 border-2 h-full flex flex-col",
+        "group/group relative cursor-pointer border-2 h-full flex flex-col",
         cardPadding,
-        isCard ? "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-xl" :
-        isAccordion ? "bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-100 dark:border-zinc-800 shadow-sm" :
-        "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800",
-        isSelected ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30 shadow-2xl" : "hover:border-indigo-500/30 z-10 hover:z-40",
+        isCard ? "bg-white dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 shadow-xl" :
+        isAccordion ? "bg-zinc-50/60 dark:bg-zinc-900/40 border-zinc-200/80 dark:border-zinc-800/80 shadow-sm" :
+        "bg-zinc-50/80 dark:bg-zinc-900/40 border-zinc-200/80 dark:border-zinc-800/80",
+        isSelected ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/10 ring-4 ring-indigo-500/15 z-30 shadow-2xl" : "hover:border-indigo-500/30 z-10 hover:z-40",
         isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30",
         isDraggingOver && "border-indigo-500 bg-indigo-50/10 dark:bg-indigo-500/5 ring-4 ring-indigo-500/15 shadow-2xl z-30 scale-[1.005]",
-        hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
+        hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30",
+        className
       )}
     >
       {isSelected && (
@@ -203,6 +213,21 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
 
       <div className={cn("flex items-center justify-between", headerMargin)}>
         <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
+          <div 
+            className={cn(
+              "drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0",
+              isNested ? "nested-drag-handle" : "root-drag-handle"
+            )}
+            title="Drag to move"
+            onPointerDown={(e: any) => {
+              e.stopPropagation();
+              if (onDragStart) {
+                onDragStart(e, { type: 'move', fieldId: block.id, parentId: block.parentId });
+              }
+            }}
+          >
+            <GripVertical size={14} />
+          </div>
           {showIcon && (
             <div className={cn(
               "flex items-center justify-center transition-all duration-500",
@@ -255,15 +280,6 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
               <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">Logic</span>
             </div>
           )}
-          <button 
-            draggable
-            onDragStart={(e) => {
-              onDragStart(e, { type: 'move', fieldId: block.id });
-            }}
-            className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-400 hover:text-zinc-600 transition-colors cursor-grab active:cursor-grabbing"
-          >
-            <GripVertical size={16} />
-          </button>
         </div>
       </div>
 
@@ -299,150 +315,201 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
         </div>
       )}
 
-      <AnimatePresence initial={false}>
-        {!isCollapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ 
-              height: { duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] },
-              opacity: { duration: 0.2, delay: 0.1 }
+      {!isCollapsed && (
+        <div className="flex-1 flex flex-col min-h-0 w-full">
+          <div 
+            onDragOver={(e) => { 
+              if (isAccordion) return; // Handled by sections
+              e.preventDefault(); 
+              e.stopPropagation(); 
+              onDragOver?.(e, block.id);
             }}
+            onDrop={(e) => {
+              if (isAccordion) return; // Handled by sections
+              onDrop(e, block.id);
+            }}
+            onMouseEnter={() => setIsContentHovered(true)}
+            onMouseLeave={() => setIsContentHovered(false)}
+            data-group-id={block.id}
+            data-container-id={block.id}
+            className={cn(
+              "relative border-2 border-dashed transition-all duration-300 flex-1 flex flex-col min-h-0 w-full rounded-2xl",
+              isAccordion ? "p-0 mt-3 bg-transparent border-none" : "bg-zinc-100/50 dark:bg-zinc-900/20 border-zinc-200/80 dark:border-zinc-800/80 p-3.5 mt-1"
+            )}
           >
-            <div 
-              onDragOver={(e) => { 
-                if (isAccordion) return; // Handled by sections
-                e.preventDefault(); 
-                e.stopPropagation(); 
-                onDragOver?.(e, block.id);
-              }}
-              onDrop={(e) => {
-                if (isAccordion) return; // Handled by sections
-                onDrop(e, block.id);
-              }}
-              onMouseEnter={() => setIsContentHovered(true)}
-              onMouseLeave={() => setIsContentHovered(false)}
-              className={cn(
-                "relative border-2 border-dashed transition-all duration-300 flex-grow",
-                isAccordion ? "p-0 mt-6 bg-transparent border-none" : cn("bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800", nestedPadding)
-              )}
-            >
               {isAccordion ? (
-                <div className={cn("flex flex-col", density === 'compact' ? 'gap-2' : 'gap-4')}>
+                <div className={cn("flex flex-col", density === 'compact' ? 'gap-2' : 'gap-3')}>
                   {block.fields && block.fields.length > 0 ? (
-                    block.fields.map((section) => (
-                      <div 
-                        key={section.id} 
-                        className={cn(
-                          "bg-white dark:bg-zinc-950 border-2 transition-all overflow-hidden",
-                          selectedIds.includes(section.id)
-                            ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg z-10 scale-[1.01]" 
-                            : cn("border-zinc-200 dark:border-zinc-800 shadow-xs", density === 'compact' ? 'rounded-lg' : 'rounded-xl'),
-                          dragOverInfo?.parentId === section.id && "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg"
-                        )}
-                        style={{ borderRadius: density === 'compact' ? '8px' : '12px' }}
-                      >
-                        {/* Section Header in Builder */}
+                    <>
+                      {block.fields.map((section, sIdx) => (
                         <div 
-                          onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
+                          key={section.id} 
                           className={cn(
-                            "flex items-center justify-between cursor-pointer select-none transition-colors",
-                            density === 'compact' ? 'px-3 py-2' : 'px-6 py-4',
-                            selectedIds.includes(section.id) ? "bg-indigo-500/5" : "bg-zinc-50/80 dark:bg-zinc-900/80 border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            "bg-white dark:bg-zinc-900/60 border-2 transition-all overflow-hidden",
+                            selectedIds.includes(section.id)
+                              ? "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg z-10 scale-[1.005]" 
+                              : cn("border-zinc-200 dark:border-zinc-800 shadow-xs", density === 'compact' ? 'rounded-lg' : 'rounded-xl'),
+                            dragOverInfo?.parentId === section.id && "border-indigo-500 ring-4 ring-indigo-500/10 shadow-lg"
                           )}
+                          style={{ borderRadius: density === 'compact' ? '8px' : '12px' }}
                         >
-                          <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
-                            <div className={cn(
-                              "flex items-center justify-center transition-all",
-                              density === 'compact' ? 'w-6 h-6 rounded-md' : 'w-8 h-8 rounded-xl',
-                              selectedIds.includes(section.id) ? "bg-indigo-500 text-white shadow-lg rotate-3" : "bg-indigo-500/10 text-indigo-500"
-                            )}>
-                              <DynamicIcon name={section.iconName || 'Folder'} size={density === 'compact' ? 10 : 14} />
+                          {/* Section Header in Builder */}
+                          <div 
+                            onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
+                            className={cn(
+                              "flex items-center justify-between cursor-pointer select-none transition-colors",
+                              density === 'compact' ? 'px-3 py-2' : 'px-4 py-3',
+                              selectedIds.includes(section.id) ? "bg-indigo-500/5" : "bg-zinc-50/80 dark:bg-zinc-900/80 border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
+                              <div className={cn(
+                                "flex items-center justify-center transition-all",
+                                density === 'compact' ? 'w-6 h-6 rounded-md' : 'w-8 h-8 rounded-xl',
+                                selectedIds.includes(section.id) ? "bg-indigo-500 text-white shadow-lg rotate-3" : "bg-indigo-500/10 text-indigo-500"
+                              )}>
+                                <DynamicIcon name={section.iconName || 'Folder'} size={density === 'compact' ? 10 : 14} />
+                              </div>
+                              <div>
+                                <p className={cn(
+                                  "font-black uppercase tracking-widest",
+                                  density === 'compact' ? 'text-[7px]' : 'text-[8px]',
+                                  selectedIds.includes(section.id) ? "text-indigo-600" : "text-zinc-400"
+                                )}>Section {sIdx + 1}</p>
+                                <p className={cn("font-bold text-zinc-900 dark:text-white", density === 'compact' ? 'text-[10px]' : 'text-xs')}>{section.label}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className={cn(
-                                "font-black uppercase tracking-widest",
-                                density === 'compact' ? 'text-[7px]' : 'text-[8px]',
-                                selectedIds.includes(section.id) ? "text-indigo-600" : "text-zinc-400"
-                              )}>Section Subtitle</p>
-                              <p className={cn("font-bold text-zinc-900 dark:text-white", density === 'compact' ? 'text-[10px]' : 'text-xs')}>{section.label}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-zinc-400 mr-1">
+                                {section.fields?.length || 0} {section.fields?.length === 1 ? 'Field' : 'Fields'}
+                              </span>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const updated = (block.fields || []).map(s => s.id === section.id ? { ...s, isCollapsed: !s.isCollapsed } : s);
+                                  onUpdate(block.id, { fields: updated });
+                                }}
+                                className={cn(
+                                  "w-6 h-6 rounded-md flex items-center justify-center transition-all",
+                                  section.isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500"
+                                )}
+                                title={section.isCollapsed ? "Expand Section" : "Collapse Section"}
+                              >
+                                <ChevronDown size={12} className={cn("transition-transform duration-200", section.isCollapsed ? "-rotate-90" : "rotate-0")} />
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const updated = (block.fields || []).filter(s => s.id !== section.id);
+                                  onUpdate(block.id, { fields: updated });
+                                }}
+                                className="p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-md transition-all"
+                                title="Delete Section"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
+                                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-indigo-500 transition-colors"
+                                title="Configure Section"
+                              >
+                                <Settings2 size={12} />
+                              </button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); onSelect(section.id); }}
-                               className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-indigo-500 transition-colors"
-                             >
-                               <Settings2 size={12} />
-                             </button>
-                          </div>
-                        </div>
 
-                        {/* Nesting Zone for Section */}
-                        <div 
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onDragOver?.(e, section.id);
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onDrop(e, section.id);
-                          }}
-                          className={cn(
-                            "relative grid grid-cols-12 transition-colors",
-                            dragOverInfo?.parentId === section.id ? "bg-indigo-500/5" : "bg-transparent"
-                          )}
-                          style={{ 
-                            gridAutoRows: `${gc.rowHeight}px`,
-                            gap: `${gc.gap}px`,
-                            padding: `${gc.nestedPadding}px`,
-                            minHeight: '100px'
-                          }}
-                        >
-                          {isDragging && (
-                            <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
-                              {Array.from({ length: 12 }).map((_, i) => (
-                                <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
-                              ))}
-                            </div>
-                          )}
-                          {renderNested && renderNested(section.fields || [], section.id)}
-                          {(!section.fields || section.fields.length === 0) && !isDraggingOver && (
-                            <div className="col-span-12 flex flex-col items-center justify-center py-8 opacity-30">
-                              <Move size={16} className="text-zinc-400 mb-2" />
-                              <p className="text-[8px] font-black uppercase tracking-widest">Drop fields into {section.label}</p>
+                          {/* Nesting Zone for Section */}
+                          {!section.isCollapsed && (
+                            <div 
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onDragOver?.(e, section.id);
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onDrop(e, section.id);
+                              }}
+                              className={cn(
+                                "relative w-full transition-colors",
+                                dragOverInfo?.parentId === section.id ? "bg-indigo-500/5" : "bg-transparent"
+                              )}
+                              style={{ 
+                                padding: `${gc.nestedPadding}px`,
+                                minHeight: section.fields && section.fields.length > 0 ? 'auto' : '60px'
+                              }}
+                            >
+                              {isDragging && (
+                                <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
+                                  {Array.from({ length: 12 }).map((_, i) => (
+                                    <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
+                                  ))}
+                                </div>
+                              )}
+                              {renderNested && renderNested(section.fields || [], section.id)}
+                              {(!section.fields || section.fields.length === 0) && !isDraggingOver && (
+                                <div className="w-full flex flex-col items-center justify-center py-3.5 opacity-30">
+                                  <Move size={14} className="text-zinc-400 mb-1" />
+                                  <p className="text-[8px] font-black uppercase tracking-widest">Drop fields into {section.label}</p>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      </div>
-                    ))
+                      ))}
+
+                      {/* Add Subsection Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const newSection: Field = {
+                            id: `section-${Date.now()}`,
+                            type: 'group',
+                            label: `New Section ${(block.fields?.length || 0) + 1}`,
+                            fields: []
+                          };
+                          onUpdate(block.id, { fields: [...(block.fields || []), newSection] });
+                        }}
+                        className="w-full py-2.5 px-3 border border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50 hover:bg-indigo-500/5 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-indigo-500 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Plus size={12} />
+                        Add Subsection
+                      </button>
+                    </>
                   ) : (
                     <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newSection: Field = {
+                          id: `section-${Date.now()}`,
+                          type: 'group',
+                          label: 'New Section 1',
+                          fields: []
+                        };
+                        onUpdate(block.id, { fields: [newSection] });
+                      }}
                       onDragOver={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         onDragOver?.(e, block.id);
                       }}
                       onDrop={(e) => onDrop(e, block.id)}
-                      className="p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center gap-2 opacity-40 hover:opacity-100 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all"
+                      className="p-8 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col items-center justify-center gap-2 cursor-pointer opacity-50 hover:opacity-100 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all"
                     >
-                      <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
-                        <Plus size={24} />
+                      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                        <Plus size={20} />
                       </div>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Drop a Group to create a section</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-900 dark:text-zinc-100">Add Subsection</p>
+                      <p className="text-[8px] text-zinc-400 font-medium">Click to add a section or drop fields here</p>
                     </div>
                   )}
                 </div>
               ) : (
                 ((block.fields && block.fields.length > 0) || isDraggingOver) ? (
                   <div 
-                    className="relative grid grid-cols-12 min-h-full z-10"
+                    className="relative w-full min-h-full z-10"
                     style={{ 
-                      gridAutoRows: `${gc.rowHeight}px`,
-                      gap: `${gc.gap}px`,
                       padding: `${gc.nestedPadding}px`
                     }}
                   >
@@ -465,65 +532,12 @@ export const FieldGroup: React.FC<FieldGroupProps> = ({
                 )
               )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Fluid Interaction Controls */}
-      {viewportSize !== 'mobile' && isSelected && (
-        <>
-          {/* Resize Handles */}
-          <div 
-            onPointerDown={(e) => handleResizeStart(e, 'left')}
-            className="absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-16 cursor-ew-resize z-50 flex items-center justify-center"
-          >
-            <div className="w-1.5 h-8 bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
           </div>
-          
-          <div 
-            onPointerDown={(e) => handleResizeStart(e, 'right')}
-            className="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-16 cursor-ew-resize z-50 flex items-center justify-center"
-          >
-            <div className="w-1.5 h-8 bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
-          </div>
-        </>
-      )}
-
-      {/* Floating Action Bar */}
-      <AnimatePresence>
-        {isSelected && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.9 }}
-            className="absolute -bottom-14 left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 rounded-xl shadow-2xl z-50"
-          >
-            <button 
-              onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
-              className="p-2 hover:bg-rose-500 hover:text-white rounded-lg transition-all"
-              title="Delete Group"
-            >
-              <Trash2 size={16} />
-            </button>
-            <div className="w-px h-4 bg-zinc-700 dark:bg-zinc-200 mx-1" />
-            <button 
-              onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
-              className="p-2 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"
-              title="Duplicate"
-            >
-              <Copy size={16} />
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); onSelect(block.id); }}
-              className="p-2 hover:bg-zinc-800 dark:hover:bg-zinc-100 rounded-lg transition-all"
-              title="Settings"
-            >
-              <Settings2 size={16} />
-            </button>
-          </motion.div>
         )}
-      </AnimatePresence>
-    </motion.div>
+
+    </div>
   );
-};
+});
+
+FieldGroup.displayName = 'FieldGroup';
 
