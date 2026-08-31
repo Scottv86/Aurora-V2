@@ -1507,7 +1507,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                   key={rec.id}
                   onClick={() => setSelectedSplitRecordId(rec.id)}
                   className={cn(
-                    "p-3 rounded-2xl border transition-all cursor-pointer space-y-1.5 select-none relative",
+                    "p-3 rounded-none border transition-all cursor-pointer space-y-1.5 select-none relative",
                     isSelected
                       ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
                       : rowFmt.hasMatch

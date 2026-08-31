@@ -4898,7 +4898,7 @@ export const ModuleEditor = () => {
                 <div
                   key={item.id}
                   className={cn(
-                    "p-3 rounded-xl border transition-all cursor-pointer space-y-1.5",
+                    "p-3 rounded-none border transition-all cursor-pointer space-y-1.5",
                     idx === 0
                       ? "bg-white dark:bg-zinc-800/90 border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600"
                       : "bg-white/60 dark:bg-zinc-900/40 border-zinc-200/70 dark:border-zinc-800/70 hover:bg-white dark:hover:bg-zinc-800"
