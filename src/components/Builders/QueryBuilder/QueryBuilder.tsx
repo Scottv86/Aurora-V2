@@ -42,6 +42,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
 import { supabase } from '../../../lib/supabase';
 import { cn } from '../../../lib/utils';
+import { UnsavedChangesModal } from '../../Common/UnsavedChangesModal';
 import { 
   SavedQueryEntity, 
   QueryParameter, 
@@ -95,6 +96,23 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({
   const [newTagInput, setNewTagInput] = useState('');
   const [status, setStatus] = useState<QueryStatus>(initialQuery?.status || 'DRAFT');
   const [cacheTtl, setCacheTtl] = useState<number>(initialQuery?.cacheTtlSeconds || 0);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  // Track query builder modifications
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [name, description, category, tags, sqlQuery, parameters, columnsConfig, cacheTtl]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      setIsDirty(false);
+    }, 150);
+  }, [initialQuery]);
 
   // SQL & Mode State
   const [sqlQuery, setSqlQuery] = useState<string>(
@@ -376,6 +394,7 @@ LIMIT 50;`
       const savedData: SavedQueryEntity = await res.json();
       setQueryId(savedData.id);
       setStatus(savedData.status);
+      setIsDirty(false);
       toast.success(targetStatus === 'PUBLISHED' ? 'Query Published Successfully!' : 'Draft Saved');
       if (onSaveSuccess) onSaveSuccess(savedData);
     } catch (err: any) {
@@ -442,7 +461,13 @@ LIMIT 50;`
         {/* Left Title & Status */}
         <div className="flex items-center gap-4">
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (isDirty) {
+                setShowUnsavedConfirm(true);
+              } else {
+                onClose();
+              }
+            }}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-all text-xs font-semibold border border-zinc-800"
             title="Back to Queries Library"
           >
@@ -1129,6 +1154,26 @@ LIMIT 50;`
           </div>
         </main>
       </div>
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="query"
+          isSaving={isSaving}
+          onSaveAndExit={async () => {
+            await handleSave();
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            onClose();
+          }}
+          onDiscardAndExit={() => {
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            onClose();
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };

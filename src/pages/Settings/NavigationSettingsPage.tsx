@@ -45,6 +45,7 @@ import { QueueBuilder } from '../../components/Builders/QueueBuilder/QueueBuilde
 import { QueueEntity } from '../../types/platform';
 import { MenuItem, MenuSection } from '../../types/menu';
 import { SiteService, Site } from '../../services/siteService';
+import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 
 // Types
 type LayoutStyle = 'sidebar' | 'slim' | 'top';
@@ -130,6 +131,23 @@ export const NavigationSettingsPage = () => {
     positions: {},
     users: {}
   });
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  // Track navigation modifications
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [navigationName, menuConfigState, activeScope, layoutStyle, showBreadcrumbs]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      setIsDirty(false);
+    }, 200);
+  }, [menuConfig]);
 
   // Synchronize navigation title based on active scope
   useEffect(() => {
@@ -434,6 +452,7 @@ export const NavigationSettingsPage = () => {
 
       await Promise.all(promises);
       await refetchContext();
+      setIsDirty(false);
       toast.success('Navigation layout saved successfully!');
     } catch (error) {
       toast.error('Failed to update navigation settings');
@@ -824,11 +843,15 @@ export const NavigationSettingsPage = () => {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => {
-              setIsBuilderFullscreen(false);
-              if (returnUrl) {
-                navigate(returnUrl);
+              if (isDirty) {
+                setShowUnsavedConfirm(true);
               } else {
-                navigate('/workspace/settings/navigation');
+                setIsBuilderFullscreen(false);
+                if (returnUrl) {
+                  navigate(returnUrl);
+                } else {
+                  navigate('/workspace/settings/navigation');
+                }
               }
             }}
             className={cn(
@@ -2023,6 +2046,35 @@ export const NavigationSettingsPage = () => {
         </InContextBuilderModal>
       )}
 
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="navigation layout"
+          isSaving={saving}
+          onSaveAndExit={async () => {
+            await handleSave();
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/navigation');
+            }
+          }}
+          onDiscardAndExit={() => {
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/navigation');
+            }
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };

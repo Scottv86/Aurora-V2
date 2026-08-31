@@ -53,7 +53,7 @@ interface FieldGroupProps {
   className?: string;
 }
 
-export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect' | 'onDragStart'>>(({
+export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect' | 'onDragStart' | 'onDrop' | 'onDragOver'>>(({
   block,
   selectedIds,
   onSelect,
@@ -344,6 +344,9 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
                       {block.fields.map((section, sIdx) => (
                         <div 
                           key={section.id} 
+                          id={`canvas-field-${section.id}`}
+                          data-group-id={section.id}
+                          data-container-id={section.id}
                           className={cn(
                             "bg-white dark:bg-zinc-900/60 border-2 transition-all overflow-hidden",
                             selectedIds.includes(section.id)
@@ -421,6 +424,9 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
                           {/* Nesting Zone for Section */}
                           {!section.isCollapsed && (
                             <div 
+                              id={`canvas-nesting-${section.id}`}
+                              data-group-id={section.id}
+                              data-container-id={section.id}
                               onDragOver={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -467,6 +473,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
                             id: `section-${Date.now()}`,
                             type: 'group',
                             label: `New Section ${(block.fields?.length || 0) + 1}`,
+                            parentId: block.id,
                             fields: []
                           };
                           onUpdate(block.id, { fields: [...(block.fields || []), newSection] });
@@ -485,6 +492,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
                           id: `section-${Date.now()}`,
                           type: 'group',
                           label: 'New Section 1',
+                          parentId: block.id,
                           fields: []
                         };
                         onUpdate(block.id, { fields: [newSection] });

@@ -19,6 +19,7 @@ import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed, getWidgetDefaultDimensions } from './WorkspacePageView';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
+import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 export { PageBuilderEngine } from '../../components/PageEngine';
 export { getWidgetDefaultDimensions };
 
@@ -86,12 +87,22 @@ export const PageBuilder = () => {
   const [widgets, setWidgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
 
   // Widget settings editing state
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [showAIModal, setShowAIModal] = useState(false);
 
   const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
+
+  // Track user modifications after initial page load
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [widgets, name, iconName]);
 
   // Fetch existing layout
   useEffect(() => {
@@ -126,6 +137,10 @@ export const PageBuilder = () => {
           };
         });
         setWidgets(loadedWidgets);
+        setTimeout(() => {
+          isInitializedRef.current = true;
+          setIsDirty(false);
+        }, 100);
       } catch (err) {
         console.error('Failed to fetch page config for builder', err);
         toast.error('Failed to fetch page configuration');
@@ -187,6 +202,7 @@ export const PageBuilder = () => {
       }
 
       await refreshModules();
+      setIsDirty(false);
       toast.success('Page layout saved successfully!');
     } catch (err: any) {
       toast.error(err.message || 'Failed to save page');
@@ -345,11 +361,15 @@ export const PageBuilder = () => {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => {
-              setIsBuilderFullscreen(false);
-              if (returnUrl) {
-                navigate(returnUrl);
+              if (isDirty) {
+                setShowUnsavedConfirm(true);
               } else {
-                navigate('/workspace/settings/pages');
+                setIsBuilderFullscreen(false);
+                if (returnUrl) {
+                  navigate(returnUrl);
+                } else {
+                  navigate('/workspace/settings/pages');
+                }
               }
             }}
             className={cn(
@@ -755,6 +775,36 @@ export const PageBuilder = () => {
         onLayoutGenerated={handleAISuggestedLayout}
         modules={modules}
       />
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="page"
+          isSaving={saving}
+          onSaveAndExit={async () => {
+            await handleSave();
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/pages');
+            }
+          }}
+          onDiscardAndExit={() => {
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/pages');
+            }
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };

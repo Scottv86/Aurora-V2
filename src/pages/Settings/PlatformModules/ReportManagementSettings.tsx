@@ -22,6 +22,7 @@ import { PageHeader } from '../../../components/UI/PageHeader';
 import { EmptyState } from '../../../components/UI/EmptyState';
 import { TrashService } from '../../../services/trashService';
 import { DeleteConfirmationModal } from '../../../components/Common/DeleteConfirmationModal';
+import { UnsavedChangesModal } from '../../../components/Common/UnsavedChangesModal';
 import { API_BASE_URL } from '../../../config';
 import { builderCache } from '../../../utils/builderCache';
 
@@ -521,6 +522,16 @@ setView('LIST');
   const [isPreview, setIsPreview] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
   const [deletingReport, setDeletingReport] = useState<Report | null>(null);
+  const [isReportDirty, setIsReportDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isReportInitializedRef = React.useRef(false);
+
+  // Track report modifications
+  useEffect(() => {
+    if (isReportInitializedRef.current && currentReport) {
+      setIsReportDirty(true);
+    }
+  }, [currentReport?.name, currentReport?.description, currentReport?.config]);
 
   // Update breadcrumb override when currentReport changes
   useEffect(() => {
@@ -822,6 +833,7 @@ setView('LIST');
       if (!res.ok) throw new Error('Failed to save report');
       const updatedReport = await res.json();
       setCurrentReport(updatedReport);
+      setIsReportDirty(false);
       // Update reports list state
       setReports(prev => prev.map(r => r.id === updatedReport.id ? updatedReport : r));
       toast.success(statusOverride ? `Report published!` : 'Report draft saved successfully.');
@@ -1697,9 +1709,13 @@ setView('LIST');
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => {
-                    setIsBuilderFullscreen(false);
-                    navigate('?');
-                    fetchReports();
+                    if (isReportDirty) {
+                      setShowUnsavedConfirm(true);
+                    } else {
+                      setIsBuilderFullscreen(false);
+                      navigate('?');
+                      fetchReports();
+                    }
                   }}
                   className={cn(
                     "rounded-xl border border-zinc-200/50 dark:border-white/10 hover:bg-zinc-150 dark:hover:bg-zinc-800 text-zinc-500 transition-colors",
@@ -2484,6 +2500,30 @@ setView('LIST');
             </div>
           </div>
         )
+      )}
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="report"
+          isSaving={savingReport}
+          onSaveAndExit={async () => {
+            await handleSaveReport();
+            setIsReportDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            navigate('?');
+            fetchReports();
+          }}
+          onDiscardAndExit={() => {
+            setIsReportDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            navigate('?');
+            fetchReports();
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
       )}
     </div>
   );

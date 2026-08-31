@@ -25,6 +25,7 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useUsers } from '../../../hooks/useUsers';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
+import { UnsavedChangesModal } from '../../Common/UnsavedChangesModal';
 
 export interface AgentBuilderStudioProps {
   initialAgent?: AgentBlueprint | null;
@@ -53,6 +54,8 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
 
   useEffect(() => {
     setIsBuilderFullscreen(true);
@@ -62,6 +65,7 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   }, [setIsBuilderFullscreen]);
 
   const handleUpdateBlueprint = (delta: Partial<AgentBlueprint>) => {
+    setIsDirty(true);
     setBlueprint(prev => ({
       ...prev,
       ...delta,
@@ -73,6 +77,7 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
     setIsSaving(true);
     try {
       localStorage.setItem(`agent_draft_${blueprint.id}`, JSON.stringify(blueprint));
+      setIsDirty(false);
       toast.success(`Agent "${blueprint.name}" draft saved`);
     } catch (err: any) {
       toast.error('Failed to save draft');
@@ -123,6 +128,7 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
       });
 
       handleUpdateBlueprint({ status: 'ACTIVE' });
+      setIsDirty(false);
       toast.success(`Digital Coworker "${blueprint.name}" deployed to Workforce!`);
       if (onDeploySuccess) {
         onDeploySuccess({ ...blueprint, status: 'ACTIVE' });
@@ -135,13 +141,23 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
     }
   };
 
-  const handleClose = () => {
+  const exitStudio = () => {
+    setIsDirty(false);
+    setShowUnsavedConfirm(false);
     if (onClose) {
       onClose();
     } else if (returnUrl) {
       navigate(returnUrl);
     } else {
       navigate('/workspace/settings/platform-modules/workforce-management?tab=agents');
+    }
+  };
+
+  const handleClose = () => {
+    if (isDirty) {
+      setShowUnsavedConfirm(true);
+    } else {
+      exitStudio();
     }
   };
 
@@ -285,6 +301,22 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
           </div>
         )}
       </main>
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="agent"
+          isSaving={isSaving}
+          onSaveAndExit={async () => {
+            await handleSaveDraft();
+            exitStudio();
+          }}
+          onDiscardAndExit={() => {
+            exitStudio();
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };

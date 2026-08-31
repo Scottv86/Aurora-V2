@@ -122,6 +122,7 @@ const DriveApp = lazy(() => import('./pages/Apps/DriveApp').then(m => ({ default
 
 const DocsApp = lazy(() => import('./pages/Apps/DocsApp').then(m => ({ default: m.DocsApp })));
 const DocEditor = lazy(() => import('./pages/Apps/DocEditor').then(m => ({ default: m.DocEditor })));
+const InboxApp = lazy(() => import('./pages/Apps/InboxApp').then(m => ({ default: m.InboxApp })));
 import { slugify } from './lib/utils';
 
 
@@ -317,6 +318,8 @@ const App = () => {
                 <Route path="platform/records-management" element={<RecordsManagement />} />
                 
                 {/* Aurora Utility Apps */}
+                <Route path="apps/inbox" element={<InboxApp />} />
+                <Route path="inbox" element={<Navigate to="/workspace/apps/inbox" replace />} />
                 <Route path="apps/drive" element={<DriveApp />} />
                 <Route path="apps/docs" element={<DocsApp />} />
                 <Route path="apps/docs/:documentId" element={<DocEditor />} />

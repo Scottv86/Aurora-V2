@@ -82,6 +82,7 @@ import { ComponentPickerModal } from '../../components/Builders/Common/Component
 import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { FormBuilder } from '../../components/Builders/FormBuilder/FormBuilder';
 import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
+import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 
 
 
@@ -178,6 +179,22 @@ export const SiteBuilderPage: React.FC = () => {
   const [bodyScripts, setBodyScripts] = useState('');
   const [customCss, setCustomCss] = useState('');
   const [navLinkStyle, setNavLinkStyle] = useState<SiteThemeConfig['navLinkStyle']>('underline');
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  // Track site modifications
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [
+    name, description, category, type, domain, status, access,
+    accentColor, logoUrl, headerTitle, footerText, headerLayout,
+    pages, navItems, metaTitle, metaDescription, ogImageUrl, noIndex, canonicalUrl,
+    fontFamily, borderRadius, fontScale, headScripts, bodyScripts, customCss,
+    navLinkStyle, themeBgMode, themeCardStyle, themeRadius, themeFont
+  ]);
 
   const handleApplyPresetTheme = (preset: PresetTheme) => {
     setAccentColor(preset.accentColor);
@@ -457,6 +474,11 @@ export const SiteBuilderPage: React.FC = () => {
             { id: 'mod-lead-registration', name: 'Lead Registration Form', type: 'RECORD' }
           ]);
         }
+
+        setTimeout(() => {
+          isInitializedRef.current = true;
+          setIsDirty(false);
+        }, 150);
 
       } catch (err: any) {
         toast.error(err.message || 'Failed to load site details.');
@@ -1120,6 +1142,7 @@ export const SiteBuilderPage: React.FC = () => {
 
       const updated = await SiteService.updateSite(site.id, updatedData);
       setSite(updated);
+      setIsDirty(false);
       toast.success(`Multi-page site "${name}" saved successfully!`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to save site configuration.');
@@ -1154,10 +1177,14 @@ export const SiteBuilderPage: React.FC = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => {
-              if (returnUrl) {
-                navigate(returnUrl);
+              if (isDirty) {
+                setShowUnsavedConfirm(true);
               } else {
-                navigate('/workspace/settings/platform-modules/sites');
+                if (returnUrl) {
+                  navigate(returnUrl);
+                } else {
+                  navigate('/workspace/settings/platform-modules/sites');
+                }
               }
             }}
             className="p-2 opacity-70 hover:opacity-100 hover:bg-indigo-500/10 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-semibold"
@@ -5210,6 +5237,34 @@ export const SiteBuilderPage: React.FC = () => {
           }}
         />
       </InContextBuilderModal>
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="site"
+          isSaving={saving}
+          onSaveAndExit={async () => {
+            await handleSave();
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/platform-modules/sites');
+            }
+          }}
+          onDiscardAndExit={() => {
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/platform-modules/sites');
+            }
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };

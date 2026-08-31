@@ -145,7 +145,9 @@ import {
   ChevronRight,
   Copy,
   Key,
-  Edit2
+  Edit2,
+  Undo2,
+  Redo2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -179,11 +181,13 @@ import { useGlobalLists } from '../hooks/useGlobalList';
 import { useTeams } from '../hooks/useTeams';
 import { usePositions } from '../hooks/usePositions';
 import { usePermissionGroups } from '../hooks/usePermissionGroups';
+import { useModuleHistory } from '../hooks/useModuleHistory';
 import { toast } from 'sonner';
 import { DATA_API_URL, API_BASE_URL } from '../config';
 import { ModuleType } from '../types/platform';
 import { MODULES, MODULE_CATEGORIES } from '../constants/modules';
 import { PLATFORM_MODULES } from '../constants/platformModules';
+import { UnsavedChangesModal } from './Common/UnsavedChangesModal';
 import { FieldGroup } from './Builder/FieldGroup';
 import { useGridEngine } from '../hooks/useGridEngine';
 import { IconPicker } from './Common/IconPicker';
@@ -2108,6 +2112,38 @@ export const ModuleEditor = () => {
 
   // Validation Rules State
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // History for Undo / Redo
+  const {
+    undo,
+    redo,
+    canUndo,
+    canRedo
+  } = useModuleHistory({
+    layout,
+    tabs,
+    moduleSettings,
+    interfaceSettings,
+    workflow,
+    forms,
+    validationRules,
+    connectorMappings,
+    dataPopulationRules,
+    localAutomations,
+    isLoading,
+    setLayout,
+    setTabs,
+    setModuleSettings,
+    setInterfaceSettings,
+    setWorkflow,
+    setForms,
+    setValidationRules,
+    setConnectorMappings,
+    setDataPopulationRules,
+    setLocalAutomations
+  });
 
   // Fetch Active Connectors & Registry
   useEffect(() => {
@@ -2752,6 +2788,7 @@ export const ModuleEditor = () => {
       await refreshModules();
       queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
 
+      setIsDirty(false);
       if (isNew) {
         toast.success('Module created successfully!');
         const targetPath = returnUrl 
@@ -2772,18 +2809,40 @@ export const ModuleEditor = () => {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      );
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen(true);
+        return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         handleSave();
+        return;
+      }
+      if (!isInput) {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          undo();
+          return;
+        }
+        if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+          e.preventDefault();
+          redo();
+          return;
+        }
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleSave]);
+  }, [handleSave, undo, redo]);
   
   const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
@@ -3461,28 +3520,23 @@ export const ModuleEditor = () => {
       const isOverMainCanvas = elements.some(el => el.id === 'main-grid-container');
 
       if (targetGroupId) {
-        if (targetGroupId !== parentId) {
-          const rect = groupEl?.getBoundingClientRect() || { left: moveEvt.clientX, top: moveEvt.clientY, width: 800 };
-          const { x, y } = snapToGrid(
-            moveEvt.clientX - rect.left,
-            moveEvt.clientY - rect.top,
-            rect.width,
-            GRID_CONFIG.rowHeight,
-            GRID_CONFIG.gap,
-            GRID_CONFIG.nestedPadding
-          );
-          setDragOverInfo({
-            active: true,
-            parentId: targetGroupId,
-            col: x + 1,
-            span: Math.min(fieldToMove.colSpan || 6, 12 - x),
-            index: y,
-            rowSpan: calculateHeight(fieldToMove)
-          });
-        } else {
-          // Re-entered or remaining inside originating group: clear cross-container info so group's native placeholder takes over cleanly
-          setDragOverInfo(null);
-        }
+        const rect = groupEl?.getBoundingClientRect() || { left: moveEvt.clientX, top: moveEvt.clientY, width: 800 };
+        const { x, y } = snapToGrid(
+          moveEvt.clientX - rect.left,
+          moveEvt.clientY - rect.top,
+          rect.width,
+          GRID_CONFIG.rowHeight,
+          GRID_CONFIG.gap,
+          GRID_CONFIG.nestedPadding
+        );
+        setDragOverInfo({
+          active: true,
+          parentId: targetGroupId,
+          col: x + 1,
+          span: Math.min(fieldToMove.colSpan || 6, 12 - x),
+          index: y,
+          rowSpan: calculateHeight(fieldToMove)
+        });
       } else if (isOverMainCanvas) {
         if (parentId) {
           const canvasEl = document.getElementById('main-grid-container');
@@ -3530,7 +3584,7 @@ export const ModuleEditor = () => {
         return (parentField.fields || []).some(f => isDescendant(f, searchId));
       };
 
-      if (targetGroupId && targetGroupId !== parentId) {
+      if (targetGroupId) {
         // Guard against circular nesting for container fields
         if (isContainerField(fieldToMove.type) && isDescendant(fieldToMove, targetGroupId)) {
           return;
@@ -3559,8 +3613,30 @@ export const ModuleEditor = () => {
           const insertIntoGroup = (fields: Field[]): Field[] => {
             return fields.map(f => {
               if (f.id === targetGroupId) {
+                if (f.type === 'accordion' && updatedField.type !== 'group' && updatedField.type !== 'fieldGroup') {
+                  if (!f.fields || f.fields.length === 0) {
+                    const sectionId = `section-${Date.now()}`;
+                    const fieldWithParent = { ...updatedField, parentId: sectionId };
+                    const newSection: Field = {
+                      id: sectionId,
+                      type: 'group' as FieldType,
+                      label: 'New Section 1',
+                      name: `section_${Date.now()}`,
+                      parentId: f.id,
+                      fields: [fieldWithParent]
+                    };
+                    return { ...f, fields: [newSection] };
+                  }
+                  const firstSection = f.fields[0];
+                  const fieldWithParent = { ...updatedField, parentId: firstSection.id };
+                  const sectionFields = [...(firstSection.fields || []), fieldWithParent];
+                  const resolved = resolveCollisionsInArray(fieldWithParent, sectionFields);
+                  const updatedSections = f.fields.map((s, idx) => idx === 0 ? { ...s, fields: normalizeLayout(resolved) } : s);
+                  return { ...f, fields: updatedSections };
+                }
                 const children = [...(f.fields || []), updatedField];
-                return { ...f, fields: normalizeLayout(children) };
+                const resolved = resolveCollisionsInArray(updatedField, children);
+                return { ...f, fields: normalizeLayout(resolved) };
               }
               if (f.fields) {
                 return { ...f, fields: insertIntoGroup(f.fields) };
@@ -3622,7 +3698,7 @@ export const ModuleEditor = () => {
     
     const isNested = !!parentId;
     const gridElement = (parentId 
-      ? document.getElementById(`canvas-field-${parentId}`) 
+      ? (document.getElementById(`canvas-nesting-${parentId}`) || document.getElementById(`canvas-field-${parentId}`)) 
       : targetTabId 
         ? document.getElementById(`section-grid-${targetTabId}`) 
         : document.getElementById('main-grid-container')) || (e.currentTarget as HTMLElement);
@@ -3703,7 +3779,7 @@ export const ModuleEditor = () => {
       const data = JSON.parse(e.dataTransfer.getData('application/json'));
       const isNested = !!parentId;
       const gridElement = (parentId 
-        ? document.getElementById(`canvas-field-${parentId}`) 
+        ? (document.getElementById(`canvas-nesting-${parentId}`) || document.getElementById(`canvas-field-${parentId}`)) 
         : targetTabId 
           ? document.getElementById(`section-grid-${targetTabId}`) 
           : document.getElementById('main-grid-container')) || (e.currentTarget as HTMLElement);
@@ -3772,20 +3848,24 @@ export const ModuleEditor = () => {
           if (f.id === targetId) {
             if (f.type === 'accordion' && updatedField.type !== 'group' && updatedField.type !== 'fieldGroup') {
               if (!f.fields || f.fields.length === 0) {
+                const sectionId = `section-${Date.now()}`;
+                const fieldWithParent = { ...updatedField, parentId: sectionId };
                 const newSection: Field = {
-                  id: `section-${Date.now()}`,
+                  id: sectionId,
                   type: 'group' as FieldType,
                   label: 'New Section 1',
                   name: `section_${Date.now()}`,
-                  fields: [updatedField]
+                  parentId: f.id,
+                  fields: [fieldWithParent]
                 };
-                insertedField = updatedField;
+                insertedField = fieldWithParent;
                 return { ...f, fields: [newSection] };
               }
               const firstSection = f.fields[0];
-              const sectionFields = [...(firstSection.fields || []), updatedField];
-              const resolved = resolveCollisionsInArray(updatedField, sectionFields);
-              insertedField = updatedField;
+              const fieldWithParent = { ...updatedField, parentId: firstSection.id };
+              const sectionFields = [...(firstSection.fields || []), fieldWithParent];
+              const resolved = resolveCollisionsInArray(fieldWithParent, sectionFields);
+              insertedField = fieldWithParent;
               const updatedSections = f.fields.map((s, idx) => idx === 0 ? { ...s, fields: normalizeLayout(resolved) } : s);
               return { ...f, fields: updatedSections };
             }
@@ -4955,8 +5035,8 @@ export const ModuleEditor = () => {
             }}
             onUpdate={updateField}
             onDelete={(id) => deleteBlocks([id])}
-            onDrop={(e) => handleDropOnCanvas(e, block.id, targetTabId)}
-            onDragOver={(e) => handleDragOver(e, block.id, targetTabId)}
+            onDrop={(e, dropParentId) => handleDropOnCanvas(e, dropParentId || block.id, targetTabId)}
+            onDragOver={(e, dragParentId) => handleDragOver(e, dragParentId || block.id, targetTabId)}
             onDragStart={handleDragStart}
             renderNested={(fields, pId) => renderFieldBlocks(fields as any, pId, targetTabId)}
             viewportSize={viewportSize}
@@ -4977,7 +5057,7 @@ export const ModuleEditor = () => {
         <div
           key={block.id}
           draggable={activeTab === 'builder'}
-          onDragStart={(e: any) => handleDragStart(e, { type: 'move', fieldId: block.id })}
+          onDragStart={(e: any) => handleDragStart(e, { type: 'move', fieldId: block.id, parentId })}
           onDragEnd={handleDragEnd}
           style={{ 
             gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
@@ -5029,7 +5109,17 @@ export const ModuleEditor = () => {
               <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 min-w-0">
-                <div className="drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-550 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0" title="Drag to move">
+                <div 
+                  className={cn(
+                    "drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-550 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0",
+                    parentId ? "nested-drag-handle" : "root-drag-handle"
+                  )}
+                  title="Drag to move"
+                  onPointerDown={(e: any) => {
+                    e.stopPropagation();
+                    handleUnifiedPointerDrag(block.id, parentId)(e);
+                  }}
+                >
                   <GripVertical size={12} />
                 </div>
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
@@ -5210,11 +5300,15 @@ export const ModuleEditor = () => {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => {
-              setIsBuilderFullscreen(false);
-              if (returnUrl) {
-                navigate(returnUrl);
+              if (isDirty || canUndo) {
+                setShowUnsavedConfirm(true);
               } else {
-                navigate('/workspace/settings/platform-modules');
+                setIsBuilderFullscreen(false);
+                if (returnUrl) {
+                  navigate(returnUrl);
+                } else {
+                  navigate('/workspace/settings/platform-modules');
+                }
               }
             }}
             className={cn(
@@ -5249,6 +5343,28 @@ export const ModuleEditor = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Undo / Redo Toolbar */}
+          <div className="flex items-center bg-zinc-100/80 dark:bg-white/[0.04] p-0.5 rounded-xl border border-zinc-200 dark:border-white/5">
+            <button 
+              type="button"
+              onClick={undo}
+              disabled={!canUndo}
+              className="rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors hover:bg-white dark:hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none p-1.5"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 size={16} />
+            </button>
+            <button 
+              type="button"
+              onClick={redo}
+              disabled={!canRedo}
+              className="rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors hover:bg-white dark:hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none p-1.5"
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo2 size={16} />
+            </button>
+          </div>
+
           <button 
             onClick={() => setIsCommandPaletteOpen(true)}
             className="rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01] p-1.5"
@@ -6720,25 +6836,26 @@ export const ModuleEditor = () => {
                                               }}
                                               onDoubleClick={() => setIsEditingTab(tab.id)}
                                               className={cn(
-                                                "w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group",
+                                                "w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-between group cursor-pointer",
                                                 isActive
-                                                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                                  ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white font-bold shadow-sm"
+                                                  : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60"
                                               )}
                                             >
                                               <div className="flex items-center gap-2 min-w-0">
                                                 {interfaceSettings.detail?.showTabIcons && (
-                                                  <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
+                                                  <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={14} className="shrink-0" />
                                                 )}
                                                 <span className="truncate">{tab.label}</span>
                                               </div>
-                                              <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2", isActive ? "text-white" : "text-zinc-400 group-hover:translate-x-0.5")} />
+                                              {!isParent && <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400 group-hover:translate-x-0.5")} />}
+                                              {isParent && <ChevronDown size={12} className={cn("transition-transform shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400")} />}
                                             </button>
                                             <Settings2 
                                               size={12} 
                                               className={cn(
                                                 "absolute right-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-20 cursor-pointer",
-                                                isActive ? "text-white" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                                                isActive ? "text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                                               )}
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -6950,8 +7067,8 @@ export const ModuleEditor = () => {
                                     }}
                                     onUpdate={updateField}
                                     onDelete={(id) => deleteBlocks([id])}
-                                    onDrop={(e) => handleDropOnCanvas(e, block.id, tabId)}
-                                    onDragOver={(e) => handleDragOver(e, block.id, tabId)}
+                                    onDrop={(e, dropParentId) => handleDropOnCanvas(e, dropParentId || block.id, tabId)}
+                                    onDragOver={(e, dragParentId) => handleDragOver(e, dragParentId || block.id, tabId)}
                                     onDragStart={(e: any) => handleUnifiedPointerDrag(block.id, parentId)(e)}
                                     renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId, tabId)}
                                     viewportSize={viewportSize}
@@ -7288,8 +7405,8 @@ export const ModuleEditor = () => {
                                     }}
                                     onUpdate={updateField}
                                     onDelete={(id) => deleteBlocks([id])}
-                                    onDrop={handleDropOnCanvas}
-                                    onDragOver={handleDragOver}
+                                    onDrop={(e, dropParentId) => handleDropOnCanvas(e, dropParentId || block.id)}
+                                    onDragOver={(e, dragParentId) => handleDragOver(e, dragParentId || block.id)}
                                     onDragStart={(e: any) => handleUnifiedPointerDrag(block.id, parentId)(e)}
                                     renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId)}
                                     viewportSize={viewportSize}
@@ -15304,6 +15421,8 @@ export const ModuleEditor = () => {
           layout={layout}
           activeTab={activeTab}
           onAction={(action) => {
+            if (action === 'undo') undo();
+            if (action === 'redo') redo();
             if (action === 'preview') setActiveTab(activeTab === 'preview' ? 'builder' : 'preview');
             if (action === 'save') handleSave();
             if (action === 'console') setShowConsole(!showConsole);
@@ -16035,6 +16154,35 @@ export const ModuleEditor = () => {
         }}
       />
 
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="module"
+          isSaving={isSaving}
+          onSaveAndExit={async () => {
+            await handleSave();
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/platform-modules');
+            }
+          }}
+          onDiscardAndExit={() => {
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            setIsBuilderFullscreen(false);
+            if (returnUrl) {
+              navigate(returnUrl);
+            } else {
+              navigate('/workspace/settings/platform-modules');
+            }
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
 
     </div>
   );

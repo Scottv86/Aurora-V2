@@ -30,6 +30,7 @@ export const FormsLibraryPage: React.FC = () => {
   
   const [isNewFormModalOpen, setIsNewFormModalOpen] = useState(false);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [selectedForm, setSelectedForm] = useState<FormEntity | null>(null);
   const [previewForm, setPreviewForm] = useState<FormEntity | null>(null);
   const [shareForm, setShareForm] = useState<FormEntity | null>(null);
@@ -402,22 +403,35 @@ export const FormsLibraryPage: React.FC = () => {
       {/* Standalone Builder Modal */}
       <InContextBuilderModal
         isOpen={isBuilderOpen}
-        onClose={() => setIsBuilderOpen(false)}
+        onClose={() => {
+          setIsBuilderOpen(false);
+          setIsFormDirty(false);
+          setSelectedForm(null);
+        }}
+        isDirty={isFormDirty}
+        onDiscardAndExit={() => {
+          setIsFormDirty(false);
+          setIsBuilderOpen(false);
+          setSelectedForm(null);
+        }}
         title={selectedForm?.name ? `Edit ${selectedForm.name}` : 'Create New Form'}
         subtitle="Global Platform Form Builder"
         builderContext={{ mode: 'global' }}
       >
         <FormBuilder
           initialForm={selectedForm || undefined}
+          onDirtyChange={setIsFormDirty}
           builderContext={{
             mode: 'global',
             onSaveSuccess: (_id, savedForm) => {
               toast.success(`Form "${savedForm.name}" saved!`);
+              setIsFormDirty(false);
               setIsBuilderOpen(false);
               fetchForms();
             }
           }}
           onSave={() => {
+            setIsFormDirty(false);
             setIsBuilderOpen(false);
             fetchForms();
           }}

@@ -26,6 +26,7 @@ export const WorkflowsLibraryPage: React.FC = () => {
   const [search, setSearch] = useState('');
   
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isWorkflowDirty, setIsWorkflowDirty] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowEntity | null>(null);
 
   const fetchWorkflows = async () => {
@@ -315,17 +316,29 @@ export const WorkflowsLibraryPage: React.FC = () => {
       {/* Standalone Workflow Builder Modal */}
       <InContextBuilderModal
         isOpen={isBuilderOpen}
-        onClose={() => setIsBuilderOpen(false)}
+        onClose={() => {
+          setIsBuilderOpen(false);
+          setIsWorkflowDirty(false);
+          setSelectedWorkflow(null);
+        }}
+        isDirty={isWorkflowDirty}
+        onDiscardAndExit={() => {
+          setIsWorkflowDirty(false);
+          setIsBuilderOpen(false);
+          setSelectedWorkflow(null);
+        }}
         title={selectedWorkflow ? `Edit ${selectedWorkflow.name}` : 'Create New Workflow'}
         subtitle="Visual Workflow Graph Canvas"
         builderContext={{ mode: 'global' }}
       >
         <WorkflowBuilder
           initialWorkflow={selectedWorkflow || undefined}
+          onDirtyChange={setIsWorkflowDirty}
           builderContext={{
             mode: 'global',
             onSaveSuccess: (_id, savedWf) => {
               toast.success(`Workflow "${savedWf.name}" saved!`);
+              setIsWorkflowDirty(false);
               setIsBuilderOpen(false);
               fetchWorkflows();
             }

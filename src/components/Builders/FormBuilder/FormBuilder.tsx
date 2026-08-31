@@ -19,12 +19,14 @@ export interface FormBuilderProps {
   initialForm?: Partial<FormEntity>;
   builderContext: StandaloneBuilderContext;
   onSave?: (form: FormEntity) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const FormBuilder: React.FC<FormBuilderProps> = ({
   initialForm,
   builderContext,
-  onSave
+  onSave,
+  onDirtyChange
 }) => {
   const { tenant } = usePlatform();
   const [name, setName] = useState(initialForm?.name || 'Untitled Form');
@@ -46,6 +48,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   const [viewMode, setViewMode] = useState<'editor' | 'preview'>('editor');
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(fields[0]?.id || null);
   const [saving, setSaving] = useState(false);
+  const isInitializedRef = React.useRef(false);
 
   React.useEffect(() => {
     if (initialForm) {
@@ -56,7 +59,17 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
         setSelectedFieldId(initialForm.schema.layout[0]?.id || null);
       }
     }
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      onDirtyChange?.(false);
+    }, 100);
   }, [initialForm]);
+
+  React.useEffect(() => {
+    if (isInitializedRef.current) {
+      onDirtyChange?.(true);
+    }
+  }, [name, description, fields, tabs, onDirtyChange]);
 
   // Sub-Modals & Drawers from ModuleBuilder Engine
   const [showFieldSelector, setShowFieldSelector] = useState(false);
@@ -132,6 +145,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
         if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(formPayload.id, formPayload);
         if (onSave) onSave(formPayload);
       }
+      onDirtyChange?.(false);
     } catch (err) {
       toast.error('Failed to save form');
     } finally {

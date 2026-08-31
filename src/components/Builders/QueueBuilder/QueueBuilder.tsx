@@ -20,6 +20,7 @@ export interface QueueBuilderProps {
   onSave: (queue: QueueEntity) => void;
   onCancel?: () => void;
   isSaving?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 const POPULAR_ICONS = [
@@ -31,7 +32,8 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   initialQueue,
   onSave,
   onCancel,
-  isSaving = false
+  isSaving = false,
+  onDirtyChange
 }) => {
   const { tenant, modules } = usePlatform();
 
@@ -122,6 +124,24 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   const [defaultSortDir, setDefaultSortDir] = useState<'asc' | 'desc'>(
     initialQueue?.queueConfig?.defaultSort?.direction || 'desc'
   );
+  const isInitializedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      onDirtyChange?.(false);
+    }, 150);
+  }, [initialQueue]);
+
+  React.useEffect(() => {
+    if (isInitializedRef.current) {
+      onDirtyChange?.(true);
+    }
+  }, [
+    name, description, iconName, isUnifiedQueue, moduleId, moduleIds,
+    listLayout, kanbanGroupBy, cardFields, tableDensity, detailViewMode, detailLayoutType,
+    rules, formattingRules, selectedColumns, defaultSortKey, defaultSortDir, onDirtyChange
+  ]);
 
   // Target Module IDs
   const currentTargetModuleIds = useMemo(() => {
@@ -250,6 +270,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
       updatedAt: new Date().toISOString()
     };
 
+    onDirtyChange?.(false);
     onSave(payload);
   };
 

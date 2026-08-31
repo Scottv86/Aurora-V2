@@ -702,6 +702,8 @@ export const AutomationsPage: React.FC = () => {
 
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [isAutomationDirty, setIsAutomationDirty] = useState(false);
+  const isRuleInitializedRef = React.useRef(false);
 
   
   // Search & Filter state
@@ -829,7 +831,18 @@ export const AutomationsPage: React.FC = () => {
       setVisualConditions([]);
       setActions([]);
     }
+    setTimeout(() => {
+      isRuleInitializedRef.current = true;
+      setIsAutomationDirty(false);
+    }, 100);
   }, [selectedRuleId, selectedRule, modules]);
+
+  // Track rule modifications
+  useEffect(() => {
+    if (isRuleInitializedRef.current && isStudioOpen) {
+      setIsAutomationDirty(true);
+    }
+  }, [name, description, isActive, scope, selectedModuleId, triggerType, cronExpression, conditions, actions, visualConditions, isStudioOpen]);
 
   // Auto-switch trigger types when scope changes
   useEffect(() => {
@@ -1109,6 +1122,7 @@ export const AutomationsPage: React.FC = () => {
 
       if (res.ok) {
         const savedData = await res.json();
+        setIsAutomationDirty(false);
         toast.success(isNew ? 'Automation created successfully' : 'Automation updated');
         fetchAutomations();
         if (isNew && savedData?.id) {
@@ -2831,7 +2845,17 @@ export const AutomationsPage: React.FC = () => {
           {/* Studio Modal */}
           <InContextBuilderModal
             isOpen={isStudioOpen}
-            onClose={() => setIsStudioOpen(false)}
+            onClose={() => {
+              setIsStudioOpen(false);
+              setIsAutomationDirty(false);
+              setSelectedRuleId(null);
+            }}
+            isDirty={isAutomationDirty}
+            onDiscardAndExit={() => {
+              setIsAutomationDirty(false);
+              setIsStudioOpen(false);
+              setSelectedRuleId(null);
+            }}
             title={selectedRule ? `Edit ${selectedRule.name}` : 'Create Automation Rule'}
             subtitle="Visual Automation Rule Studio"
             builderContext={{ mode: 'global' }}

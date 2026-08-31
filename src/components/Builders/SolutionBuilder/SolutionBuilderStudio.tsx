@@ -26,6 +26,7 @@ import { orchestrateSolutionBlueprint } from '../../../services/aiService';
 import { API_BASE_URL } from '../../../config';
 import { motion } from 'motion/react';
 import { supabase } from '../../../lib/supabase';
+import { UnsavedChangesModal } from '../../Common/UnsavedChangesModal';
 
 const getAuthToken = async (): Promise<string> => {
   try {
@@ -113,6 +114,16 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   );
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingSteps, setThinkingSteps] = useState<{ id: string; label: string; status: 'pending' | 'active' | 'completed' }[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  // Track solution modifications
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [solutionName, solutionVersion, solutionStatus, contextSources, connectedModules, artifacts, savedNotes]);
 
   const handleApproveDesign = () => {
     setIsDesignApproved(true);
@@ -135,6 +146,10 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
       if (initialSolution.artifacts) setArtifacts(initialSolution.artifacts);
       if (initialSolution.savedNotes) setSavedNotes(initialSolution.savedNotes);
     }
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      setIsDirty(false);
+    }, 150);
   }, [initialSolution]);
 
   // Set fullscreen studio mode on mount and reset on unmount
@@ -387,6 +402,7 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
       });
 
       if (res.ok) {
+        setIsDirty(false);
         toast.success(`Solution blueprint "${solutionName}" saved to database.`);
         if (onSaveSuccess) onSaveSuccess();
       } else {
@@ -497,13 +513,23 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
     toast.success(`Exported Architecture Specification Markdown file.`);
   };
 
-  const handleBack = () => {
+  const exitStudio = () => {
+    setIsDirty(false);
+    setShowUnsavedConfirm(false);
     if (onClose) {
       onClose();
     } else if (returnUrl) {
       navigate(returnUrl);
     } else {
       navigate('/workspace/settings/platform-modules/solutions');
+    }
+  };
+
+  const handleBack = () => {
+    if (isDirty) {
+      setShowUnsavedConfirm(true);
+    } else {
+      exitStudio();
     }
   };
 
@@ -738,6 +764,21 @@ ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.st
         </motion.div>
       </div>
 
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="solution"
+          isSaving={false}
+          onSaveAndExit={async () => {
+            await handleSaveBlueprint();
+            exitStudio();
+          }}
+          onDiscardAndExit={() => {
+            exitStudio();
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 

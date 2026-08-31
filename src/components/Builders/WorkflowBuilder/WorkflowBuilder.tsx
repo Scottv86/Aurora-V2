@@ -8,6 +8,7 @@ export interface WorkflowBuilderProps {
   initialWorkflow?: Partial<WorkflowEntity>;
   builderContext: StandaloneBuilderContext;
   onSave?: (workflow: WorkflowEntity) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
   fields?: any[];
 }
 
@@ -15,6 +16,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   initialWorkflow,
   builderContext,
   onSave,
+  onDirtyChange,
   fields = []
 }) => {
   const [name, setName] = useState(initialWorkflow?.name || 'Untitled Workflow');
@@ -36,6 +38,20 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'debugger' | 'architect'>('inspector');
   const [saving, setSaving] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      onDirtyChange?.(false);
+    }, 100);
+  }, [initialWorkflow]);
+
+  React.useEffect(() => {
+    if (isInitializedRef.current) {
+      onDirtyChange?.(true);
+    }
+  }, [name, description, currentWorkflow, onDirtyChange]);
 
   const handleSaveWorkflow = () => {
     setSaving(true);
@@ -55,6 +71,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
 
     setTimeout(() => {
       setSaving(false);
+      onDirtyChange?.(false);
       if (onSave) onSave(workflowEntity);
       if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(workflowEntity.id, workflowEntity);
     }, 400);

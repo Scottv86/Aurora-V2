@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Save, ArrowLeft } from 'lucide-react';
 
 import { Button } from '../../UI/Primitives';
 import { StandaloneBuilderContext } from '../../../types/platform';
+import { UnsavedChangesModal } from '../../Common/UnsavedChangesModal';
 
-interface InContextBuilderModalProps {
+export interface InContextBuilderModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
@@ -14,6 +15,9 @@ interface InContextBuilderModalProps {
   children: React.ReactNode;
   onSave?: () => void;
   isSaving?: boolean;
+  isDirty?: boolean;
+  onSaveAndExit?: () => void | Promise<void>;
+  onDiscardAndExit?: () => void | Promise<void>;
 }
 
 export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
@@ -24,9 +28,43 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
   builderContext,
   children,
   onSave,
-  isSaving = false
+  isSaving = false,
+  isDirty = false,
+  onSaveAndExit,
+  onDiscardAndExit
 }) => {
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+
   if (!isOpen) return null;
+
+  const handleAttemptClose = () => {
+    if (isDirty) {
+      setShowUnsavedModal(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleSaveAndExit = async () => {
+    if (onSaveAndExit) {
+      await onSaveAndExit();
+      setShowUnsavedModal(false);
+    } else if (onSave) {
+      await onSave();
+      setShowUnsavedModal(false);
+    } else {
+      setShowUnsavedModal(false);
+      onClose();
+    }
+  };
+
+  const handleDiscardAndExit = async () => {
+    if (onDiscardAndExit) {
+      await onDiscardAndExit();
+    }
+    setShowUnsavedModal(false);
+    onClose();
+  };
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex flex-col w-screen h-screen bg-white dark:bg-zinc-950 overflow-hidden">
@@ -34,7 +72,7 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
       <div className="flex items-center justify-between px-6 py-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
           <button
-            onClick={onClose}
+            onClick={handleAttemptClose}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800 transition-all text-xs font-bold"
             title="Back to Platform Settings"
           >
@@ -64,7 +102,7 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
         <div className="flex items-center gap-3">
           <Button
             variant="secondary"
-            onClick={onClose}
+            onClick={handleAttemptClose}
             className="text-xs px-3.5 py-1.5 rounded-xl"
           >
             Close
@@ -87,6 +125,18 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
       <div className="flex-1 overflow-y-auto bg-zinc-100/50 dark:bg-zinc-900/30">
         {children}
       </div>
+
+      {/* Unsaved Changes Confirmation Modal */}
+      {showUnsavedModal && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedModal}
+          entityName={title}
+          isSaving={isSaving}
+          onSaveAndExit={handleSaveAndExit}
+          onDiscardAndExit={handleDiscardAndExit}
+          onCancel={() => setShowUnsavedModal(false)}
+        />
+      )}
     </div>,
     document.body
   );

@@ -19,6 +19,7 @@ import { DocumentService } from '../services/documentService';
 import { generateDocumentTemplate } from '../services/aiService';
 import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
+import { UnsavedChangesModal } from './Common/UnsavedChangesModal';
 
 interface DocumentTemplateBuilderProps {
   template?: DocumentTemplate;
@@ -47,6 +48,22 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'history'>('editor');
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [name, content, status]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      setIsDirty(false);
+    }, 150);
+  }, [template]);
 
   const modules = [
     { id: 'text', label: 'Text Block', icon: Type, snippet: '<p>Enter text here...</p>' },
@@ -72,6 +89,7 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
         moduleId,
         createdBy: userId
       });
+      setIsDirty(false);
       toast.success('Template saved successfully');
       onSave?.(savedTemplate);
     } catch (error) {
@@ -111,7 +129,11 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
         <div className="flex items-center gap-4">
           <button 
             onClick={() => {
-              onCancel?.();
+              if (isDirty) {
+                setShowUnsavedConfirm(true);
+              } else {
+                onCancel?.();
+              }
             }}
             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
           >
@@ -275,6 +297,26 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
           </div>
         </div>
       </div>
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="document template"
+          isSaving={false}
+          onSaveAndExit={async () => {
+            await handleSave();
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            onCancel?.();
+          }}
+          onDiscardAndExit={() => {
+            setIsDirty(false);
+            setShowUnsavedConfirm(false);
+            onCancel?.();
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };

@@ -16,7 +16,7 @@ interface AppItem {
 }
 
 const APPS: AppItem[] = [
-  { id: 'inbox', label: 'Inbox', iconName: 'Inbox', description: 'Unified communication hub', color: 'text-blue-500' },
+  { id: 'inbox', label: 'Inbox', iconName: 'Inbox', description: 'Unified communication hub', color: 'text-blue-500', to: '/workspace/apps/inbox' },
   { id: 'docs', label: 'Documents', iconName: 'FileText', description: 'Collaborative documents & merge fields', color: 'text-indigo-500', to: '/workspace/apps/docs' },
   { id: 'drive', label: 'Drive', iconName: 'Folder', description: 'Personal & tenant shared storage', color: 'text-amber-500', to: '/workspace/apps/drive' },
   { id: 'query', label: 'Query Explorer', iconName: 'Terminal', description: 'Database schema, SQL runner & data explorer', color: 'text-indigo-500', to: '/workspace/apps/query' },

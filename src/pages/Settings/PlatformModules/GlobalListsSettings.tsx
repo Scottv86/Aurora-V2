@@ -83,6 +83,7 @@ import { toast } from 'sonner';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { TrashService } from '../../../services/trashService';
 import { DeleteConfirmationModal } from '../../../components/Common/DeleteConfirmationModal';
+import { UnsavedChangesModal } from '../../../components/Common/UnsavedChangesModal';
 import { ListBulkImportModal } from '../../../components/Settings/PlatformModules/ListBulkImportModal';
 import { CalculatorModal } from '../../../components/Builder/CalculatorModal';
 import { createFormulaContext } from '../../../lib/formulaEngine';
@@ -2748,43 +2749,3 @@ const CreateListModal = ({ onClose, onSubmit, data, setData, onOpenBulkImport }:
   return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : null;
 };
 
-const UnsavedChangesModal = ({ onSaveAndExit, onDiscardAndExit, onCancel, isSaving }: any) => {
-  const modalNode = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onCancel} className="absolute inset-0 bg-zinc-950/70 backdrop-blur-sm" />
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 16 }} className="relative w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-6 text-center space-y-5 z-10">
-        <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto border border-amber-500/20">
-          <AlertTriangle size={24} />
-        </div>
-        <div className="space-y-1.5">
-          <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">Unsaved Changes</h3>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            You have unsaved changes in this list. What would you like to do before leaving?
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 pt-1">
-          <button
-            onClick={onSaveAndExit}
-            disabled={isSaving}
-            className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 hover:bg-indigo-500 transition-all cursor-pointer disabled:opacity-50"
-          >
-            {isSaving ? 'Saving...' : 'Save & Exit'}
-          </button>
-          <button
-            onClick={onDiscardAndExit}
-            className="w-full py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all cursor-pointer"
-          >
-            Discard Changes & Exit
-          </button>
-          <button
-            onClick={onCancel}
-            className="w-full py-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-medium transition-all cursor-pointer"
-          >
-            Keep Editing
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : null;
-};

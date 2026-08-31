@@ -24,6 +24,7 @@ export const ValidationsLibraryPage: React.FC = () => {
   const [search, setSearch] = useState('');
   
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isValidationDirty, setIsValidationDirty] = useState(false);
   const [selectedRuleset, setSelectedRuleset] = useState<ValidationRulesetEntity | null>(null);
 
   const fetchRulesets = async () => {
@@ -305,16 +306,28 @@ export const ValidationsLibraryPage: React.FC = () => {
       {/* Standalone Builder Modal */}
       <InContextBuilderModal
         isOpen={isBuilderOpen}
-        onClose={() => setIsBuilderOpen(false)}
+        onClose={() => {
+          setIsBuilderOpen(false);
+          setIsValidationDirty(false);
+          setSelectedRuleset(null);
+        }}
+        isDirty={isValidationDirty}
+        onDiscardAndExit={() => {
+          setIsValidationDirty(false);
+          setIsBuilderOpen(false);
+          setSelectedRuleset(null);
+        }}
         title={selectedRuleset ? `Edit ${selectedRuleset.name}` : 'Create Validation Ruleset'}
         subtitle="Validation Ruleset Studio"
         builderContext={{ mode: 'global' }}
       >
         <ValidationBuilder
+          onDirtyChange={setIsValidationDirty}
           builderContext={{
             mode: 'global',
             onSaveSuccess: () => {
               toast.success('Validation ruleset saved!');
+              setIsValidationDirty(false);
               setIsBuilderOpen(false);
               fetchRulesets();
             }

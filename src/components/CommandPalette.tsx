@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Command, ArrowRight, Zap, Play, Settings, Plus, ShieldCheck } from 'lucide-react';
+import { Search, Command, ArrowRight, Zap, Play, Settings, Plus, ShieldCheck, Undo2, Redo2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { FIELD_CATEGORIES } from './ModuleEditor';
 
@@ -45,6 +45,8 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs:
   ];
 
   const systemActions = [
+    { id: 'undo', label: 'Undo Action', icon: Undo2, shortcut: 'Cmd+Z', type: 'action' },
+    { id: 'redo', label: 'Redo Action', icon: Redo2, shortcut: 'Cmd+Y', type: 'action' },
     { id: 'preview', label: 'Toggle Preview', icon: Play, shortcut: 'P', type: 'action' },
     { id: 'save', label: 'Save Module', icon: Zap, shortcut: 'Cmd+S', type: 'action' },
     { id: 'console', label: 'Toggle Console', icon: Plus, shortcut: 'C', type: 'action' },

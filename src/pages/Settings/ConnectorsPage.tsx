@@ -31,6 +31,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
+import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
 import { clsx } from 'clsx';
@@ -195,13 +196,15 @@ const DEFAULT_CONNECTORS: Connector[] = [
         { name: 'signatureSecret', type: 'password', label: 'HMAC Signature Secret', description: 'Secret used for X-Aurora-Signature' }
       ]
     }, 
-    description: 'Outbound REST POST/PUT webhook triggers with HMAC signature security.' 
+    description: 'Outbound REST POST/PUT webhook triggers with HMAC signature security.',
+    version: '1.0.0',
+    status: 'active',
+    isOfficial: true,
+    capabilities: ['WEBHOOK']
   }
 ];
 
-export const ConnectorsPage = () => {
-  const location = useLocation();
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
+export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSettingsMode = true }) => {
   const { tenant, modules } = usePlatform();
   const { session } = useAuth();
   const { id: selectedConnectorId } = useParams();
@@ -216,6 +219,8 @@ export const ConnectorsPage = () => {
   const [activeTab, setActiveTab] = useState<'setup' | 'mapping' | 'usage' | 'test' | 'logs'>('setup');
   const [listTab, setListTab] = useState<'all' | 'active' | 'vault'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isConnectorDirty, setIsConnectorDirty] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
 
   const basePath = isSettingsMode 
     ? '/workspace/settings/platform-modules/integration-management'
@@ -520,7 +525,13 @@ export const ConnectorsPage = () => {
               <Button 
                 variant="secondary" 
                 size="sm"
-                onClick={() => navigate(basePath)}
+                onClick={() => {
+                  if (isConnectorDirty) {
+                    setShowUnsavedConfirm(true);
+                  } else {
+                    navigate(basePath);
+                  }
+                }}
                 className="gap-2 font-bold text-xs px-3.5 py-2 rounded-xl"
               >
                 <ArrowLeft size={15} /> Back to Integrations
@@ -698,6 +709,7 @@ export const ConnectorsPage = () => {
                   activeConnector={selectedTenantConnector}
                   onRefresh={fetchData}
                   onActivate={toggleActivation}
+                  onDirtyChange={setIsConnectorDirty}
                 />
               )}
               {activeTab === 'usage' && (
@@ -744,6 +756,25 @@ export const ConnectorsPage = () => {
         itemName={connectorToDelete?.name}
         isDeleting={isDeletingConnector}
       />
+
+      {showUnsavedConfirm && (
+        <UnsavedChangesModal
+          isOpen={showUnsavedConfirm}
+          entityName="connector settings"
+          isSaving={false}
+          onSaveAndExit={() => {
+            setIsConnectorDirty(false);
+            setShowUnsavedConfirm(false);
+            navigate(basePath);
+          }}
+          onDiscardAndExit={() => {
+            setIsConnectorDirty(false);
+            setShowUnsavedConfirm(false);
+            navigate(basePath);
+          }}
+          onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
     </div>
   );
 };
@@ -785,12 +816,14 @@ const ConnectorSetup = ({
   connector, 
   activeConnector, 
   onRefresh,
-  onActivate 
+  onActivate,
+  onDirtyChange
 }: { 
   connector: Connector, 
   activeConnector?: TenantConnector, 
   onRefresh: () => void,
-  onActivate: () => void
+  onActivate: () => void,
+  onDirtyChange?: (isDirty: boolean) => void
 }) => {
   const { tenant } = usePlatform();
   const [secrets, setSecrets] = useState<Record<string, string>>({});
@@ -817,12 +850,15 @@ const ConnectorSetup = ({
       });
       if (res.ok) {
         toast.success('Configuration saved successfully');
+        onDirtyChange?.(false);
         onRefresh();
       } else {
         toast.success('Configuration saved locally');
+        onDirtyChange?.(false);
       }
     } catch (err) {
       toast.success('Configuration saved to encrypted vault');
+      onDirtyChange?.(false);
     } finally {
       setSaving(false);
     }
@@ -858,7 +894,10 @@ const ConnectorSetup = ({
                 placeholder={field.description}
                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl py-3 px-4 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100"
                 value={secrets[field.name] || ''}
-                onChange={(e) => setSecrets(prev => ({ ...prev, [field.name]: e.target.value }))}
+                onChange={(e) => {
+                  setSecrets(prev => ({ ...prev, [field.name]: e.target.value }));
+                  onDirtyChange?.(true);
+                }}
               />
               {activeConnector?.secrets?.find(s => s.secretKey === field.name) && (
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-emerald-500 text-[10px] font-bold uppercase">

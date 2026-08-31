@@ -34,6 +34,7 @@ import solutionRoutes from './routes/solutionRoutes';
 import queueRoutes from './routes/queueRoutes';
 import savedQueryRoutes from './routes/savedQueryRoutes';
 import savedViewRoutes from './routes/savedViewRoutes';
+import inboxRoutes from './routes/inboxRoutes';
 
 
 
@@ -42,6 +43,7 @@ import { requireTenantAccess } from './middleware/tenantMiddleware';
 import http from 'http';
 import { initSocket } from './socket';
 import { AutomationScheduler } from './services/scheduler';
+import { EmailWorker } from './services/emailWorker';
 
 dotenv.config();
 
@@ -141,6 +143,7 @@ app.use('/api/solutions', authenticate, requireTenantAccess, solutionRoutes);
 app.use('/api/queues', authenticate, requireTenantAccess, queueRoutes);
 app.use('/api/saved-queries', authenticate, requireTenantAccess, savedQueryRoutes);
 app.use('/api/saved-views', authenticate, requireTenantAccess, savedViewRoutes);
+app.use('/api/inbox', authenticate, requireTenantAccess, inboxRoutes);
 
 
 
@@ -175,5 +178,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 httpServer.listen(PORT, () => {
   console.log(`🚀 Aurora Platform Server (with Real-time) running on http://localhost:${PORT}`);
   AutomationScheduler.start();
+  EmailWorker.start();
 });
 // Server reload trigger timestamp: 2026-08-17T22:30:00Z

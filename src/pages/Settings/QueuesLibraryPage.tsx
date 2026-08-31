@@ -33,6 +33,7 @@ export const QueuesLibraryPage: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'unified' | 'single'>('all');
 
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isQueueDirty, setIsQueueDirty] = useState(false);
   const [selectedQueue, setSelectedQueue] = useState<QueueEntity | null>(null);
   const [previewQueue, setPreviewQueue] = useState<QueueEntity | null>(null);
   const [depQueue, setDepQueue] = useState<QueueEntity | null>(null);
@@ -674,6 +675,13 @@ export const QueuesLibraryPage: React.FC = () => {
         isOpen={isBuilderOpen}
         onClose={() => {
           setIsBuilderOpen(false);
+          setIsQueueDirty(false);
+          setSelectedQueue(null);
+        }}
+        isDirty={isQueueDirty}
+        onDiscardAndExit={() => {
+          setIsQueueDirty(false);
+          setIsBuilderOpen(false);
           setSelectedQueue(null);
         }}
         builderContext={{ mode: 'global' }}
@@ -681,9 +689,11 @@ export const QueuesLibraryPage: React.FC = () => {
       >
         <QueueBuilder
           initialQueue={selectedQueue}
+          onDirtyChange={setIsQueueDirty}
           onSave={handleSaveQueue}
           onCancel={() => {
             setIsBuilderOpen(false);
+            setIsQueueDirty(false);
             setSelectedQueue(null);
           }}
         />

@@ -8,14 +8,20 @@ export interface ValidationBuilderProps {
   fields?: any[];
   validationRules?: any[];
   setValidationRules?: React.Dispatch<React.SetStateAction<any[]>>;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
   builderContext,
   fields = [],
   validationRules = [],
-  setValidationRules = () => {}
+  setValidationRules = () => {},
+  onDirtyChange
 }) => {
+  const handleSetValidationRules: React.Dispatch<React.SetStateAction<any[]>> = (updater) => {
+    onDirtyChange?.(true);
+    setValidationRules(updater);
+  };
   return (
     <div className="h-full w-full bg-zinc-950 flex flex-col overflow-hidden">
 
@@ -37,7 +43,7 @@ export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
         <ValidationsTab
           fields={fields}
           validationRules={validationRules}
-          setValidationRules={setValidationRules}
+          setValidationRules={handleSetValidationRules}
         />
       </div>
     </div>
