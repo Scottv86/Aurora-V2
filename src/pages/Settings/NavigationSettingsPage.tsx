@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { 
   Columns,
@@ -95,7 +95,7 @@ export const NavigationSettingsPage = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { tenant, updateMenuConfig, updateTenant, refetchContext, modules, members, teams, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, menuConfig, updateMenuConfig, updateTenant, refetchContext, modules, members, teams, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export const NavigationSettingsPage = () => {
   });
   const [isDirty, setIsDirty] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
-  const isInitializedRef = React.useRef(false);
+  const isInitializedRef = useRef(false);
 
   // Track navigation modifications
   useEffect(() => {
